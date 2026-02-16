@@ -1,0 +1,12 @@
+{
+  "format": "meta_core_costvec_v1",
+  "schema_version": "1",
+  "components": [
+    "cpu",
+    "io"
+  ],
+  "ordering": [
+    "cpu",
+    "io"
+  ]
+}

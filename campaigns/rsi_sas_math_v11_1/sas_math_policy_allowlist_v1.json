@@ -1,0 +1,1 @@
+{"allowed_lean_tactics":["rfl","exact Nat.add_comm _ _"],"allowed_policy_families":["lean_tactic_v1"],"allowed_toy_checker_proofs":[],"max_attempts_per_problem_max":2,"schema_version":"sas_math_policy_allowlist_v1"}

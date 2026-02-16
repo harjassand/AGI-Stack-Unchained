@@ -1,0 +1,1 @@
+{"fs_mode":"read_only_except_workspace","net":"forbidden","proc_limits":{"fds_max":256,"procs_max":64,"threads_max":128},"profile_id":"sha256:a77ce5f4879113175bb2edf6f442d64afd12294941c43ac9be9f4e0b1758139d","schema_version":"dsbx_profile_v1"}

@@ -1,0 +1,9 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "enum": [
+    0,
+    1
+  ],
+  "title": "PubChem Weight300 target v1",
+  "type": "integer"
+}

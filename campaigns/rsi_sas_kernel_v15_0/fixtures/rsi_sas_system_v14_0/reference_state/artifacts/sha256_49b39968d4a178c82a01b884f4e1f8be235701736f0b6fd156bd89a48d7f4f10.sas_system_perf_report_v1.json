@@ -1,0 +1,1 @@
+{"cand_cost_total":213,"ref_cost_total":1165305,"schema_version":"sas_system_perf_report_v1","spec_version":"v14_0","speedup_den":213,"speedup_num":1165305,"suite_id":"sas_system_workmeter_heldout_v1","tier_costs":{"L":{"cand_cost":71,"ref_cost":1054035},"M":{"cand_cost":71,"ref_cost":101035},"S":{"cand_cost":71,"ref_cost":10235}}}

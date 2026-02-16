@@ -1,0 +1,23 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "meta_core_dominance_witness_v1",
+  "type": "object",
+  "required": ["x_star", "state_a", "condextra_inputs"],
+  "properties": {
+    "x_star": { "type": "object" },
+    "state_a": {},
+    "condextra_inputs": {
+      "type": "object",
+      "required": ["blob_hashes"],
+      "properties": {
+        "blob_hashes": {
+          "type": "array",
+          "items": { "type": "string", "pattern": "^[0-9a-f]{64}$" }
+        }
+      },
+      "additionalProperties": true
+    },
+    "state_b": {}
+  },
+  "additionalProperties": true
+}

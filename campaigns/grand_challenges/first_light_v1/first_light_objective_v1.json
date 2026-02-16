@@ -1,0 +1,1 @@
+{"dataset_csv_rel":"dataset.csv","dataset_manifest_rel":"dataset_manifest.json","objective":{"direction":"MINIMIZE","metric_id":"science_rmse_q32","target_q32":{"q":268435456},"weight_q32":{"q":2147483648}},"objective_id":"first_light_science_rmse_v1","schema_version":"first_light_objective_v1"}

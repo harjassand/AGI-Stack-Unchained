@@ -1,0 +1,49 @@
+name: Omega V19 Full Loop (Manual)
+
+on:
+  workflow_dispatch:
+    inputs:
+      ticks:
+        description: "Number of ticks to run"
+        required: true
+        default: "10"
+      start_tick:
+        description: "Starting tick number"
+        required: true
+        default: "1"
+
+jobs:
+  omega_full_loop:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Setup Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r CDEL-v2/requirements.lock
+
+      - name: Run Omega v19 Full Loop
+        run: |
+          python3 tools/v19_runs/run_omega_v19_full_loop.py \
+            --campaign_pack campaigns/rsi_omega_daemon_v19_0/rsi_omega_daemon_pack_v1.json \
+            --ticks "${{ inputs.ticks }}" \
+            --start_tick "${{ inputs.start_tick }}"
+
+      - name: Upload Reports
+        uses: actions/upload-artifact@v4
+        with:
+          name: omega-v19-full-loop-reports
+          path: |
+            runs/v19_full_loop/V19_AXIS_BUNDLE_COVERAGE_SCAN_v1.json
+            runs/v19_full_loop/V19_LADDER_EVIDENCE_REPORT_v1.json
+            runs/v19_full_loop/V19_LEVEL_ATTAINMENT_REPORT_v1.json
+            runs/v19_full_loop/V19_LEVEL_ATTAINMENT_REPORT_v1.md

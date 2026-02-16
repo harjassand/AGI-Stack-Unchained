@@ -1,0 +1,1 @@
+{"instances":[{"env":"gridworld-v1","goal":{"x":9,"y":0},"max_steps":10,"start":{"x":0,"y":0},"walls":[]},{"env":"gridworld-v1","goal":{"x":10,"y":0},"max_steps":10,"start":{"x":0,"y":0},"walls":[]}],"schema":"instance_pack_v1","schema_version":1}

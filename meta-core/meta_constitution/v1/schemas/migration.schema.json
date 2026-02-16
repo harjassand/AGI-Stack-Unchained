@@ -1,0 +1,11 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "meta_core_state_v1",
+  "anyOf": [
+    { "type": "object" },
+    { "type": "array" },
+    { "type": "string" },
+    { "type": "integer" },
+    { "type": "boolean" }
+  ]
+}

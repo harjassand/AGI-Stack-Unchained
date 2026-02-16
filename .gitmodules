@@ -1,0 +1,12 @@
+[submodule "Extension-1"]
+	path = Extension-1
+	url = https://github.com/harjassand/Extension-1.git
+[submodule "CDEL-v2"]
+	path = CDEL-v2
+	url = https://github.com/harjassand/CDEL-v2.git
+[submodule "Genesis"]
+	path = Genesis
+	url = https://github.com/harjassand/Genesis.git
+[submodule "agi-orchestrator"]
+	path = agi-orchestrator
+	url = https://github.com/harjassand/agi-orchestrator.git

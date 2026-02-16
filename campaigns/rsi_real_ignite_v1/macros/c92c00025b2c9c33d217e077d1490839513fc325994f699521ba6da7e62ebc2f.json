@@ -1,0 +1,1 @@
+{"admission_epoch":0,"body":[{"args":{"dir":3},"name":"MOVE"},{"args":{"dir":3},"name":"MOVE"}],"guard":null,"macro_id":"sha256:c92c00025b2c9c33d217e077d1490839513fc325994f699521ba6da7e62ebc2f","rent_bits":1216,"schema":"macro_def_v1","schema_version":1}

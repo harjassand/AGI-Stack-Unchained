@@ -1,0 +1,1 @@
+{"ops":["linear","attn","ssm","conv","rnn","memory"],"opset_id":"sas_opset_v1","schema_version":"sas_opset_manifest_v1"}

@@ -1,0 +1,1 @@
+{"cases":[{"budget":{"max_bytes_hashed_total":5000000,"max_env_steps_total":2000},"case_id":"mb-001","env":"gridworld-v1","epoch_key":"sha256:1111111111111111111111111111111111111111111111111111111111111111","instance_pack_path":"bench/mb001_instances.json"}],"schema":"mech_benchmark_pack_v1","schema_version":1}

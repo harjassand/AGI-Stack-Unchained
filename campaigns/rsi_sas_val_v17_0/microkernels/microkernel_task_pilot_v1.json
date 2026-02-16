@@ -1,0 +1,1 @@
+{"brain_fixture_rel":"fixtures/brain_suitepack_dev_v15_1.json","microkernel_id":"SHA256_COMPRESS_M4_V1","patch_manifest_rel":"patches/val_patch_manifest_v1.json","schema_version":"microkernel_task_v1","source_path_rel":"CDEL-v2/cdel/v15_1/verify_rsi_sas_kernel_v15_1.py","source_symbol":"_collect_case_metrics","val_eligible_marker":true}

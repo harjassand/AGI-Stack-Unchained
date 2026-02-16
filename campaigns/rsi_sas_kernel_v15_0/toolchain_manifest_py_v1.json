@@ -1,0 +1,1 @@
+{"checker_executable_hash":"sha256:0f534e4beb14b610b15eedbb4352c5b305a5795a05527632c8f82c83317f833a","checker_name":"python3_runner","invocation_template":["/usr/bin/python3","-V"],"toolchain_id":"sha256:7a485c0306c91edcaf23e0f7b91dd964ac60697df897a6478e38eceb3a37776d"}

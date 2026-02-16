@@ -1,0 +1,1 @@
+{"AUTOPATCH_ENUM_V2_START_SHIFT":4,"CTX_HASH_CACHE_V1_MAX_CAPACITY":65536,"RHO_MET_MIN_DEN":20,"RHO_MET_MIN_NUM":21,"WORK_COST_WEIGHTS_V1":{"w_canon_byte":1,"w_canon_call":1000000,"w_onto_ctx_hash_call":1000000,"w_sha256_byte":1,"w_sha256_call":1000000}}

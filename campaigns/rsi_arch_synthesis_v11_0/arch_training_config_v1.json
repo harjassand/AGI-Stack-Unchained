@@ -1,0 +1,1 @@
+{"batch_size":1,"dataset_path":"training/inputs/training_examples_v1.jsonl","determinism":{"cpu_only":true,"deterministic_algorithms":true,"dropout_zero":true},"device":"cpu","min_steps":300000,"min_time_ms":200,"schema_version":"arch_training_config_v1","seed":0,"steps":300000}

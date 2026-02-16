@@ -1,0 +1,1 @@
+{"allowed_spawn_prefixes":["/usr/bin/true","/usr/bin/python3","/usr/bin/shasum"],"fs_read_prefix_allowlist":["."],"fs_write_prefix_allowlist":["runs/rsi_sas_kernel_v15_1_tick_0001","runs/_v15_1_verify_replay"],"schema_version":"sas_kernel_policy_v15_1"}

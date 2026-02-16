@@ -1,0 +1,1 @@
+{"K_required_patches":1,"attempt_pack_path":"campaigns/rsi_real_demon_v9_hardening/rsi_real_demon_campaign_pack_v9.json","cdel_version":"v2_3","max_attempts_total":64,"require_accept_after_reject":true,"require_rejection_min":1,"require_rejection_reason":"CSI_IMMUTABLE_CORE_TOUCH","run_kind":"hardening_v2_3","schema":"rsi_real_hardening_pack_v1"}

@@ -1,0 +1,1 @@
+{"frame_ref":{"artifact_id":"sha256:febd25399c5242b8a842140fe0267a81ba45eeba0e9cda173c544a5374eeb96b","artifact_relpath":"polymath/registry/eudrs_u/vision/frames/sha256_febd25399c5242b8a842140fe0267a81ba45eeba0e9cda173c544a5374eeb96b.vision_frame_v1.bin"},"height_u32":120,"pixel_format":"GRAY8","schema_id":"vision_frame_manifest_v1","timestamp_ns_u64":0,"width_u32":160}

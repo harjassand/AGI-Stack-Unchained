@@ -1,0 +1,1 @@
+{"N_epochs":6,"R_insertions":5,"campaign_id":"rsi_real_science_v1","insertion_epochs":[2,3,4,5,6],"macro_proposal_epochs":[5],"mech_patch_eval_epochs":[6],"schema":"rsi_science_campaign_pack_v1","schema_version":1,"x-family_manifest":"family_manifest_science_v1.json","x-mech_benchmark_pack":"mech_benchmark_pack_sci_v1.json"}

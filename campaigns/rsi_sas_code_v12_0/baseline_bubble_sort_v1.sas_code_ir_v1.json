@@ -1,0 +1,1 @@
+{"algo_id":"sha256:889ddd0fe5e9efd6016ad28e63617668b2ff24d4f1f58750da915e066aea2b9c","algo_kind":"BUBBLE_SORT_V1","domain":"SAS_CODE_SORT_V1","params":{"hybrid":{"insertion_cutoff_n":0},"quick":{"pivot_policy":"FIRST_ELEMENT"},"schema_version":"sas_code_algo_params_v1"},"schema_version":"sas_code_ir_v1","tags":["n2","local_swap"],"types":{"input":"ListNat","output":"ListNat"}}

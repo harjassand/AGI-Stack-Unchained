@@ -1,0 +1,320 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mission Control v18.0</title>
+    <meta name="description" content="Telemetry visualization dashboard for Omega v4.0 and SAS-VAL v17.0 runs">
+    <link rel="stylesheet" href="/static/styles.css">
+</head>
+<body>
+    <!-- Header -->
+    <header class="header">
+        <h1>Mission Control v18.0</h1>
+        <nav class="header-nav">
+            <a href="#" id="nav-runs" onclick="showRunChooser(); return false;">Runs</a>
+        </nav>
+    </header>
+
+    <!-- Main Content -->
+    <main class="container">
+        <!-- Run Chooser Page -->
+        <div id="page-runs" class="page">
+            <div class="page-header">
+                <h2>Run Directory</h2>
+                <p class="text-muted" id="runs-root-path"></p>
+            </div>
+            
+            <div id="runs-loading" class="loading">
+                <div class="spinner"></div>
+                Loading runs...
+            </div>
+            
+            <div id="runs-table-container" class="table-container" style="display: none;">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Run ID</th>
+                            <th>Detected Types</th>
+                            <th>Last Seen (UTC)</th>
+                            <th>Health</th>
+                        </tr>
+                    </thead>
+                    <tbody id="runs-table-body">
+                    </tbody>
+                </table>
+            </div>
+            
+            <div id="runs-empty" class="empty-state" style="display: none;">
+                <div class="empty-state-icon">📂</div>
+                <p>No detectable runs found in this directory.</p>
+            </div>
+        </div>
+
+        <!-- Run Detail Page -->
+        <div id="page-detail" class="page" style="display: none;">
+            <a href="#" class="back-button" onclick="showRunChooser(); return false;">← Back to Runs</a>
+            
+            <div class="page-header">
+                <h2 id="detail-run-id"></h2>
+                <div id="detail-types" class="type-badges"></div>
+            </div>
+            
+            <!-- Tabs for run types -->
+            <div class="tabs" id="detail-tabs">
+                <a class="tab active" data-tab="omega" id="tab-omega">Omega v4.0</a>
+                <a class="tab" data-tab="sasval" id="tab-sasval">SAS-VAL v17.0</a>
+            </div>
+            
+            <!-- Omega Tab Content -->
+            <div id="content-omega" class="tab-content active">
+                <div class="grid-2">
+                    <!-- Current Focus -->
+                    <div class="panel">
+                        <div class="panel-header">
+                            <h3>📍 Current Focus</h3>
+                        </div>
+                        <div class="panel-content">
+                            <div class="focus-indicator" id="omega-focus">
+                                <div class="focus-dot"></div>
+                                <div class="focus-text">
+                                    <span class="focus-state" id="omega-focus-state">—</span>
+                                    <span class="focus-detail" id="omega-focus-detail">—</span>
+                                </div>
+                            </div>
+                            <div class="metrics-grid" style="margin-top: 16px;">
+                                <div class="metric">
+                                    <span class="metric-label">Last Epoch</span>
+                                    <span class="metric-value" id="omega-last-epoch">—</span>
+                                </div>
+                                <div class="metric">
+                                    <span class="metric-label">Last Event Hash</span>
+                                    <span class="metric-value mono hash" id="omega-last-hash">—</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Ignition Status -->
+                    <div class="panel">
+                        <div class="panel-header">
+                            <h3>🔥 Ignition Status</h3>
+                        </div>
+                        <div class="panel-content" id="omega-ignition">
+                            <div class="empty-state">
+                                <p>No ignition detected</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Performance Metrics -->
+                <div class="panel">
+                    <div class="panel-header">
+                        <h3>📊 Performance Metrics</h3>
+                        <span class="text-muted" id="omega-checkpoint-label">from latest checkpoint</span>
+                    </div>
+                    <div class="panel-content">
+                        <div class="metrics-grid" id="omega-metrics">
+                            <div class="metric">
+                                <span class="metric-label">Tasks Attempted</span>
+                                <span class="metric-value" id="omega-tasks-attempted">—</span>
+                            </div>
+                            <div class="metric">
+                                <span class="metric-label">Tasks Passed</span>
+                                <span class="metric-value" id="omega-tasks-passed">—</span>
+                            </div>
+                            <div class="metric">
+                                <span class="metric-label">Compute Used</span>
+                                <span class="metric-value" id="omega-compute">—</span>
+                            </div>
+                            <div class="metric">
+                                <span class="metric-label">Accel Windows</span>
+                                <span class="metric-value" id="omega-accel-windows">—</span>
+                            </div>
+                            <div class="metric">
+                                <span class="metric-label">Accel Ratio</span>
+                                <span class="metric-value" id="omega-accel-ratio">—</span>
+                            </div>
+                            <div class="metric">
+                                <span class="metric-label">Meta Epoch</span>
+                                <span class="metric-value" id="omega-meta-epoch">—</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Verified Discoveries -->
+                <div class="panel">
+                    <div class="panel-header">
+                        <h3>✅ Verified Discoveries</h3>
+                        <span class="badge badge-ok" id="omega-promotion-count">0</span>
+                    </div>
+                    <div class="panel-content">
+                        <div class="table-container">
+                            <table>
+                                <thead>
+                                    <tr>
+                                        <th>Epoch</th>
+                                        <th>Proposal ID</th>
+                                        <th>Bundle ID</th>
+                                        <th>Verdict</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="omega-promotions-body">
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Proposals -->
+                <div class="panel">
+                    <div class="panel-header">
+                        <h3>💡 Proposals</h3>
+                    </div>
+                    <div class="panel-content">
+                        <h4 style="margin-bottom: 8px; color: var(--text-secondary); font-size: 12px;">EMITTED</h4>
+                        <div class="table-container" style="margin-bottom: 16px;">
+                            <table>
+                                <thead>
+                                    <tr>
+                                        <th>Epoch</th>
+                                        <th>Proposal ID</th>
+                                        <th>Kind</th>
+                                        <th>Trigger Tasks</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="omega-proposals-emit-body">
+                                </tbody>
+                            </table>
+                        </div>
+                        
+                        <h4 style="margin-bottom: 8px; color: var(--text-secondary); font-size: 12px;">EVALUATED</h4>
+                        <div class="table-container">
+                            <table>
+                                <thead>
+                                    <tr>
+                                        <th>Epoch</th>
+                                        <th>Proposal ID</th>
+                                        <th>Decision</th>
+                                        <th>Delta Score</th>
+                                        <th>Reason</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="omega-proposals-eval-body">
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Event Stream -->
+                <div class="panel">
+                    <div class="panel-header">
+                        <h3>📜 Event Stream</h3>
+                        <div class="auto-refresh">
+                            <div class="auto-refresh-dot"></div>
+                            <span>Auto-refresh 1Hz</span>
+                            <span id="omega-event-count">(0 events)</span>
+                        </div>
+                    </div>
+                    <div class="panel-content">
+                        <div class="table-container" style="max-height: 400px; overflow-y: auto;">
+                            <table>
+                                <thead>
+                                    <tr>
+                                        <th>Epoch</th>
+                                        <th>Event Type</th>
+                                        <th>Summary</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="omega-events-body">
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- SAS-VAL Tab Content -->
+            <div id="content-sasval" class="tab-content">
+                <!-- VAL Gates -->
+                <div class="panel">
+                    <div class="panel-header">
+                        <h3>🔒 VAL Gates</h3>
+                        <span class="text-muted">from latest promotion bundle</span>
+                    </div>
+                    <div class="panel-content">
+                        <div class="metrics-grid" id="sasval-gates">
+                            <div class="metric">
+                                <span class="metric-label">Bundle ID</span>
+                                <span class="metric-value mono hash" id="sasval-bundle-id">—</span>
+                            </div>
+                            <div class="metric">
+                                <span class="metric-label">Baseline Cycles</span>
+                                <span class="metric-value" id="sasval-cycles-baseline">—</span>
+                            </div>
+                            <div class="metric">
+                                <span class="metric-label">Candidate Cycles</span>
+                                <span class="metric-value" id="sasval-cycles-candidate">—</span>
+                            </div>
+                            <div class="metric">
+                                <span class="metric-label">ValCycles Gate</span>
+                                <span class="metric-value" id="sasval-gate-valcycles">—</span>
+                            </div>
+                            <div class="metric">
+                                <span class="metric-label">Wallclock Gate</span>
+                                <span class="metric-value" id="sasval-gate-wallclock">—</span>
+                            </div>
+                            <div class="metric">
+                                <span class="metric-label">Work Conservation</span>
+                                <span class="metric-value" id="sasval-gate-work">—</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Hotloops -->
+                <div class="panel">
+                    <div class="panel-header">
+                        <h3>🔄 Hotloops</h3>
+                    </div>
+                    <div class="panel-content">
+                        <div class="metrics-grid" style="margin-bottom: 16px;">
+                            <div class="metric">
+                                <span class="metric-label">Pilot Loop</span>
+                                <span class="metric-value mono" id="sasval-pilot-loop">—</span>
+                            </div>
+                            <div class="metric">
+                                <span class="metric-label">Dominant Loop</span>
+                                <span class="metric-value mono" id="sasval-dominant-loop">—</span>
+                            </div>
+                        </div>
+                        
+                        <div class="table-container hotloop-table">
+                            <table>
+                                <thead>
+                                    <tr>
+                                        <th>Loop ID</th>
+                                        <th>Iters</th>
+                                        <th>Bytes</th>
+                                        <th>Adds</th>
+                                        <th>Muls</th>
+                                        <th>Loads</th>
+                                        <th>Stores</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="sasval-hotloops-body">
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <script src="/static/app.js"></script>
+</body>
+</html>

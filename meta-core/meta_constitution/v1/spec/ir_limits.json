@@ -1,0 +1,8 @@
+{
+  "format": "meta_core_ir_limits_v1",
+  "schema_version": "1",
+  "max_ast_depth": 128,
+  "max_nodes": 4096,
+  "max_fuel": 100000,
+  "max_gas": 200000
+}

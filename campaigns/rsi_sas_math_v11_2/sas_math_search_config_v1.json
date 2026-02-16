@@ -1,0 +1,1 @@
+{"candidates":[{"lean_tactics":["exact Nat.gcd_dvd_right _ _"],"max_attempts_per_problem":1,"notes":"candidate: add Nat.gcd_dvd_right","policy_family":"lean_tactic_v1","policy_id":"","schema_version":"sas_math_policy_ir_v1","seed":1,"toy_checker_proofs":[]}],"schema_version":"sas_math_search_config_v1"}

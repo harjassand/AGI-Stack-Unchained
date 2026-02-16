@@ -1,0 +1,1 @@
+{"components":{"SAS_SCIENCE_WORKMETER_V1":{"active_backend":"RUST_EXT_V1","rust_ext":{"artifact_sha256":"sha256:96930875728e75502f63d41629b4158fb5e709f9ae5ab8e5d23b52bfaf7fdd50","module":"runs/rsi_sas_system_v14_0_tick_0001/daemon/rsi_sas_system_v14_0/state/artifacts/cdel_workmeter_rs_v1.cpython-313-darwin.so"}}},"schema":"sas_system_component_registry_v1","spec_version":"v14_0"}

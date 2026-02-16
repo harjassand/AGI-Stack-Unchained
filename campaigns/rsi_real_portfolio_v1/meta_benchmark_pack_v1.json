@@ -1,0 +1,1 @@
+{"cases":[{"case_id":"case-001","epoch_key":"sha256:b13d3a5e21f8e3b526e4f166ddd7da8646d82d7e9b168f6cef2d239f58e75e2b","inbox_snapshot_path":"bench/inbox_case_001","state_snapshot_path":"bench/state_case_001"}],"schema":"meta_benchmark_pack_v1","schema_version":1}

@@ -1,0 +1,8 @@
+{
+  "format": "meta_core_metaconst_v1",
+  "schema_version": "1",
+  "gcj_version": "GCJ-1",
+  "bundle_method": "BUNDLE_V1",
+  "ruleset_method": "RULESET_V1",
+  "hash_method": "SHA256"
+}

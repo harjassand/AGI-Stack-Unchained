@@ -1,0 +1,1 @@
+{"And":[{"Safe":null},{"Or":[{"Or":[{"Eq":[{"MapGet":[{"Var":"x"},{"Str":"flagA"},{"Int":0}]},{"Int":1}]},{"Eq":[{"MapGet":[{"Var":"x"},{"Str":"flagB"},{"Int":0}]},{"Int":1}]}]},{"Eq":[{"MapGet":[{"Var":"x"},{"Str":"omega_bind_e2aeb3e0"},{"Int":0}]},{"Int":1}]}]}]}

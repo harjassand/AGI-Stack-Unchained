@@ -1,0 +1,8 @@
+.next/
+node_modules/
+runtime/inbox/*
+!runtime/inbox/.gitkeep
+runtime/uploads/*
+!runtime/uploads/.gitkeep
+runtime/mock_runs/*
+!runtime/mock_runs/.gitkeep

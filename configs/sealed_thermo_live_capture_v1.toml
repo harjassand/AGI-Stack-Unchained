@@ -1,0 +1,14 @@
+[powermetrics]
+sample_interval_ms = 1000
+sample_count = 5
+
+[runner]
+# "fixture_mode" here means the RE3 orchestrator does not invoke powermetrics itself.
+# Instead it imports logs produced by a privileged RE2 worker (or operator) from disk.
+fixture_mode = true
+
+[fixtures]
+powermetrics_stdout_path = "/tmp/powermetrics_live.txt"
+thermal_log_path = "/tmp/thermalstate_live.log"
+powermetrics_help_stdout_path = ""
+

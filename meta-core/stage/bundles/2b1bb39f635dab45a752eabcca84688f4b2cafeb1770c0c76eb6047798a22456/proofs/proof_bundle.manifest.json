@@ -1,0 +1,1 @@
+{"dominance_witness_sha256":"b2e45da426e143cceebf40bd2f1ba817c9a7d9971516fb3360986764685298ab","format":"meta_core_proof_bundle_v1","schema_version":"1","statement_ids":["SOUNDNESS_BY_CONSTRUCTION_V1","TERMINATION_IR_TOTAL_V1","DOMINANCE_STRUCTURAL_OR_V1","STATE_MIGRATION_TOTAL_V1","SPEC_RUNTIME_HASH_BINDING_V1"]}

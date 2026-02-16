@@ -1,0 +1,1 @@
+{"demon":{"eval_macro_every_n_epochs":2,"eval_onto_every_n_epochs":2},"epochs":6,"proposals":{"macros_v2_dir":"proposals/macros_v2","ontology_v3_dir":"proposals/ontology_v3"},"schema":"rsi_real_demon_campaign_pack_v3","schema_version":3,"strict_rsi":true,"suites":{"anchor_suite_id":"rsi_real_demon_v3_anchor","heldout_suite_id":"rsi_real_demon_v3_heldout"}}

@@ -1,0 +1,1 @@
+{"base_embed_v1":{"block_h_u32":2,"block_w_u32":2,"center_subtract_b":true},"crop":{"crop_height_u32":16,"crop_width_u32":16,"pixel_format":"GRAY8","resize_kind":"NEAREST_NEIGHBOR_V1"},"embedding_kind":"VISION_EMBED_BASE_V1","item_kind":"OBJECT_CROP_V1","key_dim_u32":64,"schema_id":"vision_embedding_config_v1"}

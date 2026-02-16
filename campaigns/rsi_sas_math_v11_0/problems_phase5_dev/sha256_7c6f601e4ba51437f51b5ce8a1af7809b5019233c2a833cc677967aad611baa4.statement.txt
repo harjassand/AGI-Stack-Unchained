@@ -1,0 +1,5 @@
+def s : Nat -> Nat
+| 0 => 0
+| Nat.succ n => s n + (n + n + 1)
+
+theorem s_closed (n : Nat) : s n = n * n :=

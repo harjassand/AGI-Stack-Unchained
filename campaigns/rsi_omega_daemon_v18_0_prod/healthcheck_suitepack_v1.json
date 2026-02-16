@@ -1,0 +1,1 @@
+{"checks":[{"check_id":"state_snapshot_exists","expected_hash":null,"kind":"FILE_EXISTS","required":true,"target_rel":"snapshot"},{"check_id":"trace_chain_exists","expected_hash":null,"kind":"FILE_EXISTS","required":true,"target_rel":"ledger"}],"schema_version":"healthcheck_suitepack_v1"}

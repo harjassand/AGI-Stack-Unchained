@@ -1,0 +1,1 @@
+{"checker_executable":"/Users/harjas/.cargo/bin/cargo","checker_executable_hash":"sha256:20ef5516c31b1ac2290084199ba77dbbcaa1406c45c1d978ca68558ef5964ef5","checker_name":"rust_runner","invocation_template":["/Users/harjas/.cargo/bin/cargo","build","--release","--locked","--offline"],"toolchain_id":"sha256:3c1913f7912a6474609cc059cf645ddf3128c25c82563dcb3731d127e2b77790"}

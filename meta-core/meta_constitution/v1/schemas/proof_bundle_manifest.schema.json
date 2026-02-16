@@ -1,0 +1,28 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "meta_core_proof_bundle_manifest_v1",
+  "type": "object",
+  "required": [
+    "format",
+    "schema_version",
+    "dominance_witness_sha256",
+    "statement_ids"
+  ],
+  "properties": {
+    "format": {
+      "const": "meta_core_proof_bundle_v1"
+    },
+    "schema_version": {
+      "const": "1"
+    },
+    "dominance_witness_sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "statement_ids": {
+      "type": "array",
+      "items": { "type": "string" }
+    }
+  },
+  "additionalProperties": false
+}

@@ -1,0 +1,1 @@
+{"architecture":"toy_transformer_bytelevel_v1","base_model_id":"sha256:a999abf013ef1d43debacab5ce5a27e9386a7e517e67af4fdbf4f7fb6ec9aaa7","batch_size":1,"determinism":{"single_thread":true,"torch_deterministic":true},"device":"cpu","lr_den":1000,"lr_num":1,"max_seq_len":16,"output_format":"weights_bin_v1","schema_version":"training_config_v1","seed":0,"steps":1}

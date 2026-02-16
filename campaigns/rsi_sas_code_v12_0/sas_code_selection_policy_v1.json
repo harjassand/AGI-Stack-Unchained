@@ -1,0 +1,1 @@
+{"schema_version":"sas_code_selection_policy_v1","selection_rule":"MIN_WORK_COST_HELDOUT","tie_breaker":"LEXICO_ALGO_ID"}

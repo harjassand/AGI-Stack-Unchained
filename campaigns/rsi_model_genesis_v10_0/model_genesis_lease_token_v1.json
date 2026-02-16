@@ -1,0 +1,1 @@
+{"allowed_ops":["MODEL_GENESIS_TRAIN","MODEL_GENESIS_EVAL"],"issued_by":"operator_fixture","lease_id":"sha256:324f6ff4708f08a15e5d2054f21222cf4467ff7b612150ee4b73bde78468ad43","max_runs":3,"schema_version":"model_genesis_lease_token_v1","valid_from_tick":0,"valid_until_tick":1000}

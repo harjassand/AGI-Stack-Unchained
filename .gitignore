@@ -1,0 +1,57 @@
+# Runtime artifacts
+runs/
+**/runs/
+epochs/
+.cdel_state/
+artifacts_out/
+tmp/
+**/_compile_state/
+
+# Build outputs
+__pycache__/
+*.pyc
+*.pyo
+target/
+dist/
+build/
+*.egg-info/
+
+# Caches
+.cache/
+.pytest_cache/
+.mypy_cache/
+
+# Omega workspaces
+.omega_cache/
+.omega_v18_exec_workspace*/
+
+# Environment
+.venv/
+venv/
+.env
+*.env
+
+# Logs and temp
+*.log
+*.tmp
+*.bak
+
+# Binary artifacts
+*.tar
+*.tar.gz
+*.sha256
+
+# IDE
+.idea/
+.vscode/
+*.swp
+
+# OS
+.DS_Store
+Thumbs.db
+# Runtime churn
+daemon/
+.omega_v18_exec_workspace/
+# Python/tool caches
+.ruff_cache/
+# OS junk

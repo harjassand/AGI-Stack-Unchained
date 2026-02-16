@@ -1,0 +1,14 @@
+[powermetrics]
+sample_interval_ms = 1000
+sample_count = 5
+
+[runner]
+# If true, the probe runner uses recorded fixture logs instead of invoking powermetrics.
+fixture_mode = false
+
+[fixtures]
+# Optional paths used when runner.fixture_mode=true.
+powermetrics_stdout_path = ""
+thermal_log_path = ""
+powermetrics_help_stdout_path = ""
+

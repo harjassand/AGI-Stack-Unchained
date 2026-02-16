@@ -1,0 +1,11 @@
+{
+  "format": "meta_core_policy_v1",
+  "schema_version": "1",
+  "max_blobs": 32,
+  "max_blob_bytes": 1048576,
+  "max_proof_bytes": 262144,
+  "allowed_blob_extensions": [
+    ".json",
+    ".ir.json"
+  ]
+}

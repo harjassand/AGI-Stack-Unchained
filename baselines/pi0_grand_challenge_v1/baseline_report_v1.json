@@ -1,0 +1,1 @@
+{"baseline_id":"pi0_grand_challenge_v1","pass_rate_den":1,"pass_rate_num":0,"schema":"baseline_report_v1","solved_task_ids":[],"solved_task_ids_hash":"sha256:4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945","spec_version":"v4_0","suite_id":"grand_challenge_heldout_v1","task_budget":{"max_compute_units":200000,"max_wall_seconds":60}}

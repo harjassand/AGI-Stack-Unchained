@@ -1,0 +1,306 @@
+{
+  "cases": [
+    {
+      "case_id": "b339bac5b8442af8b60fdcd491b1d2cecd8d15266a961f6a71b6abc5e49e3953",
+      "selection_index_u64": 0,
+      "source_state_dir_rel": "runs/rsi_omega_runaway_v18_1_bench10_copy_20260208_151848_tick_0001/daemon/rsi_omega_daemon_v18_0/state"
+    },
+    {
+      "case_id": "5769f3686ec7477fd02529c70276b4de992b96af4de9a15318063d3a8ce6cb71",
+      "selection_index_u64": 1,
+      "source_state_dir_rel": "runs/rsi_omega_runaway_v18_1_bench10_copy_20260208_151848_tick_0002/daemon/rsi_omega_daemon_v18_0/state"
+    },
+    {
+      "case_id": "dee3e534aaaf309a40298019e8e730ddad1440bd15f5ed8b16ef9f372c692f5c",
+      "selection_index_u64": 2,
+      "source_state_dir_rel": "runs/rsi_omega_runaway_v18_1_bench10_copy_20260208_151848_tick_0003/daemon/rsi_omega_daemon_v18_0/state"
+    },
+    {
+      "case_id": "90be324f1f30189043d03f662ee4bd298e46fb3e44b6b863b571a08041e767a4",
+      "selection_index_u64": 3,
+      "source_state_dir_rel": "runs/rsi_omega_runaway_v18_1_bench10_copy_20260208_151848_tick_0004/daemon/rsi_omega_daemon_v18_0/state"
+    },
+    {
+      "case_id": "5681459c75486ff95d8ef22a224db692c6a7845b070b471057942a81eec280fd",
+      "selection_index_u64": 4,
+      "source_state_dir_rel": "runs/rsi_omega_runaway_v18_1_bench10_copy_20260208_151848_tick_0005/daemon/rsi_omega_daemon_v18_0/state"
+    },
+    {
+      "case_id": "34a02e23f6d36018fbeb30e096c1c265f3df1ed35c7077a4f78e3146e7a1dd56",
+      "selection_index_u64": 5,
+      "source_state_dir_rel": "runs/rsi_omega_runaway_v18_1_bench10_copy_20260208_151848_tick_0006/daemon/rsi_omega_daemon_v18_0/state"
+    },
+    {
+      "case_id": "a95ec7a28cdb6dde8b4be19d026bdf6efd64d6fde464af37bdf955bbb806aea2",
+      "selection_index_u64": 6,
+      "source_state_dir_rel": "runs/rsi_omega_runaway_v18_1_bench10_copy_20260208_151848_tick_0007/daemon/rsi_omega_daemon_v18_0/state"
+    },
+    {
+      "case_id": "358179972bd2110ffd18defd6bc7355fa0d4eadb6927ad10f1b6c18ee53f7a02",
+      "selection_index_u64": 7,
+      "source_state_dir_rel": "runs/rsi_omega_runaway_v18_1_bench10_copy_20260208_151848_tick_0008/daemon/rsi_omega_daemon_v18_0/state"
+    },
+    {
+      "case_id": "f16a307e82db0fa867bd56891688fbaaa704c2ff10b14826021750a0e9946a3d",
+      "selection_index_u64": 8,
+      "source_state_dir_rel": "runs/rsi_omega_runaway_v18_1_bench10_copy_20260208_151848_tick_0009/daemon/rsi_omega_daemon_v18_0/state"
+    },
+    {
+      "case_id": "3f651acd67d31187efbd6daae94d1588dd7c4db15a91d50dce0b0ab3a35b1ea2",
+      "selection_index_u64": 9,
+      "source_state_dir_rel": "runs/rsi_omega_runaway_v18_1_bench10_copy_20260208_151848_tick_0010/daemon/rsi_omega_daemon_v18_0/state"
+    },
+    {
+      "case_id": "d55e12233fe2084a80b1f6c42a733d6781b513aabe1f95bebf8195df4fdb152e",
+      "selection_index_u64": 10,
+      "source_state_dir_rel": "runs/rsi_omega_runaway_v18_1_bench10_nocopy_20260208_151848_tick_0001/daemon/rsi_omega_daemon_v18_0/state"
+    },
+    {
+      "case_id": "a00cfc87f09f4b37fefb6cdc5d8329d0ee1c0ec6181cba2a0886a51e7f9ada45",
+      "selection_index_u64": 11,
+      "source_state_dir_rel": "runs/rsi_omega_runaway_v18_1_bench10_nocopy_20260208_151848_tick_0002/daemon/rsi_omega_daemon_v18_0/state"
+    },
+    {
+      "case_id": "b350e30e13f07ef29e39f6b52bf6de2974bfab64049e52d43251df7db4527633",
+      "selection_index_u64": 12,
+      "source_state_dir_rel": "runs/rsi_omega_runaway_v18_1_bench10_nocopy_20260208_151848_tick_0003/daemon/rsi_omega_daemon_v18_0/state"
+    },
+    {
+      "case_id": "f8a2806d7f944513590e1ba7147153688dcaa1ab48ab9a5743ad82c96af17dfd",
+      "selection_index_u64": 13,
+      "source_state_dir_rel": "runs/rsi_omega_runaway_v18_1_diag10_20260208_170426_tick_0001/daemon/rsi_omega_daemon_v18_0/state"
+    },
+    {
+      "case_id": "6092c7e6fffe40fde5615f0dd1dbc64a981515ab3cb34afa4d28cc13160b0cb4",
+      "selection_index_u64": 14,
+      "source_state_dir_rel": "runs/rsi_omega_runaway_v18_1_diag10_20260208_170426_tick_0002/daemon/rsi_omega_daemon_v18_0/state"
+    },
+    {
+      "case_id": "088c2f3df10df96f467e317cdebcd2e3b595639c9ab2ec97dd76079c4dc2b29c",
+      "selection_index_u64": 15,
+      "source_state_dir_rel": "runs/rsi_omega_runaway_v18_1_diag10_20260208_170426_tick_0003/daemon/rsi_omega_daemon_v18_0/state"
+    },
+    {
+      "case_id": "82f671e5edb29639817f1d8a2cf8b2dba68361cd00535725ebeb5bbc794f7f2d",
+      "selection_index_u64": 16,
+      "source_state_dir_rel": "runs/rsi_omega_runaway_v18_1_diag10_20260208_170426_tick_0004/daemon/rsi_omega_daemon_v18_0/state"
+    },
+    {
+      "case_id": "e11555b9831ac789c9164d04d80d9bd0efd166346449fc68ca9c64a04ef6542b",
+      "selection_index_u64": 17,
+      "source_state_dir_rel": "runs/rsi_omega_runaway_v18_1_diag10_20260208_170426_tick_0005/daemon/rsi_omega_daemon_v18_0/state"
+    },
+    {
+      "case_id": "af32852c54a7bcd3479e940269ccdcf0ae2308288719bcffa940ed0ed98565ab",
+      "selection_index_u64": 18,
+      "source_state_dir_rel": "runs/rsi_omega_runaway_v18_1_diag10_20260208_170426_tick_0006/daemon/rsi_omega_daemon_v18_0/state"
+    },
+    {
+      "case_id": "95f99ba87f089f4e5f435e70e0cfb06abfe4c9285d05203c7a0c399a9fed61af",
+      "selection_index_u64": 19,
+      "source_state_dir_rel": "runs/rsi_omega_runaway_v18_1_diag10_20260208_170426_tick_0007/daemon/rsi_omega_daemon_v18_0/state"
+    },
+    {
+      "case_id": "49883ec934b5cefa7e0f4f4224673e4d1e83c1f4c195f0db6a4712b1f5ca958e",
+      "selection_index_u64": 20,
+      "source_state_dir_rel": "runs/rsi_omega_runaway_v18_1_diag10_20260208_170426_tick_0008/daemon/rsi_omega_daemon_v18_0/state"
+    },
+    {
+      "case_id": "938fb58da81461128b817e75e186b752436816cfd3bfb8cf4f0274a7f7c87cc6",
+      "selection_index_u64": 21,
+      "source_state_dir_rel": "runs/rsi_omega_runaway_v18_1_diag10_20260208_170426_tick_0009/daemon/rsi_omega_daemon_v18_0/state"
+    },
+    {
+      "case_id": "7924e45e10f2047185b44c6ec3cd48726a4fa918f5885faaf37bacc79ed2f22d",
+      "selection_index_u64": 22,
+      "source_state_dir_rel": "runs/rsi_omega_runaway_v18_1_diag10_20260208_170426_tick_0010/daemon/rsi_omega_daemon_v18_0/state"
+    },
+    {
+      "case_id": "ed7182f40407f3a530d3a8ff93ad93d5c53bfa1c9adf1f21bdec4786818c5f74",
+      "selection_index_u64": 23,
+      "source_state_dir_rel": "runs/rsi_omega_runaway_v18_1_phase6diag_20260208_174226_tick_0001/daemon/rsi_omega_daemon_v18_0/state"
+    },
+    {
+      "case_id": "ba77b3cf22a83e284b9d7658feb58e1899512bfeb1f024d5baabe5e8f86e18d4",
+      "selection_index_u64": 24,
+      "source_state_dir_rel": "runs/rsi_omega_runaway_v18_1_phase6diag_20260208_174226_tick_0002/daemon/rsi_omega_daemon_v18_0/state"
+    },
+    {
+      "case_id": "7119ab7c22a029f9fd991f738006c431d3c6075ea193abab2defb5ca54260055",
+      "selection_index_u64": 25,
+      "source_state_dir_rel": "runs/rsi_omega_runaway_v18_1_phase6diag_20260208_174226_tick_0003/daemon/rsi_omega_daemon_v18_0/state"
+    },
+    {
+      "case_id": "c0abb879ea4ccceca4d63d22010aeb96665f450e1f18abbaff6aa07299a5ae4c",
+      "selection_index_u64": 26,
+      "source_state_dir_rel": "runs/rsi_omega_runaway_v18_1_phase6diag_20260208_174226_tick_0004/daemon/rsi_omega_daemon_v18_0/state"
+    },
+    {
+      "case_id": "cbee589ac9638552342efbfb5e9d35ad44395b95858efecd339c113671c935cf",
+      "selection_index_u64": 27,
+      "source_state_dir_rel": "runs/rsi_omega_runaway_v18_1_phase6diag_20260208_174226_tick_0005/daemon/rsi_omega_daemon_v18_0/state"
+    },
+    {
+      "case_id": "cbfa891b3ec75331a4ed8f95beebf7e6b1c6eee9f5fdb33c8d2b97e721f4026c",
+      "selection_index_u64": 28,
+      "source_state_dir_rel": "runs/rsi_omega_runaway_v18_1_phase6diag_20260208_174226_tick_0006/daemon/rsi_omega_daemon_v18_0/state"
+    },
+    {
+      "case_id": "866b6b058eb1f1c0f0144f43c4a876ff7842e91e82ffd3cee9480ba319ec6c85",
+      "selection_index_u64": 29,
+      "source_state_dir_rel": "runs/rsi_omega_runaway_v18_1_phase6diag_20260208_174226_tick_0007/daemon/rsi_omega_daemon_v18_0/state"
+    },
+    {
+      "case_id": "d131f519ee0710e14763f0551d44203ede569e174f0af4a9db7f0700e690fc1a",
+      "selection_index_u64": 30,
+      "source_state_dir_rel": "runs/rsi_omega_runaway_v18_1_phase6diag_20260208_174226_tick_0008/daemon/rsi_omega_daemon_v18_0/state"
+    },
+    {
+      "case_id": "931550ab38fdc0f40cc87723e8c9c0ee14fe21a982c46521a54c9fca9119cd10",
+      "selection_index_u64": 31,
+      "source_state_dir_rel": "runs/rsi_omega_runaway_v18_1_phase6diag_20260208_174226_tick_0009/daemon/rsi_omega_daemon_v18_0/state"
+    },
+    {
+      "case_id": "0d3d769641c8c747570c6b10759f00588827bc7c4c1e9e981f18a9ef30d26a53",
+      "selection_index_u64": 32,
+      "source_state_dir_rel": "runs/rsi_omega_runaway_v18_1_phase6diag_20260208_174226_tick_0010/daemon/rsi_omega_daemon_v18_0/state"
+    },
+    {
+      "case_id": "171a86fd98820d70ff3ca98eaaff0b6072d3ba2449f0c7ef9e7e406365f6706e",
+      "selection_index_u64": 33,
+      "source_state_dir_rel": "runs/rsi_omega_runaway_v18_1_phase7diag_20260208_183622_tick_0001/daemon/rsi_omega_daemon_v18_0/state"
+    },
+    {
+      "case_id": "c304f12e2e75519f4d54af4c3efd3daec2c0e920bfe5f06f11d6874111301ed1",
+      "selection_index_u64": 34,
+      "source_state_dir_rel": "runs/rsi_omega_runaway_v18_1_phase7diag_20260208_183622_tick_0002/daemon/rsi_omega_daemon_v18_0/state"
+    },
+    {
+      "case_id": "66738230d7d363cc40e7f0ca6ce04a649877a23ea530180918ea9ecf5126b016",
+      "selection_index_u64": 35,
+      "source_state_dir_rel": "runs/rsi_omega_runaway_v18_1_phase7diag_20260208_183622_tick_0003/daemon/rsi_omega_daemon_v18_0/state"
+    },
+    {
+      "case_id": "3bd64ae2ec6129d72e6f8ff47dcf1831ca6b657a8e58db9f1d10005ce7509e8e",
+      "selection_index_u64": 36,
+      "source_state_dir_rel": "runs/rsi_omega_runaway_v18_1_phase8diag10_20260208_191746_tick_0001/daemon/rsi_omega_daemon_v18_0/state"
+    },
+    {
+      "case_id": "a97f4a400f70dddad1ac233dc93349506943c8ee5362b7ab056aa9097ff8bda1",
+      "selection_index_u64": 37,
+      "source_state_dir_rel": "runs/rsi_omega_runaway_v18_1_phase8diag10_20260208_191746_tick_0002/daemon/rsi_omega_daemon_v18_0/state"
+    },
+    {
+      "case_id": "ed671efca013c1ded9e9603a5ea4c51ab02ab814006e60e9383b4892e1b6038d",
+      "selection_index_u64": 38,
+      "source_state_dir_rel": "runs/rsi_omega_runaway_v18_1_phase8diag10_20260208_191746_tick_0003/daemon/rsi_omega_daemon_v18_0/state"
+    },
+    {
+      "case_id": "ca953d63ab6fb1e36cf27249a9f24e4c8ef1263e175e44452e706119fd933d5a",
+      "selection_index_u64": 39,
+      "source_state_dir_rel": "runs/rsi_omega_runaway_v18_1_phase8diag20_20260208_192039_tick_0001/daemon/rsi_omega_daemon_v18_0/state"
+    },
+    {
+      "case_id": "b9370b898a4401410eb8e2e19346eee8525b4f40ecb8d7522c97dc7155c891c5",
+      "selection_index_u64": 40,
+      "source_state_dir_rel": "runs/rsi_omega_runaway_v18_1_phase8diag20_20260208_192039_tick_0002/daemon/rsi_omega_daemon_v18_0/state"
+    },
+    {
+      "case_id": "6cbee2778c5becc2168a6f031a3f01f8aa305e2c9e28ea2ac3d7ba89c5820c5c",
+      "selection_index_u64": 41,
+      "source_state_dir_rel": "runs/rsi_omega_runaway_v18_1_phase8diag20_20260208_192039_tick_0003/daemon/rsi_omega_daemon_v18_0/state"
+    },
+    {
+      "case_id": "4db5806b3db374b6264d737a3d9ffd265decb6c4f41b41abad8c5443a1ed697a",
+      "selection_index_u64": 42,
+      "source_state_dir_rel": "runs/rsi_omega_runaway_v18_1_phase8diag20_20260208_193723_tick_0001/daemon/rsi_omega_daemon_v18_0/state"
+    },
+    {
+      "case_id": "93b320ab32b8cb235199dce0bdbdbeb9a8fb6edf47d95a5cc6ae6d89a43cba7a",
+      "selection_index_u64": 43,
+      "source_state_dir_rel": "runs/rsi_omega_runaway_v18_1_phase8diag20_20260208_193723_tick_0002/daemon/rsi_omega_daemon_v18_0/state"
+    },
+    {
+      "case_id": "5e96567d846fdf8232822f75871411759c3976a230982fe7d4304b0714a1d5a8",
+      "selection_index_u64": 44,
+      "source_state_dir_rel": "runs/rsi_omega_runaway_v18_1_phase8diag20_20260208_193723_tick_0003/daemon/rsi_omega_daemon_v18_0/state"
+    },
+    {
+      "case_id": "086f73778d27fc3cd64db35203dd2ee770345aab009675d2f8c0bbed53a1fed3",
+      "selection_index_u64": 45,
+      "source_state_dir_rel": "runs/rsi_omega_runaway_v18_1_phase8diag20_20260208_193723_tick_0004/daemon/rsi_omega_daemon_v18_0/state"
+    },
+    {
+      "case_id": "f8dd9900aa1f6d5acabba3eb7206c0e179562a2915157b792344666bb709517f",
+      "selection_index_u64": 46,
+      "source_state_dir_rel": "runs/rsi_omega_runaway_v18_1_phase8diag20_20260208_193723_tick_0005/daemon/rsi_omega_daemon_v18_0/state"
+    },
+    {
+      "case_id": "2ee5288c41c138c97569b4ccdc28946ed8ba07fe1bf8b6bfce7516c861ca549c",
+      "selection_index_u64": 47,
+      "source_state_dir_rel": "runs/rsi_omega_runaway_v18_1_phase8diag20_20260208_193723_tick_0006/daemon/rsi_omega_daemon_v18_0/state"
+    },
+    {
+      "case_id": "7d33b7a583fd08fb8f94641d37c2a7bd3ae172be9a36673d734c5d33c771eddc",
+      "selection_index_u64": 48,
+      "source_state_dir_rel": "runs/rsi_omega_runaway_v18_1_phase8diag20_20260208_193723_tick_0007/daemon/rsi_omega_daemon_v18_0/state"
+    },
+    {
+      "case_id": "d20b4e2db1f93435871606169b9336f17068d465a915792bdee685796ead7d18",
+      "selection_index_u64": 49,
+      "source_state_dir_rel": "runs/rsi_omega_runaway_v18_1_phase8diag20_20260208_193723_tick_0008/daemon/rsi_omega_daemon_v18_0/state"
+    },
+    {
+      "case_id": "699822c7357d7433666bce203a318c1f17c455f2d7f04c31e7cc01c03395d28c",
+      "selection_index_u64": 50,
+      "source_state_dir_rel": "runs/rsi_omega_runaway_v18_1_phase8diag20_20260208_193723_tick_0009/daemon/rsi_omega_daemon_v18_0/state"
+    },
+    {
+      "case_id": "30b855fe7d3e128082d8887fa08fa01e9b7e2315c7f4d50c2995e2f569e5ab6f",
+      "selection_index_u64": 51,
+      "source_state_dir_rel": "runs/rsi_omega_runaway_v18_1_phase8diag20_20260208_193723_tick_0010/daemon/rsi_omega_daemon_v18_0/state"
+    },
+    {
+      "case_id": "0dbd7138bb4e27df989ef020e459e209700be00fd9cc13190052bd7f3228599f",
+      "selection_index_u64": 52,
+      "source_state_dir_rel": "runs/rsi_omega_runaway_v18_1_phase8diag20_20260208_193723_tick_0011/daemon/rsi_omega_daemon_v18_0/state"
+    },
+    {
+      "case_id": "15c2e75adbb4b0f98e823d17959d64ba84abe81591c626e997b416e88f050455",
+      "selection_index_u64": 53,
+      "source_state_dir_rel": "runs/rsi_omega_runaway_v18_1_phase8diag20_20260208_193723_tick_0012/daemon/rsi_omega_daemon_v18_0/state"
+    },
+    {
+      "case_id": "99b96e94334d3b3a98d000674d1c7f7abf3d9a1ba917f2697b561ace44c54f81",
+      "selection_index_u64": 54,
+      "source_state_dir_rel": "runs/rsi_omega_runaway_v18_1_phase8diag20_20260208_193723_tick_0013/daemon/rsi_omega_daemon_v18_0/state"
+    },
+    {
+      "case_id": "9c40a8bac0290049b58f8d5e772df1eebfd1c48f84d1997178017aef2ac34470",
+      "selection_index_u64": 55,
+      "source_state_dir_rel": "runs/rsi_omega_runaway_v18_1_phase8diag20_20260208_193723_tick_0014/daemon/rsi_omega_daemon_v18_0/state"
+    },
+    {
+      "case_id": "79fdd2aca50a3df961c90278ba72cd781b45fcae4bf878d078a76e356097baa8",
+      "selection_index_u64": 56,
+      "source_state_dir_rel": "runs/rsi_omega_runaway_v18_1_phase8diag20_20260208_193723_tick_0015/daemon/rsi_omega_daemon_v18_0/state"
+    },
+    {
+      "case_id": "04e78a69f093370d8c53124ff1a3090372d0f65bc4dbfd9b4641ca3fce27e6d9",
+      "selection_index_u64": 57,
+      "source_state_dir_rel": "runs/rsi_omega_runaway_v18_1_phase8diag20_20260208_193723_tick_0016/daemon/rsi_omega_daemon_v18_0/state"
+    },
+    {
+      "case_id": "8f463a23594e5432d737cbd3672a29c3bce6bcc7eb81690289be0c852ddef668",
+      "selection_index_u64": 58,
+      "source_state_dir_rel": "runs/rsi_omega_runaway_v18_1_phase8diag20_20260208_193723_tick_0017/daemon/rsi_omega_daemon_v18_0/state"
+    },
+    {
+      "case_id": "e19baec1836efbdb2a50c19938bac17a0d4a8eb4cf8cc28af8ca83cf88aa92de",
+      "selection_index_u64": 59,
+      "source_state_dir_rel": "runs/rsi_omega_runaway_v18_1_phase8diag20_20260208_193723_tick_0018/daemon/rsi_omega_daemon_v18_0/state"
+    }
+  ],
+  "cases_u64": 60,
+  "schema_version": "omega_verifier_corpus_index_v1"
+}

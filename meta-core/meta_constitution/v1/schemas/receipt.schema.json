@@ -1,0 +1,28 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "meta_core_receipt_v1",
+  "type": "object",
+  "required": [
+    "format",
+    "schema_version",
+    "verdict",
+    "bundle_hash",
+    "meta_hash",
+    "kernel_hash",
+    "toolchain_merkle_root",
+    "reason_code",
+    "details"
+  ],
+  "properties": {
+    "format": { "const": "meta_core_receipt_v1" },
+    "schema_version": { "const": "1" },
+    "verdict": { "enum": ["VALID", "INVALID"] },
+    "bundle_hash": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+    "meta_hash": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+    "kernel_hash": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+    "toolchain_merkle_root": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+    "reason_code": { "type": "string" },
+    "details": { "type": "object" }
+  },
+  "additionalProperties": false
+}

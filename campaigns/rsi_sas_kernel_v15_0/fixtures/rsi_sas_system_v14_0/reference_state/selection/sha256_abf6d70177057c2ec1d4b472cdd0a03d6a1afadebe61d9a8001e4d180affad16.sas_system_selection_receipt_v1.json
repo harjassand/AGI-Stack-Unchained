@@ -1,0 +1,1 @@
+{"profile_report_hash":"sha256:05fd5f1dc8bcaad82ff99082fa87a6834e15e3fe8d8483ecba47d21ffa066a96","reason":"LOOP_SUMMARY_RS_V1 dominates deterministic IR cost","schema_version":"sas_system_selection_receipt_v1","selected_candidate_id":"LOOP_SUMMARY_RS_V1","spec_version":"v14_0","target_id":"SAS_SCIENCE_WORKMETER_V1"}

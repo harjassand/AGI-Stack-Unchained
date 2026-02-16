@@ -1,0 +1,13 @@
+# Runtime churn
+runs/
+daemon/
+.omega_v18_exec_workspace/
+
+# Python/tool caches
+__pycache__/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# OS junk
+.DS_Store

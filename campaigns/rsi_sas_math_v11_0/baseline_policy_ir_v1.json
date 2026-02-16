@@ -1,0 +1,1 @@
+{"lean_tactics":["rfl"],"max_attempts_per_problem":1,"notes":"baseline: rfl only","policy_family":"lean_tactic_v1","policy_id":"sha256:3c8ea5465c941364fb3fbcae61b8331cdb750bef5b3052eacbf18d5273524469","schema_version":"sas_math_policy_ir_v1","seed":0,"toy_checker_proofs":[]}

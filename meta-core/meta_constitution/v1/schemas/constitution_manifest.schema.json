@@ -1,0 +1,88 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "meta_core_constitution_manifest_v1",
+  "type": "object",
+  "required": [
+    "format",
+    "schema_version",
+    "bundle_hash",
+    "parent_bundle_hash",
+    "meta_hash",
+    "kernel_hash",
+    "ruleset_hash",
+    "migration_hash",
+    "state_schema_hash",
+    "toolchain_merkle_root",
+    "blobs",
+    "proofs"
+  ],
+  "properties": {
+    "format": {
+      "const": "meta_core_bundle_v1"
+    },
+    "schema_version": {
+      "const": "1"
+    },
+    "bundle_hash": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "parent_bundle_hash": {
+      "type": "string",
+      "anyOf": [
+        { "const": "" },
+        { "pattern": "^[0-9a-f]{64}$" }
+      ]
+    },
+    "meta_hash": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "kernel_hash": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "ruleset_hash": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "migration_hash": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "state_schema_hash": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "toolchain_merkle_root": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "manifest_hash": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "blobs": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["path", "sha256", "bytes"],
+        "properties": {
+          "path": { "type": "string" },
+          "sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+          "bytes": { "type": "integer", "minimum": 0 }
+        },
+        "additionalProperties": false
+      }
+    },
+    "proofs": {
+      "type": "object",
+      "required": ["proof_bundle_hash"],
+      "properties": {
+        "proof_bundle_hash": { "type": "string", "pattern": "^[0-9a-f]{64}$" }
+      },
+      "additionalProperties": true
+    }
+  },
+  "additionalProperties": false
+}

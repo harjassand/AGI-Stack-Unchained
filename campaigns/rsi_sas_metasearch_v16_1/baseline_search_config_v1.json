@@ -1,0 +1,1 @@
+{"algo_kind":"GENETIC_ALGO_V1","crossover_rate_q32":{"q":"2576980378","schema_version":"q32_v1","shift":32},"generations":30,"max_dev_evals":1920,"mutation_rate_q32":{"q":"858993459","schema_version":"q32_v1","shift":32},"population":64,"schema_version":"baseline_search_config_v1","seed_u64":17}

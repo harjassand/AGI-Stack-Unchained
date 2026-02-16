@@ -1,0 +1,1 @@
+{"allowed_norm_pow_p":[1,2,3,4],"max_abs_q32":"9223372036854775807","max_node_count":80,"max_param_count":4,"max_term_count":4,"numeric_mode":"FIXED_Q32_V1","param_factorization_kind":"MU_ONLY_V1","q32_rounding":"ROUND_HALF_EVEN","schema_version":"sas_science_ir_policy_v1"}

@@ -1,0 +1,1 @@
+{"checker_executable_hash":"sha256:20ef5516c31b1ac2290084199ba77dbbcaa1406c45c1d978ca68558ef5964ef5","checker_name":"cargo_runner","invocation_template":["/Users/harjas/.cargo/bin/rustup","--version"],"toolchain_id":"sha256:aa8cc779785542b358af92f5addfc47f2e5360382c64e5c2a67155f287c2b6e5"}

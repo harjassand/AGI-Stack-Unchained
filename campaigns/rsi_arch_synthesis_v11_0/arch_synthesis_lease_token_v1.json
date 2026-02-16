@@ -1,0 +1,1 @@
+{"allowed_ops":["ARCH_SYNTHESIS_BUILD","ARCH_SYNTHESIS_TRAIN","ARCH_SYNTHESIS_EVAL","ARCH_SYNTHESIS_PROMOTE"],"issued_by":"fixture","lease_id":"sha256:9999999999999999999999999999999999999999999999999999999999999999","max_runs":2,"schema_version":"arch_synthesis_lease_token_v1","valid_from_tick":0,"valid_until_tick":100}

@@ -110,6 +110,9 @@ def test_observer_prefix_scan_finds_latest(tmp_path, monkeypatch) -> None:
         objectives_hash="sha256:" + ("4" * 64),
     )
     assert int(report["metrics"]["science_rmse_q32"]["q"]) == 456
+    assert "OBJ_EXPAND_CAPABILITIES" in report["metrics"]
+    assert "OBJ_MAXIMIZE_SCIENCE" in report["metrics"]
+    assert "OBJ_MAXIMIZE_SPEED" in report["metrics"]
 
     index = load_index(tmp_path)
     entry = ((index.get("entries") or {}).get("metasearch_compute_report_v1") or {}).get("path_rel")

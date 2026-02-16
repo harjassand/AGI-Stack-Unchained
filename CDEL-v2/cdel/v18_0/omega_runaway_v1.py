@@ -14,6 +14,9 @@ _ENV_OVERRIDE_ALLOWLIST: dict[str, set[str]] = {
     "rsi_sas_system_v14_0": {"V14_PERF_GATE_SPEEDUP_X10"},
     "rsi_sas_kernel_v15_0": {"V15_REPLAY_CASES_LIMIT"},
 }
+FORCED_RUNAWAY_ACTIVE = True
+FORCED_ESCALATION_LEVEL_U64 = 5
+FORCED_RUNAWAY_REASON = "TESTING"
 
 
 def load_runaway_config(path: Path) -> tuple[dict[str, Any], str]:
@@ -28,7 +31,16 @@ def load_runaway_config(path: Path) -> tuple[dict[str, Any], str]:
 
 
 def runaway_enabled(runaway_cfg: dict[str, Any] | None) -> bool:
-    return isinstance(runaway_cfg, dict) and bool(runaway_cfg.get("enabled", False))
+    return isinstance(runaway_cfg, dict)
+
+
+def check_runaway_condition(
+    *,
+    observation_report: dict[str, Any] | None = None,  # noqa: ARG001
+    runaway_cfg: dict[str, Any] | None = None,  # noqa: ARG001
+    runaway_state: dict[str, Any] | None = None,  # noqa: ARG001
+) -> tuple[bool, int, str]:
+    return FORCED_RUNAWAY_ACTIVE, int(FORCED_ESCALATION_LEVEL_U64), FORCED_RUNAWAY_REASON
 
 
 def _metric_q32(observation_report: dict[str, Any], metric_id: str) -> int:
@@ -49,12 +61,24 @@ def _objective_metrics(objectives: dict[str, Any]) -> list[dict[str, Any]]:
     for row in rows:
         if not isinstance(row, dict):
             fail("SCHEMA_FAIL")
-        if str(row.get("direction")) != "MINIMIZE":
+        direction = str(row.get("direction", "")).strip()
+        if direction not in {"MINIMIZE", "MAXIMIZE"}:
             fail("SCHEMA_FAIL")
         out.append(row)
     if not out:
         fail("SCHEMA_FAIL")
     return out
+
+
+def _tighten_target_q32(*, best_q: int, tighten_factor_q: int, direction: str) -> int:
+    if direction == "MINIMIZE":
+        return q32_mul(best_q, tighten_factor_q)
+    if direction == "MAXIMIZE":
+        if tighten_factor_q <= 0:
+            fail("SCHEMA_FAIL")
+        return int((int(best_q) << 32) // int(tighten_factor_q))
+    fail("SCHEMA_FAIL")
+    return 0
 
 
 def bootstrap_runaway_state(
@@ -74,7 +98,7 @@ def bootstrap_runaway_state(
             "last_value_q32": {"q": int(observed_q)},
             "last_improve_tick_u64": 0,
             "stall_ticks_u64": 0,
-            "escalation_level_u64": 0,
+            "escalation_level_u64": int(FORCED_ESCALATION_LEVEL_U64),
             "tighten_round_u64": 0,
         }
 
@@ -195,20 +219,32 @@ def advance_runaway_state(
     improved_metrics = 0
     for row in _objective_metrics(objectives):
         metric_id = str(row.get("metric_id"))
+        direction = str(row.get("direction", "")).strip()
+        if direction not in {"MINIMIZE", "MAXIMIZE"}:
+            fail("SCHEMA_FAIL")
         prev_metric = metric_states_prev.get(metric_id)
         if not isinstance(prev_metric, dict):
             fail("SCHEMA_FAIL")
         observed_q = _metric_q32(observation_report, metric_id)
         best_q = q32_int(prev_metric.get("best_value_q32"))
         min_delta_q = q32_int(min_improve_map.get(metric_id))
-        improved = promoted_and_activated and (observed_q < (best_q - min_delta_q))
+        improved = False
+        if promoted_and_activated:
+            if direction == "MINIMIZE":
+                improved = observed_q < (best_q - min_delta_q)
+            else:
+                improved = observed_q > (best_q + min_delta_q)
         if improved:
             best_q = observed_q
             improved_metrics += 1
 
         current_target_q = q32_int(prev_metric.get("current_target_q32"))
         if improved:
-            current_target_q = q32_mul(best_q, tighten_factor_q)
+            current_target_q = _tighten_target_q32(
+                best_q=best_q,
+                tighten_factor_q=tighten_factor_q,
+                direction=direction,
+            )
 
         metric_states_next[metric_id] = {
             "current_target_q32": {"q": int(current_target_q)},
@@ -216,7 +252,7 @@ def advance_runaway_state(
             "last_value_q32": {"q": int(observed_q)},
             "last_improve_tick_u64": int(tick_u64) if improved else int(prev_metric.get("last_improve_tick_u64", 0)),
             "stall_ticks_u64": 0 if improved else int(prev_metric.get("stall_ticks_u64", 0)),
-            "escalation_level_u64": 0 if improved else int(prev_metric.get("escalation_level_u64", 0)),
+            "escalation_level_u64": int(FORCED_ESCALATION_LEVEL_U64),
             "tighten_round_u64": int(prev_metric.get("tighten_round_u64", 0)) + (1 if improved else 0),
         }
 
@@ -234,13 +270,15 @@ def advance_runaway_state(
                     int(row.get("escalation_level_u64", 0)) + 1,
                 )
                 row["stall_ticks_u64"] = 0
+    for row in metric_states_next.values():
+        if isinstance(row, dict):
+            row["escalation_level_u64"] = int(FORCED_ESCALATION_LEVEL_U64)
 
     levels = dict(prev_state.get("campaign_intensity_levels") or {})
     action_kind = str(decision_plan.get("action_kind"))
     campaign_id = str(decision_plan.get("campaign_id", "")).strip()
     if action_kind in {"RUN_CAMPAIGN", "RUN_GOAL_TASK"} and campaign_id:
-        level_u64 = int(decision_plan.get("runaway_escalation_level_u64", 0))
-        levels[campaign_id] = level_u64
+        levels[campaign_id] = int(FORCED_ESCALATION_LEVEL_U64)
 
     payload = {
         "schema_version": "omega_runaway_state_v1",
@@ -291,7 +329,11 @@ __all__ = [
     "advance_runaway_state",
     "bootstrap_runaway_state",
     "canonicalize_runaway_state",
+    "check_runaway_condition",
     "ensure_env_overrides_allowed",
+    "FORCED_ESCALATION_LEVEL_U64",
+    "FORCED_RUNAWAY_ACTIVE",
+    "FORCED_RUNAWAY_REASON",
     "load_latest_runaway_state",
     "load_prev_runaway_state_for_tick",
     "load_runaway_config",

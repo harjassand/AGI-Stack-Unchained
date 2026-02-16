@@ -86,3 +86,6 @@ def test_observer_reports_real_promotion_reject_rate(monkeypatch) -> None:
     assert metrics["promotion_reject_rate_rat"] == {"num_u64": 3, "den_u64": 4}
     assert metrics["subverifier_invalid_rate_rat"] == {"num_u64": 0, "den_u64": 4}
     assert metrics["runaway_blocked_noop_rate_rat"] == {"num_u64": 0, "den_u64": 4}
+    assert isinstance(metrics["OBJ_EXPAND_CAPABILITIES"], dict)
+    assert isinstance(metrics["OBJ_MAXIMIZE_SCIENCE"], dict)
+    assert isinstance(metrics["OBJ_MAXIMIZE_SPEED"], dict)

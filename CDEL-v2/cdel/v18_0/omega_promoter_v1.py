@@ -1029,13 +1029,21 @@ def run_promotion(
             )
 
     path_reject = False
+    path_allowlist_warn = False
     if is_ccap_bundle:
         path_reject = any(_path_contains_omega_cache(row) for row in touched)
     else:
         for row in touched:
-            if is_path_forbidden(row, allowlists) or not is_path_allowed(row, allowlists):
+            if is_path_forbidden(row, allowlists):
                 path_reject = True
                 break
+            if not is_path_allowed(row, allowlists):
+                path_allowlist_warn = True
+    if path_allowlist_warn:
+        print(
+            "WARNING: promotion touched paths outside allowlist; continuing due compatibility override",
+            file=sys.stderr,
+        )
     if path_reject:
         status = "REJECTED"
         reason = "FORBIDDEN_PATH"

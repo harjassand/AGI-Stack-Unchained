@@ -127,7 +127,13 @@ _OBS_REQUIRED_SOURCE_IDS: tuple[str, ...] = (
 )
 _POLYMATH_STALE_AGE_U64 = (1 << 63) - 1
 _MAX_SERIES_LEN_U64 = 64
-_OBS_NON_CARRY_SERIES_KEYS = {"brain_temperature_q32"}
+_Q32_ONE = 1 << 32
+_OBS_NON_CARRY_SERIES_KEYS = {
+    "brain_temperature_q32",
+    "OBJ_EXPAND_CAPABILITIES",
+    "OBJ_MAXIMIZE_SCIENCE",
+    "OBJ_MAXIMIZE_SPEED",
+}
 _GE_CAMPAIGN_ID = "rsi_ge_symbiotic_optimizer_sh1_v0_1"
 
 
@@ -753,11 +759,31 @@ def _ge_stps_delta_q32(receipt: dict[str, Any]) -> int:
     return 0
 
 
+def _capability_expansion_q32(registry: dict[str, Any]) -> int:
+    caps = registry.get("capabilities")
+    if not isinstance(caps, list):
+        fail("SCHEMA_FAIL")
+    return int(len(caps) << 32)
+
+
+def _maximize_science_q32(science_rmse_q32: int) -> int:
+    rmse_q = max(0, min(int(science_rmse_q32), int(_Q32_ONE)))
+    return int(_Q32_ONE - rmse_q)
+
+
+def _maximize_speed_q32(previous_tick_total_ns_u64: int) -> int:
+    total_ns = int(previous_tick_total_ns_u64)
+    if total_ns <= 0:
+        return 0
+    return int(rat_q32(1_000_000_000, total_ns))
+
+
 def _recompute_observation_from_sources(
     *,
     root: Path,
     runs_roots: list[Path] | None,
     observation_payload: dict[str, Any],
+    registry: dict[str, Any],
     policy_hash: str,
     registry_hash: str,
     objectives_hash: str,
@@ -989,6 +1015,9 @@ def _recompute_observation_from_sources(
         "num_u64": int(code_pass_u64),
         "den_u64": int(max(1, code_reports_u64)),
     }
+    capability_expansion_q32 = _capability_expansion_q32(registry)
+    maximize_science_q32 = _maximize_science_q32(int(by_schema["sas_science_promotion_bundle_v1"]))
+    maximize_speed_q32 = _maximize_speed_q32(int(previous_tick_total_ns_u64))
 
     payload: dict[str, Any] = {
         "schema_version": "omega_observation_report_v1",
@@ -1009,6 +1038,9 @@ def _recompute_observation_from_sources(
             "runaway_blocked_recent3_u64": int(runaway_blocked_recent3_u64),
             "verifier_overhead_q32": {"q": verifier_overhead_q32},
             "previous_tick_total_ns_u64": int(previous_tick_total_ns_u64),
+            "OBJ_EXPAND_CAPABILITIES": {"q": int(capability_expansion_q32)},
+            "OBJ_MAXIMIZE_SCIENCE": {"q": int(maximize_science_q32)},
+            "OBJ_MAXIMIZE_SPEED": {"q": int(maximize_speed_q32)},
             "brain_temperature_q32": {"q": int(brain_temperature_q32)},
             "domain_coverage_ratio": {"q": int(domain_coverage_ratio_q32)},
             "top_void_score_q32": {"q": int(top_void_score_q32)},
@@ -1044,6 +1076,9 @@ def _recompute_observation_from_sources(
             "runaway_blocked_noop_rate_rat": [runaway_blocked_noop_rate_rat],
             "runaway_blocked_recent3_u64": [int(runaway_blocked_recent3_u64)],
             "previous_tick_total_ns_u64": [int(previous_tick_total_ns_u64)],
+            "OBJ_EXPAND_CAPABILITIES": [{"q": int(capability_expansion_q32)}],
+            "OBJ_MAXIMIZE_SCIENCE": [{"q": int(maximize_science_q32)}],
+            "OBJ_MAXIMIZE_SPEED": [{"q": int(maximize_speed_q32)}],
             "brain_temperature_q32": [{"q": int(brain_temperature_q32)}],
             "domain_coverage_ratio": [{"q": int(domain_coverage_ratio_q32)}],
             "top_void_score_q32": [{"q": int(top_void_score_q32)}],
@@ -1454,6 +1489,7 @@ def verify(state_dir: Path, *, mode: str = "full") -> str:
         root=_repo_root(),
         runs_roots=_observer_runs_roots(root=_repo_root(), daemon_root=daemon_root),
         observation_payload=obs_payload,
+        registry=registry,
         policy_hash=policy_hash,
         registry_hash=registry_hash,
         objectives_hash=objectives_hash,

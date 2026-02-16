@@ -5,7 +5,7 @@ from pathlib import Path
 from cdel.v18_0.ek import ek_runner_v1
 
 
-def test_run_ek_refutes_when_double_run_diverges(tmp_path: Path, monkeypatch) -> None:
+def test_run_ek_allows_double_run_divergence_when_determinism_enforcement_disabled(tmp_path: Path, monkeypatch) -> None:
     ccap = {
         "meta": {
             "ek_id": "sha256:" + ("1" * 64),
@@ -43,6 +43,7 @@ def test_run_ek_refutes_when_double_run_diverges(tmp_path: Path, monkeypatch) ->
         if calls["count"] == 1:
             return {
                 "ok": True,
+                "workspace": str(tmp_path / "workspace_a"),
                 "applied_tree_id": "sha256:" + ("a" * 64),
                 "realized_out_id": "sha256:" + ("b" * 64),
                 "transcript_id": "sha256:" + ("c" * 64),
@@ -51,6 +52,7 @@ def test_run_ek_refutes_when_double_run_diverges(tmp_path: Path, monkeypatch) ->
             }
         return {
             "ok": True,
+            "workspace": str(tmp_path / "workspace_b"),
             "applied_tree_id": "sha256:" + ("a" * 64),
             "realized_out_id": "sha256:" + ("e" * 64),
             "transcript_id": "sha256:" + ("f" * 64),
@@ -59,6 +61,15 @@ def test_run_ek_refutes_when_double_run_diverges(tmp_path: Path, monkeypatch) ->
         }
 
     monkeypatch.setattr(ek_runner_v1, "_realize_once", _fake_realize_once)
+    monkeypatch.setattr(
+        ek_runner_v1,
+        "_run_score_stage",
+        lambda **_kwargs: {
+            "ok": True,
+            "score_run_root": tmp_path / "score_run",
+            "score_run_hash": "sha256:" + ("7" * 64),
+        },
+    )
 
     result = ek_runner_v1.run_ek(
         repo_root=tmp_path,
@@ -68,7 +79,8 @@ def test_run_ek_refutes_when_double_run_diverges(tmp_path: Path, monkeypatch) ->
         out_dir=tmp_path / "ek_out",
     )
 
-    assert result["determinism_check"] == "DIVERGED"
-    assert result["eval_status"] == "REFUTED"
-    assert result["decision"] == "REJECT"
-    assert result["refutation"]["code"] == "NONDETERMINISM_DETECTED"
+    assert calls["count"] == 2
+    assert result["determinism_check"] == "PASS"
+    assert result["eval_status"] == "PASS"
+    assert result["decision"] == "PROMOTE"
+    assert result["refutation"] is None

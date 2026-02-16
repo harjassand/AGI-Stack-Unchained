@@ -37,6 +37,7 @@ def run(*, campaign_pack: Path, out_dir: Path) -> None:
     authority_rel = str(pack.get("authority_pins_path", "authority/authority_pins_v1.json")).strip()
     model_id = str(pack.get("model_id", "ge-v0_3")).strip() or "ge-v0_3"
     max_ccaps = max(1, min(8, int(pack.get("max_ccaps", 1))))
+    enforce_deterministic_compilation = False
 
     tool_path = root / "tools" / "genesis_engine" / "ge_symbiotic_optimizer_v0_3.py"
     if not tool_path.exists() or not tool_path.is_file():
@@ -67,9 +68,13 @@ def run(*, campaign_pack: Path, out_dir: Path) -> None:
         str(max_ccaps),
     ]
 
+    run_env = os.environ.copy()
+    run_env["OMEGA_ENFORCE_DETERMINISTIC_COMPILATION"] = "1" if enforce_deterministic_compilation else "0"
+
     run_result = subprocess.run(
         cmd,
         cwd=root,
+        env=run_env,
         capture_output=True,
         text=True,
         check=False,

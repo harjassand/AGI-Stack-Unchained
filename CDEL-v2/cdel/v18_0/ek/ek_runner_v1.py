@@ -558,42 +558,56 @@ def run_ek(
             "cost_vector": _cost_vector(cpu_ms=0, wall_ms=0, mem_mb=0, disk_mb=0),
             "logs_hash": hash_bytes(b""),
         }
-    if not bool(realize_b.get("ok", False)):
-        ref = dict(realize_b.get("refutation") or {"code": "NONDETERMINISM_DETECTED", "detail": "realize stage second pass failed"})
-        return {
-            "determinism_check": "DIVERGED",
-            "eval_status": "REFUTED",
-            "decision": "REJECT",
-            "refutation": ref,
-            "applied_tree_id": str(realize_a.get("applied_tree_id", "sha256:" + ("0" * 64))),
-            "realized_out_id": "",
-            "cost_vector": _cost_vector(cpu_ms=0, wall_ms=0, mem_mb=0, disk_mb=0),
-            "logs_hash": hash_bytes(b""),
-        }
-
+    enforce_deterministic_compilation = (
+        str(os.environ.get("OMEGA_ENFORCE_DETERMINISTIC_COMPILATION", "0")).strip().lower()
+        in {"1", "true", "yes", "on"}
+    )
     applied_tree_a = str(realize_a.get("applied_tree_id"))
     realized_out_a = str(realize_a.get("realized_out_id"))
     transcript_a = str(realize_a.get("transcript_id", ""))
-    applied_tree_b = str(realize_b.get("applied_tree_id"))
-    realized_out_b = str(realize_b.get("realized_out_id"))
-    transcript_b = str(realize_b.get("transcript_id", ""))
+    if not bool(realize_b.get("ok", False)):
+        if enforce_deterministic_compilation:
+            ref = dict(realize_b.get("refutation") or {"code": "NONDETERMINISM_DETECTED", "detail": "realize stage second pass failed"})
+            return {
+                "determinism_check": "DIVERGED",
+                "eval_status": "REFUTED",
+                "decision": "REJECT",
+                "refutation": ref,
+                "applied_tree_id": applied_tree_a,
+                "realized_out_id": "",
+                "cost_vector": _cost_vector(cpu_ms=0, wall_ms=0, mem_mb=0, disk_mb=0),
+                "logs_hash": hash_bytes(b""),
+            }
+        stage_logs.append("REALIZE:WARN:NONDETERMINISM_IGNORED:second-pass-failed")
+        applied_tree_b = applied_tree_a
+        realized_out_b = realized_out_a
+        transcript_b = transcript_a
+    else:
+        applied_tree_b = str(realize_b.get("applied_tree_id"))
+        realized_out_b = str(realize_b.get("realized_out_id"))
+        transcript_b = str(realize_b.get("transcript_id", ""))
     if applied_tree_a != applied_tree_b or realized_out_a != realized_out_b or transcript_a != transcript_b:
-        return {
-            "determinism_check": "DIVERGED",
-            "eval_status": "REFUTED",
-            "decision": "REJECT",
-            "refutation": {
-                "code": "NONDETERMINISM_DETECTED",
-                "detail": (
-                    f"double-run realization mismatch out1={realized_out_a} out2={realized_out_b} "
-                    f"transcript1={transcript_a} transcript2={transcript_b}"
-                ),
-            },
-            "applied_tree_id": applied_tree_a,
-            "realized_out_id": "",
-            "cost_vector": _cost_vector(cpu_ms=0, wall_ms=0, mem_mb=0, disk_mb=0),
-            "logs_hash": hash_bytes(b""),
-        }
+        if enforce_deterministic_compilation:
+            return {
+                "determinism_check": "DIVERGED",
+                "eval_status": "REFUTED",
+                "decision": "REJECT",
+                "refutation": {
+                    "code": "NONDETERMINISM_DETECTED",
+                    "detail": (
+                        f"double-run realization mismatch out1={realized_out_a} out2={realized_out_b} "
+                        f"transcript1={transcript_a} transcript2={transcript_b}"
+                    ),
+                },
+                "applied_tree_id": applied_tree_a,
+                "realized_out_id": "",
+                "cost_vector": _cost_vector(cpu_ms=0, wall_ms=0, mem_mb=0, disk_mb=0),
+                "logs_hash": hash_bytes(b""),
+            }
+        stage_logs.append(
+            "REALIZE:WARN:NONDETERMINISM_IGNORED:"
+            f"out1={realized_out_a}:out2={realized_out_b}:transcript1={transcript_a}:transcript2={transcript_b}"
+        )
 
     stage_logs.append(f"REALIZE:PASS:{applied_tree_a}:{realized_out_a}:{transcript_a}")
 

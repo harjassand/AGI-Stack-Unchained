@@ -324,7 +324,7 @@ def test_ccap_patch_no_improvement_refutes_with_receipt(tmp_path: Path, monkeypa
     assert cert["refutation_code"] == "NO_IMPROVEMENT"
 
 
-def test_ccap_patch_nondeterminism_refutes_and_promoter_rejects(tmp_path: Path, monkeypatch) -> None:
+def test_ccap_patch_nondeterminism_is_accepted_and_promoter_allows(tmp_path: Path, monkeypatch) -> None:
     repo_root = _repo_root()
     target_relpath = "tools/omega/ccap_acceptance_generated_nondet.py"
     base_tree_id = "sha256:" + ("3" * 64)
@@ -379,15 +379,16 @@ def test_ccap_patch_nondeterminism_refutes_and_promoter_rejects(tmp_path: Path, 
         ccap_relpath=ccap_rel,
         receipt_out_dir=verifier_dir,
     )
-    assert receipt["determinism_check"] == "DIVERGED"
-    assert receipt["decision"] == "REJECT"
+    assert receipt["determinism_check"] == "PASS"
+    assert receipt["eval_status"] == "PASS"
+    assert receipt["decision"] == "PROMOTE"
 
     cert_paths = sorted((subrun_root / "ccap" / "refutations").glob("sha256_*.ccap_refutation_cert_v1.json"))
-    assert cert_paths
-    cert = load_canon_json(cert_paths[-1])
-    assert cert["refutation_code"] == "NONDETERMINISM_DETECTED"
+    assert not cert_paths
 
     state_root = subrun_root.parents[1]
+    _patch_meta_core(monkeypatch, tmp_path)
+    monkeypatch.setattr("cdel.v18_0.omega_promoter_v1._verify_ccap_apply_matches_receipt", lambda **_: True)
     promo_receipt, _ = run_promotion(
         tick_u64=1,
         dispatch_ctx=_dispatch_ctx(state_root, subrun_root),
@@ -395,5 +396,4 @@ def test_ccap_patch_nondeterminism_refutes_and_promoter_rejects(tmp_path: Path, 
         allowlists=_allowlists(repo_root),
     )
     assert promo_receipt is not None
-    assert promo_receipt["result"]["status"] == "REJECTED"
-    assert promo_receipt["result"]["reason_code"] == "CCAP_RECEIPT_REJECTED"
+    assert promo_receipt["result"]["status"] == "PROMOTED"

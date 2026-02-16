@@ -26,6 +26,7 @@ from cdel.v1_7r.canon import canon_bytes, write_canon_json
 from cdel.v18_0.authority.authority_hash_v1 import auth_hash, load_authority_pins
 from cdel.v18_0.ccap_runtime_v1 import ccap_payload_id, compute_repo_base_tree_id
 from cdel.v18_0.omega_common_v1 import canon_hash_obj, rat_q32, validate_schema
+from cdel.v18_0.patch_diff_v1 import build_unified_patch_bytes
 
 from tools.genesis_engine.sh1_pd_v1 import build_pd_from_patch_bytes, touched_paths_hash_for_paths, touched_paths_hash_prefix_hex
 from tools.genesis_engine.sh1_xs_v1 import build_xs_snapshot, load_ge_config
@@ -167,20 +168,10 @@ def _base_tree_id_best_effort(repo_root: Path) -> str:
 
 
 def _build_unified_patch(*, target_relpath: str, before: str, after: str) -> bytes:
-    import difflib
-
-    rows = list(
-        difflib.unified_diff(
-            before.splitlines(keepends=True),
-            after.splitlines(keepends=True),
-            fromfile=f"a/{target_relpath}",
-            tofile=f"b/{target_relpath}",
-            lineterm="",
-        )
-    )
-    if not rows:
+    patch_bytes = build_unified_patch_bytes(relpath=target_relpath, before_text=before, after_text=after)
+    if not patch_bytes:
         raise _invalid("SITE_NOT_FOUND")
-    return ("\n".join(rows) + "\n").encode("utf-8")
+    return patch_bytes
 
 
 def _build_comment_patch(*, target_relpath: str, marker: str, repo_root: Path) -> bytes:

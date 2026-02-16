@@ -134,7 +134,7 @@ def apply_patch_bytes(*, workspace_root: Path, patch_bytes: bytes) -> None:
             fail("VERIFY_ERROR")
 
         check_run = subprocess.run(
-            ["git", "apply", "--check", str(patch_path)],
+            ["git", "apply", "-p1", "--check", str(patch_path)],
             cwd=workspace_root,
             capture_output=True,
             text=True,
@@ -151,7 +151,7 @@ def apply_patch_bytes(*, workspace_root: Path, patch_bytes: bytes) -> None:
             raise RuntimeError(f"git_apply_check_failed: {detail}")
 
         run = subprocess.run(
-            ["git", "apply", str(patch_path)],
+            ["git", "apply", "-p1", str(patch_path)],
             cwd=workspace_root,
             capture_output=True,
             text=True,

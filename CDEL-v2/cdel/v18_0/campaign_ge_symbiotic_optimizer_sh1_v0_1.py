@@ -3,17 +3,19 @@
 from __future__ import annotations
 
 import argparse
-import difflib
 import hashlib
 import json
 import os
 import subprocess
 import sys
+import tempfile
 from pathlib import Path
 from typing import Any
 
 from ..v1_7r.canon import write_canon_json
+from .ccap_runtime_v1 import materialize_repo_snapshot
 from .omega_common_v1 import canon_hash_obj, fail, load_canon_dict, repo_root, validate_schema
+from .patch_diff_v1 import build_unified_patch_bytes
 
 _DEFAULT_BACKLOG_REGISTRY_REL = "campaigns/rsi_omega_daemon_v18_0_prod/omega_capability_registry_v2.json"
 _DEFAULT_BACKLOG_GOAL_QUEUE_REL = "campaigns/rsi_omega_daemon_v18_0_prod/goals/omega_goal_queue_v1.json"
@@ -68,23 +70,8 @@ def _build_goal_id(capability_id: str, ordinal_u64: int) -> str:
     return f"goal_cap_backlog_{_sanitize_goal_id_piece(capability_id)}_{int(ordinal_u64):04d}"
 
 
-def _build_unified_patch(*, relpath: str, before: str, after: str) -> str:
-    if before == after:
-        return ""
-    before_lines = before.splitlines(keepends=True)
-    after_lines = after.splitlines(keepends=True)
-    rows = list(
-        difflib.unified_diff(
-            before_lines,
-            after_lines,
-            fromfile=f"a/{relpath}",
-            tofile=f"b/{relpath}",
-            lineterm="",
-        )
-    )
-    if not rows:
-        return ""
-    return "\n".join(rows) + "\n"
+def _build_unified_patch(*, relpath: str, before: str, after: str) -> bytes:
+    return build_unified_patch_bytes(relpath=relpath, before_text=before, after_text=after)
 
 
 def _resolve_capability_backlog(pack: dict[str, Any]) -> list[str]:
@@ -136,6 +123,55 @@ def _patch_touches_relpath(*, patch_bytes: bytes, relpath: str) -> bool:
         if line == target:
             return True
     return False
+
+
+def _patch_head_rows(patch_bytes: bytes, *, max_lines: int = 80) -> list[str]:
+    return patch_bytes.decode("utf-8", errors="replace").splitlines()[:max_lines]
+
+
+def _preflight_merged_patch(*, root: Path, out_dir: Path, merged_patch: bytes) -> None:
+    if not merged_patch:
+        return
+    debug_path = out_dir / "debug_patch_head.txt"
+    with tempfile.TemporaryDirectory(prefix="ccap_patch_preflight_", dir=str(out_dir.resolve())) as scratch_raw:
+        scratch_root = Path(scratch_raw)
+        materialize_repo_snapshot(root, scratch_root)
+        patch_path = scratch_root / ".merged.patch"
+        patch_path.write_bytes(merged_patch)
+
+        init_run = subprocess.run(
+            ["git", "init", "-q"],
+            cwd=scratch_root,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        if int(init_run.returncode) != 0:
+            fail("VERIFY_ERROR")
+
+        check_run = subprocess.run(
+            ["git", "apply", "--check", "-p1", str(patch_path)],
+            cwd=scratch_root,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        if int(check_run.returncode) != 0:
+            head_rows = _patch_head_rows(merged_patch, max_lines=80)
+            head_text = ("\n".join(head_rows) + "\n") if head_rows else ""
+            debug_path.write_text(head_text, encoding="utf-8")
+            detail = (check_run.stderr or check_run.stdout).strip()
+            if not detail:
+                detail = f"git apply --check exited with status {int(check_run.returncode)}"
+            detail = detail.replace(str(scratch_root.resolve()), "<workspace>")
+            detail = detail.replace(str(scratch_root), "<workspace>")
+            detail = detail.replace(str(patch_path.resolve()), "<patch>")
+            detail = detail.replace(str(patch_path), "<patch>")
+            head_inline = "\\n".join(head_rows)
+            fail(
+                "VERIFY_ERROR:PATCH_PREFLIGHT_APPLY_CHECK_FAILED:"
+                f"detail={detail}:debug_patch_head_rel=debug_patch_head.txt:patch_head={head_inline}"
+            )
 
 
 def _build_capability_backlog_patch(*, root: Path, pack: dict[str, Any], skip_registry_diff: bool = False) -> bytes:
@@ -228,7 +264,7 @@ def _build_capability_backlog_patch(*, root: Path, pack: dict[str, Any], skip_re
     registry_after = _canonical_json_text(registry_payload)
     goal_queue_after = _canonical_json_text(goal_queue_payload)
 
-    patch_chunks: list[str] = []
+    patch_chunks: list[bytes] = []
     patch_registry = _build_unified_patch(relpath=registry_rel, before=registry_before, after=registry_after)
     if patch_registry and not skip_registry_diff:
         patch_chunks.append(patch_registry)
@@ -237,7 +273,7 @@ def _build_capability_backlog_patch(*, root: Path, pack: dict[str, Any], skip_re
         patch_chunks.append(patch_goals)
     if not patch_chunks:
         return b""
-    return "".join(patch_chunks).encode("utf-8")
+    return b"".join(patch_chunks)
 
 
 def _inject_capability_backlog_patch(
@@ -279,6 +315,7 @@ def _inject_capability_backlog_patch(
     if merged_patch and not merged_patch.endswith(b"\n"):
         merged_patch += b"\n"
     merged_patch += backlog_patch_bytes
+    _preflight_merged_patch(root=root, out_dir=out_dir, merged_patch=merged_patch)
 
     patch_hex = hashlib.sha256(merged_patch).hexdigest()
     next_patch_relpath = f"ccap/blobs/sha256_{patch_hex}.patch"

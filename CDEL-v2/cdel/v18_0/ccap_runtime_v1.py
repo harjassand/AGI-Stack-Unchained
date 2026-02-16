@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import os
+import re
 import shutil
 import subprocess
 from pathlib import Path
@@ -101,34 +102,72 @@ def workspace_disk_mb(workspace_root: Path) -> int:
     return max(0, (total + (1024 * 1024 - 1)) // (1024 * 1024))
 
 
+_ABSOLUTE_PATH_RE = re.compile(r"(?<![A-Za-z0-9_.-])/[^\s:\"']+")
+
+
+def _sanitize_git_apply_error(
+    *,
+    workspace_root: Path,
+    patch_path: Path,
+    stderr: str,
+    stdout: str,
+    returncode: int,
+) -> str:
+    message = (stderr or "").strip() or (stdout or "").strip()
+    if not message:
+        message = f"git apply exited with status {int(returncode)}"
+    sanitized = message.replace(str(workspace_root.resolve()), "<workspace>")
+    sanitized = sanitized.replace(str(workspace_root), "<workspace>")
+    sanitized = sanitized.replace(str(patch_path.resolve()), "<patch>")
+    sanitized = sanitized.replace(str(patch_path), "<patch>")
+    sanitized = _ABSOLUTE_PATH_RE.sub("<abs_path>", sanitized)
+    compact = " | ".join(row.strip() for row in sanitized.splitlines() if row.strip())
+    return compact or f"git apply exited with status {int(returncode)}"
+
+
 def apply_patch_bytes(*, workspace_root: Path, patch_bytes: bytes) -> None:
     patch_path = workspace_root / ".ccap_apply.patch"
     patch_path.write_bytes(patch_bytes)
+    try:
+        init_run = subprocess.run(["git", "init", "-q"], cwd=workspace_root, capture_output=True, text=True, check=False)
+        if init_run.returncode != 0:
+            fail("VERIFY_ERROR")
 
-    init_run = subprocess.run(["git", "init", "-q"], cwd=workspace_root, capture_output=True, text=True, check=False)
-    if init_run.returncode != 0:
-        fail("VERIFY_ERROR")
+        check_run = subprocess.run(
+            ["git", "apply", "--check", str(patch_path)],
+            cwd=workspace_root,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        if check_run.returncode != 0:
+            detail = _sanitize_git_apply_error(
+                workspace_root=workspace_root,
+                patch_path=patch_path,
+                stderr=check_run.stderr,
+                stdout=check_run.stdout,
+                returncode=check_run.returncode,
+            )
+            raise RuntimeError(f"git_apply_check_failed: {detail}")
 
-    check_run = subprocess.run(
-        ["git", "apply", "--check", str(patch_path)],
-        cwd=workspace_root,
-        capture_output=True,
-        text=True,
-        check=False,
-    )
-    if check_run.returncode != 0:
-        fail("SITE_NOT_FOUND")
-
-    run = subprocess.run(
-        ["git", "apply", str(patch_path)],
-        cwd=workspace_root,
-        capture_output=True,
-        text=True,
-        check=False,
-    )
-    if run.returncode != 0:
-        fail("SITE_NOT_FOUND")
-    patch_path.unlink(missing_ok=True)
+        run = subprocess.run(
+            ["git", "apply", str(patch_path)],
+            cwd=workspace_root,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        if run.returncode != 0:
+            detail = _sanitize_git_apply_error(
+                workspace_root=workspace_root,
+                patch_path=patch_path,
+                stderr=run.stderr,
+                stdout=run.stdout,
+                returncode=run.returncode,
+            )
+            raise RuntimeError(f"git_apply_check_failed: {detail}")
+    finally:
+        patch_path.unlink(missing_ok=True)
 
 
 def patch_blob_path(*, subrun_root: Path, patch_blob_id: str) -> Path:

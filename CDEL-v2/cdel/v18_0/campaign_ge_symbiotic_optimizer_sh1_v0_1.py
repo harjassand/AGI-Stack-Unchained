@@ -15,8 +15,8 @@ from typing import Any
 from ..v1_7r.canon import write_canon_json
 from .omega_common_v1 import canon_hash_obj, fail, load_canon_dict, repo_root, validate_schema
 
-_DEFAULT_BACKLOG_REGISTRY_REL = "campaigns/rsi_omega_daemon_v19_0_super_unified/omega_capability_registry_v2.json"
-_DEFAULT_BACKLOG_GOAL_QUEUE_REL = "campaigns/rsi_omega_daemon_v19_0_super_unified/goals/omega_goal_queue_v1.json"
+_DEFAULT_BACKLOG_REGISTRY_REL = "campaigns/rsi_omega_daemon_v18_0_prod/omega_capability_registry_v2.json"
+_DEFAULT_BACKLOG_GOAL_QUEUE_REL = "campaigns/rsi_omega_daemon_v18_0_prod/goals/omega_goal_queue_v1.json"
 _DEFAULT_CAPABILITY_BACKLOG: tuple[str, ...] = (
     "RSI_OMEGA_SELF_OPTIMIZE_CORE",
     "RSI_OMEGA_SKILL_TRANSFER",
@@ -33,6 +33,7 @@ _DEFAULT_CAPABILITY_BACKLOG: tuple[str, ...] = (
     "RSI_EUDRS_U_INDEX_REBUILD",
     "RSI_EUDRS_U_ONTOLOGY_UPDATE",
     "RSI_EUDRS_U_EVAL_CAC",
+    "RSI_EUDRS_U_TRAIN",
 )
 
 
@@ -177,17 +178,17 @@ def _build_capability_backlog_patch(*, root: Path, pack: dict[str, Any], skip_re
             by_capability_id[cap_id] = row
 
     newly_enabled: list[str] = []
+    target_goal_caps: list[str] = []
     for cap_id in backlog:
         row = by_capability_id.get(cap_id)
         if row is None:
             continue
         if bool(row.get("enabled", False)):
+            target_goal_caps.append(cap_id)
             continue
         row["enabled"] = True
         newly_enabled.append(cap_id)
-
-    if not newly_enabled:
-        return b""
+        target_goal_caps.append(cap_id)
 
     existing_goal_ids: set[str] = set()
     existing_goal_caps: set[str] = set()
@@ -201,7 +202,8 @@ def _build_capability_backlog_patch(*, root: Path, pack: dict[str, Any], skip_re
         if cap_id:
             existing_goal_caps.add(cap_id)
 
-    for cap_id in newly_enabled:
+    goals_added: list[str] = []
+    for cap_id in target_goal_caps:
         if cap_id in existing_goal_caps:
             continue
         ordinal_u64 = 1
@@ -218,6 +220,10 @@ def _build_capability_backlog_patch(*, root: Path, pack: dict[str, Any], skip_re
         )
         existing_goal_ids.add(goal_id)
         existing_goal_caps.add(cap_id)
+        goals_added.append(cap_id)
+
+    if not newly_enabled and not goals_added:
+        return b""
 
     registry_after = _canonical_json_text(registry_payload)
     goal_queue_after = _canonical_json_text(goal_queue_payload)

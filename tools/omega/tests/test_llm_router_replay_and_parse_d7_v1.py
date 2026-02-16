@@ -90,6 +90,9 @@ def test_llm_router_replay_parse_and_trace(tmp_path: Path, monkeypatch: pytest.M
     monkeypatch.setenv("ORCH_LLM_MAX_CALLS", "4")
     monkeypatch.setenv("ORCH_LLM_MAX_PROMPT_CHARS", "200000")
     monkeypatch.setenv("ORCH_LLM_MAX_RESPONSE_CHARS", "200000")
+    monkeypatch.setenv("ORCH_LLM_TEMPERATURE", "0.6")
+    monkeypatch.setenv("ORCH_LLM_MAX_TOKENS", "777")
+    monkeypatch.setenv("ORCH_LLM_TOP_P", "0.8")
 
     result = router_v1.run(run_dir=run_dir, tick_u64=10, store_root=run_dir / "polymath" / "store")
     assert str(result.get("status", "")) == "OK"
@@ -112,6 +115,9 @@ def test_llm_router_replay_parse_and_trace(tmp_path: Path, monkeypatch: pytest.M
     assert isinstance(diagnostics, dict)
     assert len(diagnostics.get("rejected_web_queries", [])) == 2
     assert len(diagnostics.get("rejected_goal_injections", [])) == 1
+    assert float(diagnostics.get("llm_temperature_f64", 0.0)) == 0.6
+    assert int(diagnostics.get("llm_max_tokens_u64", 0)) == 777
+    assert float(diagnostics.get("llm_top_p_f64", 0.0)) == 0.8
 
     trace_lines = [line for line in (run_dir / "OMEGA_LLM_TOOL_TRACE_v1.jsonl").read_text(encoding="utf-8").splitlines() if line.strip()]
     assert len(trace_lines) == 1
@@ -119,6 +125,9 @@ def test_llm_router_replay_parse_and_trace(tmp_path: Path, monkeypatch: pytest.M
     assert trace.get("created_at_utc") == ""
     assert trace.get("prompt_sha256") == result.get("prompt_sha256")
     assert trace.get("response_sha256") == result.get("response_sha256")
+    assert float(trace.get("llm_temperature_f64", 0.0)) == 0.6
+    assert int(trace.get("llm_max_tokens_u64", 0)) == 777
+    assert float(trace.get("llm_top_p_f64", 0.0)) == 0.8
 
 
 def test_llm_router_failsoft_invalid_json(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -138,3 +147,17 @@ def test_llm_router_failsoft_invalid_json(tmp_path: Path, monkeypatch: pytest.Mo
     diagnostics = plan.get("diagnostics") if isinstance(plan, dict) else {}
     assert isinstance(diagnostics, dict)
     assert "LLM_ROUTER_INVALID_JSON" in str(diagnostics.get("error_reason", ""))
+
+
+def test_llm_router_backend_alias_google_maps_to_gemini_harvest(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    run_dir = tmp_path / "run_alias"
+    run_dir.mkdir(parents=True, exist_ok=True)
+    _write_registry(run_dir / "_overnight_pack" / "omega_capability_registry_v2.json")
+
+    monkeypatch.setenv("ORCH_LLM_BACKEND", "google")
+    monkeypatch.setenv("ORCH_GEMINI_MODEL", "gemini-2.0-flash")
+    monkeypatch.setenv("ORCH_LLM_REPLAY_PATH", (run_dir / "missing_replay.jsonl").as_posix())
+
+    result = router_v1.run_failsoft(run_dir=run_dir, tick_u64=0, store_root=run_dir / "polymath" / "store")
+    assert str(result.get("status", "")) == "ERROR"
+    assert "LLM_LIVE_DISABLED" in str(result.get("error_reason", ""))

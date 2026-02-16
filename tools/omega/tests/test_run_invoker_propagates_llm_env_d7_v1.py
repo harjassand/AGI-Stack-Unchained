@@ -15,6 +15,9 @@ def test_run_invoker_propagates_llm_and_net_env(monkeypatch, tmp_path: Path) -> 
     monkeypatch.setenv("ORCH_LLM_BACKEND", "openai_replay")
     monkeypatch.setenv("ORCH_LLM_REPLAY_PATH", replay_path.as_posix())
     monkeypatch.setenv("ORCH_LLM_MAX_CALLS", "7")
+    monkeypatch.setenv("ORCH_LLM_TEMPERATURE", "0.7")
+    monkeypatch.setenv("ORCH_LLM_MAX_TOKENS", "2048")
+    monkeypatch.setenv("ORCH_LLM_TOP_P", "0.9")
 
     module_path = tmp_path / "env_probe_llm_v1.py"
     module_path.write_text(
@@ -25,6 +28,9 @@ def test_run_invoker_propagates_llm_and_net_env(monkeypatch, tmp_path: Path) -> 
         "  'ORCH_LLM_BACKEND': os.environ.get('ORCH_LLM_BACKEND',''),\n"
         "  'ORCH_LLM_REPLAY_PATH': os.environ.get('ORCH_LLM_REPLAY_PATH',''),\n"
         "  'ORCH_LLM_MAX_CALLS': os.environ.get('ORCH_LLM_MAX_CALLS',''),\n"
+        "  'ORCH_LLM_TEMPERATURE': os.environ.get('ORCH_LLM_TEMPERATURE',''),\n"
+        "  'ORCH_LLM_MAX_TOKENS': os.environ.get('ORCH_LLM_MAX_TOKENS',''),\n"
+        "  'ORCH_LLM_TOP_P': os.environ.get('ORCH_LLM_TOP_P',''),\n"
         "}, sort_keys=True, separators=(',',':')))\n",
         encoding="utf-8",
     )
@@ -42,9 +48,15 @@ def test_run_invoker_propagates_llm_and_net_env(monkeypatch, tmp_path: Path) -> 
     assert payload["ORCH_LLM_BACKEND"] == "openai_replay"
     assert payload["ORCH_LLM_REPLAY_PATH"] == replay_path.as_posix()
     assert payload["ORCH_LLM_MAX_CALLS"] == "7"
+    assert payload["ORCH_LLM_TEMPERATURE"] == "0.7"
+    assert payload["ORCH_LLM_MAX_TOKENS"] == "2048"
+    assert payload["ORCH_LLM_TOP_P"] == "0.9"
 
     env = _build_env()
     assert env["OMEGA_NET_LIVE_OK"] == "1"
     assert env["ORCH_LLM_BACKEND"] == "openai_replay"
     assert env["ORCH_LLM_REPLAY_PATH"] == replay_path.as_posix()
     assert env["ORCH_LLM_MAX_CALLS"] == "7"
+    assert env["ORCH_LLM_TEMPERATURE"] == "0.7"
+    assert env["ORCH_LLM_MAX_TOKENS"] == "2048"
+    assert env["ORCH_LLM_TOP_P"] == "0.9"

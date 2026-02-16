@@ -40,6 +40,8 @@ _REQUIRED_PASS_GATES_REFINERY = ("A", "B", "C", "F", "P", "Q")
 _REQUIRED_PASS_GATES_UNIFIED = ("A", "B", "C", "D", "E", "F", "P", "Q")
 _REQUIRED_PASS_GATES_UNIFIED_NO_POLYMATH = ("A", "B", "C", "D", "E", "F")
 _GOAL_QUEUE_MAX_LEN_U64 = 300
+_CAPABILITY_FRONTIER_WINDOW_U64 = 512
+_GOAL_REFRESH_IDLE_TICKS_U64 = 64
 _GE_CAMPAIGN_ID = "rsi_ge_symbiotic_optimizer_sh1_v0_1"
 _GE_CAPABILITY_ID = "RSI_GE_SH1_OPTIMIZER"
 _MODEL_GENESIS_CAMPAIGN_ID = "rsi_model_genesis_v10_0"
@@ -103,6 +105,25 @@ _UNIFIED_SKILL_ROWS: tuple[tuple[str, str, str], ...] = (
 _UNIFIED_SKILL_CAPABILITY_IDS: tuple[str, ...] = tuple(
     sorted({str(capability_id) for _campaign_id, capability_id, _goal_id in _UNIFIED_SKILL_ROWS})
 )
+_SPEED_CHURN_DEEMPHASIS_CAPABILITY_IDS: frozenset[str] = frozenset(
+    {
+        "RSI_SAS_CODE",
+        "RSI_SAS_SYSTEM",
+        "RSI_SAS_KERNEL",
+        "RSI_OMEGA_SELF_OPTIMIZE_CORE",
+    }
+)
+_SH1_SCAFFOLD_DEFAULT_DOMAIN = "frontier_probe"
+_SLUG_TOKEN_RE = re.compile(r"[^a-z0-9]+")
+
+
+def _env_truthy(name: str) -> bool:
+    return str(os.environ.get(name, "")).strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _slug_token(value: str) -> str:
+    out = _SLUG_TOKEN_RE.sub("_", str(value).strip().lower()).strip("_")
+    return out or "x"
 
 
 def _state_dir(run_dir: Path) -> Path:
@@ -930,6 +951,221 @@ def _inject_pending_goal(*, goal_queue_path: Path, goal_id: str, capability_id: 
         goal_queue_path=goal_queue_path,
         pending_goals=[(goal_id, capability_id)],
     )
+
+
+def _requested_sh1_scaffold_domains() -> list[str]:
+    raw = str(os.environ.get("OMEGA_SH1_SCAFFOLD_DOMAINS", "")).strip()
+    if raw:
+        tokens = re.split(r"[,\s]+", raw)
+        return sorted({_slug_token(token) for token in tokens if str(token).strip()})
+    if _env_truthy("OMEGA_SH1_SCAFFOLD_ENABLE"):
+        return [_SH1_SCAFFOLD_DEFAULT_DOMAIN]
+    return []
+
+
+def _enabled_capability_rows_from_registry(registry_path: Path) -> list[dict[str, Any]]:
+    if not registry_path.exists() or not registry_path.is_file():
+        return []
+    try:
+        payload = _load_json(registry_path)
+    except Exception:  # noqa: BLE001
+        return []
+    caps = payload.get("capabilities")
+    if not isinstance(caps, list):
+        return []
+    out: list[dict[str, Any]] = []
+    for row in caps:
+        if not isinstance(row, dict):
+            continue
+        if not bool(row.get("enabled", False)):
+            continue
+        capability_id = str(row.get("capability_id", "")).strip()
+        campaign_id = str(row.get("campaign_id", "")).strip()
+        if not capability_id or not campaign_id:
+            continue
+        out.append(dict(row))
+    out.sort(key=lambda row: (str(row.get("capability_id", "")), str(row.get("campaign_id", ""))))
+    return out
+
+
+def _enabled_capability_ids_from_registry(registry_path: Path) -> list[str]:
+    return sorted(
+        {
+            str(row.get("capability_id", "")).strip()
+            for row in _enabled_capability_rows_from_registry(registry_path)
+            if str(row.get("capability_id", "")).strip()
+        }
+    )
+
+
+def _background_only_capability_ids() -> set[str]:
+    raw = str(os.environ.get("OMEGA_BACKGROUND_ONLY_CAPABILITY_IDS", "")).strip()
+    if not raw:
+        return set()
+    tokens = re.split(r"[,\s]+", raw)
+    return {str(token).strip() for token in tokens if str(token).strip()}
+
+
+def _goal_id_for_enabled_capability(*, capability_id: str, tick_u64: int, reason_tag: str) -> str:
+    return (
+        f"goal_auto_00_refresh_{_slug_token(str(reason_tag))}_{_slug_token(capability_id)}_{int(max(0, tick_u64)):06d}"
+    )
+
+
+def _dispatch_last_tick_by_capability(state_dir: Path) -> dict[str, int]:
+    out: dict[str, int] = {}
+    for payload in _dispatch_receipt_payloads(state_dir):
+        capability_id = str(payload.get("capability_id", "")).strip()
+        if not capability_id:
+            continue
+        tick_u64 = max(0, int(payload.get("tick_u64", 0)))
+        out[capability_id] = max(int(out.get(capability_id, 0)), int(tick_u64))
+    return {key: int(out[key]) for key in sorted(out.keys())}
+
+
+def _refresh_enabled_capability_goals(
+    *,
+    goal_queue_path: Path,
+    registry_path: Path,
+    state_dir: Path,
+    tick_u64: int,
+    idle_window_ticks_u64: int,
+    reason_tag: str,
+) -> dict[str, Any]:
+    enabled_capability_ids = _enabled_capability_ids_from_registry(registry_path)
+    background_only = _background_only_capability_ids()
+    last_dispatch_by_capability = _dispatch_last_tick_by_capability(state_dir)
+    idle_window = max(1, int(idle_window_ticks_u64))
+    min_recent_tick_u64 = max(0, int(tick_u64) - int(idle_window) + 1)
+
+    pending_goals: list[tuple[str, str]] = []
+    idle_capability_ids: list[str] = []
+    for capability_id in enabled_capability_ids:
+        if capability_id in background_only:
+            continue
+        last_tick_u64 = last_dispatch_by_capability.get(capability_id)
+        if last_tick_u64 is not None and int(last_tick_u64) >= int(min_recent_tick_u64):
+            continue
+        pending_goals.append(
+            (
+                _goal_id_for_enabled_capability(
+                    capability_id=capability_id,
+                    tick_u64=int(tick_u64),
+                    reason_tag=reason_tag,
+                ),
+                capability_id,
+            )
+        )
+        idle_capability_ids.append(capability_id)
+
+    _inject_pending_goals(
+        goal_queue_path=goal_queue_path,
+        pending_goals=pending_goals,
+    )
+    return {
+        "tick_u64": int(max(0, tick_u64)),
+        "reason_tag": str(reason_tag),
+        "idle_window_ticks_u64": int(idle_window),
+        "enabled_capability_ids_u64": int(len(enabled_capability_ids)),
+        "background_only_capability_ids_u64": int(len(background_only)),
+        "idle_capability_ids_u64": int(len(idle_capability_ids)),
+        "idle_capability_ids": sorted(idle_capability_ids),
+        "goals_requested_u64": int(len(pending_goals)),
+    }
+
+
+def _capability_id_from_dispatch_dir(dispatch_dir: Path) -> str:
+    binding_path = dispatch_dir / "promotion" / "omega_activation_binding_v1.json"
+    if binding_path.exists() and binding_path.is_file():
+        try:
+            payload = _load_json(binding_path)
+        except Exception:  # noqa: BLE001
+            payload = {}
+        if isinstance(payload, dict):
+            capability_id = str(payload.get("capability_id", "")).strip()
+            if capability_id:
+                return capability_id
+    for path in sorted(dispatch_dir.glob("sha256_*.omega_dispatch_receipt_v1.json"), key=lambda row: row.as_posix()):
+        try:
+            payload = _load_json(path)
+        except Exception:  # noqa: BLE001
+            continue
+        if not isinstance(payload, dict):
+            continue
+        capability_id = str(payload.get("capability_id", "")).strip()
+        if capability_id:
+            return capability_id
+    return ""
+
+
+def _capability_frontier_snapshot(
+    *,
+    state_dir: Path,
+    registry_path: Path,
+    tick_u64: int,
+    window_ticks_u64: int,
+) -> dict[str, Any]:
+    window_u64 = max(1, int(window_ticks_u64))
+    records: list[dict[str, Any]] = []
+    for activation_path in sorted(
+        state_dir.glob("dispatch/*/activation/sha256_*.omega_activation_receipt_v1.json"),
+        key=lambda row: row.as_posix(),
+    ):
+        try:
+            payload = _load_json(activation_path)
+        except Exception:  # noqa: BLE001
+            continue
+        if not isinstance(payload, dict):
+            continue
+        dispatch_dir = activation_path.parent.parent
+        capability_id = _capability_id_from_dispatch_dir(dispatch_dir)
+        if not capability_id:
+            continue
+        records.append(
+            {
+                "tick_u64": max(0, int(payload.get("tick_u64", 0))),
+                "capability_id": capability_id,
+                "activation_success": bool(payload.get("activation_success", False)),
+            }
+        )
+    records.sort(key=lambda row: (int(row.get("tick_u64", 0)), str(row.get("capability_id", ""))))
+
+    latest_tick_u64 = max(0, int(tick_u64))
+    if records and latest_tick_u64 <= 0:
+        latest_tick_u64 = max(int(row.get("tick_u64", 0)) for row in records)
+    min_tick_u64 = max(0, int(latest_tick_u64) - int(window_u64) + 1)
+
+    window_rows = [
+        row
+        for row in records
+        if int(min_tick_u64) <= int(row.get("tick_u64", 0)) <= int(latest_tick_u64)
+    ]
+    frontier_ids = sorted(
+        {
+            str(row.get("capability_id", "")).strip()
+            for row in window_rows
+            if bool(row.get("activation_success", False)) and str(row.get("capability_id", "")).strip()
+        }
+    )
+    before_frontier_ids = {
+        str(row.get("capability_id", "")).strip()
+        for row in records
+        if bool(row.get("activation_success", False))
+        and int(row.get("tick_u64", 0)) < int(min_tick_u64)
+        and str(row.get("capability_id", "")).strip()
+    }
+    newly_activated_capability_ids = sorted(set(frontier_ids) - before_frontier_ids)
+    cap_activated_u64 = sum(1 for row in window_rows if bool(row.get("activation_success", False)))
+    cap_enabled_u64 = int(len(_enabled_capability_ids_from_registry(registry_path)))
+    return {
+        "tick_u64": int(latest_tick_u64),
+        "window_ticks_u64": int(window_u64),
+        "cap_frontier_u64": int(len(frontier_ids)),
+        "cap_enabled_u64": int(cap_enabled_u64),
+        "cap_activated_u64": int(cap_activated_u64),
+        "frontier_capability_ids": frontier_ids,
+        "newly_activated_capability_ids_last_W_ticks": newly_activated_capability_ids,
+    }
 
 
 def _count_ge_sh1_artifacts(run_dir: Path) -> dict[str, int]:
@@ -1898,6 +2134,49 @@ def _write_skill_manifest_artifacts(*, run_dir: Path, repo_root: Path) -> tuple[
     return run_artifact_path, worktree_artifact_path
 
 
+def _materialize_sh1_scaffold_rows(*, repo_root: Path, domains: list[str]) -> list[dict[str, Any]]:
+    if not domains:
+        return []
+    try:
+        from orchestrator.omega_skill_scaffold_generator_v1 import materialize_sh1_scaffold
+    except Exception:  # noqa: BLE001
+        return []
+
+    rows: list[dict[str, Any]] = []
+    seen_campaign_ids: set[str] = set()
+    for domain in domains:
+        try:
+            payload = materialize_sh1_scaffold(repo_root=repo_root, domain_slug=domain)
+        except Exception:  # noqa: BLE001
+            continue
+        if not isinstance(payload, dict):
+            continue
+        registry_row = payload.get("registry_row")
+        if not isinstance(registry_row, dict):
+            continue
+        campaign_id = str(registry_row.get("campaign_id", "")).strip()
+        if not campaign_id or campaign_id in seen_campaign_ids:
+            continue
+        seen_campaign_ids.add(campaign_id)
+        rows.append(dict(registry_row))
+    rows.sort(key=lambda row: (str(row.get("campaign_id", "")), str(row.get("capability_id", ""))))
+    return rows
+
+
+def _apply_speed_churn_deemphasis(caps: list[dict[str, Any]]) -> None:
+    for row in caps:
+        if not isinstance(row, dict):
+            continue
+        capability_id = str(row.get("capability_id", "")).strip()
+        if capability_id not in _SPEED_CHURN_DEEMPHASIS_CAPABILITY_IDS:
+            continue
+        if capability_id == "RSI_OMEGA_SELF_OPTIMIZE_CORE":
+            row["enabled"] = False
+            continue
+        cooldown_ticks_u64 = max(1, int(row.get("cooldown_ticks_u64", 1)))
+        row["cooldown_ticks_u64"] = int(max(cooldown_ticks_u64, 60))
+
+
 def _prepare_campaign_pack_overlay(
     *,
     campaign_pack: Path,
@@ -1909,6 +2188,7 @@ def _prepare_campaign_pack_overlay(
     ge_pack_overrides: dict[str, Any] | None,
     profile: str,
     promo_focus: bool = False,
+    speed_churn_deemphasis: bool = False,
 ) -> Path:
     profile_norm = str(profile).strip().lower()
     if not enable_self_optimize_core and not enable_polymath_bootstrap and not enable_polymath_drive and not enable_ge_sh1_optimizer:
@@ -1924,6 +2204,29 @@ def _prepare_campaign_pack_overlay(
     caps = registry.get("capabilities")
     if not isinstance(caps, list):
         raise RuntimeError("invalid capability registry in campaign pack overlay")
+    sh1_scaffold_rows: list[dict[str, Any]] = []
+    if enable_ge_sh1_optimizer:
+        scaffold_domains = _requested_sh1_scaffold_domains()
+        sh1_scaffold_rows = _materialize_sh1_scaffold_rows(
+            repo_root=_REPO_ROOT,
+            domains=scaffold_domains,
+        )
+        existing_campaign_ids = {
+            str(row.get("campaign_id", "")).strip()
+            for row in caps
+            if isinstance(row, dict) and str(row.get("campaign_id", "")).strip()
+        }
+        for row in sh1_scaffold_rows:
+            campaign_id = str(row.get("campaign_id", "")).strip()
+            if not campaign_id or campaign_id in existing_campaign_ids:
+                continue
+            existing_campaign_ids.add(campaign_id)
+            caps.append(dict(row))
+    scaffold_campaign_ids = {
+        str(row.get("campaign_id", "")).strip()
+        for row in sh1_scaffold_rows
+        if isinstance(row, dict) and str(row.get("campaign_id", "")).strip()
+    }
     if enable_self_optimize_core:
         found = False
         for row in caps:
@@ -2023,6 +2326,7 @@ def _prepare_campaign_pack_overlay(
             allowed_campaign_ids.add("rsi_omega_self_optimize_core_v1")
         if enable_ge_sh1_optimizer:
             allowed_campaign_ids.add(_GE_CAMPAIGN_ID)
+            allowed_campaign_ids.update(scaffold_campaign_ids)
 
         found_metasearch = False
         for row in caps:
@@ -2051,6 +2355,7 @@ def _prepare_campaign_pack_overlay(
         ]
         if enable_ge_sh1_optimizer:
             unified_required_campaign_ids.append(_GE_CAMPAIGN_ID)
+            unified_required_campaign_ids.extend(sorted(scaffold_campaign_ids))
         found_campaign_ids: set[str] = set()
         allowed_campaign_ids = set(unified_required_campaign_ids)
         if enable_self_optimize_core:
@@ -2083,6 +2388,9 @@ def _prepare_campaign_pack_overlay(
         missing = sorted(set(unified_required_campaign_ids) - found_campaign_ids)
         if missing:
             raise RuntimeError(f"unified profile missing capabilities: {','.join(missing)}")
+
+    if speed_churn_deemphasis:
+        _apply_speed_churn_deemphasis(caps)
 
     goal_queue_path = _resolve_goal_queue_overlay_path(overlay_pack_path=overlay_pack_path, overlay_root=dst_root)
     if enable_ge_sh1_optimizer and profile_norm != "unified":
@@ -2137,6 +2445,44 @@ def _prepare_campaign_pack_overlay(
         )
 
     _write_json(registry_path, registry)
+
+    goal_refresh_bootstrap = _refresh_enabled_capability_goals(
+        goal_queue_path=goal_queue_path,
+        registry_path=registry_path,
+        state_dir=_state_dir(run_dir),
+        tick_u64=0,
+        idle_window_ticks_u64=1,
+        reason_tag="overlay_bootstrap",
+    )
+    if profile_norm == "unified":
+        try:
+            goal_payload = _load_json(goal_queue_path)
+        except Exception:  # noqa: BLE001
+            goal_payload = {"goals": []}
+        goal_rows = goal_payload.get("goals") if isinstance(goal_payload, dict) else []
+        injected_goals = [
+            {
+                "goal_id": str(row.get("goal_id", "")),
+                "capability_id": str(row.get("capability_id", "")),
+                "status": str(row.get("status", "")),
+            }
+            for row in (goal_rows if isinstance(goal_rows, list) else [])
+            if isinstance(row, dict)
+        ]
+        enabled_campaign_ids = sorted(
+            str(row.get("campaign_id", "")).strip()
+            for row in caps
+            if isinstance(row, dict) and bool(row.get("enabled", False))
+        )
+        _write_json(
+            run_dir / "OMEGA_UNIFIED_PROFILE_PLAN_v1.json",
+            {
+                "schema_version": "OMEGA_UNIFIED_PROFILE_PLAN_v1",
+                "enabled_campaign_ids": enabled_campaign_ids,
+                "injected_goals": injected_goals,
+                "goal_refresh_bootstrap": goal_refresh_bootstrap,
+            },
+        )
     return overlay_pack_path
 
 
@@ -3043,6 +3389,9 @@ def main() -> None:
     parser.add_argument("--min_activation_successes", type=int, default=0)
     parser.add_argument("--stall_watchdog_checkpoints", type=int, default=3)
     parser.add_argument("--stall_watchdog_runaway_blocked_pct", type=float, default=90.0)
+    parser.add_argument("--cap_frontier_window_ticks", type=int, default=_CAPABILITY_FRONTIER_WINDOW_U64)
+    parser.add_argument("--goal_refresh_idle_ticks", type=int, default=_GOAL_REFRESH_IDLE_TICKS_U64)
+    parser.add_argument("--speed_churn_deemphasis", type=int, default=0)
     parser.add_argument("--profile", choices=("full", "refinery", "unified"), default="full")
     parser.add_argument("--promo_focus", type=int, default=0)
     args = parser.parse_args()
@@ -3083,6 +3432,9 @@ def main() -> None:
     require_new_domain_registered = bool(int(args.require_new_domain_registered))
     stall_watchdog_checkpoints = max(1, int(args.stall_watchdog_checkpoints))
     stall_watchdog_runaway_blocked_pct = max(0.0, float(args.stall_watchdog_runaway_blocked_pct))
+    cap_frontier_window_ticks_u64 = max(1, int(args.cap_frontier_window_ticks))
+    goal_refresh_idle_ticks_u64 = max(1, int(args.goal_refresh_idle_ticks))
+    speed_churn_deemphasis = bool(int(args.speed_churn_deemphasis))
     profile = str(args.profile).strip().lower()
     promo_focus = bool(int(args.promo_focus))
     promo_focus_unified_b = bool(profile == "unified" and promo_focus)
@@ -3171,6 +3523,7 @@ def main() -> None:
                 else None,
                 profile=profile,
                 promo_focus=bool(promo_focus),
+                speed_churn_deemphasis=bool(speed_churn_deemphasis),
             )
     except Exception as exc:  # noqa: BLE001
         overlay_error = f"{type(exc).__name__}:{exc}"
@@ -3251,6 +3604,18 @@ def main() -> None:
     capability_usage_path: Path | None = None
     llm_router_invocations: list[dict[str, Any]] = []
     llm_router_failures: list[dict[str, Any]] = []
+    goal_refresh_events: list[dict[str, Any]] = []
+    frontier_registry_path = (
+        capability_registry_path
+        if capability_registry_path is not None
+        else (campaign_pack.parent / "omega_capability_registry_v2.json")
+    )
+    frontier_baseline_snapshot = _capability_frontier_snapshot(
+        state_dir=_state_dir(run_dir),
+        registry_path=frontier_registry_path,
+        tick_u64=0,
+        window_ticks_u64=cap_frontier_window_ticks_u64,
+    )
 
     baseline_head_sha = _git_head_sha(_REPO_ROOT)
     last_good_head_sha = baseline_head_sha
@@ -3400,6 +3765,17 @@ def main() -> None:
             safe_halt = True
             termination_reason = "LLM_ROUTER_FAIL"
             preloop_abort_b = True
+    if not preloop_abort_b:
+        goal_refresh_events.append(
+            _refresh_enabled_capability_goals(
+                goal_queue_path=void_goal_queue_effective_path,
+                registry_path=frontier_registry_path,
+                state_dir=_state_dir(run_dir),
+                tick_u64=0,
+                idle_window_ticks_u64=goal_refresh_idle_ticks_u64,
+                reason_tag="preloop_refresh",
+            )
+        )
     bootstrap_first_tick_u64: int | None = None
     try:
         while (not preloop_abort_b) and time.monotonic() < deadline_monotonic:
@@ -3493,6 +3869,16 @@ def main() -> None:
                         out_goal_queue_effective_path=void_goal_queue_effective_path,
                         tick_u64=int(tick_u64),
                     )
+                goal_refresh_events.append(
+                    _refresh_enabled_capability_goals(
+                        goal_queue_path=void_goal_queue_effective_path,
+                        registry_path=frontier_registry_path,
+                        state_dir=prev_state_dir or _state_dir(run_dir),
+                        tick_u64=int(tick_u64),
+                        idle_window_ticks_u64=goal_refresh_idle_ticks_u64,
+                        reason_tag="checkpoint_refresh",
+                    )
+                )
                 if enable_llm_router and tick_u64 in {_POLYMATH_STALL_P_TICK_U64, _POLYMATH_STALL_Q_TICK_U64}:
                     router_result = omega_llm_router_v1.run_failsoft(
                         run_dir=run_dir,
@@ -3834,6 +4220,53 @@ def main() -> None:
                 "reason": "REQUIRE_NEW_DOMAIN_REGISTERED_UNMET",
             }
         )
+    frontier_final_snapshot = _capability_frontier_snapshot(
+        state_dir=state_dir,
+        registry_path=frontier_registry_path,
+        tick_u64=int(tick_u64),
+        window_ticks_u64=cap_frontier_window_ticks_u64,
+    )
+    frontier_delta_u64 = int(frontier_final_snapshot.get("cap_frontier_u64", 0)) - int(
+        frontier_baseline_snapshot.get("cap_frontier_u64", 0)
+    )
+    prev_zero_frontier_segments_u64 = max(
+        0,
+        int(str(os.environ.get("OMEGA_PREV_ZERO_FRONTIER_SEGMENTS_U64", "0")).strip() or "0"),
+    )
+    zero_frontier_segments_u64 = (
+        int(prev_zero_frontier_segments_u64) + 1 if int(frontier_delta_u64) == 0 else 0
+    )
+    pressure_auto_escalated_b = bool(int(zero_frontier_segments_u64) >= 2)
+    next_segment_pressure = {
+        "schema_version": "OMEGA_NEXT_SEGMENT_PRESSURE_v1",
+        "created_at_utc": datetime.now(UTC).isoformat(),
+        "series_prefix": str(series_prefix),
+        "tick_u64": int(max(0, tick_u64)),
+        "frontier_delta_u64": int(frontier_delta_u64),
+        "zero_frontier_segments_u64": int(zero_frontier_segments_u64),
+        "auto_escalated_b": bool(pressure_auto_escalated_b),
+        "recommended_ge_max_ccaps_u64": int(
+            min(8, int(ge_max_ccaps) + (1 if pressure_auto_escalated_b else 0))
+        ),
+        "recommended_polymath_scout_every_ticks_u64": int(
+            max(1, int(benchmark_every_ticks) - (1 if pressure_auto_escalated_b else 0))
+        ),
+        "recommended_polymath_max_new_domains_per_run_u64": int(
+            min(16, int(max_new_domains) + (1 if pressure_auto_escalated_b else 0))
+        ),
+        "recommended_speed_churn_deemphasis_b": bool(pressure_auto_escalated_b),
+    }
+    next_segment_pressure_path = run_dir / "OMEGA_NEXT_SEGMENT_PRESSURE_v1.json"
+    _write_json(next_segment_pressure_path, next_segment_pressure)
+    goal_refresh_path = run_dir / "OMEGA_GOAL_REFRESH_EVENTS_v1.json"
+    _write_json(
+        goal_refresh_path,
+        {
+            "schema_version": "OMEGA_GOAL_REFRESH_EVENTS_v1",
+            "events_u64": int(len(goal_refresh_events)),
+            "events": goal_refresh_events,
+        },
+    )
 
     elapsed_seconds = max(0.001, float(time.monotonic() - run_started_monotonic))
     promoted_u64 = int(promotion_summary.get("promoted_u64", 0))
@@ -3879,6 +4312,7 @@ def main() -> None:
         "meta_core_mode": str(args.meta_core_mode),
         "profile": str(profile),
         "promo_focus_enabled_b": bool(promo_focus),
+        "speed_churn_deemphasis_enabled_b": bool(speed_churn_deemphasis),
         "required_pass_gates": [str(gate) for gate in required_pass_gates],
         "meta_core_root": meta_core_root.as_posix(),
         "livewire_branch": branch,
@@ -3903,6 +4337,27 @@ def main() -> None:
         "new_bundle_hashes": new_bundle_hashes,
         "latest_gate_status": latest_gate_status,
         "perf_rates": perf_rates,
+        "capability_frontier": {
+            "window_ticks_u64": int(cap_frontier_window_ticks_u64),
+            "baseline": frontier_baseline_snapshot,
+            "final": frontier_final_snapshot,
+            "frontier_delta_u64": int(frontier_delta_u64),
+            "cap_frontier_u64": int(frontier_final_snapshot.get("cap_frontier_u64", 0)),
+            "cap_enabled_u64": int(frontier_final_snapshot.get("cap_enabled_u64", 0)),
+            "cap_activated_u64": int(frontier_final_snapshot.get("cap_activated_u64", 0)),
+            "newly_activated_capability_ids_last_W_ticks": list(
+                frontier_final_snapshot.get("newly_activated_capability_ids_last_W_ticks", [])
+            ),
+            "frontier_capability_ids": list(frontier_final_snapshot.get("frontier_capability_ids", [])),
+        },
+        "goal_refresh": {
+            "events_u64": int(len(goal_refresh_events)),
+            "events_path": goal_refresh_path.as_posix(),
+            "events": goal_refresh_events,
+            "idle_window_ticks_u64": int(goal_refresh_idle_ticks_u64),
+        },
+        "next_segment_pressure": next_segment_pressure,
+        "next_segment_pressure_path": next_segment_pressure_path.as_posix(),
         "auto_rollback": {
             "baseline_head_sha": str(baseline_head_sha),
             "last_good_head_sha": str(last_good_head_sha),
@@ -3982,6 +4437,8 @@ def main() -> None:
             "void_to_goals_report_json": void_to_goals_report_json_path.as_posix()
             if void_to_goals_report_json_path.exists()
             else "",
+            "goal_refresh_events_json": goal_refresh_path.as_posix() if goal_refresh_path.exists() else "",
+            "next_segment_pressure_json": next_segment_pressure_path.as_posix() if next_segment_pressure_path.exists() else "",
             "new_domain_report_md": new_domain_report_md_path.as_posix(),
             "domain_conquer_report_md": domain_conquer_report_md_path.as_posix(),
             "skill_manifest_json": skill_manifest_json_path.as_posix(),
@@ -4007,11 +4464,19 @@ def main() -> None:
         f"- Meta-core mode: `{str(args.meta_core_mode)}`",
         f"- Profile: `{profile}` required gates={','.join(required_pass_gates)}",
         f"- Promo focus: `{bool(promo_focus)}`",
+        f"- Speed-churn de-emphasis: `{bool(speed_churn_deemphasis)}`",
         f"- Meta-core root: `{meta_core_root.as_posix()}`",
         f"- Ticks completed: **{int(tick_u64)}**",
         f"- Termination reason: `{termination_reason}`",
         f"- Promotions: **{int(report_json['promotions_u64'])}**",
         f"- Activation successes: **{int(report_json['activation_successes_u64'])}**",
+        (
+            "- Capability frontier: "
+            f"cap_frontier_u64={int(frontier_final_snapshot.get('cap_frontier_u64', 0))} "
+            f"cap_enabled_u64={int(frontier_final_snapshot.get('cap_enabled_u64', 0))} "
+            f"cap_activated_u64={int(frontier_final_snapshot.get('cap_activated_u64', 0))} "
+            f"frontier_delta_u64={int(frontier_delta_u64)}"
+        ),
         (
             "- Wall rates: "
             f"promotions/min={float(perf_rates.get('promotions_per_min_wall', 0.0)):.4f} "
@@ -4064,6 +4529,13 @@ def main() -> None:
             f"backend={str(llm_router_backend)} "
             f"invocations={int(len(llm_router_invocations))} "
             f"failures={int(len(llm_router_failures))}"
+        ),
+        (
+            "- Next-segment pressure recommendation: "
+            f"auto_escalated={bool(next_segment_pressure.get('auto_escalated_b', False))} "
+            f"ge_max_ccaps={int(next_segment_pressure.get('recommended_ge_max_ccaps_u64', ge_max_ccaps))} "
+            f"polymath_scout_every_ticks={int(next_segment_pressure.get('recommended_polymath_scout_every_ticks_u64', benchmark_every_ticks))} "
+            f"speed_churn_deemphasis={bool(next_segment_pressure.get('recommended_speed_churn_deemphasis_b', False))}"
         ),
         "",
         "## Top Bottlenecks",
@@ -4142,6 +4614,8 @@ def main() -> None:
             f"- `{core_opt_summary_md_path.as_posix()}`",
             f"- `{polymath_void_report_md_path.as_posix()}`",
             f"- `{void_to_goals_report_json_path.as_posix()}`" if void_to_goals_report_json_path.exists() else "- (void-to-goals report not emitted)",
+            f"- `{goal_refresh_path.as_posix()}`" if goal_refresh_path.exists() else "- (goal refresh report not emitted)",
+            f"- `{next_segment_pressure_path.as_posix()}`" if next_segment_pressure_path.exists() else "- (next segment pressure report not emitted)",
             f"- `{new_domain_report_md_path.as_posix()}`",
             f"- `{domain_conquer_report_md_path.as_posix()}`",
             f"- `{skill_manifest_json_path.as_posix()}`",
@@ -4183,6 +4657,13 @@ def main() -> None:
 
     print(report_json_path.as_posix())
     print((run_dir / "OMEGA_OVERNIGHT_REPORT.md").as_posix())
+    print(
+        "CAPABILITY_FRONTIER "
+        f"cap_frontier_u64={int(frontier_final_snapshot.get('cap_frontier_u64', 0))} "
+        f"cap_enabled_u64={int(frontier_final_snapshot.get('cap_enabled_u64', 0))} "
+        f"cap_activated_u64={int(frontier_final_snapshot.get('cap_activated_u64', 0))} "
+        f"frontier_delta_u64={int(frontier_delta_u64)}"
+    )
 
 
 if __name__ == "__main__":

@@ -38,6 +38,9 @@ _DEFAULT_TOP_K_U64 = 5
 _DEFAULT_MAX_CALLS_U64 = 64
 _DEFAULT_MAX_PROMPT_CHARS_U64 = 12000
 _DEFAULT_MAX_RESPONSE_CHARS_U64 = 16000
+_DEFAULT_MAX_TOKENS_U64 = 1200
+_DEFAULT_TEMPERATURE_STRICT_F64 = 0.0
+_DEFAULT_TEMPERATURE_WILD_F64 = 0.7
 
 
 class _LLMReplayMissError(RuntimeError):
@@ -89,6 +92,57 @@ def _int_env(name: str, default: int, *, minimum: int = 0) -> int:
     except Exception:  # noqa: BLE001
         return int(default)
     return max(int(minimum), int(value))
+
+
+def _float_env(name: str, default: float, *, minimum: float, maximum: float) -> float:
+    raw = str(os.environ.get(name, "")).strip()
+    if not raw:
+        return float(default)
+    try:
+        value = float(raw)
+    except Exception:  # noqa: BLE001
+        return float(default)
+    return float(max(float(minimum), min(float(maximum), float(value))))
+
+
+def _optional_float_env(name: str, *, minimum: float, maximum: float) -> float | None:
+    raw = str(os.environ.get(name, "")).strip()
+    if not raw:
+        return None
+    try:
+        value = float(raw)
+    except Exception:  # noqa: BLE001
+        return None
+    return float(max(float(minimum), min(float(maximum), float(value))))
+
+
+def _default_temperature_f64() -> float:
+    wild_mode = str(os.environ.get("OMEGA_WILD_MODE", "")).strip().lower() in {"1", "true", "yes", "on"}
+    blackbox_mode = str(os.environ.get("OMEGA_BLACKBOX", "")).strip().lower() in {"1", "true", "yes", "on"}
+    if wild_mode or blackbox_mode:
+        return float(_DEFAULT_TEMPERATURE_WILD_F64)
+    return float(_DEFAULT_TEMPERATURE_STRICT_F64)
+
+
+def _llm_generation_knobs() -> dict[str, Any]:
+    return {
+        "temperature_f64": float(
+            _float_env(
+                "ORCH_LLM_TEMPERATURE",
+                _default_temperature_f64(),
+                minimum=0.0,
+                maximum=2.0,
+            )
+        ),
+        "max_tokens_u64": int(
+            _int_env(
+                "ORCH_LLM_MAX_TOKENS",
+                _DEFAULT_MAX_TOKENS_U64,
+                minimum=1,
+            )
+        ),
+        "top_p_f64": _optional_float_env("ORCH_LLM_TOP_P", minimum=0.0, maximum=1.0),
+    }
 
 
 def _validate_openai_model(model_id: str) -> str:
@@ -259,8 +313,16 @@ def _lookup_replay_response_any(*, replay_path: Path, prompt: str) -> tuple[str,
     raise _LLMReplayMissError("LLM_REPLAY_MISS")
 
 
-def _router_backend_response(*, backend: str, prompt: str) -> tuple[str, str, str, str]:
-    backend_key = str(backend).strip()
+def _router_backend_response(*, backend: str, prompt: str) -> tuple[str, str, str, str, dict[str, Any]]:
+    backend_key_raw = str(backend).strip()
+    backend_aliases = {
+        "openai": "openai_harvest",
+        "anthropic": "anthropic_harvest",
+        "google": "gemini_harvest",
+        "gemini": "gemini_harvest",
+    }
+    backend_key = backend_aliases.get(backend_key_raw, backend_key_raw)
+    generation_knobs = _llm_generation_knobs()
     replay_path_raw = str(os.environ.get("ORCH_LLM_REPLAY_PATH", "")).strip()
     replay_path = Path(replay_path_raw).expanduser().resolve() if replay_path_raw else None
 
@@ -285,13 +347,13 @@ def _router_backend_response(*, backend: str, prompt: str) -> tuple[str, str, st
                     ),
                 )
             )
-        return response, "mock", "mock", backend_key
+        return response, "mock", "mock", backend_key, generation_knobs
 
     if backend_key == "replay":
         if replay_path is None:
             raise RuntimeError("LLM_REPLAY_PATH_MISSING")
         response, provider, model = _lookup_replay_response_any(replay_path=replay_path, prompt=prompt)
-        return response, provider, model, backend_key
+        return response, provider, model, backend_key, generation_knobs
 
     if backend_key in {"openai_replay", "openai_harvest"}:
         provider = "openai"
@@ -310,7 +372,7 @@ def _router_backend_response(*, backend: str, prompt: str) -> tuple[str, str, st
 
     if backend_key.endswith("_replay"):
         response = _lookup_replay_response(replay_path=replay_path, provider=provider, model=model, prompt=prompt)
-        return response, provider, model, backend_key
+        return response, provider, model, backend_key, generation_knobs
 
     if str(os.environ.get("ORCH_LLM_LIVE_OK", "")).strip() != "1":
         raise RuntimeError("LLM_LIVE_DISABLED")
@@ -319,10 +381,19 @@ def _router_backend_response(*, backend: str, prompt: str) -> tuple[str, str, st
         api_key = str(os.environ.get("OPENAI_API_KEY", "")).strip()
         if not api_key:
             raise RuntimeError("OPENAI_API_KEY_MISSING")
+        request_payload = {
+            "model": model,
+            "input": prompt,
+            "temperature": float(generation_knobs.get("temperature_f64", _DEFAULT_TEMPERATURE_STRICT_F64)),
+            "max_output_tokens": int(generation_knobs.get("max_tokens_u64", _DEFAULT_MAX_TOKENS_U64)),
+        }
+        top_p = generation_knobs.get("top_p_f64")
+        if top_p is not None:
+            request_payload["top_p"] = float(top_p)
         raw_payload = _http_post_json(
             url="https://api.openai.com/v1/responses",
             headers={"Authorization": f"Bearer {api_key}"},
-            payload={"model": model, "input": prompt},
+            payload=request_payload,
         )
         response = _extract_openai_response_text(raw_payload)
     elif provider == "anthropic":
@@ -330,27 +401,37 @@ def _router_backend_response(*, backend: str, prompt: str) -> tuple[str, str, st
         if not api_key:
             raise RuntimeError("ANTHROPIC_API_KEY_MISSING")
         version = str(os.environ.get("ORCH_ANTHROPIC_VERSION", "2023-06-01")).strip() or "2023-06-01"
+        request_payload = {
+            "model": model,
+            "max_tokens": int(generation_knobs.get("max_tokens_u64", _DEFAULT_MAX_TOKENS_U64)),
+            "temperature": float(generation_knobs.get("temperature_f64", _DEFAULT_TEMPERATURE_STRICT_F64)),
+            "messages": [{"role": "user", "content": prompt}],
+        }
+        top_p = generation_knobs.get("top_p_f64")
+        if top_p is not None:
+            request_payload["top_p"] = float(top_p)
         raw_payload = _http_post_json(
             url="https://api.anthropic.com/v1/messages",
             headers={"x-api-key": api_key, "anthropic-version": version},
-            payload={
-                "model": model,
-                "max_tokens": 1200,
-                "messages": [{"role": "user", "content": prompt}],
-            },
+            payload=request_payload,
         )
         response = _extract_anthropic_response_text(raw_payload)
     else:
         api_key = str(os.environ.get("GOOGLE_API_KEY", "")).strip()
         if not api_key:
             raise RuntimeError("GOOGLE_API_KEY_MISSING")
+        generation_config = {
+            "temperature": float(generation_knobs.get("temperature_f64", _DEFAULT_TEMPERATURE_STRICT_F64)),
+            "maxOutputTokens": int(generation_knobs.get("max_tokens_u64", _DEFAULT_MAX_TOKENS_U64)),
+        }
+        top_p = generation_knobs.get("top_p_f64")
+        if top_p is not None:
+            generation_config["topP"] = float(top_p)
         raw_payload = _http_post_json(
             url=f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={api_key}",
             headers={},
             payload={
-                "generationConfig": {
-                    "temperature": 0.0,
-                },
+                "generationConfig": generation_config,
                 "contents": [
                     {
                         "role": "user",
@@ -371,9 +452,10 @@ def _router_backend_response(*, backend: str, prompt: str) -> tuple[str, str, st
         "response": response,
         "created_at_utc": _utc_now_iso(),
         "raw_response_json": raw_payload,
+        "generation_knobs": generation_knobs,
     }
     _append_replay_row(replay_path, replay_row)
-    return response, provider, model, backend_key
+    return response, provider, model, backend_key, generation_knobs
 
 
 def _load_optional_json(path: Path) -> dict[str, Any]:
@@ -753,7 +835,7 @@ def run(*, run_dir: Path, tick_u64: int, store_root: Path | None = None) -> dict
         raise RuntimeError("LLM_PROMPT_TOO_LARGE")
 
     backend = str(os.environ.get("ORCH_LLM_BACKEND", "mock")).strip() or "mock"
-    response_text, provider, model, backend_used = _router_backend_response(backend=backend, prompt=prompt)
+    response_text, provider, model, backend_used, generation_knobs = _router_backend_response(backend=backend, prompt=prompt)
 
     max_response_chars_u64 = _int_env("ORCH_LLM_MAX_RESPONSE_CHARS", _DEFAULT_MAX_RESPONSE_CHARS_U64, minimum=1)
     if len(response_text) > int(max_response_chars_u64):
@@ -783,6 +865,9 @@ def run(*, run_dir: Path, tick_u64: int, store_root: Path | None = None) -> dict
             "allowed_capability_ids": list(allowlists.get("allowed_capability_ids", [])),
             "rejected_web_queries": list(normalized.get("rejected_web_queries", [])),
             "rejected_goal_injections": list(normalized.get("rejected_goal_injections", [])),
+            "llm_temperature_f64": float(generation_knobs.get("temperature_f64", _DEFAULT_TEMPERATURE_STRICT_F64)),
+            "llm_max_tokens_u64": int(generation_knobs.get("max_tokens_u64", _DEFAULT_MAX_TOKENS_U64)),
+            "llm_top_p_f64": generation_knobs.get("top_p_f64"),
         },
     }
     _write_json(plan_path, final_plan)
@@ -800,6 +885,9 @@ def run(*, run_dir: Path, tick_u64: int, store_root: Path | None = None) -> dict
         "tool_calls": tool_calls,
         "goal_injections_requested_u64": int(len(normalized.get("goal_injections", []))),
         "goal_injections_accepted_u64": int(len(normalized.get("goal_injections", []))),
+        "llm_temperature_f64": float(generation_knobs.get("temperature_f64", _DEFAULT_TEMPERATURE_STRICT_F64)),
+        "llm_max_tokens_u64": int(generation_knobs.get("max_tokens_u64", _DEFAULT_MAX_TOKENS_U64)),
+        "llm_top_p_f64": generation_knobs.get("top_p_f64"),
         "error": "",
     }
     _append_jsonl(trace_path, trace_row)
@@ -815,6 +903,9 @@ def run(*, run_dir: Path, tick_u64: int, store_root: Path | None = None) -> dict
         "backend": backend_used,
         "provider": provider,
         "model": model,
+        "llm_temperature_f64": float(generation_knobs.get("temperature_f64", _DEFAULT_TEMPERATURE_STRICT_F64)),
+        "llm_max_tokens_u64": int(generation_knobs.get("max_tokens_u64", _DEFAULT_MAX_TOKENS_U64)),
+        "llm_top_p_f64": generation_knobs.get("top_p_f64"),
     }
 
 
@@ -822,6 +913,7 @@ def run_failsoft(*, run_dir: Path, tick_u64: int, store_root: Path | None = None
     run_root = run_dir.resolve()
     plan_path = run_root / "OMEGA_LLM_ROUTER_PLAN_v1.json"
     trace_path = run_root / "OMEGA_LLM_TOOL_TRACE_v1.jsonl"
+    generation_knobs = _llm_generation_knobs()
     try:
         return run(run_dir=run_root, tick_u64=tick_u64, store_root=store_root)
     except _LLMReplayMissError as exc:
@@ -837,6 +929,9 @@ def run_failsoft(*, run_dir: Path, tick_u64: int, store_root: Path | None = None
         "goal_injections": [],
         "diagnostics": {
             "error_reason": error_reason,
+            "llm_temperature_f64": float(generation_knobs.get("temperature_f64", _DEFAULT_TEMPERATURE_STRICT_F64)),
+            "llm_max_tokens_u64": int(generation_knobs.get("max_tokens_u64", _DEFAULT_MAX_TOKENS_U64)),
+            "llm_top_p_f64": generation_knobs.get("top_p_f64"),
         },
     }
     _write_json(plan_path, fallback_plan)
@@ -855,6 +950,9 @@ def run_failsoft(*, run_dir: Path, tick_u64: int, store_root: Path | None = None
             "tool_calls": [],
             "goal_injections_requested_u64": 0,
             "goal_injections_accepted_u64": 0,
+            "llm_temperature_f64": float(generation_knobs.get("temperature_f64", _DEFAULT_TEMPERATURE_STRICT_F64)),
+            "llm_max_tokens_u64": int(generation_knobs.get("max_tokens_u64", _DEFAULT_MAX_TOKENS_U64)),
+            "llm_top_p_f64": generation_knobs.get("top_p_f64"),
             "error": error_reason,
         },
     )
@@ -865,6 +963,9 @@ def run_failsoft(*, run_dir: Path, tick_u64: int, store_root: Path | None = None
         "trace_path": trace_path.as_posix(),
         "goal_injections": [],
         "web_queries": [],
+        "llm_temperature_f64": float(generation_knobs.get("temperature_f64", _DEFAULT_TEMPERATURE_STRICT_F64)),
+        "llm_max_tokens_u64": int(generation_knobs.get("max_tokens_u64", _DEFAULT_MAX_TOKENS_U64)),
+        "llm_top_p_f64": generation_knobs.get("top_p_f64"),
     }
 
 

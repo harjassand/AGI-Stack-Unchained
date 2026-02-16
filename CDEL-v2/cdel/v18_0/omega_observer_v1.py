@@ -35,10 +35,14 @@ _POLYMATH_VOID_REPORT_REL = "polymath/registry/polymath_void_report_v1.jsonl"
 _POLYMATH_SCOUT_STATUS_REL = "polymath/registry/polymath_scout_status_v1.json"
 _POLYMATH_PORTFOLIO_REL = "polymath/registry/polymath_portfolio_v1.json"
 _POLYMATH_STALE_AGE_U64 = (1 << 63) - 1
+_CAPABILITY_FRONTIER_WINDOW_U64 = 512
 _NON_CARRY_SERIES_KEYS = {
     "OBJ_EXPAND_CAPABILITIES",
     "OBJ_MAXIMIZE_SCIENCE",
     "OBJ_MAXIMIZE_SPEED",
+    "cap_frontier_u64",
+    "cap_enabled_u64",
+    "cap_activated_u64",
 }
 _LEGACY_SKILL_SOURCES: tuple[tuple[str, str, str, str], ...] = (
     (
@@ -839,13 +843,112 @@ def _load_legacy_skill_metrics(*, root: Path) -> tuple[dict[str, Any], list[dict
     return metrics, sources
 
 
-def _capability_expansion_q32(registry: dict[str, Any] | None) -> int:
+def _count_enabled_capabilities(registry: dict[str, Any] | None) -> int:
     if not isinstance(registry, dict):
         return 0
     rows = registry.get("capabilities")
     if not isinstance(rows, list):
         return 0
-    return int(len(rows) << 32)
+    return int(sum(1 for row in rows if isinstance(row, dict) and bool(row.get("enabled", False))))
+
+
+def _latest_valid_receipt(*, rows: Iterable[Path], schema_version: str) -> tuple[dict[str, Any], int] | None:
+    best_payload: dict[str, Any] | None = None
+    best_tick_u64 = -1
+    best_path = ""
+    for path in sorted(rows, key=lambda row: row.as_posix()):
+        if not path.exists() or not path.is_file():
+            continue
+        try:
+            payload = load_canon_dict(path)
+        except Exception:  # noqa: BLE001
+            continue
+        if str(payload.get("schema_version", "")).strip() != schema_version:
+            continue
+        try:
+            tick_u64 = int(payload.get("tick_u64", 0))
+        except Exception:  # noqa: BLE001
+            continue
+        path_key = path.as_posix()
+        if tick_u64 > best_tick_u64 or (tick_u64 == best_tick_u64 and path_key > best_path):
+            best_payload = payload
+            best_tick_u64 = tick_u64
+            best_path = path_key
+    if best_payload is None:
+        return None
+    return best_payload, int(best_tick_u64)
+
+
+def _capability_frontier_metrics(
+    *,
+    root: Path,
+    registry: dict[str, Any] | None,
+    window_ticks_u64: int = _CAPABILITY_FRONTIER_WINDOW_U64,
+) -> dict[str, int]:
+    records: list[dict[str, Any]] = []
+    for dispatch_dir in sorted(root.glob("runs/*/daemon/rsi_omega_daemon_v*/state/dispatch/*"), key=lambda row: row.as_posix()):
+        if not dispatch_dir.is_dir():
+            continue
+        dispatch_row = _latest_valid_receipt(
+            rows=dispatch_dir.glob("*.omega_dispatch_receipt_v1.json"),
+            schema_version="omega_dispatch_receipt_v1",
+        )
+        activation_row = _latest_valid_receipt(
+            rows=dispatch_dir.glob("activation/*.omega_activation_receipt_v1.json"),
+            schema_version="omega_activation_receipt_v1",
+        )
+        if dispatch_row is None or activation_row is None:
+            continue
+
+        dispatch_payload, dispatch_tick_u64 = dispatch_row
+        activation_payload, activation_tick_u64 = activation_row
+        capability_id = str(dispatch_payload.get("capability_id", "")).strip()
+        if not capability_id:
+            continue
+
+        try:
+            dispatch_rel = dispatch_dir.resolve().relative_to(root.resolve()).as_posix()
+        except Exception:
+            dispatch_rel = dispatch_dir.as_posix()
+
+        before_hash = str(activation_payload.get("before_active_manifest_hash", ""))
+        after_hash = str(activation_payload.get("after_active_manifest_hash", ""))
+        records.append(
+            {
+                "tick_u64": int(max(dispatch_tick_u64, activation_tick_u64)),
+                "dispatch_rel": dispatch_rel,
+                "capability_id": capability_id,
+                "activation_success": bool(activation_payload.get("activation_success", False)),
+                "manifest_changed": before_hash != after_hash,
+            }
+        )
+
+    enabled_u64 = _count_enabled_capabilities(registry)
+    if not records:
+        return {
+            "cap_frontier_u64": 0,
+            "cap_enabled_u64": int(enabled_u64),
+            "cap_activated_u64": 0,
+            "cap_manifest_changed_u64": 0,
+        }
+
+    window = max(1, int(window_ticks_u64))
+    latest_tick_u64 = max(int(row["tick_u64"]) for row in records)
+    min_tick_u64 = max(0, int(latest_tick_u64 - window + 1))
+    rows_window = [row for row in records if int(row["tick_u64"]) >= min_tick_u64]
+    frontier_ids = sorted(
+        {str(row["capability_id"]) for row in rows_window if bool(row["activation_success"])}
+    )
+    activated_u64 = sum(1 for row in rows_window if bool(row["activation_success"]))
+    manifest_changed_u64 = sum(
+        1 for row in rows_window if bool(row["activation_success"]) and bool(row["manifest_changed"])
+    )
+    return {
+        "cap_frontier_u64": int(len(frontier_ids)),
+        "cap_enabled_u64": int(enabled_u64),
+        "cap_activated_u64": int(activated_u64),
+        "cap_manifest_changed_u64": int(manifest_changed_u64),
+    }
 
 
 def _maximize_science_q32(science_rmse_q32: int) -> int:
@@ -938,7 +1041,8 @@ def observe(
     ge_metrics, ge_sources = _load_ge_metrics(root=root)
     code_metrics, code_sources = _load_code_metrics(root=root, index=index)
     legacy_skill_metrics, legacy_skill_sources = _load_legacy_skill_metrics(root=root)
-    capability_expansion_q32 = _capability_expansion_q32(registry)
+    capability_frontier = _capability_frontier_metrics(root=root, registry=registry)
+    capability_expansion_q32 = int(int(capability_frontier["cap_frontier_u64"]) << 32)
     maximize_science_q32 = _maximize_science_q32(science_q)
     maximize_speed_q32 = _maximize_speed_q32(previous_tick_total_ns_u64)
 
@@ -994,6 +1098,9 @@ def observe(
             "OBJ_EXPAND_CAPABILITIES": {"q": int(capability_expansion_q32)},
             "OBJ_MAXIMIZE_SCIENCE": {"q": int(maximize_science_q32)},
             "OBJ_MAXIMIZE_SPEED": {"q": int(maximize_speed_q32)},
+            "cap_frontier_u64": int(capability_frontier["cap_frontier_u64"]),
+            "cap_enabled_u64": int(capability_frontier["cap_enabled_u64"]),
+            "cap_activated_u64": int(capability_frontier["cap_activated_u64"]),
             "domain_coverage_ratio": dict(polymath_metrics["domain_coverage_ratio"]),
             "top_void_score_q32": dict(polymath_metrics["top_void_score_q32"]),
             "domains_bootstrapped_u64": int(polymath_metrics["domains_bootstrapped_u64"]),
@@ -1031,6 +1138,9 @@ def observe(
             "OBJ_EXPAND_CAPABILITIES": [{"q": int(capability_expansion_q32)}],
             "OBJ_MAXIMIZE_SCIENCE": [{"q": int(maximize_science_q32)}],
             "OBJ_MAXIMIZE_SPEED": [{"q": int(maximize_speed_q32)}],
+            "cap_frontier_u64": [int(capability_frontier["cap_frontier_u64"])],
+            "cap_enabled_u64": [int(capability_frontier["cap_enabled_u64"])],
+            "cap_activated_u64": [int(capability_frontier["cap_activated_u64"])],
             "domain_coverage_ratio": [dict(polymath_metrics["domain_coverage_ratio"])],
             "top_void_score_q32": [dict(polymath_metrics["top_void_score_q32"])],
             "domains_bootstrapped_u64": [int(polymath_metrics["domains_bootstrapped_u64"])],

@@ -1,0 +1,92 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v2_1/rsi_real_demon_campaign_pack_v7",
+  "title": "RSI real demon campaign pack v7",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "cdel_version",
+    "campaign_kind",
+    "domain_id",
+    "epochs",
+    "translation_inputs_path",
+    "autonomy",
+    "efficiency",
+    "proposals"
+  ],
+  "properties": {
+    "schema": {"const": "rsi_real_demon_campaign_pack_v7"},
+    "schema_version": {"type": "integer", "const": 7},
+    "cdel_version": {"type": "string", "const": "v2_1"},
+    "campaign_kind": {"type": "string", "const": "demon_v7_recursive_ontology"},
+    "domain_id": {"type": "string"},
+    "epochs": {"type": "integer", "minimum": 1},
+    "translation_inputs_path": {"type": "string"},
+    "autonomy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["metabolism", "opt_ontology"],
+      "properties": {
+        "metabolism": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["enabled", "enum_kind"],
+          "properties": {
+            "enabled": {"type": "boolean"},
+            "enum_kind": {"type": "string", "const": "autopatch_enum_v3"}
+          }
+        },
+        "opt_ontology": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["enabled", "enum_kind"],
+          "properties": {
+            "enabled": {"type": "boolean"},
+            "enum_kind": {"type": "string", "const": "autoconcept_enum_v1"}
+          }
+        }
+      }
+    },
+    "efficiency": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["enabled", "rho_min"],
+      "properties": {
+        "enabled": {"type": "boolean"},
+        "rho_min": {"$ref": "#/$defs/rational_pair"}
+      }
+    },
+    "proposals": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["metabolism_dir", "opt_concepts_dir"],
+      "properties": {
+        "metabolism_dir": {"type": "string"},
+        "opt_concepts_dir": {"type": "string"},
+        "ontology_v3_dir": {"type": "string"},
+        "macros_v2_dir": {"type": "string"}
+      }
+    },
+    "demon": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "eval_onto_every_n_epochs": {"type": "integer", "minimum": 0},
+        "eval_macro_every_n_epochs": {"type": "integer", "minimum": 0},
+        "eval_metabolism_every_n_epochs": {"type": "integer", "minimum": 0}
+      }
+    }
+  },
+  "$defs": {
+    "rational_pair": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["num", "den"],
+      "properties": {
+        "num": {"type": "integer", "minimum": 0},
+        "den": {"type": "integer", "minimum": 1}
+      }
+    }
+  }
+}

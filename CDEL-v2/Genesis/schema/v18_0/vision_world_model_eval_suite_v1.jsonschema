@@ -1,0 +1,58 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v18_0/vision_world_model_eval_suite_v1",
+  "title": "vision_world_model_eval_suite_v1",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "schema_id": {"const": "vision_world_model_eval_suite_v1"},
+    "suite_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "dc1_id": {"const": "dc1:q32_v1"},
+    "opset_id": {"type": "string", "pattern": "^opset:eudrs_u_v1:sha256:[0-9a-f]{64}$"},
+    "dataset_policy": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "max_transitions_u64": {"type": "integer", "minimum": 1},
+        "sample_stride_u32": {"type": "integer", "minimum": 1, "maximum": 4294967295}
+      },
+      "required": ["max_transitions_u64", "sample_stride_u32"]
+    },
+    "metrics": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "prediction_metric_id": {"const": "mean_l1_q32"},
+        "stability_metric_id": {"const": "rollout_drift_q32"},
+        "saturation_metric_id": {"const": "saturation_rate_q32"}
+      },
+      "required": ["prediction_metric_id", "stability_metric_id", "saturation_metric_id"]
+    },
+    "thresholds": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "mean_l1_max_q32": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {"q": {"type": "integer", "minimum": 0}},
+          "required": ["q"]
+        },
+        "rollout_drift_max_q32": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {"q": {"type": "integer", "minimum": 0}},
+          "required": ["q"]
+        },
+        "saturation_rate_max_q32": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {"q": {"type": "integer", "minimum": 0}},
+          "required": ["q"]
+        }
+      },
+      "required": ["mean_l1_max_q32", "rollout_drift_max_q32", "saturation_rate_max_q32"]
+    }
+  },
+  "required": ["schema_id", "suite_id", "dc1_id", "opset_id", "dataset_policy", "metrics", "thresholds"]
+}

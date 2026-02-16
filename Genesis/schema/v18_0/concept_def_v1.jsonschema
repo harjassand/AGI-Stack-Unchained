@@ -1,0 +1,37 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v18_0/concept_def_v1",
+  "title": "concept_def_v1",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "schema_id": { "const": "concept_def_v1" },
+    "concept_id": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" },
+
+    "dc1_id": { "const": "dc1:q32_v1" },
+    "opset_id": { "type": "string", "pattern": "^opset:eudrs_u_v1:sha256:[0-9a-f]{64}$" },
+
+    "handle": { "type": "string", "pattern": "^concept/[a-z0-9][a-z0-9._/-]{0,127}$" },
+
+    "deps": {
+      "type": "array",
+      "items": { "type": "string", "pattern": "^concept/[a-z0-9][a-z0-9._/-]{0,127}$" },
+      "uniqueItems": true
+    },
+
+    "shard_ref": { "$ref": "https://genesis.engine/specs/v18_0/eudrs_u_artifact_ref_v1" },
+
+    "unify_caps": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "region_node_cap_u32": { "type": "integer", "minimum": 1, "maximum": 64 },
+        "backtrack_step_cap_u32": { "type": "integer", "minimum": 1 },
+        "candidate_leaf_cap_u32": { "type": "integer", "minimum": 1 }
+      },
+      "required": ["region_node_cap_u32", "backtrack_step_cap_u32", "candidate_leaf_cap_u32"]
+    }
+  },
+  "required": ["schema_id", "concept_id", "dc1_id", "opset_id", "handle", "deps", "shard_ref", "unify_caps"]
+}
+

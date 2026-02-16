@@ -1,0 +1,39 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "brain_decision_v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "case_id",
+    "verdict",
+    "selected_campaign_id",
+    "selected_capability_id",
+    "budget_verdict",
+    "rule_path",
+    "branch_signature",
+    "explain_hash"
+  ],
+  "properties": {
+    "schema_version": {"const": "brain_decision_v1"},
+    "case_id": {"type": "string", "minLength": 1},
+    "verdict": {"enum": ["RUN", "SKIP", "STOP"]},
+    "selected_campaign_id": {"type": ["string", "null"]},
+    "selected_capability_id": {"type": ["string", "null"]},
+    "budget_verdict": {"enum": ["OK", "INSUFFICIENT", "HARD_STOP"]},
+    "rule_path": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["rule_id", "outcome"],
+        "properties": {
+          "rule_id": {"type": "string", "minLength": 1},
+          "outcome": {"type": "string", "minLength": 1}
+        }
+      }
+    },
+    "branch_signature": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "explain_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"}
+  }
+}

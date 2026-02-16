@@ -1,0 +1,123 @@
+name: ci
+
+on:
+  push:
+    branches:
+      - "**"
+    tags:
+      - "v*"
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[dev]"
+      - name: Compile
+        run: python -m compileall -q cdel tests
+      - name: Pytest
+        run: pytest -q
+      - name: Core Sealed Tests No Skip
+        run: |
+          pytest -q tests/test_stat_cert* tests/test_sealed* -rs | tee /tmp/pytest_sealed.txt
+          if grep -q "SKIPPED" /tmp/pytest_sealed.txt; then
+            echo "core sealed/stat_cert tests were skipped"
+            exit 1
+          fi
+      - name: Smoke E2E
+        run: scripts/smoke_e2e.sh
+      - name: Smoke Stat Cert Adopt
+        run: scripts/smoke_statcert_adopt.sh
+      - name: Smoke Solve One Task
+        env:
+          CDEL_CI_ARTIFACTS_DIR: ${{ runner.temp }}/ci_artifacts/trackB
+        run: scripts/smoke_solve_one_task.sh "${RUNNER_TEMP}/smoke_solve_one_task"
+      - name: Upload Track B Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: smoke-trackB
+          path: |
+            ${{ runner.temp }}/ci_artifacts/trackB/solve_out.json
+            ${{ runner.temp }}/ci_artifacts/trackB/summary.md
+            ${{ runner.temp }}/ci_artifacts/trackB/scoreboard/trackB_scoreboard.json
+            ${{ runner.temp }}/ci_artifacts/trackB/scoreboard/trackB_scoreboard.md
+      - name: Smoke Solve Suite
+        env:
+          CDEL_CI_ARTIFACTS_DIR: ${{ runner.temp }}/ci_artifacts/trackB_suite
+        run: scripts/smoke_solve_suite_small.sh "${RUNNER_TEMP}/smoke_solve_suite"
+      - name: Upload Track B Suite Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: smoke-trackB-suite
+          path: |
+            ${{ runner.temp }}/ci_artifacts/trackB_suite/suite_scoreboard.json
+            ${{ runner.temp }}/ci_artifacts/trackB_suite/suite_summary.md
+      - name: Smoke Solve Suite Ablations
+        env:
+          CDEL_CI_ARTIFACTS_DIR: ${{ runner.temp }}/ci_artifacts/trackB_ablations
+        run: scripts/smoke_solve_suite_ablations_small.sh "${RUNNER_TEMP}/smoke_solve_suite_ablations"
+      - name: Upload Track B Ablations Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: smoke-trackB-ablations
+          path: |
+            ${{ runner.temp }}/ci_artifacts/trackB_ablations/ablations_results.json
+            ${{ runner.temp }}/ci_artifacts/trackB_ablations/ablations_summary.md
+      - name: Smoke Solve Suite Ablations Golden
+        env:
+          CDEL_CI_ARTIFACTS_DIR: ${{ runner.temp }}/ci_artifacts/trackB_ablations_golden
+        run: scripts/smoke_solve_suite_ablations_golden.sh "${RUNNER_TEMP}/smoke_solve_suite_ablations_golden"
+      - name: Upload Track B Ablations Golden Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: smoke-trackB-ablations-golden
+          path: |
+            ${{ runner.temp }}/ci_artifacts/trackB_ablations_golden/ablations_results.json
+            ${{ runner.temp }}/ci_artifacts/trackB_ablations_golden/ablations_summary.md
+      - name: Smoke Solve Stress
+        env:
+          CDEL_CI_ARTIFACTS_DIR: ${{ runner.temp }}/ci_artifacts/trackB_stress
+        run: scripts/smoke_solve_stress_small.sh "${RUNNER_TEMP}/smoke_solve_stress"
+      - name: Upload Track B Stress Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: smoke-trackB-stress
+          path: |
+            ${{ runner.temp }}/ci_artifacts/trackB_stress/stress_results.json
+            ${{ runner.temp }}/ci_artifacts/trackB_stress/stress_summary.md
+      - name: Smoke Generalization Experiment
+        run: scripts/smoke_generalization_experiment.sh "${RUNNER_TEMP}/smoke_generalization"
+      - name: Upload Generalization Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: smoke-generalization
+          path: |
+            ${{ runner.temp }}/smoke_generalization/out/summary.md
+            ${{ runner.temp }}/smoke_generalization/out/results.json
+      - name: Smoke Evidence Suite
+        run: scripts/smoke_evidence_suite.sh "${RUNNER_TEMP}/smoke_evidence_suite"
+      - name: Upload Evidence Suite Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: smoke-evidence-suite
+          path: |
+            ${{ runner.temp }}/smoke_evidence_suite/out/summary.md
+            ${{ runner.temp }}/smoke_evidence_suite/out/results.json
+      - name: Smoke Scaling Experiment
+        run: scripts/smoke_scaling_experiment.sh "${RUNNER_TEMP}/smoke_scaling_experiment"
+      - name: Upload Scaling Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: smoke-scaling
+          path: |
+            ${{ runner.temp }}/smoke_scaling_experiment/out/summary.md
+            ${{ runner.temp }}/smoke_scaling_experiment/out/results.json
+      - name: Smoke Rebuild
+        run: scripts/smoke_rebuild.sh

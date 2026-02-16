@@ -1,0 +1,11 @@
+{
+  "epochs": {
+    "epoch-1": {
+      "calls": 1,
+      "alpha_spent": "0.001",
+      "epsilon_spent": "1",
+      "delta_spent": "0",
+      "compute_units_spent": 10
+    }
+  }
+}

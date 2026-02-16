@@ -1,0 +1,31 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v1_5r/meta_patch_admission_report_v1",
+  "title": "Meta patch admission report v1",
+  "type": "object",
+  "additionalProperties": false,
+  "patternProperties": {
+    "^x-": {}
+  },
+  "required": ["schema", "schema_version", "decisions"],
+  "properties": {
+    "schema": {"const": "meta_patch_admission_report_v1"},
+    "schema_version": {"type": "integer", "const": 1},
+    "decisions": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/decision"}
+    }
+  },
+  "$defs": {
+    "decision": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["patch_id", "decision", "reason_codes"],
+      "properties": {
+        "patch_id": {"type": "string", "pattern": "^sha256:[a-f0-9]{64}$"},
+        "decision": {"type": "string", "enum": ["PASS", "FAIL"]},
+        "reason_codes": {"type": "array", "items": {"type": "string"}}
+      }
+    }
+  }
+}

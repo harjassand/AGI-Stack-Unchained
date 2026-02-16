@@ -1,0 +1,13 @@
+{
+  "schema_version": 1,
+  "kind": "constraint_spec",
+  "domain": "env",
+  "constraints": {
+    "banned_tools": [],
+    "max_steps": 16,
+    "max_file_writes": 0,
+    "allow_path_escape": false,
+    "allow_network": false,
+    "allow_subprocess": false
+  }
+}

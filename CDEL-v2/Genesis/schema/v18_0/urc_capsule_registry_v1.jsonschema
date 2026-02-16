@@ -1,0 +1,26 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v18_0/urc_capsule_registry_v1",
+  "title": "urc_capsule_registry_v1",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "schema_id": {"const": "urc_capsule_registry_v1"},
+    "epoch_u64": {"type": "integer", "minimum": 0},
+    "dc1_id": {"const": "dc1:q32_v1"},
+    "opset_id": {"type": "string", "pattern": "^opset:eudrs_u_v1:sha256:[0-9a-f]{64}$"},
+    "capsules": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "handle": {"type": "string", "pattern": "^capsule/[a-z0-9][a-z0-9._/-]{0,127}$"},
+          "capsule_def_ref": {"$ref": "https://genesis.engine/specs/v18_0/eudrs_u_artifact_ref_v1"}
+        },
+        "required": ["handle", "capsule_def_ref"]
+      }
+    }
+  },
+  "required": ["schema_id", "epoch_u64", "dc1_id", "opset_id", "capsules"]
+}

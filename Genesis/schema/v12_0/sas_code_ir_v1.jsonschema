@@ -1,0 +1,59 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v12_0/sas_code_ir_v1",
+  "title": "SAS-CODE algorithm IR v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "domain",
+    "algo_id",
+    "algo_kind",
+    "params",
+    "types",
+    "tags"
+  ],
+  "properties": {
+    "schema_version": {"const": "sas_code_ir_v1"},
+    "domain": {"const": "SAS_CODE_SORT_V1"},
+    "algo_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "algo_kind": {
+      "type": "string",
+      "enum": ["BUBBLE_SORT_V1", "MERGE_SORT_V1", "INSERTION_SORT_V1", "QUICK_SORT_V1"]
+    },
+    "params": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema_version", "quick", "hybrid"],
+      "properties": {
+        "schema_version": {"const": "sas_code_algo_params_v1"},
+        "quick": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["pivot_policy"],
+          "properties": {
+            "pivot_policy": {"type": "string", "enum": ["FIRST_ELEMENT"]}
+          }
+        },
+        "hybrid": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["insertion_cutoff_n"],
+          "properties": {
+            "insertion_cutoff_n": {"type": "integer", "minimum": 0}
+          }
+        }
+      }
+    },
+    "types": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["input", "output"],
+      "properties": {
+        "input": {"type": "string", "enum": ["ListNat"]},
+        "output": {"type": "string", "enum": ["ListNat"]}
+      }
+    },
+    "tags": {"type": "array", "items": {"type": "string"}}
+  }
+}

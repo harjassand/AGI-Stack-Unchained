@@ -1,0 +1,89 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/ccai_x_v1/preference_capsule_v1.schema.json",
+  "title": "CCAI-X v1 Preference Capsule",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "format",
+    "schema_version",
+    "preference_id",
+    "energy_bounds",
+    "metrics",
+    "admissibility"
+  ],
+  "properties": {
+    "format": {"const": "preference_capsule_v1"},
+    "schema_version": {"const": "1"},
+    "preference_id": {"$ref": "#/$defs/identifier"},
+    "energy_bounds": {"$ref": "#/$defs/energy_bounds"},
+    "metrics": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/metric"},
+      "uniqueItems": true
+    },
+    "admissibility": {"$ref": "#/$defs/admissibility"},
+    "x_extensions": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {}
+    }
+  },
+  "$defs": {
+    "identifier": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9_./-]{0,127}$"
+    },
+    "energy_bounds": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["min_energy_fp", "max_energy_fp"],
+      "properties": {
+        "min_energy_fp": {"type": "integer"},
+        "max_energy_fp": {"type": "integer"}
+      }
+    },
+    "metric": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["metric_id", "direction", "weight_fp"],
+      "properties": {
+        "metric_id": {"$ref": "#/$defs/identifier"},
+        "direction": {"type": "string", "enum": ["min", "max", "target"]},
+        "target_int": {"type": "integer"},
+        "tolerance_int": {"type": "integer"},
+        "weight_fp": {"type": "integer"}
+      },
+      "allOf": [
+        {
+          "if": {"properties": {"direction": {"const": "target"}}},
+          "then": {"required": ["target_int", "tolerance_int"]}
+        }
+      ]
+    },
+    "admissibility": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "forbidden_action_tokens",
+        "max_horizon",
+        "max_branching",
+        "max_interventions_per_episode"
+      ],
+      "properties": {
+        "forbidden_action_tokens": {
+          "type": "array",
+          "items": {"$ref": "#/$defs/identifier"},
+          "uniqueItems": true
+        },
+        "max_horizon": {"type": "integer", "minimum": 1, "maximum": 10000},
+        "max_branching": {"type": "integer", "minimum": 1, "maximum": 10000},
+        "max_interventions_per_episode": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 10000
+        }
+      }
+    }
+  }
+}

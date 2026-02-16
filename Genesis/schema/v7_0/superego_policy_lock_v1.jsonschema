@@ -1,0 +1,21 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v7_0/superego_policy_lock_v1",
+  "title": "Superego policy lock v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "superego_policy_hash",
+    "icore_id",
+    "meta_hash",
+    "created_utc"
+  ],
+  "properties": {
+    "schema_version": {"const": "superego_policy_lock_v1"},
+    "superego_policy_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "icore_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "meta_hash": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "created_utc": {"type": "string"}
+  }
+}

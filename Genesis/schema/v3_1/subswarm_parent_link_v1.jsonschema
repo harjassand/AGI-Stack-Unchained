@@ -1,0 +1,27 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v3_1/subswarm_parent_link_v1",
+  "title": "Subswarm parent link v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "spec_version",
+    "parent_swarm_run_id",
+    "parent_task_id",
+    "sponsor_agent_id",
+    "spawn_event_ref_hash",
+    "depth",
+    "subswarm_slot"
+  ],
+  "properties": {
+    "schema": {"const": "subswarm_parent_link_v1"},
+    "spec_version": {"const": "v3_1"},
+    "parent_swarm_run_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "parent_task_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "sponsor_agent_id": {"type": "string", "pattern": "^agent_[0-9]{4}$"},
+    "spawn_event_ref_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "depth": {"type": "integer", "minimum": 1},
+    "subswarm_slot": {"type": "integer", "minimum": 0}
+  }
+}

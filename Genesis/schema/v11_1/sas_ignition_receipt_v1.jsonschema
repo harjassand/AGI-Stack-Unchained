@@ -1,0 +1,15 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v11_0/sas_ignition_receipt_v1",
+  "title": "SAS ignition receipt v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "icore_id", "meta_hash", "ledger_head_hash", "created_utc"],
+  "properties": {
+    "schema_version": {"const": "sas_ignition_receipt_v1"},
+    "icore_id": {"type": "string"},
+    "meta_hash": {"type": "string"},
+    "ledger_head_hash": {"type": "string"},
+    "created_utc": {"type": "string", "format": "date-time"}
+  }
+}

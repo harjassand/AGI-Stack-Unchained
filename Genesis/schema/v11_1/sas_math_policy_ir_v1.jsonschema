@@ -1,0 +1,30 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v11_0/sas_math_policy_ir_v1",
+  "title": "SAS-MATH policy IR v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "policy_id",
+    "policy_family",
+    "max_attempts_per_problem",
+    "seed"
+  ],
+  "properties": {
+    "schema_version": {"const": "sas_math_policy_ir_v1"},
+    "policy_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "policy_family": {"type": "string", "enum": ["toy_checker_proof_v1", "lean_tactic_v1", "mixed_v1"]},
+    "toy_checker_proofs": {
+      "type": "array",
+      "items": {"type": "string"}
+    },
+    "lean_tactics": {
+      "type": "array",
+      "items": {"type": "string"}
+    },
+    "max_attempts_per_problem": {"type": "integer", "minimum": 1},
+    "seed": {"type": "integer"},
+    "notes": {"type": "string"}
+  }
+}

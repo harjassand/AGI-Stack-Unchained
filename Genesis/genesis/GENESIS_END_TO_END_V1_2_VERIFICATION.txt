@@ -1,0 +1,11 @@
+GENESIS_END_TO_END_V1_2_VERIFICATION
+
+Commands:
+1) export CDEL_ROOT=<path-to-cdel>
+2) ./run_end_to_end_v1_2.sh
+
+Observed:
+- PASS receipts verified
+- Embedded eval bundle verified
+- FAILs returned no receipts
+- Logs deterministic under fixed seed

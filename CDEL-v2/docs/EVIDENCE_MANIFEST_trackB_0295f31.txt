@@ -1,0 +1,7 @@
+commit: 0295f3194d17fad2829b18150b7b9b47f5e28bf9
+config_hash: 9a7ffcdb5cd5774238d065c751f2a22c8a55737a25b8da7aada530473d5a7849
+eval_harness_hash: harness-hash
+eval_suite_hash: suite-hash
+scoreboard_json_sha256: 6b87e9dc93b0025a1a9c654b7844468960a35503b8292c0772b58ab135ec65c0
+scoreboard_md_sha256: d9f44f6b3fe5b1ffc3d98e4d1ba4f63fc05c80027521bd327e8e2e9908e8669b
+command_scoreboard: cdel run-solve-scoreboard --out /private/tmp/cdel_trackB_scoreboard_0295f31 --tasks 12 --max-candidates 2 --episodes 32 --seed-key trackb-seed --budget 1000000

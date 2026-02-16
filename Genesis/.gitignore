@@ -1,0 +1,52 @@
+# OS / editor
+.DS_Store
+__MACOSX/
+*.swp
+*.swo
+
+# Python
+__pycache__/
+*.pyc
+.pytest_cache/
+
+# Exclude implementation repos
+cdel/
+cdel_keystore_v1_2/
+
+# Virtualenvs
+.venv/
+venv/
+
+# Dist artifacts
+dist/*.tar.gz
+dist/*.bundle
+dist/*.sha256
+dist/*.bundle.sha256
+dist/final_handoff_plan_complete_v1/
+dist/
+
+# Genesis outputs
+genesis/dist/
+genesis/receipts/
+GENESIS_REDTEAM_REPORT.json
+HARDFIX_REPORT.json
+PLAN_CLOSURE_VERIFICATION.txt
+verification_outputs/
+genesis_run.jsonl
+genesis_run_v1_*.jsonl
+genesis_summary.json
+genesis_archive.jsonl
+genesis_system_summary.json
+genesis_policy_summary.json
+genesis/shadow_calibration.json
+genesis/.cdel_ledger_e2e/
+genesis/.cdel_ledger_e2e_v0_3/
+genesis/.cdel_ledger_e2e_v0_4/
+genesis/library.json
+.cdel_ledger/
+genesis/cdel_keystore_v1_0.json
+genesis/cdel_keystore_v1_1/
+genesis/cdel_keystore_v1_2/
+genesis/genesis/cdel_keystore_v1_0.json
+genesis/genesis/cdel_keystore_v1_1/
+genesis/genesis/cdel_keystore_v1_2/

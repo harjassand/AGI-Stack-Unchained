@@ -1,0 +1,111 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v19_0/axis_upgrade_bundle_v1",
+  "title": "Axis upgrade sidecar bundle v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_name",
+    "schema_version",
+    "axis_bundle_id",
+    "sigma_old_ref",
+    "sigma_new_ref",
+    "regime_old_ref",
+    "regime_new_ref",
+    "objective_J_profile_ref",
+    "continuity_budget",
+    "morphisms"
+  ],
+  "$defs": {
+    "sha256": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "artifact_ref_v1": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["artifact_id", "artifact_relpath"],
+      "properties": {
+        "artifact_id": {"$ref": "#/$defs/sha256"},
+        "artifact_relpath": {"type": "string", "minLength": 1}
+      }
+    },
+    "regime_ref_v1": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["C", "K", "E", "W", "T"],
+      "properties": {
+        "C": {"$ref": "#/$defs/artifact_ref_v1"},
+        "K": {"$ref": "#/$defs/artifact_ref_v1"},
+        "E": {"$ref": "#/$defs/artifact_ref_v1"},
+        "W": {"$ref": "#/$defs/artifact_ref_v1"},
+        "T": {"$ref": "#/$defs/artifact_ref_v1"}
+      }
+    },
+    "budget_spec_v1": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema_name",
+        "schema_version",
+        "max_steps",
+        "max_bytes_read",
+        "max_bytes_write",
+        "max_items",
+        "seed",
+        "policy"
+      ],
+      "properties": {
+        "schema_name": {"const": "budget_spec_v1"},
+        "schema_version": {"const": "v19_0"},
+        "max_steps": {"type": "integer", "minimum": 1},
+        "max_bytes_read": {"type": "integer", "minimum": 0},
+        "max_bytes_write": {"type": "integer", "minimum": 0},
+        "max_items": {"type": "integer", "minimum": 1},
+        "seed": {"type": "integer", "minimum": 0},
+        "policy": {"type": "string", "enum": ["HARD_FAIL", "SAFE_HALT", "SAFE_SPLIT"]}
+      }
+    }
+  },
+  "properties": {
+    "schema_name": {"const": "axis_upgrade_bundle_v1"},
+    "schema_version": {"const": "v19_0"},
+    "axis_bundle_id": {"$ref": "#/$defs/sha256"},
+    "sigma_old_ref": {"$ref": "#/$defs/artifact_ref_v1"},
+    "sigma_new_ref": {"$ref": "#/$defs/artifact_ref_v1"},
+    "regime_old_ref": {"$ref": "#/$defs/regime_ref_v1"},
+    "regime_new_ref": {"$ref": "#/$defs/regime_ref_v1"},
+    "objective_J_profile_ref": {"$ref": "#/$defs/artifact_ref_v1"},
+    "continuity_budget": {"$ref": "#/$defs/budget_spec_v1"},
+    "continuity_constitution_ref": {"$ref": "#/$defs/artifact_ref_v1"},
+    "governed_surfaces_touched": {
+      "type": "array",
+      "items": {"type": "string", "enum": ["SIGMA", "K", "E", "W", "T", "C", "M"]},
+      "uniqueItems": true
+    },
+    "morphisms": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "morphism_ref",
+          "overlap_profile_ref",
+          "translator_bundle_ref",
+          "totality_cert_ref",
+          "continuity_receipt_ref",
+          "axis_specific_proof_refs"
+        ],
+        "properties": {
+          "morphism_ref": {"$ref": "#/$defs/artifact_ref_v1"},
+          "overlap_profile_ref": {"$ref": "#/$defs/artifact_ref_v1"},
+          "translator_bundle_ref": {"$ref": "#/$defs/artifact_ref_v1"},
+          "totality_cert_ref": {"$ref": "#/$defs/artifact_ref_v1"},
+          "continuity_receipt_ref": {"$ref": "#/$defs/artifact_ref_v1"},
+          "axis_specific_proof_refs": {
+            "type": "array",
+            "items": {"$ref": "#/$defs/artifact_ref_v1"}
+          }
+        }
+      }
+    }
+  }
+}

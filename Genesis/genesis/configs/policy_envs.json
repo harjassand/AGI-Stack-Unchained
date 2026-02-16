@@ -1,0 +1,8 @@
+{
+  "envs": {
+    "policy_env_tiny": {
+      "path": "tests/fixtures/policy/policy_env.jsonl",
+      "format": "jsonl"
+    }
+  }
+}

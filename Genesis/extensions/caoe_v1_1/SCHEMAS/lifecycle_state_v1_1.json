@@ -1,0 +1,31 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "lifecycle_state_v1_1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "format",
+    "schema_version",
+    "candidate_id",
+    "state",
+    "heldout_pass_count",
+    "heldout_fail_count",
+    "mdll_win_count",
+    "worst_case_win_count",
+    "recent_outcomes"
+  ],
+  "properties": {
+    "format": {"const": "lifecycle_state_v1_1"},
+    "schema_version": {"const": 1},
+    "candidate_id": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "state": {"enum": ["PROVISIONAL", "PROMOTED", "EXPIRED"]},
+    "heldout_pass_count": {"type": "integer", "minimum": 0},
+    "heldout_fail_count": {"type": "integer", "minimum": 0},
+    "mdll_win_count": {"type": "integer", "minimum": 0},
+    "worst_case_win_count": {"type": "integer", "minimum": 0},
+    "recent_outcomes": {
+      "type": "array",
+      "items": {"type": "boolean"}
+    }
+  }
+}

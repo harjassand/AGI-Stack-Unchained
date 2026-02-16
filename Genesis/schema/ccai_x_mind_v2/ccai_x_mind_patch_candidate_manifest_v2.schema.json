@@ -1,0 +1,59 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/ccai_x_mind_v2/ccai_x_mind_patch_candidate_manifest_v2.schema.json",
+  "title": "CCAI-X Mind v2 Patch Candidate Manifest",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "format",
+    "schema_version",
+    "task_id",
+    "candidate_id",
+    "artifacts"
+  ],
+  "properties": {
+    "format": {"const": "ccai_x_mind_patch_candidate_mind_v2"},
+    "schema_version": {"const": "1"},
+    "task_id": {"const": "ccai_x_mind_v2"},
+    "candidate_id": {"$ref": "#/$defs/hash"},
+    "artifacts": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/artifact"},
+      "uniqueItems": true
+    },
+    "x_extensions": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {}
+    }
+  },
+  "$defs": {
+    "hash": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "artifact": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "sha256", "bytes_len"],
+      "properties": {
+        "path": {
+          "type": "string",
+          "enum": [
+            "markov_blanket_spec.json",
+            "do_map.json",
+            "causal_mechanism_registry.json",
+            "mechanism_registry_diff.json",
+            "inference_kernel_isa.json",
+            "inference_kernel_program.json",
+            "policy_prior.json",
+            "preference_capsule.json",
+            "coherence_operator.json"
+          ]
+        },
+        "sha256": {"$ref": "#/$defs/hash"},
+        "bytes_len": {"type": "integer", "minimum": 1}
+      }
+    }
+  }
+}

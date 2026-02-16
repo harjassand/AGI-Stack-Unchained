@@ -1,0 +1,25 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v3_0/rsi_agent_receipt_v1",
+  "title": "RSI swarm agent receipt v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "spec_version",
+    "agent_id",
+    "task_id",
+    "result_id",
+    "verdict",
+    "reason"
+  ],
+  "properties": {
+    "schema": {"const": "rsi_agent_receipt_v1"},
+    "spec_version": {"const": "v3_0"},
+    "agent_id": {"type": "string", "pattern": "^agent_[0-9]{4}$"},
+    "task_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "result_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "verdict": {"type": "string", "enum": ["OK", "FAIL"]},
+    "reason": {"type": "string"}
+  }
+}

@@ -1,0 +1,26 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v2_1/rsi_real_recursive_ontology_pack_v1",
+  "title": "RSI real recursive ontology pack v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "cdel_version",
+    "run_kind",
+    "K_required_concepts",
+    "max_attempts_total",
+    "source_campaign_pack_path",
+    "target_campaign_pack_path"
+  ],
+  "properties": {
+    "schema": {"const": "rsi_real_recursive_ontology_pack_v1"},
+    "schema_version": {"type": "integer", "const": 1},
+    "cdel_version": {"type": "string", "const": "v2_1"},
+    "run_kind": {"type": "string", "const": "recursive_ontology_v2_1"},
+    "K_required_concepts": {"type": "integer", "minimum": 1},
+    "max_attempts_total": {"type": "integer", "minimum": 1},
+    "source_campaign_pack_path": {"type": "string"},
+    "target_campaign_pack_path": {"type": "string"}
+  }
+}

@@ -1,0 +1,7 @@
+{
+  "domain": "env-gridworld-v1",
+  "suite_hash": "d30a99e708fde73fca18d9249435110eb520df9a70b2a9405c556380b2d2ee93",
+  "updated_at": "2026-01-24",
+  "source": "manual",
+  "notes": "Expanded gridworld ladder episodes"
+}

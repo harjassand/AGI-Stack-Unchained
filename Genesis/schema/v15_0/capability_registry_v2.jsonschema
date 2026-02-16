@@ -1,0 +1,64 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v15_0/capability_registry_v2",
+  "title": "Capability registry v2",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "capabilities"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "capability_registry_v2"
+    },
+    "capabilities": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "$ref": "#/$defs/capability"
+      }
+    }
+  },
+  "$defs": {
+    "capability": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "capability_id",
+        "daemon_root_rel",
+        "pack_rel",
+        "verifier_module",
+        "kernel_support",
+        "python_driver"
+      ],
+      "properties": {
+        "capability_id": {
+          "type": "string"
+        },
+        "daemon_root_rel": {
+          "type": "string"
+        },
+        "pack_rel": {
+          "type": "string"
+        },
+        "verifier_module": {
+          "type": "string"
+        },
+        "kernel_support": {
+          "enum": [
+            "REQUIRED",
+            "OPTIONAL",
+            "NONE"
+          ]
+        },
+        "python_driver": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      }
+    }
+  }
+}

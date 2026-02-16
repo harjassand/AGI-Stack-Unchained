@@ -1,0 +1,37 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v11_0/sas_sealed_training_receipt_v1",
+  "title": "SAS sealed training receipt v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "arch_id",
+    "arch_graph_hash",
+    "toolchain_hash",
+    "training_config_hash",
+    "corpus_id",
+    "weights_sha256",
+    "dataset_path",
+    "weights_path",
+    "stdout_hash",
+    "stderr_hash",
+    "time_ms",
+    "network_used"
+  ],
+  "properties": {
+    "schema_version": {"const": "sas_sealed_training_receipt_v1"},
+    "arch_id": {"type": "string"},
+    "arch_graph_hash": {"type": "string"},
+    "toolchain_hash": {"type": "string"},
+    "training_config_hash": {"type": "string"},
+    "corpus_id": {"type": "string"},
+    "weights_sha256": {"type": "string"},
+    "dataset_path": {"type": "string"},
+    "weights_path": {"type": "string"},
+    "stdout_hash": {"type": "string"},
+    "stderr_hash": {"type": "string"},
+    "time_ms": {"type": "integer"},
+    "network_used": {"type": "boolean"}
+  }
+}

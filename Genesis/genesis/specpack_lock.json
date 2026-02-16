@@ -1,0 +1,10 @@
+{
+  "canonicalization_id": "GCJ-1",
+  "canonicalization_tool_sha256": "47b192d7b9b98a90b72131d77f8076f3ab26187a105fd8662584029a43bb8ce2",
+  "capsule_schema_sha256": "52babde62e50a54fc26f86978bf8d08672262de6834dcf99b9a68bd04d566188",
+  "level2_fullstack_series_sha256": "a2d4f85815cb1622bdf7074e82fb0418b8e95b72510930557dbd434c144a2925",
+  "receipt_schema_sha256": "2e8b9503c4bb4c7c8007ef3ac50d50623dd37e4b124afb87e4a8a9ea0b18e9e0",
+  "specpack_bundle_sha256": "15e6f08e63d617323233993def0f9a9566202ac62b7be1acfd944f71ff007352",
+  "specpack_tag": "v1.0.1",
+  "specpack_tarball_sha256": "3d98b254c4fd2eb5ed061805ea7b783cce4eae1fa957fa723a433d0c590bea01"
+}

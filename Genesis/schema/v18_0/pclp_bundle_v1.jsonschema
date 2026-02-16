@@ -1,0 +1,78 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v18_0/pclp_bundle_v1",
+  "title": "pclp_bundle_v1",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "schema_id": {"const": "pclp_bundle_v1"},
+    "pclp_bundle_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "proof_system_id": {"const": "stark_vm_v1"},
+    "vpvm_id": {"const": "vpvm_q32_v1"},
+    "vpvm_config_ref": {"$ref": "https://genesis.engine/specs/v18_0/eudrs_u_artifact_ref_v1"},
+    "public_inputs_ref": {"$ref": "https://genesis.engine/specs/v18_0/eudrs_u_artifact_ref_v1"},
+    "program_bin_ref": {"$ref": "https://genesis.engine/specs/v18_0/eudrs_u_artifact_ref_v1"},
+    "proof_bin_ref": {"$ref": "https://genesis.engine/specs/v18_0/eudrs_u_artifact_ref_v1"},
+    "bindings": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "opset_id": {"type": "string"},
+        "dc1_id": {"type": "string", "const": "dc1:q32_v1"},
+        "training_manifest_ref": {"$ref": "https://genesis.engine/specs/v18_0/eudrs_u_artifact_ref_v1"},
+        "dataset_manifest_ref": {"$ref": "https://genesis.engine/specs/v18_0/eudrs_u_artifact_ref_v1"},
+        "eval_manifest_ref": {"$ref": "https://genesis.engine/specs/v18_0/eudrs_u_artifact_ref_v1"},
+        "invsqrt_lut_manifest_ref": {"$ref": "https://genesis.engine/specs/v18_0/eudrs_u_artifact_ref_v1"}
+      },
+      "required": [
+        "opset_id",
+        "dc1_id",
+        "training_manifest_ref",
+        "dataset_manifest_ref",
+        "eval_manifest_ref",
+        "invsqrt_lut_manifest_ref"
+      ]
+    },
+    "expected_outputs": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "wroot_after_ref": {"$ref": "https://genesis.engine/specs/v18_0/eudrs_u_artifact_ref_v1"},
+        "h_train_tail32_hex": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "scorecard_ref": {"$ref": "https://genesis.engine/specs/v18_0/eudrs_u_artifact_ref_v1"},
+        "h_eval_tail32_hex": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "reason_code_on_fail": {
+          "type": "string",
+          "enum": [
+            "EUDRSU_PCLP_SCHEMA_INVALID",
+            "EUDRSU_PCLP_BINDING_MISMATCH",
+            "EUDRSU_PCLP_PROOF_INVALID",
+            "EUDRSU_PCLP_PUBLIC_INPUT_MISMATCH",
+            "EUDRSU_PCLP_CONFIG_MISMATCH",
+            "EUDRSU_PCLP_UNSUPPORTED_MODE"
+          ]
+        }
+      },
+      "required": [
+        "wroot_after_ref",
+        "h_train_tail32_hex",
+        "scorecard_ref",
+        "h_eval_tail32_hex",
+        "reason_code_on_fail"
+      ]
+    }
+  },
+  "required": [
+    "schema_id",
+    "pclp_bundle_id",
+    "proof_system_id",
+    "vpvm_id",
+    "vpvm_config_ref",
+    "public_inputs_ref",
+    "program_bin_ref",
+    "proof_bin_ref",
+    "bindings",
+    "expected_outputs"
+  ]
+}
+

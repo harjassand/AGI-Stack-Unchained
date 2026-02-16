@@ -1,0 +1,27 @@
+[project]
+name = "cdel"
+version = "0.1.0"
+description = "Certified Definitional Extension Ledger (CDEL) prototype"
+requires-python = ">=3.11"
+dependencies = [
+  "blake3>=0.4.1",
+]
+
+[project.optional-dependencies]
+core = []
+dev = [
+  "cryptography>=42.0.0",
+  "pytest>=7.0",
+]
+
+sealed = [
+  "cryptography>=42.0.0",
+]
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["cdel*"]
+exclude = ["tests*", "docs*", "reports*", "tasks*", "scripts*", ".github*"]
+
+[project.scripts]
+cdel = "cdel.cli:main"

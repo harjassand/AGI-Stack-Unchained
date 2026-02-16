@@ -1,0 +1,294 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v18_0/dmpl_config_v1",
+  "title": "DMPL Config v1",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "schema_id": {"const": "dmpl_config_v1"},
+    "dc1_id": {"type": "string", "const": "dc1:q32_v1"},
+    "opset_id": {"type": "string", "pattern": "^opset:eudrs_u_v1:sha256:[0-9a-f]{64}$"},
+
+    "enabled_b": {"type": "boolean"},
+
+    "active_modelpack_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "fparams_bundle_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "vparams_bundle_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+
+    "caps": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "K_ctx_u32": {"type": "integer", "minimum": 0, "maximum": 4294967295},
+        "K_g_u32": {"type": "integer", "minimum": 0, "maximum": 4294967295},
+        "max_concept_bytes_per_step_u32": {"type": "integer", "minimum": 0, "maximum": 4294967295},
+        "max_retrieval_bytes_u32": {"type": "integer", "minimum": 0, "maximum": 4294967295},
+        "max_retrieval_ops_u64": {"type": "integer", "minimum": 0, "maximum": 18446744073709551615},
+
+        "max_patch_rank_u32": {"type": "integer", "minimum": 0, "maximum": 4294967295},
+        "max_patch_bytes_u32": {"type": "integer", "minimum": 0, "maximum": 4294967295},
+        "max_patch_vm_steps_u32": {"type": "integer", "minimum": 0, "maximum": 4294967295},
+
+        "H_u32": {"type": "integer", "minimum": 0, "maximum": 4294967295},
+        "Nmax_u32": {"type": "integer", "minimum": 0, "maximum": 4294967295},
+        "Ka_u32": {"type": "integer", "minimum": 0, "maximum": 4294967295},
+        "beam_width_u32": {"type": "integer", "minimum": 0, "maximum": 4294967295},
+        "max_trace_bytes_u32": {"type": "integer", "minimum": 0, "maximum": 4294967295},
+        "max_node_opcount_u64": {"type": "integer", "minimum": 0, "maximum": 18446744073709551615},
+        "max_total_opcount_u64": {"type": "integer", "minimum": 0, "maximum": 18446744073709551615},
+
+        "train_steps_u32": {"type": "integer", "minimum": 0, "maximum": 4294967295},
+        "batch_size_u32": {"type": "integer", "minimum": 0, "maximum": 4294967295},
+        "max_grad_norm_q32": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {"q": {"type": "integer", "minimum": -9223372036854775808, "maximum": 9223372036854775807}},
+          "required": ["q"]
+        },
+        "lr_q32": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {"q": {"type": "integer", "minimum": -9223372036854775808, "maximum": 9223372036854775807}},
+          "required": ["q"]
+        },
+        "dataset_max_bytes_u64": {"type": "integer", "minimum": 0, "maximum": 18446744073709551615},
+
+        "max_stack_depth_u32": {"type": "integer", "minimum": 0, "maximum": 4294967295},
+        "max_recursion_depth_u32": {"type": "integer", "minimum": 0, "maximum": 4294967295}
+      },
+      "required": [
+        "K_ctx_u32",
+        "K_g_u32",
+        "max_concept_bytes_per_step_u32",
+        "max_retrieval_bytes_u32",
+        "max_retrieval_ops_u64",
+        "max_patch_rank_u32",
+        "max_patch_bytes_u32",
+        "max_patch_vm_steps_u32",
+        "H_u32",
+        "Nmax_u32",
+        "Ka_u32",
+        "beam_width_u32",
+        "max_trace_bytes_u32",
+        "max_node_opcount_u64",
+        "max_total_opcount_u64",
+        "train_steps_u32",
+        "batch_size_u32",
+        "max_grad_norm_q32",
+        "lr_q32",
+        "dataset_max_bytes_u64",
+        "max_stack_depth_u32",
+        "max_recursion_depth_u32"
+      ]
+    },
+
+    "retrieval_spec": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "ml_index_manifest_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+        "key_fn_id": {"const": "dmpl_key_v1"},
+        "score_fn_id": {"const": "ml_index_v1_default"},
+        "tie_rule_id": {"const": "score_desc_id_asc"},
+        "scan_cap_per_bucket_u32": {"type": "integer", "minimum": 1, "maximum": 4294967295},
+        "K_ctx_u32": {"type": "integer", "minimum": 0, "maximum": 4294967295}
+      },
+      "required": [
+        "ml_index_manifest_id",
+        "key_fn_id",
+        "score_fn_id",
+        "tie_rule_id",
+        "scan_cap_per_bucket_u32",
+        "K_ctx_u32"
+      ]
+    },
+
+    "gating_spec": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "normalize_weights_b": {"type": "boolean"},
+        "epsilon_q32": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {"q": {"type": "integer", "minimum": -9223372036854775808, "maximum": 9223372036854775807}},
+          "required": ["q"]
+        },
+        "pwl_pos_id": {"const": "pwl_pos_v1"},
+        "inv_q32_id": {"type": "string"},
+        "inverse_head_enabled_b": {"type": "boolean"},
+        "rev_err_threshold_q32": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {"q": {"type": "integer", "minimum": -9223372036854775808, "maximum": 9223372036854775807}},
+          "required": ["q"]
+        },
+        "theta_cac_lb_q32": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {"q": {"type": "integer", "minimum": -9223372036854775808, "maximum": 9223372036854775807}},
+          "required": ["q"]
+        },
+        "stab_thresholds": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "G0": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {"q": {"type": "integer", "minimum": -9223372036854775808, "maximum": 9223372036854775807}},
+              "required": ["q"]
+            },
+            "G1": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {"q": {"type": "integer", "minimum": -9223372036854775808, "maximum": 9223372036854775807}},
+              "required": ["q"]
+            },
+            "G2": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {"q": {"type": "integer", "minimum": -9223372036854775808, "maximum": 9223372036854775807}},
+              "required": ["q"]
+            },
+            "G3": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {"q": {"type": "integer", "minimum": -9223372036854775808, "maximum": 9223372036854775807}},
+              "required": ["q"]
+            },
+            "G4": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {"q": {"type": "integer", "minimum": -9223372036854775808, "maximum": 9223372036854775807}},
+              "required": ["q"]
+            },
+            "G5": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {"q": {"type": "integer", "minimum": -9223372036854775808, "maximum": 9223372036854775807}},
+              "required": ["q"]
+            }
+          },
+          "required": ["G0", "G1", "G2", "G3", "G4", "G5"]
+        }
+      },
+      "required": [
+        "normalize_weights_b",
+        "epsilon_q32",
+        "pwl_pos_id",
+        "inv_q32_id",
+        "inverse_head_enabled_b",
+        "rev_err_threshold_q32",
+        "theta_cac_lb_q32",
+        "stab_thresholds"
+      ],
+      "allOf": [
+        {
+          "if": {"properties": {"normalize_weights_b": {"const": true}}},
+          "then": {"properties": {"inv_q32_id": {"const": "div_q32_pos_rne_v1"}}}
+        },
+        {
+          "if": {"properties": {"normalize_weights_b": {"const": false}}},
+          "then": {"properties": {"inv_q32_id": {"const": ""}}}
+        }
+      ]
+    },
+
+    "planner_spec": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "algorithm_id": {"const": "dcbts_l_v1"},
+        "ladder_policy": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "ell_hi_u32": {"type": "integer", "minimum": 0, "maximum": 4294967295},
+            "ell_lo_u32": {"type": "integer", "minimum": 0, "maximum": 4294967295},
+            "refine_enabled_b": {"type": "boolean"},
+            "refine_budget_u32": {"type": "integer", "minimum": 0, "maximum": 4294967295},
+            "refine_per_step_budget_u32": {"type": "integer", "minimum": 0, "maximum": 4294967295}
+          },
+          "required": ["ell_hi_u32", "ell_lo_u32", "refine_enabled_b", "refine_budget_u32", "refine_per_step_budget_u32"]
+        },
+        "action_source_id": {"const": "dmpl_action_enum_v1"},
+        "ordering_policy": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "primary_key_id": {"const": "upper_bound_primary_score_desc"},
+            "secondary_key_id": {"const": "depth_asc"},
+            "tertiary_key_id": {"const": "node_id_asc"}
+          },
+          "required": ["primary_key_id", "secondary_key_id", "tertiary_key_id"]
+        },
+        "aux_tie_break_policy": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "dl_proxy_enabled_b": {"type": "boolean"},
+            "dl_proxy_id": {"type": "string"},
+            "aux_allowed_only_on_exact_score_ties_b": {"const": true}
+          },
+          "required": ["dl_proxy_enabled_b", "dl_proxy_id", "aux_allowed_only_on_exact_score_ties_b"],
+          "allOf": [
+            {
+              "if": {"properties": {"dl_proxy_enabled_b": {"const": true}}},
+              "then": {"properties": {"dl_proxy_id": {"const": "dl_proxy_v1"}}}
+            },
+            {
+              "if": {"properties": {"dl_proxy_enabled_b": {"const": false}}},
+              "then": {"properties": {"dl_proxy_id": {"const": ""}}}
+            }
+          ]
+        }
+      },
+      "required": ["algorithm_id", "ladder_policy", "action_source_id", "ordering_policy", "aux_tie_break_policy"]
+    },
+
+    "hash_layout_ids": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "step_digest_layout_id": {"const": "dmpl_step_digest_v1"},
+        "trace_chain_layout_id": {"const": "dmpl_trace_chain_v1"},
+        "record_encoding_id": {"const": "lenpref_canonjson_v1"},
+        "chunking_rule_id": {"const": "fixed_1MiB_v1"}
+      },
+      "required": ["step_digest_layout_id", "trace_chain_layout_id", "record_encoding_id", "chunking_rule_id"]
+    },
+
+    "objective_spec": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "gamma_q32": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {"q": {"type": "integer", "minimum": -9223372036854775808, "maximum": 9223372036854775807}},
+          "required": ["q"]
+        },
+        "reward_proxy_id": {"const": "ufc_proxy_v1"},
+        "ufc_objective_id": {"const": "ufc_v1_primary"}
+      },
+      "required": ["gamma_q32", "reward_proxy_id", "ufc_objective_id"]
+    }
+  },
+  "required": [
+    "schema_id",
+    "dc1_id",
+    "opset_id",
+    "enabled_b",
+    "active_modelpack_id",
+    "fparams_bundle_id",
+    "vparams_bundle_id",
+    "caps",
+    "retrieval_spec",
+    "gating_spec",
+    "planner_spec",
+    "hash_layout_ids",
+    "objective_spec"
+  ]
+}
+

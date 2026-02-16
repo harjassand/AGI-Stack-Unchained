@@ -1,0 +1,33 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v18_0/omega_rollback_receipt_v1",
+  "title": "Omega rollback receipt v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "receipt_id",
+    "tick_u64",
+    "rollback_from_manifest_hash",
+    "rollback_to_manifest_hash",
+    "cause",
+    "meta_core_verdict_hash"
+  ],
+  "properties": {
+    "schema_version": {"const": "omega_rollback_receipt_v1"},
+    "receipt_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "tick_u64": {"type": "integer", "minimum": 0},
+    "rollback_from_manifest_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "rollback_to_manifest_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "cause": {
+      "type": "string",
+      "enum": [
+        "HEALTHCHECK_FAIL",
+        "ACTIVATION_POINTER_SWAP_FAIL",
+        "REGRESSION_DETECTED",
+        "ROLLBACK_BUDGET_EXCEEDED"
+      ]
+    },
+    "meta_core_verdict_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"}
+  }
+}

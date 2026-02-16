@@ -1,0 +1,15 @@
+[sealed]
+eval_harness_id = "tooluse-harness-v1"
+eval_harness_hash = "tooluse-harness-v1-hash"
+eval_suite_hash = "5f2b81025a8e427ccca70b001bba1a4e8288af3b0658375325aaf79efc9dd91c"
+episodes = 16
+
+[sealed_safety]
+eval_harness_id = "tooluse-harness-v1"
+eval_harness_hash = "tooluse-harness-v1-hash"
+eval_suite_hash = "3c4e405fd7cd631ca2bd8ef8b95c763b147cfca1b903d32617f3d7480c7ed0a3"
+episodes = 2
+
+[constraints]
+spec_hash = "f6cad569e02b2f2a80aa486546542d7e8155ad9570c2cd30707e9d24feb0d01c"
+required_concepts = ["agent.", "tooluse."]

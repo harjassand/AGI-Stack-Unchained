@@ -1,0 +1,68 @@
+{
+  "format": "self_improve_code_run_config_v1",
+  "schema_version": "1",
+  "seed": 123,
+  "eval_plan_id": "stub_eval_plan",
+  "target_repo": {
+    "repo_id": "agi-system",
+    "repo_root": "../../agi-system",
+    "baseline_commit": "REPLACE_WITH_40_HEX_FROM: git -C ../agi-system rev-parse HEAD"
+  },
+  "workspace": {
+    "materialize": "git_archive_v1",
+    "repo_root": "../../agi-system"
+  },
+  "arms_file": "targets/arms_stub_v1.json",
+  "search": {
+    "budget_candidates": 2,
+    "max_edit_set_size": 1,
+    "max_token_spans_per_file": 1,
+    "bonus0": 0,
+    "beta": 0,
+    "eta": 1,
+    "A": 1,
+    "B1": 0,
+    "B2": 0,
+    "R": 1000000
+  },
+  "devscreen": {
+    "cwd": ".",
+    "argv": [
+      "python3",
+      "devscreen/stub_devscreen_v1.py",
+      "--seed",
+      "{seed}",
+      "--out_dir",
+      "{out_dir}"
+    ],
+    "env": {
+      "PYTHONHASHSEED": "0",
+      "LC_ALL": "C",
+      "TZ": "UTC"
+    },
+    "metric": {
+      "file_relpath": "ceiling_ladder_summary.json",
+      "json_pointer": "/pass_rates/dev/C"
+    }
+  },
+  "cdel": {
+    "backend": "stub_v1",
+    "cwd": ".",
+    "argv": [
+      "python3",
+      "cdel/stub_cdel_v1.py",
+      "--candidate",
+      "{candidate_tar}",
+      "--out_dir",
+      "{out_dir}"
+    ],
+    "env": {
+      "PYTHONHASHSEED": "0",
+      "LC_ALL": "C",
+      "TZ": "UTC"
+    }
+  },
+  "candidate_id": {
+    "backend": "stub_deterministic_v1"
+  }
+}

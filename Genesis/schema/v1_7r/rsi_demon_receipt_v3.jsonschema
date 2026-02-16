@@ -1,0 +1,68 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v1_7r/rsi_demon_receipt_v3",
+  "title": "RSI demon receipt v3",
+  "type": "object",
+  "additionalProperties": false,
+  "patternProperties": {
+    "^x-": {}
+  },
+  "required": [
+    "schema",
+    "schema_version",
+    "run_id",
+    "final_epoch",
+    "ontology_v3",
+    "macros_v2",
+    "verdict",
+    "x-meta"
+  ],
+  "properties": {
+    "schema": {"const": "rsi_demon_receipt_v3"},
+    "schema_version": {"type": "integer", "const": 3},
+    "run_id": {"type": "string"},
+    "final_epoch": {"type": "string"},
+    "ontology_v3": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "admitted",
+        "activated",
+        "active_ontology_id",
+        "active_snapshot_id",
+        "latest_dl_gain_bits",
+        "latest_support_families_improved",
+        "latest_corpus_hash"
+      ],
+      "properties": {
+        "admitted": {"type": "integer"},
+        "activated": {"type": "integer"},
+        "active_ontology_id": {"type": "string", "pattern": "^sha256:[a-f0-9]{64}$"},
+        "active_snapshot_id": {"type": "string", "pattern": "^sha256:[a-f0-9]{64}$"},
+        "latest_dl_gain_bits": {"type": "integer"},
+        "latest_support_families_improved": {"type": "integer"},
+        "latest_corpus_hash": {"type": "string", "pattern": "^sha256:[a-f0-9]{64}$"}
+      }
+    },
+    "macros_v2": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "admitted",
+        "activated",
+        "active_macro_count",
+        "best_ctx_mdl_gain_bits",
+        "best_support_families_hold"
+      ],
+      "properties": {
+        "admitted": {"type": "integer"},
+        "activated": {"type": "integer"},
+        "active_macro_count": {"type": "integer"},
+        "best_ctx_mdl_gain_bits": {"type": "integer"},
+        "best_support_families_hold": {"type": "integer"}
+      }
+    },
+    "verdict": {"type": "string"},
+    "x-meta": {"type": "object"}
+  }
+}

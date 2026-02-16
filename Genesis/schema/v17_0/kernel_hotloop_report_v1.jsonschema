@@ -1,0 +1,42 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v17_0/kernel_hotloop_report_v1",
+  "title": "Kernel hotloop report v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "source_path_rel",
+    "source_symbol",
+    "top_n",
+    "top_loops",
+    "dominant_loop_id",
+    "pilot_loop_id"
+  ],
+  "properties": {
+    "schema_version": { "const": "kernel_hotloop_report_v1" },
+    "source_path_rel": { "type": "string", "minLength": 1 },
+    "source_symbol": { "type": "string", "minLength": 1 },
+    "top_n": { "type": "integer", "minimum": 10 },
+    "top_loops": {
+      "type": "array",
+      "minItems": 10,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["loop_id", "iters", "bytes", "ops_add", "ops_mul", "ops_load", "ops_store"],
+        "properties": {
+          "loop_id": { "type": "string", "minLength": 1 },
+          "iters": { "type": "integer", "minimum": 0 },
+          "bytes": { "type": "integer", "minimum": 0 },
+          "ops_add": { "type": "integer", "minimum": 0 },
+          "ops_mul": { "type": "integer", "minimum": 0 },
+          "ops_load": { "type": "integer", "minimum": 0 },
+          "ops_store": { "type": "integer", "minimum": 0 }
+        }
+      }
+    },
+    "dominant_loop_id": { "type": "string", "minLength": 1 },
+    "pilot_loop_id": { "type": "string", "minLength": 1 }
+  }
+}

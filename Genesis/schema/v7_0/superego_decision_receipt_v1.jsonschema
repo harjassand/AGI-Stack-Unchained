@@ -1,0 +1,31 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v7_0/superego_decision_receipt_v1",
+  "title": "Superego decision receipt v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "request_id",
+    "decision",
+    "policy_hash",
+    "decision_reason_code",
+    "decision_hash",
+    "tick",
+    "daemon_id",
+    "icore_id",
+    "meta_hash"
+  ],
+  "properties": {
+    "schema_version": {"const": "superego_decision_receipt_v1"},
+    "request_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "decision": {"enum": ["ALLOW", "DENY"]},
+    "policy_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "decision_reason_code": {"type": "string"},
+    "decision_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "tick": {"type": "integer", "minimum": 0},
+    "daemon_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "icore_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "meta_hash": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+  }
+}

@@ -1,0 +1,65 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v13_0/sas_science_eval_report_v1",
+  "title": "SAS-Science eval report v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "theory_id",
+    "eval_kind",
+    "dataset_id",
+    "split_id",
+    "fit_receipt_hash",
+    "metrics",
+    "workmeter"
+  ],
+  "properties": {
+    "schema_version": {"const": "sas_science_eval_report_v1"},
+    "theory_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "eval_kind": {"type": "string", "enum": ["DEV", "HELDOUT"]},
+    "dataset_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "split_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "fit_receipt_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "metrics": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "mse_accel_q32",
+        "rmse_pos1_q32",
+        "rmse_roll_64_q32",
+        "rmse_roll_128_q32",
+        "rmse_roll_256_q32"
+      ],
+      "properties": {
+        "mse_accel_q32": {"$ref": "q32_v1.jsonschema"},
+        "rmse_pos1_q32": {"$ref": "q32_v1.jsonschema"},
+        "rmse_roll_64_q32": {"$ref": "q32_v1.jsonschema"},
+        "rmse_roll_128_q32": {"$ref": "q32_v1.jsonschema"},
+        "rmse_roll_256_q32": {"$ref": "q32_v1.jsonschema"}
+      }
+    },
+    "workmeter": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "norm_calls",
+        "sqrt_calls",
+        "div_calls",
+        "mul_calls",
+        "add_calls",
+        "pair_terms_evaluated",
+        "work_cost_total"
+      ],
+      "properties": {
+        "norm_calls": {"type": "integer", "minimum": 0},
+        "sqrt_calls": {"type": "integer", "minimum": 0},
+        "div_calls": {"type": "integer", "minimum": 0},
+        "mul_calls": {"type": "integer", "minimum": 0},
+        "add_calls": {"type": "integer", "minimum": 0},
+        "pair_terms_evaluated": {"type": "integer", "minimum": 0},
+        "work_cost_total": {"type": "integer", "minimum": 0}
+      }
+    }
+  }
+}

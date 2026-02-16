@@ -1,0 +1,108 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v3_2/barrier_entry_v5",
+  "title": "Barrier ledger entry v5",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "spec_version",
+    "seq",
+    "prev_entry_hash",
+    "swarm_event_ref_hash",
+    "agent_id",
+    "task_id",
+    "result_id",
+    "barrier_metric",
+    "evidence",
+    "entry_hash"
+  ],
+  "properties": {
+    "schema": {"const": "barrier_entry_v5"},
+    "spec_version": {"const": "v3_2"},
+    "seq": {"type": "integer", "minimum": 1},
+    "prev_entry_hash": {"type": "string", "pattern": "^(sha256:[0-9a-f]{64}|GENESIS)$"},
+    "swarm_event_ref_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "agent_id": {"type": "string", "pattern": "^agent_[0-9]{4}$"},
+    "task_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "result_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "barrier_metric": {"$ref": "#/$defs/barrier_metric"},
+    "evidence": {"$ref": "#/$defs/evidence"},
+    "entry_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"}
+  },
+  "$defs": {
+    "barrier_metric": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "prev", "next"],
+      "properties": {
+        "name": {"type": "string"},
+        "prev": {"type": "integer"},
+        "next": {"type": "integer"}
+      }
+    },
+    "evidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["receipt_relpath", "local_provenance", "subswarm_provenance", "bridge_provenance"],
+      "properties": {
+        "receipt_relpath": {"type": "string"},
+        "local_provenance": {"$ref": "#/$defs/local_provenance"},
+        "subswarm_provenance": {"$ref": "#/$defs/subswarm_provenance"},
+        "bridge_provenance": {"$ref": "#/$defs/bridge_provenance"}
+      }
+    },
+    "local_provenance": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["present"],
+      "properties": {
+        "present": {"type": "boolean"}
+      }
+    },
+    "subswarm_provenance": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["present"],
+      "properties": {
+        "present": {"type": "boolean"},
+        "child_swarm_run_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+        "join_accept_event_ref_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+        "export_bundle_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"}
+      },
+      "allOf": [
+        {
+          "if": {"properties": {"present": {"const": true}}},
+          "then": {"required": ["child_swarm_run_id", "join_accept_event_ref_hash", "export_bundle_hash"]}
+        }
+      ]
+    },
+    "bridge_provenance": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["present"],
+      "properties": {
+        "present": {"type": "boolean"},
+        "offer_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+        "import_accept_event_ref_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+        "imported_artifacts_set_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+        "staleness": {"$ref": "#/$defs/bridge_staleness"}
+      },
+      "allOf": [
+        {
+          "if": {"properties": {"present": {"const": true}}},
+          "then": {"required": ["offer_id", "import_accept_event_ref_hash", "imported_artifacts_set_hash", "staleness"]}
+        }
+      ]
+    },
+    "bridge_staleness": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["is_stale", "reason"],
+      "properties": {
+        "is_stale": {"type": "boolean"},
+        "reason": {"type": "string", "enum": ["OK", "STALE_CONTEXT"]}
+      }
+    }
+  }
+}

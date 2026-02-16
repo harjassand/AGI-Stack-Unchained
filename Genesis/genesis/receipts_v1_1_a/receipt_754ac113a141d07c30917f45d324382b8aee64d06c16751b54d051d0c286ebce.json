@@ -1,0 +1,38 @@
+{
+  "admission_token": "admit-536a52be9c5a",
+  "budgets_spent": {
+    "alpha_spent": "0.0006079271018540266760593628727",
+    "compute_spent": {
+      "adversary_strength_used": 1,
+      "compute_units": 10,
+      "wall_time_ms": 5000
+    },
+    "privacy_spent": {
+      "delta_spent": "0",
+      "epsilon_spent": "1"
+    }
+  },
+  "canonicalization": "gcj-1",
+  "capsule_hash": "536a52be9c5ae2346a72e367d8ed90eb6666717540619b9fb615e7a32dd2896e",
+  "epoch_id": "epoch-1",
+  "measurement_transcript_hash": "2e6131b72518be9388a9ba830e81708516410c91e0f1e42b0baa502fd368d7b7",
+  "receipt_id": "9bf91f1f-e65d-510f-b036-6c8cfdbf5855",
+  "receipt_version": "1.0.0",
+  "rng_commitment_id": "7ec5943b36ac5b8a279211bfe2a24fafbabe4f43038191676805b4c841d39117",
+  "schema_version": "1.0.1",
+  "signature": {
+    "alg": "ed25519",
+    "key_id": "mock-key-1",
+    "signature_base64": "AA=="
+  },
+  "x-audit_ref": "audit/entries/00000000000000000001.json",
+  "x-dp_spend": {
+    "delta_spent": "0",
+    "epsilon_spent": "1",
+    "mechanism_id": "unknown"
+  },
+  "x-randomness_commitment": {
+    "commit_scheme": "sha256(commit_payload)",
+    "commitment": "7ec5943b36ac5b8a279211bfe2a24fafbabe4f43038191676805b4c841d39117"
+  }
+}

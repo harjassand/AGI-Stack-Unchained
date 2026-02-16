@@ -1,0 +1,32 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v8_0/math_attempt_record_v1",
+  "title": "Math attempt record v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "attempt_id",
+    "problem_id",
+    "tick",
+    "daemon_id",
+    "superego_request_id",
+    "objective_class",
+    "capabilities"
+  ],
+  "properties": {
+    "schema_version": {"const": "math_attempt_record_v1"},
+    "attempt_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "problem_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "tick": {"type": "integer", "minimum": 0},
+    "daemon_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "superego_request_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "objective_class": {"const": "BOUNDLESS_RESEARCH"},
+    "capabilities": {
+      "type": "array",
+      "minItems": 1,
+      "items": {"type": "string"},
+      "contains": {"const": "NETWORK_NONE"}
+    }
+  }
+}

@@ -1,0 +1,31 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v11_0/sas_root_manifest_v1",
+  "title": "SAS root manifest v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "agi_root_raw",
+    "agi_root_stripped",
+    "agi_root_canon",
+    "was_trimmed",
+    "sas_root_canon",
+    "canon_method",
+    "canon_time_utc",
+    "agi_root_canon_hash",
+    "sas_root_canon_hash"
+  ],
+  "properties": {
+    "schema_version": {"const": "sas_root_manifest_v1"},
+    "agi_root_raw": {"type": "string"},
+    "agi_root_stripped": {"type": "string"},
+    "agi_root_canon": {"type": "string"},
+    "was_trimmed": {"type": "boolean"},
+    "sas_root_canon": {"type": "string"},
+    "canon_method": {"const": "CANON_ROOT_V1"},
+    "canon_time_utc": {"type": "string", "format": "date-time"},
+    "agi_root_canon_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "sas_root_canon_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"}
+  }
+}

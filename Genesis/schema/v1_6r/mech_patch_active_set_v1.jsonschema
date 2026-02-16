@@ -1,0 +1,25 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v1_6r/mech_patch_active_set_v1",
+  "title": "Mech patch active set v1",
+  "type": "object",
+  "additionalProperties": false,
+  "patternProperties": {
+    "^x-": {}
+  },
+  "required": [
+    "schema",
+    "schema_version",
+    "active_patch_ids",
+    "ledger_head_hash"
+  ],
+  "properties": {
+    "schema": {"const": "mech_patch_active_set_v1"},
+    "schema_version": {"type": "integer", "const": 1},
+    "active_patch_ids": {
+      "type": "array",
+      "items": {"type": "string", "pattern": "^sha256:[a-f0-9]{64}$"}
+    },
+    "ledger_head_hash": {"type": "string", "pattern": "^sha256:[a-f0-9]{64}$"}
+  }
+}

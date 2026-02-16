@@ -1,0 +1,78 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v9_0/science_task_spec_v1",
+  "title": "Science task spec v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "task_id",
+    "domain",
+    "vector",
+    "hazard_class",
+    "dataset_id",
+    "metric",
+    "baseline_metric",
+    "acceptance_threshold",
+    "limits",
+    "output_constraints",
+    "stochastic"
+  ],
+  "properties": {
+    "schema_version": {"const": "science_task_spec_v1"},
+    "task_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "domain": {"type": "string"},
+    "vector": {"type": "string"},
+    "hazard_class": {"type": "string", "enum": ["H0_BENIGN", "H1_LOW_RISK", "H2_RESTRICTED_DUAL_USE", "H3_PROHIBITED"]},
+    "dataset_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "metric": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "direction"],
+      "properties": {
+        "kind": {"type": "string"},
+        "direction": {"type": "string", "enum": ["MAX", "MIN"]},
+        "quantization": {"type": "string"}
+      }
+    },
+    "baseline_metric": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["num", "den"],
+      "properties": {
+        "num": {"type": "integer"},
+        "den": {"type": "integer", "minimum": 1}
+      }
+    },
+    "acceptance_threshold": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["num", "den"],
+      "properties": {
+        "num": {"type": "integer"},
+        "den": {"type": "integer", "minimum": 1}
+      }
+    },
+    "limits": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["time_limit_ms", "memory_limit_mb", "cpu_limit_ms"],
+      "properties": {
+        "time_limit_ms": {"type": "integer", "minimum": 1},
+        "memory_limit_mb": {"type": "integer", "minimum": 1},
+        "cpu_limit_ms": {"type": "integer", "minimum": 1}
+      }
+    },
+    "output_constraints": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["allow_kinds", "max_bytes", "allow_free_text"],
+      "properties": {
+        "allow_kinds": {"type": "array", "items": {"type": "string"}},
+        "max_bytes": {"type": "integer", "minimum": 1},
+        "allow_free_text": {"type": "boolean"}
+      }
+    },
+    "stochastic": {"type": "boolean"}
+  }
+}

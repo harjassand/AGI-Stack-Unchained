@@ -1,0 +1,23 @@
+{
+  "tests": [
+    {
+      "name": "invalid_capsule_schema_fail",
+      "type": "evaluate",
+      "capsule_path": "conformance/tests/invalid_capsule.json",
+      "expect_result": "FAIL",
+      "bid_override": {
+        "grade": "ResearchGrade",
+        "alpha_bid": 0.001,
+        "privacy_bid": {"epsilon": 0.1, "delta": 1e-6},
+        "compute_bid": {"max_compute_units": 1000, "max_wall_time_ms": 1000}
+      }
+    },
+    {
+      "name": "mock_pass_receipt_binding",
+      "type": "evaluate",
+      "capsule_path": "examples/mock_pass.capsule.json",
+      "expect_result": "PASS",
+      "verify_receipt": true
+    }
+  ]
+}

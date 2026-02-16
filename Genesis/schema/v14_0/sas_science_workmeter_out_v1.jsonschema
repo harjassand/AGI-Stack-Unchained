@@ -1,0 +1,16 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v14_0/sas_science_workmeter_out_v1",
+  "title": "SAS Science workmeter output v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema", "spec_version", "sqrt_calls", "div_calls", "pair_terms_evaluated", "work_cost_total"],
+  "properties": {
+    "schema": {"const": "sas_science_workmeter_out_v1"},
+    "spec_version": {"const": "v14_0"},
+    "sqrt_calls": {"type": "integer", "minimum": 0},
+    "div_calls": {"type": "integer", "minimum": 0},
+    "pair_terms_evaluated": {"type": "integer", "minimum": 0},
+    "work_cost_total": {"type": "integer", "minimum": 0}
+  }
+}

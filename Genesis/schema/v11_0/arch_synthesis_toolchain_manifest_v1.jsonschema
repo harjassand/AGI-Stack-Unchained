@@ -1,0 +1,29 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v11_0/arch_synthesis_toolchain_manifest_v1",
+  "title": "Architecture synthesis toolchain manifest v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "toolchain_id",
+    "python_exe_hash",
+    "pip_freeze_hash",
+    "builder_code_hash",
+    "trainer_code_hash",
+    "eval_code_hash",
+    "env_vars",
+    "offline_required"
+  ],
+  "properties": {
+    "schema_version": {"const": "arch_synthesis_toolchain_manifest_v1"},
+    "toolchain_id": {"type": "string"},
+    "python_exe_hash": {"type": "string"},
+    "pip_freeze_hash": {"type": "string"},
+    "builder_code_hash": {"type": "string"},
+    "trainer_code_hash": {"type": "string"},
+    "eval_code_hash": {"type": "string"},
+    "env_vars": {"type": "object"},
+    "offline_required": {"type": "boolean"}
+  }
+}

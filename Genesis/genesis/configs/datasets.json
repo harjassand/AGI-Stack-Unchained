@@ -1,0 +1,16 @@
+{
+  "datasets": {
+    "shadow_eval": {
+      "path": "tests/fixtures/datasets/shadow_eval.jsonl",
+      "format": "jsonl"
+    },
+    "shadow_world_model": {
+      "path": "tests/fixtures/datasets/world_model_shadow.jsonl",
+      "format": "jsonl"
+    },
+    "shadow_causal": {
+      "path": "tests/fixtures/datasets/causal_shadow.jsonl",
+      "format": "jsonl"
+    }
+  }
+}

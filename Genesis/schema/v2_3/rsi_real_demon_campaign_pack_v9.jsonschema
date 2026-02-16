@@ -1,0 +1,105 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v2_3/rsi_real_demon_campaign_pack_v9",
+  "title": "RSI real demon campaign pack v9 (CSI + hardening)",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "cdel_version",
+    "campaign_kind",
+    "csi",
+    "immutable_core",
+    "autonomy",
+    "tests"
+  ],
+  "properties": {
+    "schema": {"const": "rsi_real_demon_campaign_pack_v9"},
+    "cdel_version": {"type": "string", "const": "v2_3"},
+    "campaign_kind": {"type": "string", "const": "demon_v9_csi"},
+    "csi": {"$ref": "#/$defs/csi"},
+    "immutable_core": {"$ref": "#/$defs/immutable_core"},
+    "autonomy": {"$ref": "#/$defs/autonomy"},
+    "tests": {"$ref": "#/$defs/tests"}
+  },
+  "$defs": {
+    "rational_pair": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["num", "den"],
+      "properties": {
+        "num": {"type": "integer", "minimum": 0},
+        "den": {"type": "integer", "minimum": 1}
+      }
+    },
+    "csi": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "enabled",
+        "bench_suite_relpath",
+        "bench_inputs_relpath",
+        "rho_min",
+        "require_output_hash_match",
+        "require_double_run_determinism"
+      ],
+      "properties": {
+        "enabled": {"type": "boolean"},
+        "bench_suite_relpath": {"type": "string"},
+        "bench_inputs_relpath": {"type": "string"},
+        "rho_min": {"$ref": "#/$defs/rational_pair"},
+        "require_output_hash_match": {"type": "boolean"},
+        "require_double_run_determinism": {"type": "boolean"}
+      }
+    },
+    "immutable_core": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["enabled", "lock_relpath"],
+      "properties": {
+        "enabled": {"type": "boolean"},
+        "lock_relpath": {"type": "string"}
+      }
+    },
+    "autonomy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["code_patch", "recursive_ontology"],
+      "properties": {
+        "code_patch": {"$ref": "#/$defs/code_patch"},
+        "recursive_ontology": {"$ref": "#/$defs/recursive_ontology"}
+      }
+    },
+    "code_patch": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["enabled", "enum_kind", "out_dir_placeholder"],
+      "properties": {
+        "enabled": {"type": "boolean"},
+        "enum_kind": {"type": "string", "const": "autocodepatch_enum_v2"},
+        "out_dir_placeholder": {"type": "string"}
+      }
+    },
+    "recursive_ontology": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["enabled", "mode", "recursive_pack_path"],
+      "properties": {
+        "enabled": {"type": "boolean"},
+        "mode": {"type": "string", "enum": ["run_recursive_ontology_first", "import_recursive_ontology"]},
+        "recursive_pack_path": {"type": "string"}
+      }
+    },
+    "tests": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["pytest_targets"],
+      "properties": {
+        "pytest_targets": {
+          "type": "array",
+          "items": {"type": "string"}
+        }
+      }
+    }
+  }
+}

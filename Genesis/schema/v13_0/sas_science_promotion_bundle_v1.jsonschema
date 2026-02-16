@@ -1,0 +1,115 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v13_0/sas_science_promotion_bundle_v1",
+  "title": "SAS-Science promotion bundle v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "bundle_id",
+    "created_utc",
+    "pack_hash",
+    "perf_policy_hash",
+    "ir_policy_hash",
+    "suitepack_dev_hash",
+    "suitepack_heldout_hash",
+    "dataset_receipt_hash",
+    "split_receipt_hash",
+    "baseline_evals",
+    "candidate_evals",
+    "selection_receipt_hash",
+    "discovery_bundle",
+    "acceptance_decision",
+    "audit_evidence_path"
+  ],
+  "properties": {
+    "schema_version": {"const": "sas_science_promotion_bundle_v1"},
+    "bundle_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "created_utc": {"type": "string"},
+    "pack_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "perf_policy_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "ir_policy_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "suitepack_dev_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "suitepack_heldout_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "dataset_receipt_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "split_receipt_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "baseline_evals": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/eval_ref"}
+    },
+    "candidate_evals": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/eval_ref"}
+    },
+    "selection_receipt_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "discovery_bundle": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["law_kind", "theory_id", "params", "heldout_metrics"],
+      "properties": {
+        "law_kind": {"type": "string", "enum": ["NEWTON_NBODY_V1", "NEWTON_CENTRAL_V1", "NON_NEWTON_V1"]},
+        "theory_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+        "params": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "mu_sources_q32": {"type": "array", "items": {"$ref": "q32_v1.jsonschema"}},
+            "k_param_q32": {"$ref": "q32_v1.jsonschema"}
+          }
+        },
+        "heldout_metrics": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "mse_accel_q32",
+            "rmse_pos1_q32",
+            "rmse_roll_64_q32",
+            "rmse_roll_128_q32",
+            "rmse_roll_256_q32",
+            "work_cost_total"
+          ],
+          "properties": {
+            "mse_accel_q32": {"$ref": "q32_v1.jsonschema"},
+            "rmse_pos1_q32": {"$ref": "q32_v1.jsonschema"},
+            "rmse_roll_64_q32": {"$ref": "q32_v1.jsonschema"},
+            "rmse_roll_128_q32": {"$ref": "q32_v1.jsonschema"},
+            "rmse_roll_256_q32": {"$ref": "q32_v1.jsonschema"},
+            "work_cost_total": {"type": "integer", "minimum": 0}
+          }
+        }
+      }
+    },
+    "acceptance_decision": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["pass", "reasons"],
+      "properties": {
+        "pass": {"type": "boolean"},
+        "reasons": {"type": "array", "items": {"type": "string"}}
+      }
+    },
+    "audit_evidence_path": {"type": "string"}
+  },
+  "$defs": {
+    "eval_ref": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "theory_id",
+        "fit_receipt_hash",
+        "eval_report_dev_hash",
+        "eval_report_heldout_hash",
+        "sealed_eval_dev_hash",
+        "sealed_eval_heldout_hash"
+      ],
+      "properties": {
+        "theory_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+        "fit_receipt_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+        "eval_report_dev_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+        "eval_report_heldout_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+        "sealed_eval_dev_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+        "sealed_eval_heldout_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"}
+      }
+    }
+  }
+}

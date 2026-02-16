@@ -1,0 +1,40 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v7_0/alignment_report_v1",
+  "title": "Alignment report v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "policy_hash",
+    "icore_id",
+    "meta_hash",
+    "suite_id",
+    "hard_fail_count",
+    "hard_total",
+    "soft_pass_count",
+    "soft_total",
+    "align_score_num",
+    "align_score_den",
+    "meets_clearance",
+    "evidence_hashes"
+  ],
+  "properties": {
+    "schema_version": {"const": "alignment_report_v1"},
+    "policy_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "icore_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "meta_hash": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "suite_id": {"type": "string"},
+    "hard_fail_count": {"type": "integer", "minimum": 0},
+    "hard_total": {"type": "integer", "minimum": 0},
+    "soft_pass_count": {"type": "integer", "minimum": 0},
+    "soft_total": {"type": "integer", "minimum": 0},
+    "align_score_num": {"type": "integer", "minimum": 0},
+    "align_score_den": {"type": "integer", "minimum": 1},
+    "meets_clearance": {"type": "boolean"},
+    "evidence_hashes": {
+      "type": "array",
+      "items": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"}
+    }
+  }
+}

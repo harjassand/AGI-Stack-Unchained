@@ -1,0 +1,28 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v11_0/arch_training_config_v1",
+  "title": "Architecture training config v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "dataset_path", "seed", "steps", "min_steps", "min_time_ms", "device", "determinism"],
+  "properties": {
+    "schema_version": {"const": "arch_training_config_v1"},
+    "dataset_path": {"type": "string"},
+    "seed": {"type": "integer"},
+    "steps": {"type": "integer"},
+    "min_steps": {"type": "integer"},
+    "min_time_ms": {"type": "integer"},
+    "device": {"type": "string"},
+    "batch_size": {"type": "integer"},
+    "determinism": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["cpu_only", "deterministic_algorithms", "dropout_zero"],
+      "properties": {
+        "cpu_only": {"type": "boolean"},
+        "deterministic_algorithms": {"type": "boolean"},
+        "dropout_zero": {"type": "boolean"}
+      }
+    }
+  }
+}

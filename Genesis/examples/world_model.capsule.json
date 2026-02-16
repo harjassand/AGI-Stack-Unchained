@@ -1,0 +1,160 @@
+{
+  "schema_version": "1.0.1",
+  "capsule_version": "1.0.0",
+  "forward_compat": "x_prefix_only",
+  "canonicalization": "gcj-1",
+  "capsule_id": "2e1b85c0-86e3-4f5a-9e57-0a8a2a1a3d22",
+  "artifact_type": "WORLD_MODEL",
+  "parents": [
+    "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+  ],
+  "operators_used": [
+    "rewrite"
+  ],
+  "build_hashes": {
+    "ir_hash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+    "container_hash": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+    "dependency_hashes": [
+      "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+    ]
+  },
+  "commitments": {
+    "capsule_hash": "41887540dae788dd20ea36ded51341cf8c6201292f222f312d05dfb5fe702af2",
+    "checkpoint_merkle_root": "8888888888888888888888888888888888888888888888888888888888888888"
+  },
+  "ir_payload": {
+    "format": "GIR1-ML",
+    "version": "1.0",
+    "payload_base64": "AA=="
+  },
+  "entrypoints": [
+    {
+      "name": "predict",
+      "signature": {
+        "inputs": [
+          {
+            "name": "context",
+            "type": "Tensor<float32>[t,d]"
+          }
+        ],
+        "outputs": [
+          {
+            "name": "dist",
+            "type": "Distribution<float32>[d]"
+          }
+        ]
+      }
+    }
+  ],
+  "effects": {
+    "allow": [
+      "read_only"
+    ],
+    "deny": [
+      "network",
+      "filesystem_write",
+      "process_spawn"
+    ]
+  },
+  "contract": {
+    "functional_spec": {
+      "spec_language": "DSL1",
+      "clauses": [
+        {
+          "id": "fs-1",
+          "clause_type": "functional",
+          "text": "Predictive distribution integrates to 1."
+        }
+      ]
+    },
+    "safety_spec": {
+      "invariants": [],
+      "forbidden_behaviors": [
+        {
+          "id": "s-1",
+          "clause_type": "safety",
+          "text": "No access to external network or unapproved files."
+        }
+      ]
+    },
+    "resource_spec": {
+      "max_wall_time_ms": 200,
+      "max_memory_mb": 1024,
+      "max_sample_count": 0,
+      "max_gpu_seconds": 5
+    },
+    "statistical_spec": {
+      "metrics": [
+        {
+          "name": "nll",
+          "direction": "minimize",
+          "target": 1.2
+        }
+      ],
+      "decision_rule": "e_value",
+      "confidence_requirement": {
+        "delta": 0.01
+      }
+    },
+    "robustness_spec": {
+      "mode": "dro",
+      "dro_set": {
+        "class": "f_divergence",
+        "radius": 0.2
+      },
+      "risk_metric": "nll",
+      "risk_bound": 1.4
+    }
+  },
+  "assumptions": [
+    {
+      "assumption_id": "A-1",
+      "statement": "Bounded covariate shift between training and evaluation data.",
+      "scope": "evaluation distribution",
+      "falsification_test": {
+        "method": "two_sample_test",
+        "power_target": 0.8,
+        "min_detectable_delta": 0.1,
+        "anytime_valid": true
+      },
+      "uncertainty_set": {
+        "class": "f_divergence",
+        "radius": 0.2
+      },
+      "failure_probability": 0.01
+    }
+  ],
+  "budget_bid": {
+    "grade": "ResearchGrade",
+    "alpha_bid": "0.02",
+    "privacy_bid": {
+      "epsilon": "0.5",
+      "delta": "0.00001"
+    },
+    "compute_bid": {
+      "max_compute_units": 5000,
+      "max_wall_time_ms": 20000,
+      "max_adversary_strength": 2
+    }
+  },
+  "evidence": {
+    "certificates": [],
+    "unit_tests": [],
+    "property_tests": [],
+    "checkpoints": []
+  },
+  "reproducibility": {
+    "determinism_mode": "seeded",
+    "seed_policy": "harness_seeded",
+    "runtime_env": {
+      "os": "linux",
+      "arch": "x86_64",
+      "kernel_isa": "KISA-1"
+    }
+  },
+  "provenance": {
+    "created_by": "genesis",
+    "timestamp": "2025-01-01T00:00:00Z",
+    "source_repo": "local"
+  }
+}

@@ -1,0 +1,33 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v11_1/sas_conjecture_gen_receipt_v1",
+  "title": "SAS conjecture generation receipt v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "receipt_id",
+    "created_utc",
+    "generator_version",
+    "generator_config_hash",
+    "generator_seed",
+    "bundle_hash",
+    "toolchain_hash",
+    "network_used",
+    "stdout_hash",
+    "stderr_hash"
+  ],
+  "properties": {
+    "schema_version": {"const": "sas_conjecture_gen_receipt_v1"},
+    "receipt_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "created_utc": {"type": "string"},
+    "generator_version": {"type": "string"},
+    "generator_config_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "generator_seed": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "bundle_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "toolchain_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "network_used": {"type": "boolean"},
+    "stdout_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "stderr_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"}
+  }
+}

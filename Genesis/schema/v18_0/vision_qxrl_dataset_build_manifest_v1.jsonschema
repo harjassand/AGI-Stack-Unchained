@@ -1,0 +1,36 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v18_0/vision_qxrl_dataset_build_manifest_v1",
+  "title": "vision_qxrl_dataset_build_manifest_v1",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "schema_id": {"const": "vision_qxrl_dataset_build_manifest_v1"},
+    "config_ref": {"$ref": "https://genesis.engine/specs/v18_0/eudrs_u_artifact_ref_v1"},
+    "item_listing_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "item_listing_ref": {"$ref": "https://genesis.engine/specs/v18_0/eudrs_u_artifact_ref_v1"},
+    "produced_qxrl_dataset_manifest_ref": {"$ref": "https://genesis.engine/specs/v18_0/eudrs_u_artifact_ref_v1"},
+    "produced_segment_refs": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "segment_index_u32": {"type": "integer", "minimum": 0, "maximum": 4294967295},
+          "segment_ref": {"$ref": "https://genesis.engine/specs/v18_0/eudrs_u_artifact_ref_v1"}
+        },
+        "required": ["segment_index_u32", "segment_ref"]
+      }
+    },
+    "build_root_hash32_hex": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+  },
+  "required": [
+    "schema_id",
+    "config_ref",
+    "item_listing_id",
+    "item_listing_ref",
+    "produced_qxrl_dataset_manifest_ref",
+    "produced_segment_refs",
+    "build_root_hash32_hex"
+  ]
+}

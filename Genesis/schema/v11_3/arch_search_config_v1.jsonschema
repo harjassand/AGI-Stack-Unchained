@@ -1,0 +1,92 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v11_0/arch_search_config_v1",
+  "title": "Architecture search config v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "arch_families", "arch_seeds", "model_io", "hyperparams", "constraints"],
+  "properties": {
+    "schema_version": {"const": "arch_search_config_v1"},
+    "arch_families": {"type": "array", "items": {"type": "string"}},
+    "arch_seeds": {"type": "array", "items": {"type": "integer"}},
+    "candidates": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["schema_version", "arch_family", "arch_seed", "model_io", "hyperparams", "constraints"],
+        "properties": {
+          "schema_version": {"const": "sas_arch_ir_v1"},
+          "arch_family": {"type": "string"},
+          "arch_seed": {"type": "integer"},
+          "model_io": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["vocab_size", "seq_len", "task_head"],
+            "properties": {
+              "vocab_size": {"type": "integer"},
+              "seq_len": {"type": "integer"},
+              "task_head": {"const": "lm_head_v1"}
+            }
+          },
+          "hyperparams": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["depth", "width", "attn_layers", "ssm_layers", "conv_layers", "rnn_layers", "memory_tokens"],
+            "properties": {
+              "depth": {"type": "integer"},
+              "width": {"type": "integer"},
+              "attn_layers": {"type": "integer"},
+              "ssm_layers": {"type": "integer"},
+              "conv_layers": {"type": "integer"},
+              "rnn_layers": {"type": "integer"},
+              "memory_tokens": {"type": "integer"}
+            }
+          },
+          "constraints": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["max_params", "max_activation_mb"],
+            "properties": {
+              "max_params": {"type": "integer"},
+              "max_activation_mb": {"type": "integer"}
+            }
+          }
+        }
+      }
+    },
+    "model_io": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["vocab_size", "seq_len", "task_head"],
+      "properties": {
+        "vocab_size": {"type": "integer"},
+        "seq_len": {"type": "integer"},
+        "task_head": {"const": "lm_head_v1"}
+      }
+    },
+    "hyperparams": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["depth", "width", "attn_layers", "ssm_layers", "conv_layers", "rnn_layers", "memory_tokens"],
+      "properties": {
+        "depth": {"type": "array", "items": {"type": "integer"}},
+        "width": {"type": "array", "items": {"type": "integer"}},
+        "attn_layers": {"type": "array", "items": {"type": "integer"}},
+        "ssm_layers": {"type": "array", "items": {"type": "integer"}},
+        "conv_layers": {"type": "array", "items": {"type": "integer"}},
+        "rnn_layers": {"type": "array", "items": {"type": "integer"}},
+        "memory_tokens": {"type": "array", "items": {"type": "integer"}}
+      }
+    },
+    "constraints": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["max_params", "max_activation_mb"],
+      "properties": {
+        "max_params": {"type": "integer"},
+        "max_activation_mb": {"type": "integer"}
+      }
+    }
+  }
+}

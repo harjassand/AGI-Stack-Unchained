@@ -1,0 +1,13 @@
+# Expected FAIL codes (Mind v1 proof pack)
+
+Each fixture is a sealed run that must deterministically FAIL with the exact code below and must not write a receipt.
+
+- fail_c0_hermetic_required → CCAI_MIND_C0_HERMETIC_REQUIRED
+- fail_c0_env_not_allowlisted → CCAI_MIND_C0_ENV_NOT_ALLOWLISTED
+- fail_c1_do_mismatch → CCAI_MIND_C1_DO_MISMATCH
+- fail_c2_efe_mismatch → CCAI_MIND_C2_EFE_MISMATCH
+- fail_c3_no_admissible_actions → CCAI_MIND_C3_NO_ADMISSIBLE_ACTIONS
+- fail_c4_heldout_dir_required → CCAI_MIND_C4_HELDOUT_DIR_REQUIRED
+- fail_c5_coherence_gate → CCAI_MIND_C5_COHERENCE_FAIL
+- fail_receipt_key_missing → CCAI_MIND_ERR_RECEIPT_SIGNING_KEY_MISSING
+- fail_blanket_leak → CCAI_MIND_C0_BLANKET_LEAK

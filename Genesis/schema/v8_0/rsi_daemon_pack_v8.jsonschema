@@ -1,0 +1,138 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v8_0/rsi_daemon_pack_v8",
+  "title": "RSI daemon pack v8 (boundless math)",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "icore_id",
+    "meta_hash",
+    "daemon_id",
+    "state_dir",
+    "control",
+    "checkpoint_policy",
+    "budgets",
+    "activities",
+    "alignment",
+    "math_boundless"
+  ],
+  "properties": {
+    "schema_version": {"const": "rsi_daemon_pack_v8"},
+    "icore_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "meta_hash": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "daemon_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "state_dir": {"type": "string", "pattern": "^/"},
+    "control": {"$ref": "#/$defs/control"},
+    "checkpoint_policy": {"$ref": "#/$defs/checkpoint_policy"},
+    "budgets": {"$ref": "#/$defs/budgets"},
+    "activities": {
+      "type": "array",
+      "minItems": 1,
+      "items": {"$ref": "#/$defs/activity"}
+    },
+    "alignment": {"$ref": "#/$defs/alignment"},
+    "math_boundless": {"$ref": "#/$defs/math_boundless"}
+  },
+  "$defs": {
+    "control": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["stop", "pause", "enable_research", "enable_boundless_math"],
+      "properties": {
+        "stop": {"const": "control/STOP"},
+        "pause": {"const": "control/PAUSE"},
+        "enable_research": {"const": "control/ENABLE_RESEARCH"},
+        "enable_boundless_math": {"const": "control/ENABLE_BOUNDLESS_MATH"}
+      }
+    },
+    "checkpoint_policy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["every_ticks", "retain_last_n"],
+      "properties": {
+        "every_ticks": {"type": "integer", "minimum": 1},
+        "retain_last_n": {"type": "integer", "minimum": 1}
+      }
+    },
+    "budgets": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["max_ticks_per_boot", "max_work_units_per_day"],
+      "properties": {
+        "max_ticks_per_boot": {"type": "integer", "minimum": 1},
+        "max_work_units_per_day": {"type": "integer", "minimum": 1}
+      }
+    },
+    "activity": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["activity_kind"],
+      "properties": {
+        "activity_kind": {
+          "type": "string",
+          "enum": ["NOOP_V1", "THERMO_FIXTURE_IMPORT_V1", "BOUNDLESS_RESEARCH_V1", "MATH_BOUNDLESS_V1"]
+        },
+        "activity_id": {"type": "string"},
+        "params": {"type": "object"},
+        "objective_class": {
+          "type": "string",
+          "enum": [
+            "MAINTENANCE",
+            "VALIDATION",
+            "IMPROVEMENT_BOUNDED",
+            "RESEARCH_BOUNDED",
+            "BOUNDLESS_RESEARCH"
+          ]
+        },
+        "capabilities": {"type": "array", "items": {"type": "string"}}
+      }
+    },
+    "alignment": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "alignment_pack_path",
+        "clearance_required_for_research_bounded",
+        "clearance_required_for_boundless",
+        "require_enable_research_file_for_boundless",
+        "policy_lock_path",
+        "clearance_refresh_ticks"
+      ],
+      "properties": {
+        "alignment_pack_path": {"type": "string", "pattern": "^/"},
+        "policy_lock_path": {"type": "string", "pattern": "^/"},
+        "clearance_required_for_research_bounded": {"type": "boolean"},
+        "clearance_required_for_boundless": {"type": "boolean"},
+        "require_enable_research_file_for_boundless": {"type": "boolean"},
+        "clearance_refresh_ticks": {"type": "integer", "minimum": 1}
+      }
+    },
+    "math_boundless": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "enabled",
+        "boundless_pack_path",
+        "toolchain_manifest_path",
+        "require_enable_research_file",
+        "require_enable_boundless_math_file",
+        "attempts_per_tick_max",
+        "proof_check_per_tick_max",
+        "daily_attempt_budget",
+        "problem_selection_policy"
+      ],
+      "properties": {
+        "enabled": {"type": "boolean"},
+        "boundless_pack_path": {"type": "string", "pattern": "^/"},
+        "toolchain_manifest_path": {"type": "string", "pattern": "^/"},
+        "require_enable_research_file": {"type": "boolean"},
+        "require_enable_boundless_math_file": {"type": "boolean"},
+        "attempts_per_tick_max": {"type": "integer", "minimum": 1},
+        "proof_check_per_tick_max": {"type": "integer", "minimum": 1},
+        "daily_attempt_budget": {"type": "integer", "minimum": 1},
+        "problem_selection_policy": {"type": "string"}
+      }
+    }
+  }
+}

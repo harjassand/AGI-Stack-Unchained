@@ -1,0 +1,135 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/ccai_x_mind_v2/mechanism_registry_diff_v1.schema.json",
+  "title": "CCAI-X Mind v2 Mechanism Registry Diff v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "format",
+    "schema_version",
+    "base_registry_hash",
+    "ops"
+  ],
+  "properties": {
+    "format": {"const": "mechanism_registry_diff_v1"},
+    "schema_version": {"const": "1"},
+    "base_registry_hash": {"$ref": "#/$defs/hash"},
+    "ops": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/diff_op"},
+      "uniqueItems": true
+    },
+    "x_extensions": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {}
+    }
+  },
+  "$defs": {
+    "identifier": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9_./-]{0,127}$"
+    },
+    "hash": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "params": {
+      "type": "object",
+      "additionalProperties": false,
+      "patternProperties": {
+        "^[a-z0-9][a-z0-9_./-]{0,127}$": {"type": "integer"}
+      },
+      "properties": {}
+    },
+    "invariance_claim": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["claim_id", "scope", "evidence_hint"],
+      "properties": {
+        "claim_id": {"$ref": "#/$defs/identifier"},
+        "scope": {
+          "type": "string",
+          "enum": [
+            "across_regimes",
+            "across_policies",
+            "across_interventions"
+          ]
+        },
+        "evidence_hint": {"type": "string"}
+      }
+    },
+    "identifiability_metadata": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["identified_by_interventions"],
+      "properties": {
+        "identified_by_interventions": {
+          "type": "array",
+          "items": {"$ref": "#/$defs/identifier"},
+          "uniqueItems": true
+        }
+      }
+    },
+    "diff_op": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["op_id", "op_type", "invariance_claims", "identifiability_metadata"],
+      "properties": {
+        "op_id": {"$ref": "#/$defs/identifier"},
+        "op_type": {
+          "type": "string",
+          "enum": [
+            "ADD_EDGE",
+            "REMOVE_EDGE",
+            "REPLACE_MECHANISM_KERNEL",
+            "PATCH_PARAM_BLOCK",
+            "ADD_LATENT",
+            "REMOVE_LATENT"
+          ]
+        },
+        "mechanism_id": {"$ref": "#/$defs/identifier"},
+        "parent_var_id": {"$ref": "#/$defs/identifier"},
+        "new_kernel": {
+          "type": "string",
+          "enum": ["linear", "switch", "noisy_sensor", "table"]
+        },
+        "param_deltas": {"$ref": "#/$defs/params"},
+        "delta_bound_fp": {"type": "integer", "minimum": 0},
+        "latent_var_id": {"$ref": "#/$defs/identifier"},
+        "invariance_claims": {
+          "type": "array",
+          "items": {"$ref": "#/$defs/invariance_claim"},
+          "uniqueItems": true
+        },
+        "identifiability_metadata": {"$ref": "#/$defs/identifiability_metadata"}
+      },
+      "allOf": [
+        {
+          "if": {"properties": {"op_type": {"const": "ADD_EDGE"}}},
+          "then": {"required": ["mechanism_id", "parent_var_id"]}
+        },
+        {
+          "if": {"properties": {"op_type": {"const": "REMOVE_EDGE"}}},
+          "then": {"required": ["mechanism_id", "parent_var_id"]}
+        },
+        {
+          "if": {"properties": {"op_type": {"const": "REPLACE_MECHANISM_KERNEL"}}},
+          "then": {"required": ["mechanism_id", "new_kernel"]}
+        },
+        {
+          "if": {"properties": {"op_type": {"const": "PATCH_PARAM_BLOCK"}}},
+          "then": {"required": ["mechanism_id", "param_deltas", "delta_bound_fp"]}
+        },
+        {
+          "if": {"properties": {"op_type": {"const": "ADD_LATENT"}}},
+          "then": {"required": ["latent_var_id"]}
+        },
+        {
+          "if": {"properties": {"op_type": {"const": "REMOVE_LATENT"}}},
+          "then": {"required": ["latent_var_id"]}
+        }
+      ]
+    }
+  }
+}

@@ -1,0 +1,48 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v17_0/val_patch_manifest_v1",
+  "title": "VAL patch manifest v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "patch_id",
+    "target_arch",
+    "target_simd",
+    "target_feature_set",
+    "microkernel_id",
+    "code_bytes_b64",
+    "entry_offset_u32",
+    "declared_code_len_u32",
+    "abi",
+    "declared_loop_form",
+    "declared_mem_access_form",
+    "build_receipt_hash",
+    "notes"
+  ],
+  "properties": {
+    "schema_version": { "const": "val_patch_manifest_v1" },
+    "patch_id": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" },
+    "target_arch": { "const": "aarch64" },
+    "target_simd": { "const": "neon128" },
+    "target_feature_set": { "type": "array", "items": { "type": "string" } },
+    "microkernel_id": { "const": "SHA256_COMPRESS_M4_V1" },
+    "code_bytes_b64": { "type": "string", "minLength": 1 },
+    "entry_offset_u32": { "const": 0 },
+    "declared_code_len_u32": { "type": "integer", "minimum": 1 },
+    "abi": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["arg0", "arg1", "arg2"],
+      "properties": {
+        "arg0": { "const": "state_ptr" },
+        "arg1": { "const": "blocks_ptr" },
+        "arg2": { "const": "blocks_len" }
+      }
+    },
+    "declared_loop_form": { "enum": ["COUNTED_LOOP_SUBS_BNE", "FIXED_ROUND"] },
+    "declared_mem_access_form": { "const": "STATE32_AND_BLOCKS64_POSTINC" },
+    "build_receipt_hash": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" },
+    "notes": { "const": "" }
+  }
+}

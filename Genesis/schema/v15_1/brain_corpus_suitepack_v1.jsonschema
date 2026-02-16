@@ -1,0 +1,24 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "brain_corpus_suitepack_v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "cases"],
+  "properties": {
+    "schema_version": {"const": "brain_corpus_suitepack_v1"},
+    "cases": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["case_id", "context_rel", "decision_ref_rel"],
+        "properties": {
+          "case_id": {"type": "string", "minLength": 1},
+          "context_rel": {"type": "string", "minLength": 1},
+          "decision_ref_rel": {"type": "string", "minLength": 1}
+        }
+      }
+    }
+  }
+}

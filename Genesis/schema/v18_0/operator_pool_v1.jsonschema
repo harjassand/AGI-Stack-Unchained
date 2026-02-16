@@ -1,0 +1,108 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v18_0/operator_pool_v1",
+  "title": "CCAP operator pool v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "op_pool_id",
+    "pool_version_u32",
+    "operators"
+  ],
+  "properties": {
+    "schema_version": {"const": "operator_pool_v1"},
+    "op_pool_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "pool_version_u32": {"type": "integer", "minimum": 0, "maximum": 4294967295},
+    "operators": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "op_id",
+          "kind",
+          "enabled",
+          "pattern",
+          "rewrite",
+          "type_rules",
+          "obligation_bundle"
+        ],
+        "properties": {
+          "op_id": {"type": "string", "minLength": 1},
+          "kind": {
+            "type": "string",
+            "enum": [
+              "PATCH",
+              "GIR",
+              "ACTIONSEQ",
+              "INTERNAL"
+            ]
+          },
+          "enabled": {"type": "boolean"},
+          "pattern": {
+            "type": "object",
+            "additionalProperties": true
+          },
+          "rewrite": {
+            "type": "object",
+            "additionalProperties": true
+          },
+          "type_rules": {
+            "type": "object",
+            "additionalProperties": true
+          },
+          "obligation_bundle": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "requires",
+              "generates",
+              "discharges"
+            ],
+            "properties": {
+              "requires": {
+                "type": "array",
+                "items": {"type": "string"}
+              },
+              "generates": {
+                "type": "array",
+                "items": {"type": "string"}
+              },
+              "discharges": {
+                "type": "array",
+                "items": {"type": "string"}
+              }
+            }
+          },
+          "allowed_payload_kinds": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "PATCH",
+                "GIR",
+                "ACTIONSEQ"
+              ]
+            }
+          },
+          "site_globs": {
+            "type": "array",
+            "items": {"type": "string"}
+          },
+          "constraints": {
+            "type": "object",
+            "additionalProperties": {
+              "anyOf": [
+                {"type": "string"},
+                {"type": "integer"},
+                {"type": "boolean"}
+              ]
+            }
+          }
+        }
+      }
+    }
+  }
+}

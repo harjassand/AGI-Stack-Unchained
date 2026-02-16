@@ -1,0 +1,32 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v1_5r/meta_patch_proposal_v1",
+  "title": "Meta patch proposal v1",
+  "type": "object",
+  "additionalProperties": false,
+  "patternProperties": {
+    "^x-": {}
+  },
+  "required": [
+    "schema",
+    "schema_version",
+    "patch_id",
+    "base_meta_patch_set_hash",
+    "enable",
+    "disable",
+    "benchmark_pack_hash",
+    "equiv_relation_id",
+    "x-provenance"
+  ],
+  "properties": {
+    "schema": {"const": "meta_patch_proposal_v1"},
+    "schema_version": {"type": "integer", "const": 1},
+    "patch_id": {"type": "string", "pattern": "^sha256:[a-f0-9]{64}$"},
+    "base_meta_patch_set_hash": {"type": "string", "pattern": "^sha256:[a-f0-9]{64}$"},
+    "enable": {"type": "array", "items": {"type": "string"}},
+    "disable": {"type": "array", "items": {"type": "string"}},
+    "benchmark_pack_hash": {"type": "string", "pattern": "^sha256:[a-f0-9]{64}$"},
+    "equiv_relation_id": {"type": "string"},
+    "x-provenance": {"type": "string"}
+  }
+}

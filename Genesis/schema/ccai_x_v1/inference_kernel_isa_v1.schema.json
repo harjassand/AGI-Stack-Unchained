@@ -1,0 +1,95 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/ccai_x_v1/inference_kernel_isa_v1.schema.json",
+  "title": "CCAI-X v1 Inference Kernel ISA",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "format",
+    "schema_version",
+    "isa_id",
+    "fixed_point",
+    "primitives",
+    "schedule"
+  ],
+  "properties": {
+    "format": {"const": "inference_kernel_isa_v1"},
+    "schema_version": {"const": "1"},
+    "isa_id": {"$ref": "#/$defs/identifier"},
+    "fixed_point": {"$ref": "#/$defs/fixed_point"},
+    "primitives": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/primitive"},
+      "uniqueItems": true
+    },
+    "schedule": {"$ref": "#/$defs/schedule"},
+    "x_extensions": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {}
+    }
+  },
+  "$defs": {
+    "identifier": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9_./-]{0,127}$"
+    },
+    "primitive": {
+      "type": "string",
+      "enum": [
+        "normalize",
+        "entropy",
+        "kl_div",
+        "logsumexp",
+        "matmul_int",
+        "resample_deterministic"
+      ]
+    },
+    "fixed_point": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "format_id",
+        "scale_int",
+        "signed",
+        "bits",
+        "rounding",
+        "saturation"
+      ],
+      "properties": {
+        "format_id": {"$ref": "#/$defs/identifier"},
+        "scale_int": {"type": "integer", "minimum": 1},
+        "signed": {"type": "boolean"},
+        "bits": {"type": "integer", "enum": [32, 64]},
+        "rounding": {
+          "type": "string",
+          "enum": ["floor", "round_half_even", "round_half_up"]
+        },
+        "saturation": {"type": "string", "enum": ["wrap", "saturate"]}
+      }
+    },
+    "schedule": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["max_iters", "update_order", "tie_break_rule"],
+      "properties": {
+        "max_iters": {"type": "integer", "minimum": 1, "maximum": 10000},
+        "update_order": {
+          "type": "array",
+          "items": {"$ref": "#/$defs/primitive"},
+          "minItems": 1
+        },
+        "tie_break_rule": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["primary", "secondary", "tertiary"],
+          "properties": {
+            "primary": {"const": "min_total_G"},
+            "secondary": {"const": "min_risk"},
+            "tertiary": {"const": "lexicographic_action_token"}
+          }
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,37 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v8_0/math_research_ledger_v1.jsonl",
+  "title": "Math research ledger entry v1 (JSONL line)",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "seq",
+    "tick",
+    "event_type",
+    "event_payload",
+    "prev_entry_hash",
+    "entry_hash"
+  ],
+  "properties": {
+    "seq": {"type": "integer", "minimum": 1},
+    "tick": {"type": "integer", "minimum": 0},
+    "event_type": {
+      "type": "string",
+      "enum": [
+        "MATH_BOOTSTRAP",
+        "PROBLEM_SELECTED",
+        "ATTEMPT_STARTED",
+        "SEALED_PROOF_CHECK_STARTED",
+        "SEALED_PROOF_CHECK_RESULT",
+        "ATTEMPT_RESULT_RECORDED",
+        "PROOF_ACCEPTED",
+        "PROOF_REJECTED",
+        "SOLVED_INDEX_UPDATED",
+        "FATAL"
+      ]
+    },
+    "event_payload": {"type": "object"},
+    "prev_entry_hash": {"type": "string"},
+    "entry_hash": {"type": "string"}
+  }
+}

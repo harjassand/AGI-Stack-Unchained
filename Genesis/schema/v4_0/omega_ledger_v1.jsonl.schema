@@ -1,0 +1,49 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v4_0/omega_ledger_v1",
+  "title": "Omega ledger v1 (JSONL line)",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "spec_version",
+    "event_ref_hash",
+    "prev_event_ref_hash",
+    "root_swarm_run_id",
+    "icore_id",
+    "epoch_index",
+    "event_type",
+    "payload"
+  ],
+  "properties": {
+    "schema": {"const": "omega_ledger_event_v1"},
+    "spec_version": {"const": "v4_0"},
+    "event_ref_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "prev_event_ref_hash": {"type": "string"},
+    "root_swarm_run_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "icore_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "epoch_index": {"type": "integer", "minimum": 0},
+    "event_type": {
+      "type": "string",
+      "enum": [
+        "OMEGA_RUN_BEGIN",
+        "OMEGA_EPOCH_OPEN",
+        "OMEGA_TASK_SAMPLE",
+        "OMEGA_TASK_ATTEMPT_BEGIN",
+        "OMEGA_TASK_EVAL_REQUEST",
+        "OMEGA_TASK_EVAL_RESULT",
+        "OMEGA_TASK_ATTEMPT_END",
+        "OMEGA_IMPROVE_CYCLE_BEGIN",
+        "OMEGA_PROPOSAL_EMIT",
+        "OMEGA_PROPOSAL_EVAL_RESULT",
+        "OMEGA_PROMOTION_APPLY",
+        "OMEGA_IMPROVE_CYCLE_END",
+        "OMEGA_EPOCH_CLOSE",
+        "OMEGA_CHECKPOINT_WRITE",
+        "OMEGA_IGNITION_ASSERT",
+        "OMEGA_STOP"
+      ]
+    },
+    "payload": {"type": "object"}
+  }
+}

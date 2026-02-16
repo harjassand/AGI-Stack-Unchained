@@ -1,0 +1,27 @@
+{
+  "schema_version": 1,
+  "dsl_version": 1,
+  "parent": "GENESIS",
+  "payload": {
+    "new_symbols": ["dec", "inc"],
+    "definitions": [
+      {
+        "name": "inc",
+        "params": [{"name": "n", "type": {"tag": "int"}}],
+        "ret_type": {"tag": "int"},
+        "body": {"tag": "prim", "op": "add", "args": [{"tag": "var", "name": "n"}, {"tag": "int", "value": 2}]},
+        "termination": {"kind": "structural", "decreases_param": null}
+      },
+      {
+        "name": "dec",
+        "params": [{"name": "m", "type": {"tag": "int"}}],
+        "ret_type": {"tag": "int"},
+        "body": {"tag": "prim", "op": "sub", "args": [{"tag": "var", "name": "m"}, {"tag": "int", "value": 1}]},
+        "termination": {"kind": "structural", "decreases_param": null}
+      }
+    ],
+    "declared_deps": [],
+    "specs": []
+  },
+  "meta": {"note": "fixture C"}
+}

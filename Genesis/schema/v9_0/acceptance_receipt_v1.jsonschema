@@ -1,0 +1,33 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v9_0/acceptance_receipt_v1",
+  "title": "Science acceptance receipt v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "task_id",
+    "decision",
+    "metric_num",
+    "metric_den",
+    "threshold_num",
+    "threshold_den",
+    "replication_count",
+    "heldout_receipt_hashes"
+  ],
+  "properties": {
+    "schema_version": {"const": "acceptance_receipt_v1"},
+    "task_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "decision": {"type": "string", "enum": ["ACCEPTED", "REJECTED"]},
+    "metric_num": {"type": "integer"},
+    "metric_den": {"type": "integer", "minimum": 1},
+    "threshold_num": {"type": "integer"},
+    "threshold_den": {"type": "integer", "minimum": 1},
+    "replication_count": {"type": "integer", "minimum": 1},
+    "heldout_receipt_hashes": {
+      "type": "array",
+      "items": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"}
+    },
+    "created_utc": {"type": "string"}
+  }
+}

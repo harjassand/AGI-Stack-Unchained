@@ -1,0 +1,21 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v8_0/math_proof_artifact_v1",
+  "title": "Math proof artifact v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "proof_artifact_hash",
+    "problem_id",
+    "attempt_id",
+    "artifact_path"
+  ],
+  "properties": {
+    "schema_version": {"const": "math_proof_artifact_v1"},
+    "proof_artifact_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "problem_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "attempt_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "artifact_path": {"type": "string"}
+  }
+}

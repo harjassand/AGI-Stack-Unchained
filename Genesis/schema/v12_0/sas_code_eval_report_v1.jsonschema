@@ -1,0 +1,28 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v12_0/sas_code_eval_report_v1",
+  "title": "SAS-CODE eval report v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "algo_id",
+    "eval_kind",
+    "attempt_count",
+    "pass_count",
+    "total_wall_ms",
+    "attempt_receipt_hashes"
+  ],
+  "properties": {
+    "schema_version": {"const": "sas_code_eval_report_v1"},
+    "algo_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "eval_kind": {"type": "string", "enum": ["DEV", "HELDOUT"]},
+    "attempt_count": {"type": "integer", "minimum": 0},
+    "pass_count": {"type": "integer", "minimum": 0},
+    "total_wall_ms": {"type": "integer", "minimum": 0},
+    "attempt_receipt_hashes": {
+      "type": "array",
+      "items": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"}
+    }
+  }
+}

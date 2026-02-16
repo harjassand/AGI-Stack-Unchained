@@ -1,0 +1,11 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v18_0/abstraction_ladder_manifest_v1",
+  "title": "abstraction_ladder_manifest_v1",
+  "type": "object",
+  "additionalProperties": true,
+  "properties": {
+    "schema_id": {"const": "abstraction_ladder_manifest_v1"}
+  },
+  "required": ["schema_id"]
+}

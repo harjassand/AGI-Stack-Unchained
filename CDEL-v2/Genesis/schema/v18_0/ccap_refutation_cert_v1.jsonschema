@@ -1,0 +1,45 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v18_0/ccap_refutation_cert_v1",
+  "title": "CCAP refutation certificate v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "ccap_id",
+    "refutation_code",
+    "detail"
+  ],
+  "properties": {
+    "schema_version": {"const": "ccap_refutation_cert_v1"},
+    "ccap_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "refutation_code": {
+      "type": "string",
+      "enum": [
+        "AUTH_HASH_MISMATCH",
+        "EK_ID_NOT_ACTIVE",
+        "OP_POOL_NOT_ACTIVE",
+        "CANON_VERSION_MISMATCH",
+        "BASE_TREE_MISMATCH",
+        "PATCH_HASH_MISMATCH",
+        "FORBIDDEN_PATH",
+        "PAYLOAD_KIND_UNSUPPORTED",
+        "ILLEGAL_OPERATOR",
+        "SITE_NOT_FOUND",
+        "TYPE_MISMATCH",
+        "SSA_VIOLATION",
+        "CANONICALIZATION_MISMATCH",
+        "LOCAL_OBLIGATIONS_UNDISCHARGED",
+        "NONDETERMINISM_DETECTED",
+        "BUDGET_EXCEEDED",
+        "NO_IMPROVEMENT",
+        "EVAL_STAGE_FAIL"
+      ]
+    },
+    "detail": {"type": "string"},
+    "evidence_hashes": {
+      "type": "array",
+      "items": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"}
+    }
+  }
+}

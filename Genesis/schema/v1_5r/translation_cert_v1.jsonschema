@@ -1,0 +1,85 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v1_5r/translation_cert_v1",
+  "title": "Translation certificate v1",
+  "type": "object",
+  "additionalProperties": false,
+  "patternProperties": {
+    "^x-": {}
+  },
+  "required": [
+    "schema",
+    "schema_version",
+    "epoch_id",
+    "patch_id",
+    "benchmark_pack_hash",
+    "equiv_relation_id",
+    "cases",
+    "overall"
+  ],
+  "properties": {
+    "schema": {"const": "translation_cert_v1"},
+    "schema_version": {"type": "integer", "const": 1},
+    "epoch_id": {"type": "string"},
+    "patch_id": {"type": "string", "pattern": "^sha256:[a-f0-9]{64}$"},
+    "benchmark_pack_hash": {"type": "string", "pattern": "^sha256:[a-f0-9]{64}$"},
+    "equiv_relation_id": {"type": "string"},
+    "cases": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/case"}
+    },
+    "overall": {"$ref": "#/$defs/overall"}
+  },
+  "$defs": {
+    "workvec": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "oracle_calls_total",
+        "env_steps_total",
+        "candidates_fully_evaluated",
+        "verifier_gas_total",
+        "bytes_hashed_total",
+        "short_circuits_total"
+      ],
+      "properties": {
+        "oracle_calls_total": {"type": "integer", "minimum": 0},
+        "env_steps_total": {"type": "integer", "minimum": 0},
+        "candidates_fully_evaluated": {"type": "integer", "minimum": 0},
+        "verifier_gas_total": {"type": "integer", "minimum": 0},
+        "bytes_hashed_total": {"type": "integer", "minimum": 0},
+        "short_circuits_total": {"type": "integer", "minimum": 0}
+      }
+    },
+    "case": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "case_id",
+        "equiv_ok",
+        "semantic_output_hash_base",
+        "semantic_output_hash_new",
+        "workvec_base",
+        "workvec_new"
+      ],
+      "properties": {
+        "case_id": {"type": "string"},
+        "equiv_ok": {"type": "boolean"},
+        "semantic_output_hash_base": {"type": "string", "pattern": "^sha256:[a-f0-9]{64}$"},
+        "semantic_output_hash_new": {"type": "string", "pattern": "^sha256:[a-f0-9]{64}$"},
+        "workvec_base": {"$ref": "#/$defs/workvec"},
+        "workvec_new": {"$ref": "#/$defs/workvec"}
+      }
+    },
+    "overall": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["equiv_ok", "dominance_ok", "strict_improve_ok"],
+      "properties": {
+        "equiv_ok": {"type": "boolean"},
+        "dominance_ok": {"type": "boolean"},
+        "strict_improve_ok": {"type": "boolean"}
+      }
+    }
+  }
+}

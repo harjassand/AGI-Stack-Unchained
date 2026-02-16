@@ -1,0 +1,38 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v18_0/qxrl_perception_ufc_v1",
+  "title": "qxrl_perception_ufc_v1",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "schema_id": {"const": "qxrl_perception_ufc_v1"},
+    "suite_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "scorecard_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "ufc_q32": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {"q": {"type": "integer"}},
+      "required": ["q"]
+    },
+    "components": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "masked_acc_at_1_q32": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {"q": {"type": "integer"}},
+          "required": ["q"]
+        },
+        "recall_at_k_q32": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {"q": {"type": "integer"}},
+          "required": ["q"]
+        }
+      },
+      "required": ["masked_acc_at_1_q32", "recall_at_k_q32"]
+    }
+  },
+  "required": ["schema_id", "suite_id", "scorecard_id", "ufc_q32", "components"]
+}

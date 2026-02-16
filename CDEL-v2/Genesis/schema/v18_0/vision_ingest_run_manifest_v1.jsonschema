@@ -1,0 +1,28 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v18_0/vision_ingest_run_manifest_v1",
+  "title": "vision_ingest_run_manifest_v1",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "schema_id": {"const": "vision_ingest_run_manifest_v1"},
+
+    "capture_config_ref": {"$ref": "https://genesis.engine/specs/v18_0/eudrs_u_artifact_ref_v1"},
+    "session_manifest_ref": {"$ref": "https://genesis.engine/specs/v18_0/eudrs_u_artifact_ref_v1"},
+
+    "frame_artifact_ids": {
+      "type": "array",
+      "items": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"}
+    },
+
+    "frames_merkle_root32": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"}
+  },
+  "required": [
+    "schema_id",
+    "capture_config_ref",
+    "session_manifest_ref",
+    "frame_artifact_ids",
+    "frames_merkle_root32"
+  ]
+}
+

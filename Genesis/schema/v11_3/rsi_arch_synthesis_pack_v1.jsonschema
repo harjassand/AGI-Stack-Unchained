@@ -1,0 +1,41 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v11_0/rsi_arch_synthesis_pack_v1",
+  "title": "RSI Architecture Synthesis pack v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "icore_id",
+    "meta_hash",
+    "superego_policy_hash",
+    "allowlist_path",
+    "search_config_path",
+    "training_config_path",
+    "eval_config_dev_path",
+    "eval_config_heldout_path",
+    "toolchain_manifest_path",
+    "family_registry_path",
+    "opset_manifest_path",
+    "train_fixture_path",
+    "eval_dev_fixture_path",
+    "eval_heldout_fixture_path"
+  ],
+  "properties": {
+    "schema_version": {"const": "rsi_arch_synthesis_pack_v1"},
+    "icore_id": {"type": "string"},
+    "meta_hash": {"type": "string"},
+    "superego_policy_hash": {"type": "string"},
+    "allowlist_path": {"type": "string"},
+    "search_config_path": {"type": "string"},
+    "training_config_path": {"type": "string"},
+    "eval_config_dev_path": {"type": "string"},
+    "eval_config_heldout_path": {"type": "string"},
+    "toolchain_manifest_path": {"type": "string"},
+    "family_registry_path": {"type": "string"},
+    "opset_manifest_path": {"type": "string"},
+    "train_fixture_path": {"type": "string"},
+    "eval_dev_fixture_path": {"type": "string"},
+    "eval_heldout_fixture_path": {"type": "string"}
+  }
+}

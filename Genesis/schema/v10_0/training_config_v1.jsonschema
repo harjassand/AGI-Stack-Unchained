@@ -1,0 +1,77 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v10_0/training_config_v1",
+  "title": "Training config v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "base_model_id",
+    "architecture",
+    "seed",
+    "device",
+    "steps",
+    "batch_size",
+    "lr_num",
+    "lr_den",
+    "max_seq_len",
+    "determinism",
+    "output_format"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "training_config_v1"
+    },
+    "base_model_id": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "architecture": {
+      "type": "string"
+    },
+    "seed": {
+      "type": "integer"
+    },
+    "device": {
+      "type": "string"
+    },
+    "steps": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "batch_size": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "lr_num": {
+      "type": "integer"
+    },
+    "lr_den": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "max_seq_len": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "determinism": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "single_thread",
+        "torch_deterministic"
+      ],
+      "properties": {
+        "single_thread": {
+          "type": "boolean"
+        },
+        "torch_deterministic": {
+          "type": "boolean"
+        }
+      }
+    },
+    "output_format": {
+      "type": "string"
+    }
+  }
+}

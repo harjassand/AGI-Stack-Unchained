@@ -1,0 +1,48 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v1_7r/macro_def_v2",
+  "title": "Macro definition v2",
+  "type": "object",
+  "additionalProperties": false,
+  "patternProperties": {
+    "^x-": {}
+  },
+  "required": [
+    "schema",
+    "schema_version",
+    "macro_id",
+    "body",
+    "guard",
+    "admission_epoch",
+    "rent_bits"
+  ],
+  "properties": {
+    "schema": {"const": "macro_def_v2"},
+    "schema_version": {"type": "integer", "const": 2},
+    "macro_id": {"type": "string", "pattern": "^sha256:[a-f0-9]{64}$"},
+    "body": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["name", "args"],
+        "properties": {
+          "name": {"type": "string"},
+          "args": {"type": "object"}
+        }
+      }
+    },
+    "guard": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema", "schema_version", "ctx_hashes"],
+      "properties": {
+        "schema": {"const": "macro_guard_ctx_v1"},
+        "schema_version": {"type": "integer", "const": 1},
+        "ctx_hashes": {"type": "array", "items": {"type": "string", "pattern": "^sha256:[a-f0-9]{64}$"}}
+      }
+    },
+    "admission_epoch": {"type": "integer"},
+    "rent_bits": {"type": "integer"}
+  }
+}

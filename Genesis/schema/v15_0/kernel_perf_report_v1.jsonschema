@@ -1,0 +1,33 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v15_0/kernel_perf_report_v1",
+  "title": "Kernel perf report v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "baseline_control_opcodes",
+    "candidate_control_opcodes",
+    "gate_multiplier",
+    "gate_pass"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "kernel_perf_report_v1"
+    },
+    "baseline_control_opcodes": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "candidate_control_opcodes": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "gate_multiplier": {
+      "const": 1000
+    },
+    "gate_pass": {
+      "type": "boolean"
+    }
+  }
+}

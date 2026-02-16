@@ -1,0 +1,27 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v13_0/sas_science_dataset_receipt_v1",
+  "title": "SAS-Science dataset receipt v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "created_utc",
+    "dataset_id",
+    "manifest_hash",
+    "csv_sha256",
+    "row_count",
+    "dim",
+    "bodies"
+  ],
+  "properties": {
+    "schema_version": {"const": "sas_science_dataset_receipt_v1"},
+    "created_utc": {"type": "string"},
+    "dataset_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "manifest_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "csv_sha256": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "row_count": {"type": "integer", "minimum": 1},
+    "dim": {"type": "integer", "enum": [2, 3]},
+    "bodies": {"type": "array", "items": {"type": "string"}, "minItems": 1}
+  }
+}

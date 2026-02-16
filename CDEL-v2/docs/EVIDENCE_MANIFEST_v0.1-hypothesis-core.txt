@@ -1,0 +1,8 @@
+tag: v0.1-hypothesis-core
+commit: 54818580d37601e9706990d376c15c68123dae60
+config_hash: 9445b30ac06b7f06734a623d852a77ef928c26c54dab1275bf5592f7c8ddf840
+eval_harness_hash: harness-hash
+eval_suite_hash: suite-hash
+results.json_sha256: ae3cec5de0a58c572fd7f257f2d39138360201328c8120ec51c3e370cf8c15f2
+summary.md_sha256: bda4382f612eaa7777dd33432bab0f8da152dd56344d2c41315bef4b13b61c44
+command: scripts/repro_quickstart.sh -> cdel run-generalization-experiment --out <tmp>/out --episodes 16 --eval-int-min -10 --eval-int-max 10 --bounded-int-min -2 --bounded-int-max 2 --budget 100000

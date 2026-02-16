@@ -1,0 +1,28 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v11_0/sas_family_registry_v1",
+  "title": "SAS family registry v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "registry_version", "families"],
+  "properties": {
+    "schema_version": {"const": "sas_family_registry_v1"},
+    "registry_version": {"type": "string"},
+    "families": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["family_name", "family_schema_hash", "builder_version", "builder_entrypoint", "opset_hash", "constraints_hash"],
+        "properties": {
+          "family_name": {"type": "string"},
+          "family_schema_hash": {"type": "string"},
+          "builder_version": {"type": "string"},
+          "builder_entrypoint": {"type": "string"},
+          "opset_hash": {"type": "string"},
+          "constraints_hash": {"type": "string"}
+        }
+      }
+    }
+  }
+}

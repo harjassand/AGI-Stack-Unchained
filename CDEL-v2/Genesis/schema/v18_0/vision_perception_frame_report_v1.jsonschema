@@ -1,0 +1,91 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v18_0/vision_perception_frame_report_v1",
+  "title": "vision_perception_frame_report_v1",
+  "type": "object",
+  "additionalProperties": false,
+  "$defs": {
+    "q32_s64": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {"q": {"type": "integer"}},
+      "required": ["q"]
+    },
+    "bbox_u32": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "x0_u32": {"type": "integer", "minimum": 0, "maximum": 4294967295},
+        "y0_u32": {"type": "integer", "minimum": 0, "maximum": 4294967295},
+        "x1_u32": {"type": "integer", "minimum": 0, "maximum": 4294967295},
+        "y1_u32": {"type": "integer", "minimum": 0, "maximum": 4294967295}
+      },
+      "required": ["x0_u32", "y0_u32", "x1_u32", "y1_u32"]
+    }
+  },
+  "properties": {
+    "schema_id": {"const": "vision_perception_frame_report_v1"},
+    "session_manifest_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "frame_index_u32": {"type": "integer", "minimum": 0, "maximum": 4294967295},
+    "frame_manifest_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "frame_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "objects": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "obj_local_id_u32": {"type": "integer", "minimum": 1, "maximum": 4294967295},
+          "track_id_u32": {"type": "integer", "minimum": 1, "maximum": 4294967295},
+          "bbox": {"$ref": "https://genesis.engine/specs/v18_0/vision_perception_frame_report_v1#/$defs/bbox_u32"},
+          "area_u32": {"type": "integer", "minimum": 0, "maximum": 4294967295},
+          "centroid_x_q32": {"$ref": "https://genesis.engine/specs/v18_0/vision_perception_frame_report_v1#/$defs/q32_s64"},
+          "centroid_y_q32": {"$ref": "https://genesis.engine/specs/v18_0/vision_perception_frame_report_v1#/$defs/q32_s64"},
+          "mask_ref": {"$ref": "https://genesis.engine/specs/v18_0/eudrs_u_artifact_ref_v1"}
+        },
+        "required": [
+          "obj_local_id_u32",
+          "track_id_u32",
+          "bbox",
+          "area_u32",
+          "centroid_x_q32",
+          "centroid_y_q32",
+          "mask_ref"
+        ]
+      }
+    },
+    "events": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "event_type": {"type": "string", "enum": ["APPEAR", "DISAPPEAR", "OCCLUDE", "SPLIT", "MERGE"]},
+          "primary_id_u32": {"type": "integer", "minimum": 0, "maximum": 4294967295},
+          "track_ids": {"type": "array", "items": {"type": "integer", "minimum": 0, "maximum": 4294967295}},
+          "obj_local_ids": {"type": "array", "items": {"type": "integer", "minimum": 0, "maximum": 4294967295}}
+        },
+        "required": ["event_type", "primary_id_u32", "track_ids", "obj_local_ids"]
+      }
+    },
+    "caps_observed": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "object_count_u32": {"type": "integer", "minimum": 0, "maximum": 4294967295},
+        "event_count_u32": {"type": "integer", "minimum": 0, "maximum": 4294967295}
+      },
+      "required": ["object_count_u32", "event_count_u32"]
+    }
+  },
+  "required": [
+    "schema_id",
+    "session_manifest_id",
+    "frame_index_u32",
+    "frame_manifest_id",
+    "frame_id",
+    "objects",
+    "events",
+    "caps_observed"
+  ]
+}

@@ -1,0 +1,36 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v1_8r/meta_patch_admit_receipt_v1",
+  "title": "Meta patch admit receipt v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "schema_version",
+    "epoch_id",
+    "patch_id",
+    "patch_def_hash",
+    "meta_patch_eval_report_hash",
+    "verdict",
+    "x-meta"
+  ],
+  "properties": {
+    "schema": {"const": "meta_patch_admit_receipt_v1"},
+    "schema_version": {"type": "integer", "const": 1},
+    "epoch_id": {"type": "string"},
+    "patch_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "patch_def_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "meta_patch_eval_report_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "verdict": {"type": "string", "const": "VALID"},
+    "x-meta": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["KERNEL_HASH", "META_HASH", "constants_hash"],
+      "properties": {
+        "KERNEL_HASH": {"type": "string"},
+        "META_HASH": {"type": "string"},
+        "constants_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"}
+      }
+    }
+  }
+}

@@ -1,0 +1,143 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v18_0/dmpl_action_receipt_v1",
+  "title": "DMPL Action Receipt v1",
+  "type": "object",
+  "additionalProperties": false,
+  "$defs": {
+    "sha256_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "q32_i64": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {"q": {"type": "integer", "minimum": -9223372036854775808, "maximum": 9223372036854775807}},
+      "required": ["q"]
+    },
+    "u32": {"type": "integer", "minimum": 0, "maximum": 4294967295},
+    "u64": {"type": "integer", "minimum": 0, "maximum": 18446744073709551615}
+  },
+  "properties": {
+    "schema_id": {"const": "dmpl_action_receipt_v1"},
+    "dc1_id": {"type": "string", "const": "dc1:q32_v1"},
+    "opset_id": {"type": "string", "pattern": "^opset:eudrs_u_v1:sha256:[0-9a-f]{64}$"},
+
+    "plan_query_id": {"$ref": "#/$defs/sha256_id"},
+    "rollout_trace_id": {"$ref": "#/$defs/sha256_id"},
+
+    "chosen_action_record_id": {"$ref": "#/$defs/sha256_id"},
+    "chosen_action_hash": {"$ref": "#/$defs/sha256_id"},
+    "chosen_node_id": {"$ref": "#/$defs/sha256_id"},
+
+    "tie_break_proof": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "ordering_policy": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "primary_key_id": {"const": "upper_bound_primary_score_desc"},
+            "secondary_key_id": {"const": "depth_asc"},
+            "tertiary_key_id": {"const": "node_id_asc"}
+          },
+          "required": ["primary_key_id", "secondary_key_id", "tertiary_key_id"]
+        },
+        "ordering_keys": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 1,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "candidate_rank_u32": {"const": 0},
+              "node_id": {"$ref": "#/$defs/sha256_id"},
+              "bound_score_q32": {"$ref": "#/$defs/q32_i64"},
+              "depth_u32": {"$ref": "#/$defs/u32"}
+            },
+            "required": ["candidate_rank_u32", "node_id", "bound_score_q32", "depth_u32"]
+          }
+        },
+        "proof_digest": {"$ref": "#/$defs/sha256_id"}
+      },
+      "required": ["ordering_policy", "ordering_keys", "proof_digest"]
+    },
+
+    "ufc_decomposition": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "schema_id": {"const": "dmpl_ufc_decomposition_v1"},
+        "terms": {"type": "object", "additionalProperties": false}
+      },
+      "required": ["schema_id", "terms"]
+    },
+
+    "gating_summary": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "caps_digest": {"$ref": "#/$defs/sha256_id"},
+        "K_ctx_u32": {"$ref": "#/$defs/u32"},
+        "K_g_u32": {"$ref": "#/$defs/u32"},
+        "inverse_head_enabled_b": {"type": "boolean"},
+        "rev_err_max_q32": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {"q": {"const": 0}},
+          "required": ["q"]
+        },
+        "planner_budget_summary": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "nodes_u32": {"$ref": "#/$defs/u32"},
+            "ops_u64": {"$ref": "#/$defs/u64"},
+            "bytes_u64": {"$ref": "#/$defs/u64"}
+          },
+          "required": ["nodes_u32", "ops_u64", "bytes_u64"]
+        },
+        "status": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "ok_b": {"type": "boolean"},
+            "reason_code": {"type": "string"}
+          },
+          "required": ["ok_b", "reason_code"],
+          "allOf": [
+            {
+              "if": {"properties": {"ok_b": {"const": true}}},
+              "then": {"properties": {"reason_code": {"const": "DMPL_OK"}}}
+            },
+            {
+              "if": {"properties": {"ok_b": {"const": false}}},
+              "then": {"properties": {"reason_code": {"pattern": "^DMPL_E_[A-Z0-9_]+$"}}}
+            }
+          ]
+        }
+      },
+      "required": [
+        "caps_digest",
+        "K_ctx_u32",
+        "K_g_u32",
+        "inverse_head_enabled_b",
+        "rev_err_max_q32",
+        "planner_budget_summary",
+        "status"
+      ]
+    }
+  },
+  "required": [
+    "schema_id",
+    "dc1_id",
+    "opset_id",
+    "plan_query_id",
+    "rollout_trace_id",
+    "chosen_action_record_id",
+    "chosen_action_hash",
+    "chosen_node_id",
+    "tie_break_proof",
+    "ufc_decomposition",
+    "gating_summary"
+  ]
+}

@@ -1,0 +1,24 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v11_1/conjecture_archive_index_v1",
+  "title": "Conjecture archive index v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "entries"],
+  "properties": {
+    "schema_version": {"const": "conjecture_archive_index_v1"},
+    "entries": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["fingerprint_hash", "conjecture_id"],
+        "properties": {
+          "fingerprint_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+          "conjecture_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+          "accepted_utc": {"type": "string"}
+        }
+      }
+    }
+  }
+}

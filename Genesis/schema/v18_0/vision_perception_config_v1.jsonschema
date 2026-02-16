@@ -1,0 +1,97 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v18_0/vision_perception_config_v1",
+  "title": "vision_perception_config_v1",
+  "type": "object",
+  "additionalProperties": false,
+  "$defs": {
+    "q32_s64": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {"q": {"type": "integer"}},
+      "required": ["q"]
+    }
+  },
+  "properties": {
+    "schema_id": {"const": "vision_perception_config_v1"},
+    "caps": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "max_width_u32": {"type": "integer", "minimum": 1, "maximum": 4294967295},
+        "max_height_u32": {"type": "integer", "minimum": 1, "maximum": 4294967295},
+        "max_frames_per_session_u32": {"type": "integer", "minimum": 1, "maximum": 4294967295},
+        "max_objects_per_frame_u32": {"type": "integer", "minimum": 1, "maximum": 4294967295},
+        "max_tracks_per_session_u32": {"type": "integer", "minimum": 1, "maximum": 4294967295},
+        "max_events_per_frame_u32": {"type": "integer", "minimum": 0, "maximum": 4294967295}
+      },
+      "required": [
+        "max_width_u32",
+        "max_height_u32",
+        "max_frames_per_session_u32",
+        "max_objects_per_frame_u32",
+        "max_tracks_per_session_u32",
+        "max_events_per_frame_u32"
+      ]
+    },
+    "preprocess": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "target_pixel_format": {"type": "string", "enum": ["GRAY8"]},
+        "resize_kind": {"type": "string", "enum": ["NEAREST_NEIGHBOR_V1"]},
+        "target_width_u32": {"type": "integer", "minimum": 1, "maximum": 4294967295},
+        "target_height_u32": {"type": "integer", "minimum": 1, "maximum": 4294967295}
+      },
+      "required": ["target_pixel_format", "resize_kind", "target_width_u32", "target_height_u32"]
+    },
+    "segmentation": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "method": {"type": "string", "enum": ["OTSU_THRESHOLD_V1"]},
+        "connectivity": {"type": "string", "enum": ["CONN_4"]},
+        "morph_open_iters_u32": {"type": "integer", "minimum": 0, "maximum": 4294967295},
+        "morph_close_iters_u32": {"type": "integer", "minimum": 0, "maximum": 4294967295},
+        "min_component_area_u32": {"type": "integer", "minimum": 0, "maximum": 4294967295}
+      },
+      "required": [
+        "method",
+        "connectivity",
+        "morph_open_iters_u32",
+        "morph_close_iters_u32",
+        "min_component_area_u32"
+      ]
+    },
+    "tracking": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "iou_match_min_q32": {"$ref": "https://genesis.engine/specs/v18_0/vision_perception_config_v1#/$defs/q32_s64"},
+        "iou_event_min_q32": {"$ref": "https://genesis.engine/specs/v18_0/vision_perception_config_v1#/$defs/q32_s64"},
+        "max_lost_frames_u32": {"type": "integer", "minimum": 0, "maximum": 4294967295},
+        "track_id_start_u32": {"type": "integer", "minimum": 0, "maximum": 4294967295}
+      },
+      "required": ["iou_match_min_q32", "iou_event_min_q32", "max_lost_frames_u32", "track_id_start_u32"]
+    },
+    "outputs": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "emit_masks_b": {"type": "boolean"},
+        "emit_qxwmr_states_b": {"type": "boolean"},
+        "emit_frame_reports_b": {"type": "boolean"},
+        "emit_track_manifest_b": {"type": "boolean"},
+        "emit_event_manifest_b": {"type": "boolean"}
+      },
+      "required": [
+        "emit_masks_b",
+        "emit_qxwmr_states_b",
+        "emit_frame_reports_b",
+        "emit_track_manifest_b",
+        "emit_event_manifest_b"
+      ]
+    }
+  },
+  "required": ["schema_id", "caps", "preprocess", "segmentation", "tracking", "outputs"]
+}

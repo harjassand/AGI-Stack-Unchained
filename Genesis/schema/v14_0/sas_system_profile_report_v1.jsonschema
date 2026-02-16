@@ -1,0 +1,28 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v14_0/sas_system_profile_report_v1",
+  "title": "SAS System profile report v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "spec_version",
+    "target_id",
+    "candidate_ids",
+    "reference_ir_sha256",
+    "candidate_ir_sha256"
+  ],
+  "properties": {
+    "schema_version": {"const": "sas_system_profile_report_v1"},
+    "spec_version": {"const": "v14_0"},
+    "target_id": {"const": "SAS_SCIENCE_WORKMETER_V1"},
+    "candidate_ids": {
+      "type": "array",
+      "minItems": 2,
+      "maxItems": 2,
+      "items": {"type": "string"}
+    },
+    "reference_ir_sha256": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "candidate_ir_sha256": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"}
+  }
+}

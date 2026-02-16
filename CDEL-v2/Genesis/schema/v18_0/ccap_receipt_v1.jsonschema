@@ -1,0 +1,126 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v18_0/ccap_receipt_v1",
+  "title": "CCAP receipt v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "ccap_id",
+    "base_tree_id",
+    "applied_tree_id",
+    "realized_out_id",
+    "ek_id",
+    "op_pool_id",
+    "auth_hash",
+    "determinism_check",
+    "eval_status",
+    "decision",
+    "cost_vector",
+    "logs_hash"
+  ],
+  "properties": {
+    "schema_version": {"const": "ccap_receipt_v1"},
+    "ccap_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "base_tree_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "applied_tree_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "realized_out_id": {
+      "anyOf": [
+        {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+        {"const": ""}
+      ]
+    },
+    "ek_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "op_pool_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "auth_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "determinism_check": {"type": "string", "enum": ["PASS", "REFUTED", "DIVERGED"]},
+    "eval_status": {"type": "string", "enum": ["PASS", "FAIL", "REFUTED"]},
+    "decision": {"type": "string", "enum": ["PROMOTE", "REJECT"]},
+    "cost_vector": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "cpu_ms",
+        "wall_ms",
+        "mem_mb",
+        "disk_mb",
+        "fds",
+        "procs",
+        "threads"
+      ],
+      "properties": {
+        "cpu_ms": {"type": "integer", "minimum": 0},
+        "wall_ms": {"type": "integer", "minimum": 0},
+        "mem_mb": {"type": "integer", "minimum": 0},
+        "disk_mb": {"type": "integer", "minimum": 0},
+        "fds": {"type": "integer", "minimum": 0},
+        "procs": {"type": "integer", "minimum": 0},
+        "threads": {"type": "integer", "minimum": 0}
+      }
+    },
+    "logs_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "scorecard_summary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "median_stps_non_noop_q32",
+        "non_noop_ticks_per_min_f64",
+        "promotions_u64"
+      ],
+      "properties": {
+        "median_stps_non_noop_q32": {"type": "integer"},
+        "non_noop_ticks_per_min_f64": {"type": "number"},
+        "promotions_u64": {"type": "integer"},
+        "activation_success_u64": {"type": "integer"}
+      }
+    },
+    "score_base_summary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "median_stps_non_noop_q32",
+        "non_noop_ticks_per_min_f64",
+        "promotions_u64",
+        "activation_success_u64"
+      ],
+      "properties": {
+        "median_stps_non_noop_q32": {"type": "integer"},
+        "non_noop_ticks_per_min_f64": {"type": "number"},
+        "promotions_u64": {"type": "integer"},
+        "activation_success_u64": {"type": "integer"}
+      }
+    },
+    "score_cand_summary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "median_stps_non_noop_q32",
+        "non_noop_ticks_per_min_f64",
+        "promotions_u64",
+        "activation_success_u64"
+      ],
+      "properties": {
+        "median_stps_non_noop_q32": {"type": "integer"},
+        "non_noop_ticks_per_min_f64": {"type": "number"},
+        "promotions_u64": {"type": "integer"},
+        "activation_success_u64": {"type": "integer"}
+      }
+    },
+    "score_delta_summary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "median_stps_non_noop_q32",
+        "non_noop_ticks_per_min_f64",
+        "promotions_u64",
+        "activation_success_u64"
+      ],
+      "properties": {
+        "median_stps_non_noop_q32": {"type": "integer"},
+        "non_noop_ticks_per_min_f64": {"type": "number"},
+        "promotions_u64": {"type": "integer"},
+        "activation_success_u64": {"type": "integer"}
+      }
+    }
+  }
+}

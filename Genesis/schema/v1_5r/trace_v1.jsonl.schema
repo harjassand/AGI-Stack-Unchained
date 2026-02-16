@@ -1,0 +1,88 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v1_5r/trace_v1.jsonl.schema",
+  "title": "Trace event v1 (JSONL line)",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "schema_version",
+    "epoch_id",
+    "t_step",
+    "family_id",
+    "inst_hash",
+    "action",
+    "macro_id",
+    "obs_hash",
+    "post_obs_hash",
+    "receipt_hash",
+    "duration_steps"
+  ],
+  "properties": {
+    "schema": {
+      "const": "trace_event_v1"
+    },
+    "schema_version": {
+      "type": "integer",
+      "const": 1
+    },
+    "epoch_id": {
+      "type": "string"
+    },
+    "t_step": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "family_id": {
+      "type": "string",
+      "pattern": "^sha256:[a-f0-9]{64}$"
+    },
+    "inst_hash": {
+      "type": "string",
+      "pattern": "^sha256:[a-f0-9]{64}$"
+    },
+    "action": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "args"
+      ],
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "args": {
+          "type": "object"
+        }
+      }
+    },
+    "macro_id": {
+      "anyOf": [
+        {
+          "type": "string",
+          "pattern": "^sha256:[a-f0-9]{64}$"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "obs_hash": {
+      "type": "string",
+      "pattern": "^sha256:[a-f0-9]{64}$"
+    },
+    "post_obs_hash": {
+      "type": "string",
+      "pattern": "^sha256:[a-f0-9]{64}$"
+    },
+    "receipt_hash": {
+      "type": "string",
+      "pattern": "^sha256:[a-f0-9]{64}$"
+    },
+    "duration_steps": {
+      "type": "integer",
+      "minimum": 1
+    }
+  }
+}

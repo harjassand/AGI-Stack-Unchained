@@ -1,0 +1,95 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v18_0/omega_observation_report_v1",
+  "title": "Omega observation report v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "report_id",
+    "tick_u64",
+    "active_manifest_hash",
+    "metrics",
+    "sources",
+    "inputs_hashes"
+  ],
+  "properties": {
+    "schema_version": {"const": "omega_observation_report_v1"},
+    "report_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "tick_u64": {"type": "integer", "minimum": 0},
+    "active_manifest_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "metrics": {
+      "type": "object",
+      "additionalProperties": {
+        "anyOf": [
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["q"],
+            "properties": {"q": {"type": "integer"}}
+          },
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["num_u64", "den_u64"],
+            "properties": {
+              "num_u64": {"type": "integer", "minimum": 0},
+              "den_u64": {"type": "integer", "minimum": 1}
+            }
+          },
+          {"type": "integer", "minimum": 0}
+        ]
+      }
+    },
+    "metric_series": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "array",
+        "items": {
+          "anyOf": [
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["q"],
+              "properties": {"q": {"type": "integer"}}
+            },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["num_u64", "den_u64"],
+              "properties": {
+                "num_u64": {"type": "integer", "minimum": 0},
+                "den_u64": {"type": "integer", "minimum": 1}
+              }
+            },
+            {"type": "integer", "minimum": 0}
+          ]
+        }
+      }
+    },
+    "sources": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["schema_id", "artifact_hash", "producer_campaign_id", "producer_run_id"],
+        "properties": {
+          "schema_id": {"type": "string"},
+          "artifact_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+          "producer_campaign_id": {"type": "string"},
+          "producer_run_id": {"type": "string"}
+        }
+      }
+    },
+    "inputs_hashes": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["policy_hash", "registry_hash", "objectives_hash"],
+      "properties": {
+        "policy_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+        "registry_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+        "objectives_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"}
+      }
+    }
+  }
+}

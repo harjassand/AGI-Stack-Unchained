@@ -1,0 +1,80 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Code Patch Candidate v1",
+  "type": "object",
+  "required": [
+    "format",
+    "schema_version",
+    "candidate_id",
+    "target_repo_id",
+    "base",
+    "patch",
+    "touched_paths",
+    "constraints",
+    "eval_plan_id",
+    "determinism",
+    "rationale"
+  ],
+  "properties": {
+    "format": {"const": "repo_patch_candidate_v1"},
+    "schema_version": {"const": "1"},
+    "candidate_id": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "target_repo_id": {"const": "agi-system"},
+    "base": {
+      "type": "object",
+      "required": ["git_commit"],
+      "properties": {
+        "git_commit": {"type": "string", "pattern": "^[0-9a-f]{40}$"}
+      },
+      "additionalProperties": false
+    },
+    "patch": {
+      "type": "object",
+      "required": ["format", "sha256", "byte_length"],
+      "properties": {
+        "format": {"const": "unified_diff_v1"},
+        "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "byte_length": {"type": "integer", "minimum": 0}
+      },
+      "additionalProperties": false
+    },
+    "touched_paths": {
+      "type": "array",
+      "items": {"type": "string"},
+      "minItems": 1,
+      "description": "Sorted list of touched repo paths."
+    },
+    "constraints": {
+      "type": "object",
+      "required": [
+        "max_files_changed",
+        "max_lines_changed",
+        "forbid_binary",
+        "max_patch_bytes"
+      ],
+      "properties": {
+        "max_files_changed": {"type": "integer", "minimum": 1},
+        "max_lines_changed": {"type": "integer", "minimum": 1},
+        "forbid_binary": {"const": true},
+        "max_patch_bytes": {"type": "integer", "minimum": 1}
+      },
+      "additionalProperties": false
+    },
+    "eval_plan_id": {"type": "string", "minLength": 1},
+    "determinism": {
+      "type": "object",
+      "required": ["seed", "generator_id"],
+      "properties": {
+        "seed": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 18446744073709551615
+        },
+        "generator_id": {"type": "string", "minLength": 1}
+      },
+      "additionalProperties": false
+    },
+    "rationale": {"type": "string", "maxLength": 4000}
+  },
+  "additionalProperties": false
+}

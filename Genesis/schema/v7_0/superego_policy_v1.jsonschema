@@ -1,0 +1,111 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v7_0/superego_policy_v1",
+  "title": "Superego policy v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "policy_version",
+    "default_decision",
+    "objective_rules",
+    "global_denies"
+  ],
+  "properties": {
+    "schema_version": {"const": "superego_policy_v1"},
+    "policy_version": {"enum": ["v1", "v2", "v3", "v4"]},
+    "default_decision": {"enum": ["ALLOW", "DENY"]},
+    "objective_rules": {
+      "type": "array",
+      "minItems": 1,
+      "items": {"$ref": "#/$defs/objective_rule"}
+    },
+    "global_denies": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/deny_predicate"}
+    }
+  },
+  "$defs": {
+    "objective_rule": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["objective_class", "allowed_capabilities"],
+      "properties": {
+        "objective_class": {"$ref": "#/$defs/objective_class"},
+        "allowed_capabilities": {
+          "type": "array",
+          "minItems": 0,
+          "items": {"$ref": "#/$defs/capability"}
+        },
+        "required_capabilities": {
+          "type": "array",
+          "items": {"$ref": "#/$defs/capability"}
+        },
+        "deny_if": {
+          "type": "array",
+          "items": {"$ref": "#/$defs/deny_predicate"}
+        }
+      }
+    },
+    "objective_class": {
+      "type": "string",
+      "enum": [
+        "MAINTENANCE",
+        "VALIDATION",
+        "IMPROVEMENT_BOUNDED",
+        "RESEARCH_BOUNDED",
+        "BOUNDLESS_RESEARCH",
+        "BOUNDLESS_SCIENCE",
+        "MODEL_GENESIS"
+      ]
+    },
+    "capability": {
+      "type": "string",
+      "enum": [
+        "FS_READ_WORKSPACE",
+        "FS_WRITE_RUNS_NEW",
+        "FS_WRITE_DAEMON_STATE",
+        "FS_WRITE_STAGE",
+        "SUBPROCESS_PYTHON",
+        "SUBPROCESS_TOOLCHAIN",
+        "NETWORK_NONE",
+        "NETWORK_LOOPBACK_ONLY",
+        "NETWORK_ANY",
+        "SEALEDEXEC",
+        "PROMOTION_SUBMIT",
+        "THERMO_IMPORT_ONLY",
+        "SEALED_RUN_REQUIRED",
+        "FS_WRITE_SCIENCE_ONLY",
+        "SUBPROCESS_TRAINER"
+      ]
+    },
+    "deny_predicate": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind"],
+      "properties": {
+        "kind": {
+          "enum": [
+            "capability_present",
+            "objective_is",
+            "path_prefix_not_allowed",
+            "requires_sealed_eval",
+            "vector_not_allowlisted",
+            "lease_missing",
+            "heldout_read_in_train"
+          ]
+        },
+        "cap": {"$ref": "#/$defs/capability"},
+        "objective": {"$ref": "#/$defs/objective_class"},
+        "prefix": {"type": "string"},
+        "value": {"type": "boolean"},
+        "but_missing": {"type": "boolean"},
+        "allowlist": {
+          "type": "array",
+          "items": {"type": "string"}
+        },
+        "deny_stage": {"type": "string"}
+      }
+    }
+  }
+}

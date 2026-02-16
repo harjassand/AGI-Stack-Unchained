@@ -1,0 +1,8 @@
+tag: v0.6-templates-and-reuse
+commit: 183817a90e7d2ac6bdc3ade36d9a98cb8a3ed0ee
+config_hash: e4d36f129b2e51299a2290e25202d11b477da2e22daab3e718823426f6ea1813
+eval_harness_hash: harness-hash
+eval_suite_hash: suite-hash
+ablations_results_json_sha256: 72c45e3d557c5eee1fe4349c7bbca5b33b696d702795d3cd52720c2c5c5bb84a
+ablations_summary_md_sha256: 1e433aa9af740dc625b366d453573c0dbf696ec5cab8518edbb58fff13061738
+command_solve_suite_ablations: cdel solve-suite-ablations --suite trackA --limit 20 --strategies baseline_enum,hybrid,template_guided --budget-per-task 100000 --max-candidates 2 --episodes 32 --seed-key phase12-seed --outdir /tmp/cdel_phase12_ablations_183817a

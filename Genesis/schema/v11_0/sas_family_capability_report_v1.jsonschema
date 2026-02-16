@@ -1,0 +1,13 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v11_0/sas_family_capability_report_v1",
+  "title": "SAS family capability report v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "family_name", "capabilities"],
+  "properties": {
+    "schema_version": {"const": "sas_family_capability_report_v1"},
+    "family_name": {"type": "string"},
+    "capabilities": {"type": "array", "items": {"type": "string"}}
+  }
+}

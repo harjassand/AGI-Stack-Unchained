@@ -1,0 +1,80 @@
+name: smoke
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "0 3 * * *"
+
+jobs:
+  orchestrator-io:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Cache pip
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: pip-${{ runner.os }}-py311-${{ hashFiles('pyproject.toml') }}
+          restore-keys: |
+            pip-${{ runner.os }}-py311-
+      - name: Configure git auth for private deps
+        env:
+          CDEL_TOKEN: ${{ secrets.CDEL_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TOKEN="${CDEL_TOKEN:-${GITHUB_TOKEN}}"
+          if [ -n "$TOKEN" ]; then
+            git config --global url."https://x-access-token:${TOKEN}@github.com/".insteadOf "https://github.com/"
+          fi
+      - name: Install dependencies
+        env:
+          GIT_LFS_SKIP_SMUDGE: "1"
+        run: |
+          python -m pip install -U pip
+          pip install -e ".[dev]"
+      - name: Preflight
+        run: |
+          python scripts/preflight.py
+          python scripts/check_suite_integrity.py
+      - name: Run IO smoke
+        run: timeout 900 ./scripts/smoke_orchestrator_io_e2e.sh
+      - name: Run env smoke
+        run: timeout 900 ./scripts/smoke_orchestrator_env_e2e.sh
+      - name: Run IO smoke (mock LLM)
+        env:
+          ORCH_LLM_BACKEND: mock
+        run: timeout 900 ./scripts/smoke_orchestrator_io_with_mock_llm.sh
+      - name: Run IO smoke (mock LLM retry)
+        env:
+          ORCH_LLM_BACKEND: mock
+          ORCH_LLM_MOCK_MODE: invalid_then_valid
+        run: timeout 900 ./scripts/smoke_orchestrator_io_with_mock_llm_retry.sh
+      - name: Run IO smoke (replay backend)
+        env:
+          ORCH_LLM_BACKEND: replay
+          ORCH_LLM_REPLAY_PATH: tests/fixtures/llm_replays/io_algorithms_v1_replay.jsonl
+          ORCH_LLM_MAX_CALLS: 3
+        run: timeout 900 ./scripts/smoke_orchestrator_io_with_replay_backend.sh
+      - name: Run pyut smoke (replay backend)
+        run: timeout 900 ./scripts/smoke_orchestrator_pyut_with_replay_backend.sh
+      - name: Run env agent smoke
+        if: github.event_name == 'workflow_dispatch'
+        run: timeout 900 ./scripts/smoke_orchestrator_env_agent_e2e.sh
+      - name: Run env hard uplift smoke
+        if: github.event_name == 'workflow_dispatch'
+        run: timeout 900 ./scripts/smoke_orchestrator_env_hard_uplift.sh
+      - name: Run tooluse agent smoke
+        if: github.event_name == 'workflow_dispatch'
+        run: timeout 900 ./scripts/smoke_orchestrator_tooluse_agent_e2e.sh
+      - name: Run tooluse safety smoke (negative)
+        if: github.event_name == 'workflow_dispatch'
+        run: timeout 900 ./scripts/smoke_orchestrator_tooluse_safety_negative.sh
+      - name: Run tooluse safety smoke (positive)
+        if: github.event_name == 'workflow_dispatch'
+        run: timeout 900 ./scripts/smoke_orchestrator_tooluse_safety_positive.sh
+      - name: Run pyut suite mining smoke
+        if: github.event_name == 'workflow_dispatch'
+        run: timeout 900 ./scripts/smoke_pyut_suite_mining.sh

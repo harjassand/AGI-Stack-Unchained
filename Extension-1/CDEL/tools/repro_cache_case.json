@@ -1,0 +1,6 @@
+{
+  "baseline_run": "runs_full/base_bounded",
+  "cache_run": "runs_full/base_bounded_cache_on",
+  "tasks_file": "tasks/stream_1000_bounded.jsonl",
+  "queries": ["T0272"]
+}

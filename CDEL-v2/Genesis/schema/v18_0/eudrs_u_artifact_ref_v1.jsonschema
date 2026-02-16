@@ -1,0 +1,12 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v18_0/eudrs_u_artifact_ref_v1",
+  "title": "EUDRS-U ArtifactRef v1",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "artifact_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "artifact_relpath": {"type": "string", "minLength": 1}
+  },
+  "required": ["artifact_id", "artifact_relpath"]
+}

@@ -1,0 +1,61 @@
+{
+  "format": "self_improve_code_run_config_v1",
+  "schema_version": "1",
+  "target_repo": {
+    "repo_id": "agi-system",
+    "repo_root": "../agi-system",
+    "baseline_commit": "REPLACE_WITH_40_HEX_FROM: git -C ../agi-system rev-parse HEAD"
+  },
+  "workspace": {
+    "materialize": "git_archive_v1",
+    "repo_root": "../agi-system"
+  },
+  "devscreen": {
+    "cwd": "../agi-system",
+    "argv": [
+      "python3",
+      "agi-system/system_runtime/tasks/code_agentic_v1/ceiling_ladder_code_agentic_v1.py",
+      "--seed",
+      "{seed}",
+      "--out_dir",
+      "{out_dir}",
+      "--track",
+      "dev"
+    ],
+    "env": {
+      "PYTHONHASHSEED": "0",
+      "PYTEST_DISABLE_PLUGIN_AUTOLOAD": "1",
+      "LC_ALL": "C",
+      "TZ": "UTC"
+    },
+    "metric": {
+      "file_relpath": "ceiling_ladder_summary.json",
+      "json_pointer": "/pass_rates/dev/C"
+    }
+  },
+  "cdel": {
+    "backend": "cli_v1",
+    "cwd": "../CDEL-v2",
+    "argv": [
+      "cdel",
+      "eval",
+      "--profile",
+      "repo_patch_eval_v1",
+      "--candidate",
+      "{candidate_tar}",
+      "--out_dir",
+      "{out_dir}"
+    ],
+    "env": {
+      "PYTHONHASHSEED": "0",
+      "LC_ALL": "C",
+      "TZ": "UTC"
+    }
+  },
+  "candidate_id": {
+    "backend": "re2_authoritative_fail_closed_v1",
+    "pythonpath_add": ["../CDEL-v2"],
+    "import_path": "cdel.repo_patch.candidate_hash_v1",
+    "function": "compute_candidate_id_v1"
+  }
+}

@@ -1,0 +1,44 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "brain_perf_case_v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "case_id",
+    "rules_evaluated_u64",
+    "candidates_scanned_u64",
+    "comparisons_u64",
+    "bytes_processed_u64",
+    "candidate_steps_u64"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "brain_perf_case_v1"
+    },
+    "case_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "rules_evaluated_u64": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "candidates_scanned_u64": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "comparisons_u64": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "bytes_processed_u64": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "candidate_steps_u64": {
+      "type": "integer",
+      "minimum": 1
+    }
+  }
+}

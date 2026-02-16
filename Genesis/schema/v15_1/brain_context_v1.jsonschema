@@ -1,0 +1,121 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "brain_context_v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "case_id",
+    "seed_u64",
+    "budget",
+    "candidates",
+    "history",
+    "policy"
+  ],
+  "properties": {
+    "schema_version": {"const": "brain_context_v1"},
+    "case_id": {"type": "string", "minLength": 1},
+    "seed_u64": {"type": "integer", "minimum": 0, "maximum": 18446744073709551615},
+    "budget": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema_version", "total_budget_u64", "spent_budget_u64", "remaining_budget_u64", "per_bucket", "hard_stop"],
+      "properties": {
+        "schema_version": {"const": "brain_budget_state_v1"},
+        "total_budget_u64": {"type": "integer", "minimum": 0, "maximum": 18446744073709551615},
+        "spent_budget_u64": {"type": "integer", "minimum": 0, "maximum": 18446744073709551615},
+        "remaining_budget_u64": {"type": "integer", "minimum": 0, "maximum": 18446744073709551615},
+        "hard_stop": {"type": "boolean"},
+        "per_bucket": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["bucket_id", "total_u64", "spent_u64", "remaining_u64"],
+            "properties": {
+              "bucket_id": {"type": "string", "minLength": 1},
+              "total_u64": {"type": "integer", "minimum": 0, "maximum": 18446744073709551615},
+              "spent_u64": {"type": "integer", "minimum": 0, "maximum": 18446744073709551615},
+              "remaining_u64": {"type": "integer", "minimum": 0, "maximum": 18446744073709551615}
+            }
+          }
+        }
+      }
+    },
+    "candidates": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "campaign_id",
+          "capability_id",
+          "enabled",
+          "estimated_cost_u64",
+          "priority_i32",
+          "last_run_tick_u64",
+          "cooldown_remaining_u64",
+          "tags"
+        ],
+        "properties": {
+          "campaign_id": {"type": "string", "minLength": 1},
+          "capability_id": {"type": "string", "minLength": 1},
+          "enabled": {"type": "boolean"},
+          "estimated_cost_u64": {"type": "integer", "minimum": 0, "maximum": 18446744073709551615},
+          "priority_i32": {"type": "integer", "minimum": -2147483648, "maximum": 2147483647},
+          "last_run_tick_u64": {"type": "integer", "minimum": 0, "maximum": 18446744073709551615},
+          "cooldown_remaining_u64": {"type": "integer", "minimum": 0, "maximum": 18446744073709551615},
+          "tags": {"type": "array", "items": {"type": "string"}}
+        }
+      }
+    },
+    "history": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema_version", "current_tick_u64", "source_run_root_rel", "recent_choices", "recent_failures"],
+      "properties": {
+        "schema_version": {"const": "brain_history_v1"},
+        "current_tick_u64": {"type": "integer", "minimum": 0, "maximum": 18446744073709551615},
+        "source_run_root_rel": {"type": "string", "minLength": 1},
+        "recent_choices": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["tick_u64", "campaign_id"],
+            "properties": {
+              "tick_u64": {"type": "integer", "minimum": 0, "maximum": 18446744073709551615},
+              "campaign_id": {"type": "string", "minLength": 1}
+            }
+          }
+        },
+        "recent_failures": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["tick_u64", "campaign_id", "fail_code"],
+            "properties": {
+              "tick_u64": {"type": "integer", "minimum": 0, "maximum": 18446744073709551615},
+              "campaign_id": {"type": "string", "minLength": 1},
+              "fail_code": {"type": "string", "minLength": 1}
+            }
+          }
+        }
+      }
+    },
+    "policy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema_version", "max_cost_u64", "min_remaining_budget_u64", "tie_break_rule", "selection_rules"],
+      "properties": {
+        "schema_version": {"const": "brain_policy_v1"},
+        "max_cost_u64": {"type": "integer", "minimum": 0, "maximum": 18446744073709551615},
+        "min_remaining_budget_u64": {"type": "integer", "minimum": 0, "maximum": 18446744073709551615},
+        "tie_break_rule": {"enum": ["LOWEST_CAMPAIGN_ID", "SEEDED_HASH_ORDER_V1"]},
+        "selection_rules": {"type": "array", "items": {"type": "string", "minLength": 1}}
+      }
+    }
+  }
+}

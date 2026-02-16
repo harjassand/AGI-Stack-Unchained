@@ -1,0 +1,63 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v2_2/csi_test_report_v1",
+  "title": "CSI test report v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "run_id",
+    "attempt_id",
+    "tree_hash",
+    "tests",
+    "overall_exit_code",
+    "report_head_hash"
+  ],
+  "properties": {
+    "schema": {"const": "csi_test_report_v1"},
+    "run_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "attempt_id": {"type": "string"},
+    "tree_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "tests": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/test_entry"}
+    },
+    "overall_exit_code": {"type": "integer"},
+    "report_head_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"}
+  },
+  "$defs": {
+    "summary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["passed", "failed", "skipped"],
+      "properties": {
+        "passed": {"type": "integer", "minimum": 0},
+        "failed": {"type": "integer", "minimum": 0},
+        "skipped": {"type": "integer", "minimum": 0}
+      }
+    },
+    "test_entry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "argv",
+        "exit_code",
+        "summary",
+        "stdout_sha256",
+        "stderr_sha256"
+      ],
+      "properties": {
+        "name": {"type": "string"},
+        "argv": {
+          "type": "array",
+          "items": {"type": "string"}
+        },
+        "exit_code": {"type": "integer"},
+        "summary": {"$ref": "#/$defs/summary"},
+        "stdout_sha256": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+        "stderr_sha256": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"}
+      }
+    }
+  }
+}

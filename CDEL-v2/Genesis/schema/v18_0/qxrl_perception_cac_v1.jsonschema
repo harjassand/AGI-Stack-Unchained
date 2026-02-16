@@ -1,0 +1,49 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v18_0/qxrl_perception_cac_v1",
+  "title": "qxrl_perception_cac_v1",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "schema_id": {"const": "qxrl_perception_cac_v1"},
+    "suite_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "candidate_scorecard_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "baseline_scorecard_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "ufc_candidate_q32": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {"q": {"type": "integer"}},
+      "required": ["q"]
+    },
+    "ufc_baseline_q32": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {"q": {"type": "integer"}},
+      "required": ["q"]
+    },
+    "delta_q32": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {"q": {"type": "integer"}},
+      "required": ["q"]
+    },
+    "delta_rob_q32": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {"q": {"type": "integer"}},
+      "required": ["q"]
+    },
+    "status": {"type": "string", "enum": ["PASS", "FAIL"]}
+  },
+  "required": [
+    "schema_id",
+    "suite_id",
+    "candidate_scorecard_id",
+    "baseline_scorecard_id",
+    "ufc_candidate_q32",
+    "ufc_baseline_q32",
+    "delta_q32",
+    "delta_rob_q32",
+    "status"
+  ]
+}

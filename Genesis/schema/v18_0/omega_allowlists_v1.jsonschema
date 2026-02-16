@@ -1,0 +1,25 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v18_0/omega_allowlists_v1",
+  "title": "Omega allowlists v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "allowed_patch_prefixes", "forbidden_patch_prefixes", "allowed_config_prefixes"],
+  "properties": {
+    "schema_version": {"const": "omega_allowlists_v1"},
+    "allowed_patch_prefixes": {
+      "type": "array",
+      "minItems": 1,
+      "items": {"type": "string", "minLength": 1}
+    },
+    "forbidden_patch_prefixes": {
+      "type": "array",
+      "minItems": 1,
+      "items": {"type": "string", "minLength": 1}
+    },
+    "allowed_config_prefixes": {
+      "type": "array",
+      "items": {"type": "string", "minLength": 1}
+    }
+  }
+}

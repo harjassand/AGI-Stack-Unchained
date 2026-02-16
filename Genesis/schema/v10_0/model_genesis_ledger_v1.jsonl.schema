@@ -1,0 +1,48 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v10_0/model_genesis_ledger_v1.jsonl",
+  "title": "Model genesis ledger entry v1 (JSONL line)",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "seq",
+    "tick",
+    "event_type",
+    "event_payload",
+    "prev_entry_hash",
+    "entry_hash"
+  ],
+  "properties": {
+    "seq": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "tick": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "event_type": {
+      "type": "string",
+      "enum": [
+        "SMG_BOOT",
+        "SMG_ENABLE_PRESENT",
+        "SMG_CORPUS_BUILT",
+        "SMG_TRAINING_DONE",
+        "SMG_EVAL_DONE",
+        "SMG_PROMOTION_WRITTEN",
+        "SMG_STOP_REQUESTED",
+        "SMG_SHUTDOWN",
+        "SMG_FATAL"
+      ]
+    },
+    "event_payload": {
+      "type": "object"
+    },
+    "prev_entry_hash": {
+      "type": "string"
+    },
+    "entry_hash": {
+      "type": "string"
+    }
+  }
+}

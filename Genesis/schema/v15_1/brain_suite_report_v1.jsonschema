@@ -1,0 +1,18 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "brain_suite_report_v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "total_cases", "passed_cases", "failed_cases", "ledger_head_hash", "trace_head_hash", "branch_coverage_report_rel", "perf_report_rel", "all_pass"],
+  "properties": {
+    "schema_version": {"const": "brain_suite_report_v1"},
+    "total_cases": {"type": "integer", "minimum": 0},
+    "passed_cases": {"type": "integer", "minimum": 0},
+    "failed_cases": {"type": "integer", "minimum": 0},
+    "ledger_head_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "trace_head_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "branch_coverage_report_rel": {"type": "string", "minLength": 1},
+    "perf_report_rel": {"type": "string", "minLength": 1},
+    "all_pass": {"type": "boolean"}
+  }
+}

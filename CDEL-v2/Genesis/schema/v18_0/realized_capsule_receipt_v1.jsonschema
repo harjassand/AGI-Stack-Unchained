@@ -1,0 +1,58 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v18_0/realized_capsule_receipt_v1",
+  "title": "Realized capsule receipt v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "realized_receipt_id",
+    "ccap_id",
+    "base_tree_id",
+    "applied_tree_id",
+    "realized_out_id",
+    "ek_id",
+    "op_pool_id",
+    "auth_hash",
+    "determinism_check",
+    "eval_status",
+    "cost_vector",
+    "logs_hash"
+  ],
+  "properties": {
+    "schema_version": {"const": "realized_capsule_receipt_v1"},
+    "realized_receipt_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "ccap_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "base_tree_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "applied_tree_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "realized_out_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "ek_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "op_pool_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "auth_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "determinism_check": {"type": "string", "enum": ["PASS", "REFUTED", "DIVERGED"]},
+    "eval_status": {"type": "string", "enum": ["PASS", "FAIL", "REFUTED"]},
+    "cost_vector": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "cpu_ms",
+        "wall_ms",
+        "mem_mb",
+        "disk_mb",
+        "fds",
+        "procs",
+        "threads"
+      ],
+      "properties": {
+        "cpu_ms": {"type": "integer", "minimum": 0},
+        "wall_ms": {"type": "integer", "minimum": 0},
+        "mem_mb": {"type": "integer", "minimum": 0},
+        "disk_mb": {"type": "integer", "minimum": 0},
+        "fds": {"type": "integer", "minimum": 0},
+        "procs": {"type": "integer", "minimum": 0},
+        "threads": {"type": "integer", "minimum": 0}
+      }
+    },
+    "logs_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"}
+  }
+}

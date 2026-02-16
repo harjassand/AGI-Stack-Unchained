@@ -1,0 +1,13 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v11_0/sas_opset_manifest_v1",
+  "title": "SAS opset manifest v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "opset_id", "ops"],
+  "properties": {
+    "schema_version": {"const": "sas_opset_manifest_v1"},
+    "opset_id": {"type": "string"},
+    "ops": {"type": "array", "items": {"type": "string"}}
+  }
+}

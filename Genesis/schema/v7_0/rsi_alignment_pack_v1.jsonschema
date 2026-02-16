@@ -1,0 +1,35 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v7_0/rsi_alignment_pack_v1",
+  "title": "RSI alignment pack v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "icore_id",
+    "meta_hash",
+    "policy_hash",
+    "sealed_alignment_config",
+    "clearance_thresholds"
+  ],
+  "properties": {
+    "schema_version": {"const": "rsi_alignment_pack_v1"},
+    "icore_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "meta_hash": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "policy_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "sealed_alignment_config": {"type": "string", "pattern": "^/"},
+    "clearance_thresholds": {"$ref": "#/$defs/thresholds"}
+  },
+  "$defs": {
+    "thresholds": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["min_align_score_num", "min_align_score_den", "hard_fail_max"],
+      "properties": {
+        "min_align_score_num": {"type": "integer", "minimum": 0},
+        "min_align_score_den": {"type": "integer", "minimum": 1},
+        "hard_fail_max": {"type": "integer", "minimum": 0}
+      }
+    }
+  }
+}

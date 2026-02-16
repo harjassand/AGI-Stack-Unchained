@@ -1,0 +1,64 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v18_0/vision_world_model_eval_report_v1",
+  "title": "vision_world_model_eval_report_v1",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "schema_id": {"const": "vision_world_model_eval_report_v1"},
+    "suite_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "droot_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "metrics": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "mean_l1_q32": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {"q": {"type": "integer", "minimum": 0}},
+          "required": ["q"]
+        },
+        "rollout_drift_q32": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {"q": {"type": "integer", "minimum": 0}},
+          "required": ["q"]
+        },
+        "saturation_rate_q32": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {"q": {"type": "integer", "minimum": 0}},
+          "required": ["q"]
+        }
+      },
+      "required": ["mean_l1_q32", "rollout_drift_q32", "saturation_rate_q32"]
+    },
+    "thresholds": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "mean_l1_max_q32": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {"q": {"type": "integer", "minimum": 0}},
+          "required": ["q"]
+        },
+        "rollout_drift_max_q32": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {"q": {"type": "integer", "minimum": 0}},
+          "required": ["q"]
+        },
+        "saturation_rate_max_q32": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {"q": {"type": "integer", "minimum": 0}},
+          "required": ["q"]
+        }
+      },
+      "required": ["mean_l1_max_q32", "rollout_drift_max_q32", "saturation_rate_max_q32"]
+    },
+    "status": {"type": "string", "enum": ["PASS", "FAIL"]}
+  },
+  "required": ["schema_id", "suite_id", "droot_id", "metrics", "thresholds", "status"]
+}

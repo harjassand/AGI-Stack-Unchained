@@ -1,0 +1,69 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v2_2/csi_bench_report_v1",
+  "title": "CSI benchmark report v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "run_id",
+    "attempt_id",
+    "tree_hash",
+    "suite_id",
+    "case_output_hashes",
+    "meter_counts",
+    "work_cost",
+    "report_head_hash"
+  ],
+  "properties": {
+    "schema": {"const": "csi_bench_report_v1"},
+    "run_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "attempt_id": {"type": "string"},
+    "tree_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "suite_id": {"type": "string", "const": "csi_bench_suite_v1"},
+    "case_output_hashes": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/case_output"}
+    },
+    "meter_counts": {"$ref": "#/$defs/meter_counts"},
+    "work_cost": {"type": "integer", "minimum": 0},
+    "report_head_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"}
+  },
+  "$defs": {
+    "case_output": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["case_id", "output_sha256"],
+      "properties": {
+        "case_id": {"type": "string"},
+        "output_sha256": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"}
+      }
+    },
+    "meter_counts": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "sha256_calls_total",
+        "sha256_bytes_total",
+        "json_dumps_calls_total",
+        "json_dumps_bytes_total",
+        "json_loads_calls_total",
+        "json_loads_bytes_total",
+        "ast_parse_calls_total",
+        "regex_compile_calls_total",
+        "regex_match_calls_total"
+      ],
+      "properties": {
+        "sha256_calls_total": {"type": "integer", "minimum": 0},
+        "sha256_bytes_total": {"type": "integer", "minimum": 0},
+        "json_dumps_calls_total": {"type": "integer", "minimum": 0},
+        "json_dumps_bytes_total": {"type": "integer", "minimum": 0},
+        "json_loads_calls_total": {"type": "integer", "minimum": 0},
+        "json_loads_bytes_total": {"type": "integer", "minimum": 0},
+        "ast_parse_calls_total": {"type": "integer", "minimum": 0},
+        "regex_compile_calls_total": {"type": "integer", "minimum": 0},
+        "regex_match_calls_total": {"type": "integer", "minimum": 0}
+      }
+    }
+  }
+}

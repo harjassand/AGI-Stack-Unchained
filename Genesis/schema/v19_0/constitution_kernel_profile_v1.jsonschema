@@ -1,0 +1,36 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v19_0/constitution_kernel_profile_v1",
+  "title": "Constitution kernel profile v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_name",
+    "schema_version",
+    "ck_profile_id",
+    "ck_checker_module_hash",
+    "checked_fields",
+    "pinned_fragment_ids"
+  ],
+  "$defs": {
+    "sha256": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"}
+  },
+  "properties": {
+    "schema_name": {"const": "constitution_kernel_profile_v1"},
+    "schema_version": {"const": "v19_0"},
+    "ck_profile_id": {"$ref": "#/$defs/sha256"},
+    "ck_checker_module_hash": {"$ref": "#/$defs/sha256"},
+    "checked_fields": {
+      "type": "array",
+      "items": {"type": "string", "minLength": 1},
+      "minItems": 1,
+      "uniqueItems": true
+    },
+    "pinned_fragment_ids": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/sha256"},
+      "minItems": 1,
+      "uniqueItems": true
+    }
+  }
+}

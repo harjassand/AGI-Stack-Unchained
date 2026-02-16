@@ -1,0 +1,79 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v18_0/vision_capture_config_v1",
+  "title": "vision_capture_config_v1",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "schema_id": {"const": "vision_capture_config_v1"},
+
+    "caps": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "max_width_u32": {"type": "integer", "minimum": 0, "maximum": 4294967295},
+        "max_height_u32": {"type": "integer", "minimum": 0, "maximum": 4294967295},
+        "max_frames_per_session_u32": {"type": "integer", "minimum": 0, "maximum": 4294967295},
+        "max_clips_per_session_u32": {"type": "integer", "minimum": 0, "maximum": 4294967295}
+      },
+      "required": ["max_width_u32", "max_height_u32", "max_frames_per_session_u32", "max_clips_per_session_u32"]
+    },
+
+    "canonical_output": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "target_pixel_format": {"type": "string", "enum": ["GRAY8", "RGB8"]},
+        "target_width_u32": {"type": "integer", "minimum": 0, "maximum": 4294967295},
+        "target_height_u32": {"type": "integer", "minimum": 0, "maximum": 4294967295},
+        "resize_kind": {"const": "NEAREST_NEIGHBOR_V1"}
+      },
+      "required": ["target_pixel_format", "target_width_u32", "target_height_u32", "resize_kind"]
+    },
+
+    "camera_capture": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "enabled_b": {"type": "boolean"},
+        "adapter_kind": {"const": "CAMERA_ADAPTER_V1"},
+        "device_name": {"type": "string", "minLength": 1},
+        "requested_fps_u32": {"type": "integer", "minimum": 0, "maximum": 4294967295},
+        "requested_exposure_mode": {"type": "string", "enum": ["AUTO", "MANUAL"]},
+        "requested_exposure_us_u32": {"type": "integer", "minimum": 0, "maximum": 4294967295},
+        "requested_gain_u32": {"type": "integer", "minimum": 0, "maximum": 4294967295}
+      },
+      "required": [
+        "enabled_b",
+        "adapter_kind",
+        "device_name",
+        "requested_fps_u32",
+        "requested_exposure_mode",
+        "requested_exposure_us_u32",
+        "requested_gain_u32"
+      ]
+    },
+
+    "clip_policy": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "emit_full_session_clip_b": {"type": "boolean"},
+        "emit_clip_blob_b": {"type": "boolean"},
+        "clip_blob_kind": {"const": "CLIP_CONCAT_V1"}
+      },
+      "required": ["emit_full_session_clip_b", "emit_clip_blob_b", "clip_blob_kind"]
+    },
+
+    "merkle": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "fanout_u32": {"type": "integer", "minimum": 0, "maximum": 4294967295}
+      },
+      "required": ["fanout_u32"]
+    }
+  },
+  "required": ["schema_id", "caps", "canonical_output", "camera_capture", "clip_policy", "merkle"]
+}
+

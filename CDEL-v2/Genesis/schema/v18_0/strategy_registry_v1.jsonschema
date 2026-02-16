@@ -1,0 +1,27 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v18_0/strategy_registry_v1",
+  "title": "strategy_registry_v1",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "schema_id": { "const": "strategy_registry_v1" },
+    "epoch_u64": { "type": "integer", "minimum": 0 },
+    "dc1_id": { "const": "dc1:q32_v1" },
+    "opset_id": { "type": "string", "pattern": "^opset:eudrs_u_v1:sha256:[0-9a-f]{64}$" },
+    "strategies": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "handle": { "type": "string", "pattern": "^strategy/[a-z0-9][a-z0-9._/-]{0,127}$" },
+          "strategy_def_ref": { "$ref": "https://genesis.engine/specs/v18_0/eudrs_u_artifact_ref_v1" }
+        },
+        "required": ["handle", "strategy_def_ref"]
+      }
+    }
+  },
+  "required": ["schema_id", "epoch_u64", "dc1_id", "opset_id", "strategies"]
+}
+

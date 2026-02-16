@@ -1,0 +1,5 @@
+branch: re2/phase3_nuisance_v1_2_fullrun
+code_commit: f0f3642ed14e0be245e05d5eb9fd66a812d91bf8
+status_at_record: clean
+recorded_at_utc: 2026-01-29T10:33:10Z
+note: metadata record commit follows this entry

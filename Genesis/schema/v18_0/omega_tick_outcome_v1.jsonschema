@@ -1,0 +1,64 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v18_0/omega_tick_outcome_v1",
+  "title": "Omega tick outcome v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "outcome_id",
+    "tick_u64",
+    "action_kind",
+    "campaign_id",
+    "subverifier_status",
+    "promotion_status",
+    "promotion_reason_code",
+    "activation_success",
+    "activation_reasons",
+    "activation_meta_verdict",
+    "manifest_changed",
+    "safe_halt",
+    "noop_reason"
+  ],
+  "properties": {
+    "schema_version": {"const": "omega_tick_outcome_v1"},
+    "outcome_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "tick_u64": {"type": "integer", "minimum": 0},
+    "action_kind": {"type": "string", "enum": ["RUN_CAMPAIGN", "RUN_GOAL_TASK", "NOOP", "SAFE_HALT"]},
+    "campaign_id": {
+      "anyOf": [
+        {"type": "string"},
+        {"type": "null"}
+      ]
+    },
+    "subverifier_status": {"type": "string", "enum": ["VALID", "INVALID", "N/A"]},
+    "promotion_status": {"type": "string", "enum": ["PROMOTED", "REJECTED", "SKIPPED", "N/A"]},
+    "promotion_reason_code": {"type": "string"},
+    "activation_success": {"type": "boolean"},
+    "activation_reasons": {
+      "type": "array",
+      "items": {"type": "string"}
+    },
+    "activation_meta_verdict": {
+      "anyOf": [
+        {"type": "string"},
+        {"type": "null"}
+      ]
+    },
+    "manifest_changed": {"type": "boolean"},
+    "safe_halt": {"type": "boolean"},
+    "noop_reason": {
+      "type": "string",
+      "enum": [
+        "RUNAWAY_BLOCKED",
+        "RUNAWAY_NO_CANDIDATE",
+        "COOLDOWN",
+        "BUDGET",
+        "GOALS_COMPLETE",
+        "NO_MATCH",
+        "OTHER",
+        "N/A"
+      ]
+    }
+  }
+}

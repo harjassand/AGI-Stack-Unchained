@@ -1,0 +1,2 @@
+powermetrics help fixture output
+

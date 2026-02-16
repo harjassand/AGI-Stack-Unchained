@@ -1,0 +1,59 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v19_0/world_snapshot_v1",
+  "title": "World snapshot v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_name",
+    "schema_version",
+    "world_snapshot_id",
+    "sip_profile_id",
+    "world_manifest_ref",
+    "world_root",
+    "provenance_grades_policy_ref",
+    "non_interference_gate_receipt_ref",
+    "leakage_gate_receipt_ref",
+    "ingestion_receipt_ref"
+  ],
+  "properties": {
+    "schema_name": {
+      "const": "world_snapshot_v1"
+    },
+    "schema_version": {
+      "const": "v19_0"
+    },
+    "world_snapshot_id": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "sip_profile_id": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "world_manifest_ref": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "world_root": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "provenance_grades_policy_ref": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "non_interference_gate_receipt_ref": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "leakage_gate_receipt_ref": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "ingestion_receipt_ref": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    }
+  }
+}

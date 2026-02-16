@@ -1,0 +1,27 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v18_0/dmpl_plan_query_v1",
+  "title": "DMPL Plan Query v1",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "schema_id": {"const": "dmpl_plan_query_v1"},
+    "dc1_id": {"type": "string", "const": "dc1:q32_v1"},
+    "opset_id": {"type": "string", "pattern": "^opset:eudrs_u_v1:sha256:[0-9a-f]{64}$"},
+
+    "dmpl_droot_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "start_state_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "z0_tensor_bin_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+
+    "call_context": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "vm_step_u64": {"type": "integer", "minimum": 0, "maximum": 18446744073709551615},
+        "scenario_id": {"type": "string"}
+      },
+      "required": ["vm_step_u64", "scenario_id"]
+    }
+  },
+  "required": ["schema_id", "dc1_id", "opset_id", "dmpl_droot_id", "start_state_id", "z0_tensor_bin_id", "call_context"]
+}

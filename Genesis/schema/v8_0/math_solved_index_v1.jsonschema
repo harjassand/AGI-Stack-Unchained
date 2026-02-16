@@ -1,0 +1,28 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v8_0/math_solved_index_v1",
+  "title": "Math solved index v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "solved"],
+  "properties": {
+    "schema_version": {"const": "math_solved_index_v1"},
+    "solved": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/solved_entry"}
+    }
+  },
+  "$defs": {
+    "solved_entry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["problem_id", "attempt_id", "proof_artifact_hash", "solution_receipt_hash"],
+      "properties": {
+        "problem_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+        "attempt_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+        "proof_artifact_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+        "solution_receipt_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"}
+      }
+    }
+  }
+}

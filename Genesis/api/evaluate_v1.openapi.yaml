@@ -1,0 +1,129 @@
+openapi: 3.0.3
+info:
+  title: CDEL Evaluate API v1
+  version: 1.0.0
+  description: >-
+    Normative wire protocol for the CDEL Evaluate boundary. Implementations MUST
+    return only PASS/FAIL with an optional receipt on PASS.
+paths:
+  /evaluate/v1:
+    post:
+      summary: Evaluate a capsule under a bid for a given epoch.
+      description: >-
+        The response is binary only. Receipts are returned only on PASS. No
+        diagnostic or stage metadata is permitted.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/EvaluateRequest"
+      responses:
+        "200":
+          description: Binary result with optional receipt on PASS.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EvaluateResponse"
+components:
+  schemas:
+    EvaluateRequest:
+      type: object
+      additionalProperties: false
+      required:
+        - epoch_id
+        - capsule
+        - bid
+      properties:
+        epoch_id:
+          type: string
+          description: Spec epoch identifier.
+        capsule:
+          oneOf:
+            - type: object
+              description: >-
+                Full capsule object. MUST validate against
+                ../schema/capsule.schema.json.
+            - type: object
+              additionalProperties: false
+              required:
+                - ref_type
+                - ref
+              properties:
+                ref_type:
+                  type: string
+                  enum: ["capsule_hash"]
+                ref:
+                  type: string
+                  description: Content-addressed capsule reference.
+        bid:
+          $ref: "#/components/schemas/Bid"
+    Bid:
+      type: object
+      additionalProperties: false
+      required:
+        - grade
+        - alpha_bid
+        - privacy_bid
+        - compute_bid
+      description: Must match capsule.budget_bid.
+      properties:
+        grade:
+          type: string
+          enum: ["ResearchGrade", "DeploymentGrade"]
+        alpha_bid:
+          type: number
+          minimum: 0
+          maximum: 1
+        privacy_bid:
+          type: object
+          additionalProperties: false
+          required:
+            - epsilon
+            - delta
+          properties:
+            epsilon:
+              type: number
+              minimum: 0
+            delta:
+              type: number
+              minimum: 0
+              maximum: 1
+        compute_bid:
+          type: object
+          additionalProperties: false
+          required:
+            - max_compute_units
+            - max_wall_time_ms
+          properties:
+            max_compute_units:
+              type: integer
+              minimum: 1
+            max_wall_time_ms:
+              type: integer
+              minimum: 1
+            max_adversary_strength:
+              type: integer
+              minimum: 0
+    EvaluateResponse:
+      oneOf:
+        - type: object
+          additionalProperties: false
+          required:
+            - result
+            - receipt
+          properties:
+            result:
+              type: string
+              enum: ["PASS"]
+            receipt:
+              type: object
+              description: Must validate against ../schema/receipt.schema.json.
+        - type: object
+          additionalProperties: false
+          required:
+            - result
+          properties:
+            result:
+              type: string
+              enum: ["FAIL"]

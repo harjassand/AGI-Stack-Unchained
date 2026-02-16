@@ -1,0 +1,41 @@
+# Runtime / experiment outputs
+runs/
+**/runs/
+artifacts_out/
+tmp/
+.cache/
+__pycache__/
+*.pyc
+
+# OS/editor
+.DS_Store
+.vscode/
+.idea/
+*.swp
+
+# Python packaging
+*.egg-info/
+dist/
+build/
+.venv/
+venv/
+
+# Logs
+*.log
+
+# Local bundles
+*.tar
+*.tar.gz
+*.sha256
+
+# Local-only subrepos
+agi-orchestrator/
+
+# Ignore CDEL additions copied from backup that are not part of this repo
+CDEL/cdel/sealed/harnesses/
+CDEL/cdel/sealed/suites.py
+CDEL/configs/
+CDEL/docs/
+CDEL/scripts/
+CDEL/sealed_suites/
+CDEL/tests/

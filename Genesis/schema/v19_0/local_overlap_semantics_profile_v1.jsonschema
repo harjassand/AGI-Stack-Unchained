@@ -1,0 +1,43 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v19_0/local_overlap_semantics_profile_v1",
+  "title": "Local overlap semantics profile v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_name",
+    "schema_version",
+    "semantics_profile_id",
+    "semantics_kind",
+    "acceptance_checker_kind"
+  ],
+  "$defs": {
+    "sha256": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    }
+  },
+  "properties": {
+    "schema_name": {
+      "const": "local_overlap_semantics_profile_v1"
+    },
+    "schema_version": {
+      "const": "v19_0"
+    },
+    "semantics_profile_id": {
+      "$ref": "#/$defs/sha256"
+    },
+    "semantics_kind": {
+      "type": "string",
+      "enum": [
+        "LOCAL_ENUMERATED_ACCEPT_SET"
+      ]
+    },
+    "acceptance_checker_kind": {
+      "type": "string",
+      "enum": [
+        "ENUMERATED_ACCEPT_SET"
+      ]
+    }
+  }
+}

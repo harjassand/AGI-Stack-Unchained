@@ -1,0 +1,25 @@
+{
+  "schema": "portfolio_generator_v1",
+  "schema_version": 1,
+  "generator_id": "v1_5r_r5_4_final",
+  "motif_action_names": [
+    "UP", "UP", "RIGHT", "RIGHT", "DOWN", "DOWN"
+  ],
+  "secondary_motif_action_names": [
+    "LEFT", "LEFT", "UP", "UP", "RIGHT", "RIGHT"
+  ],
+  "portfolios": [
+    {
+      "portfolio_id": "v1_5r_portfolio_p1",
+      "seed_label": "v1_5r_p1",
+      "families": 16,
+      "repeats_per_family": 10
+    },
+    {
+      "portfolio_id": "v1_5r_portfolio_p2",
+      "seed_label": "v1_5r_p2",
+      "families": 16,
+      "repeats_per_family": 10
+    }
+  ]
+}

@@ -1,0 +1,1 @@
+{"available_actions":["tamper"],"episode_id":"ep0001","format":"ccai_x_mind_episode_spec_v1","max_steps":1,"observations":[{"ambiguity_fp":10,"noise_fp":10,"o_int":0}],"schema_version":"1","scripted_actions":["tamper"],"suite_family":"tamper_dark_room"}

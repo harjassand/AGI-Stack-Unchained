@@ -1,0 +1,177 @@
+{
+  "format": "caoe_canon_vectors_v1",
+  "schema_version": 1,
+  "vectors": [
+    {
+      "name": "empty_object",
+      "object": {},
+      "canon_sha256": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a"
+    },
+    {
+      "name": "simple_ints",
+      "object": {
+        "a": 1,
+        "b": 2
+      },
+      "canon_sha256": "43258cff783fe7036d8a43033f830adfc60ec037382473548ac742b888292777"
+    },
+    {
+      "name": "non_ascii",
+      "object": {
+        "text": "caf\u00e9",
+        "emoji": "\u2603"
+      },
+      "canon_sha256": "5d532111a3c8fea863f8e766ac472ac63bc3457450ce4db97958a04ca7b3d39f"
+    },
+    {
+      "name": "nested_ordering",
+      "object": {
+        "b": 1,
+        "a": {
+          "d": 4,
+          "c": 3
+        }
+      },
+      "canon_sha256": "943d56ce0b02b80a8afcd12d849426226b68f2d8cd2840af8f6f93067f14c360"
+    },
+    {
+      "name": "list_ordering",
+      "object": {
+        "list": [
+          3,
+          2,
+          1
+        ]
+      },
+      "canon_sha256": "e780023764445c772fa3b5f82e2290c22a475e6a6a30562b988000640a5bfeea"
+    },
+    {
+      "name": "action_set_x",
+      "object": {
+        "type": "SET_X",
+        "index": 1,
+        "value": 0
+      },
+      "canon_sha256": "2533b6543849507b4ad6d0c30e2c1782185058132b539c3b4493854ef4afce7f"
+    },
+    {
+      "name": "action_toggle_n",
+      "object": {
+        "type": "TOGGLE_N",
+        "index": 3
+      },
+      "canon_sha256": "7400e6e38848dd12dfc15315d4479a7c5e344805ef82c0865aa58343e09092d9"
+    },
+    {
+      "name": "do_event_example",
+      "object": {
+        "t": 0,
+        "o_t": [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "a_requested": {
+          "type": "SET_X",
+          "index": 0,
+          "value": 1
+        },
+        "a_applied": {
+          "type": "SET_X",
+          "index": 0,
+          "value": 1
+        },
+        "do_event_type": "SET",
+        "do_event_payload": {
+          "index": 0,
+          "value": 1
+        },
+        "attestation": "0000000000000000000000000000000000000000000000000000000000000000"
+      },
+      "canon_sha256": "2461c201bddd8f488e6c5716dad1c1798755bbe784e02d4fa5ae72c4979a6b77"
+    },
+    {
+      "name": "macro_do_event",
+      "object": {
+        "format": "macro_do_event_v1_1",
+        "schema_version": 1,
+        "events": [
+          {
+            "t": 0,
+            "set": {
+              "S": 1
+            }
+          }
+        ]
+      },
+      "canon_sha256": "a940a64195c671c81d73906e98eda0131269f87609efa84cb413478800ea2306"
+    },
+    {
+      "name": "suitepack_minimal",
+      "object": {
+        "format": "caoe_suitepack_v1",
+        "schema_version": 1,
+        "suite_id": "test_suite",
+        "target_env_id": "switchboard_v1",
+        "regimes": [],
+        "shift_families": [],
+        "episodes": []
+      },
+      "canon_sha256": "bcb1af360d6842298ecaf0e1fb5f1a19738e406532da3f7969515949ef9db298"
+    },
+    {
+      "name": "bool_nulls",
+      "object": {
+        "truth": true,
+        "false": false,
+        "none": null
+      },
+      "canon_sha256": "86d5942a560ddd0698e79cccac8886c876b67c652d1c50d6f691b960581cb1a7"
+    },
+    {
+      "name": "bitvec_example",
+      "object": {
+        "o_t": [
+          0,
+          1,
+          0,
+          1,
+          1,
+          0,
+          0,
+          1
+        ]
+      },
+      "canon_sha256": "c3cf8c88dbd97620b8bf4fd00a15355f3c4d9b7a1ca675b243a9d910218d54ae"
+    }
+  ]
+}

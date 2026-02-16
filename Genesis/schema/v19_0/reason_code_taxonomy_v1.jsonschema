@@ -1,0 +1,38 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v19_0/reason_code_taxonomy_v1",
+  "title": "Reason code taxonomy v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_name", "schema_version", "taxonomy_id", "codes"],
+  "$defs": {
+    "sha256": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"}
+  },
+  "properties": {
+    "schema_name": {"const": "reason_code_taxonomy_v1"},
+    "schema_version": {"const": "v19_0"},
+    "taxonomy_id": {"$ref": "#/$defs/sha256"},
+    "codes": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "string",
+        "enum": [
+          "SCHEMA_ERROR",
+          "ID_MISMATCH",
+          "MISSING_ARTIFACT",
+          "BUDGET_EXHAUSTED",
+          "TRANSLATOR_FAILURE",
+          "CONTINUITY_FAILURE",
+          "J_DOMINANCE_FAILURE",
+          "INV_MEASUREMENT_FAILURE",
+          "NO_NEW_ACCEPT_PATH",
+          "CK_VERIFY_FAILURE",
+          "KERNEL_POLARITY_FAILURE",
+          "ENV_REDUCTION_FAILURE"
+        ]
+      },
+      "uniqueItems": true
+    }
+  }
+}

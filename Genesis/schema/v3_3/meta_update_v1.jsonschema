@@ -1,0 +1,156 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v3_3/meta_update_v1",
+  "title": "Meta update v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "spec_version",
+    "update_id",
+    "update_hash",
+    "root_swarm_run_id",
+    "icore_id",
+    "published_at_epoch_index",
+    "publisher",
+    "topics",
+    "update_kind",
+    "payload"
+  ],
+  "properties": {
+    "schema": {"const": "meta_update_v1"},
+    "spec_version": {"const": "v3_3"},
+    "update_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "update_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "root_swarm_run_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "icore_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "published_at_epoch_index": {"type": "integer", "minimum": 0},
+    "publisher": {"$ref": "#/$defs/publisher"},
+    "topics": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 32,
+      "items": {"type": "string", "pattern": "^[A-Za-z0-9_.:/-]{1,64}$"}
+    },
+    "update_kind": {
+      "type": "string",
+      "enum": ["KNOWLEDGE_ASSERTION_ADD_V1", "POLICY_PATCH_V1"]
+    },
+    "payload": {"type": "object"}
+  },
+  "allOf": [
+    {
+      "if": {"properties": {"update_kind": {"const": "KNOWLEDGE_ASSERTION_ADD_V1"}}},
+      "then": {"properties": {"payload": {"$ref": "#/$defs/knowledge_payload"}}}
+    },
+    {
+      "if": {"properties": {"update_kind": {"const": "POLICY_PATCH_V1"}}},
+      "then": {"properties": {"payload": {"$ref": "#/$defs/policy_payload"}}}
+    }
+  ],
+  "$defs": {
+    "publisher": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "publisher_swarm_run_id",
+        "publisher_depth",
+        "publisher_node_relpath",
+        "publisher_task_id",
+        "publisher_result_id",
+        "publisher_result_verify_event_ref_hash"
+      ],
+      "properties": {
+        "publisher_swarm_run_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+        "publisher_depth": {"type": "integer", "minimum": 0},
+        "publisher_node_relpath": {"type": "string"},
+        "publisher_task_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+        "publisher_result_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+        "publisher_result_verify_event_ref_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"}
+      }
+    },
+    "knowledge_payload": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["assertions"],
+      "properties": {
+        "assertions": {
+          "type": "array",
+          "items": {"$ref": "#/$defs/assertion"}
+        }
+      }
+    },
+    "policy_payload": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["policy_delta"],
+      "properties": {
+        "policy_delta": {"$ref": "#/$defs/policy_delta"}
+      }
+    },
+    "policy_delta": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "bridge.subscriptions_add": {
+          "type": "array",
+          "items": {"type": "string", "pattern": "^[A-Za-z0-9_.:/-]{1,64}$"}
+        },
+        "task.priority_boost": {
+          "type": "array",
+          "items": {"$ref": "#/$defs/priority_item"}
+        }
+      }
+    },
+    "priority_item": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["topic", "priority"],
+      "properties": {
+        "topic": {"type": "string", "pattern": "^[A-Za-z0-9_.:/-]{1,64}$"},
+        "priority": {"type": "integer"}
+      }
+    },
+    "assertion": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "assertion_id",
+        "triple",
+        "confidence_num",
+        "confidence_den",
+        "evidence_refs"
+      ],
+      "properties": {
+        "assertion_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+        "triple": {"$ref": "#/$defs/triple"},
+        "confidence_num": {"type": "integer", "minimum": 0},
+        "confidence_den": {"type": "integer", "minimum": 1, "maximum": 100},
+        "evidence_refs": {
+          "type": "array",
+          "items": {"$ref": "#/$defs/evidence_ref"}
+        }
+      }
+    },
+    "triple": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["subject", "predicate", "object"],
+      "properties": {
+        "subject": {"type": "string"},
+        "predicate": {"type": "string"},
+        "object": {"type": "string"}
+      }
+    },
+    "evidence_ref": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "offer_id", "blob_sha256"],
+      "properties": {
+        "kind": {"const": "BRIDGE_OFFER_ARTIFACT"},
+        "offer_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+        "blob_sha256": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"}
+      }
+    }
+  }
+}

@@ -1,0 +1,52 @@
+name: tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  pytest:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Guard against local overrides
+        run: |
+          if [ -n "${ORCH_CDEL_PYTHONPATH:-}" ]; then
+            echo "ORCH_CDEL_PYTHONPATH must not be set in CI" >&2
+            exit 1
+          fi
+          PATH_PATTERN="/U""sers/"
+          if rg -n "$PATH_PATTERN" -g'*' .; then
+            echo "Found local user home path in repo" >&2
+            exit 1
+          fi
+          OVERRIDE_PATTERN="ORCH_CDEL_PYTHONPATH""="
+          if rg -n "$OVERRIDE_PATTERN" -g'*' -g'!.github/workflows/tests.yml' .; then
+            echo "Found ORCH_CDEL_PYTHONPATH override in repo" >&2
+            exit 1
+          fi
+      - name: Check repo policy
+        run: python scripts/check_repo_policy.py
+      - name: Configure git auth for private deps
+        env:
+          CDEL_TOKEN: ${{ secrets.CDEL_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TOKEN="${CDEL_TOKEN:-${GITHUB_TOKEN}}"
+          if [ -n "$TOKEN" ]; then
+            git config --global url."https://x-access-token:${TOKEN}@github.com/".insteadOf "https://github.com/"
+          fi
+      - name: Install dependencies
+        env:
+          GIT_LFS_SKIP_SMUDGE: "1"
+        run: |
+          python -m pip install -U pip
+          pip install -e ".[dev]"
+      - name: Run tests
+        run: pytest -q
+      - name: Check suite/config integrity
+        run: python scripts/check_suite_integrity.py

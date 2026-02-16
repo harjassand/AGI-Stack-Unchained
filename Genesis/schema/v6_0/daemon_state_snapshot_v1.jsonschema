@@ -1,0 +1,44 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v6_0/daemon_state_snapshot_v1",
+  "title": "Daemon state snapshot v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "daemon_id",
+    "icore_id",
+    "meta_hash",
+    "tick",
+    "ledger_head_hash",
+    "last_checkpoint_hash",
+    "boot_count",
+    "paused_reason",
+    "budget_counters"
+  ],
+  "properties": {
+    "schema_version": {"const": "daemon_state_snapshot_v1"},
+    "daemon_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "icore_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "meta_hash": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "tick": {"type": "integer", "minimum": 0},
+    "ledger_head_hash": {"type": "string", "pattern": "^(GENESIS|[0-9a-f]{64})$"},
+    "last_checkpoint_hash": {
+      "anyOf": [
+        {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+        {"type": "null"}
+      ]
+    },
+    "boot_count": {"type": "integer", "minimum": 0},
+    "paused_reason": {
+      "anyOf": [
+        {"type": "string", "enum": ["OPERATOR_PAUSE", "META_DRIFT_DETECTED", "DISK_LOW", "BUDGET_EXCEEDED", "UNKNOWN"]},
+        {"type": "null"}
+      ]
+    },
+    "budget_counters": {
+      "type": "object",
+      "additionalProperties": {"type": "integer", "minimum": 0}
+    }
+  }
+}

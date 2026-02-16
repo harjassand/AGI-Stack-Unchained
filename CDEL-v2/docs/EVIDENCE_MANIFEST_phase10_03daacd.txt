@@ -1,0 +1,13 @@
+commit: 03daacde96b7ee56d40b642d6abb77fa7db24964
+suite_config_hash: e6a497736562566f37fc8e064cdddc8b213b4a43bc038b28fe59b1d501ccc01f
+suite_eval_harness_hash: harness-hash
+suite_eval_suite_hash: suite-hash
+suite_scoreboard_json_sha256: 51f794bef4f779c50af9c5f9fd292c8e78bd98feadab709246428c97ea8dc623
+suite_summary_md_sha256: 18d62ee0e976b7f45e321d19229c497ae5d3c4e71dc8f6b032239822a46307e3
+command_solve_suite: cdel --root /private/tmp/cdel_phase10_suite_root_03daacd solve-suite --suite trackA --limit 12 --budget-per-task 100000 --max-candidates 2 --episodes 32 --seed-key phase10-seed --outdir /private/tmp/cdel_phase10_suite_03daacd
+stress_config_hash: 96855b94de5aca43bdb859627303d769edbf8fc42f86b4c92cdf2e78b31825ec
+stress_eval_harness_hash: harness-hash
+stress_eval_suite_hash: suite-hash
+stress_results_json_sha256: 1edfe31f95619cd40235546ffa13ffa393e584824910a401007c503b7e802a10
+stress_summary_md_sha256: 9835977b505f5da4f18ddccc4db078677d3373910c540d2a9b2657117bfc23e0
+command_solve_stress: cdel run-solve-stress --out /private/tmp/cdel_phase10_stress_03daacd --tasks 20 --max-candidates 2 --episodes 16 --seed-key phase10-seed --budget 500000

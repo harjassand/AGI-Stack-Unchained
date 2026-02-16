@@ -1,0 +1,80 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v18_0/vpvm_config_v1",
+  "title": "vpvm_config_v1",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "schema_id": {"const": "vpvm_config_v1"},
+    "vpvm_config_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "field": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "field_id": {"const": "goldilocks64_v1"},
+        "p_hex": {"const": "ffffffff00000001"}
+      },
+      "required": ["field_id", "p_hex"]
+    },
+    "stark": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "security_level_bits_u32": {"type": "integer", "const": 128},
+        "blowup_factor_u32": {"type": "integer", "const": 8}
+      },
+      "required": ["security_level_bits_u32", "blowup_factor_u32"]
+    },
+    "fri": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "folding_factor_u32": {"type": "integer", "const": 2},
+        "num_queries_u32": {"type": "integer", "const": 60},
+        "grinding_bits_u32": {"type": "integer", "const": 0},
+        "max_remainder_degree_u32": {"type": "integer", "const": 64}
+      },
+      "required": ["folding_factor_u32", "num_queries_u32", "grinding_bits_u32", "max_remainder_degree_u32"]
+    },
+    "hash": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "commitment_hash_id": {"const": "poseidon_gld_v1"},
+        "poseidon_params_ref": {"$ref": "https://genesis.engine/specs/v18_0/eudrs_u_artifact_ref_v1"}
+      },
+      "required": ["commitment_hash_id", "poseidon_params_ref"]
+    },
+    "trace": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "max_steps_u32": {"type": "integer", "minimum": 1},
+        "num_registers_u32": {"type": "integer", "const": 16},
+        "word_bits_u32": {"type": "integer", "const": 64},
+        "q32_shift_u32": {"type": "integer", "const": 32},
+        "endianness": {"type": "string", "const": "LE"},
+        "air_id": {"type": "string", "const": "vpvm_q32_air_v1"},
+        "opset_id": {"type": "string", "pattern": "^opset:eudrs_u_v1:sha256:[0-9a-f]{64}$"}
+      },
+      "required": [
+        "max_steps_u32",
+        "num_registers_u32",
+        "word_bits_u32",
+        "q32_shift_u32",
+        "endianness",
+        "air_id",
+        "opset_id"
+      ]
+    },
+    "range_check": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "byte_lookup_kind": {"const": "lookup256_v1"}
+      },
+      "required": ["byte_lookup_kind"]
+    }
+  },
+  "required": ["schema_id", "vpvm_config_id", "field", "stark", "fri", "hash", "trace", "range_check"]
+}

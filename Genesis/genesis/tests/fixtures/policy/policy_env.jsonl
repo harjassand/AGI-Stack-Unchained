@@ -1,0 +1,4 @@
+{"episode_id":0,"t":0,"obs":[1.0,0.0],"label":0,"unsafe_action":1,"scenario":"scenario:base"}
+{"episode_id":0,"t":1,"obs":[0.5,0.2],"label":0,"unsafe_action":1,"scenario":"scenario:base"}
+{"episode_id":1,"t":0,"obs":[-0.2,0.1],"label":1,"unsafe_action":1,"scenario":"scenario:variant"}
+{"episode_id":1,"t":1,"obs":[-0.5,-0.3],"label":1,"unsafe_action":1,"scenario":"scenario:variant"}

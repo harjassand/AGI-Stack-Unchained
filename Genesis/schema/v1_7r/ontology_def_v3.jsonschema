@@ -1,0 +1,93 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v1_7r/ontology_def_v3",
+  "title": "Ontology definition v3",
+  "type": "object",
+  "additionalProperties": false,
+  "patternProperties": {
+    "^x-": {}
+  },
+  "required": [
+    "schema",
+    "schema_version",
+    "dsl_version",
+    "ontology_id",
+    "concepts",
+    "context_kernel",
+    "training",
+    "x-meta"
+  ],
+  "properties": {
+    "schema": {"const": "ontology_def_v3"},
+    "schema_version": {"type": "integer", "const": 3},
+    "dsl_version": {"type": "integer", "const": 3},
+    "ontology_id": {"type": "string", "pattern": "^sha256:[a-f0-9]{64}$"},
+    "concepts": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["concept_id", "concept_name", "output_type", "expr", "bucketer"],
+        "properties": {
+          "concept_id": {"type": "string", "pattern": "^sha256:[a-f0-9]{64}$"},
+          "concept_name": {"type": "string"},
+          "output_type": {"enum": ["bool", "i32"]},
+          "expr": {"type": "object"},
+          "bucketer": {
+            "type": "object",
+            "oneOf": [
+              {
+                "additionalProperties": false,
+                "required": ["kind"],
+                "properties": {"kind": {"const": "bool01"}}
+              },
+              {
+                "additionalProperties": false,
+                "required": ["kind"],
+                "properties": {"kind": {"const": "sign3"}}
+              },
+              {
+                "additionalProperties": false,
+                "required": ["kind", "m"],
+                "properties": {
+                  "kind": {"const": "mod_m"},
+                  "m": {"type": "integer", "minimum": 2, "maximum": 256}
+                }
+              },
+              {
+                "additionalProperties": false,
+                "required": ["kind", "r"],
+                "properties": {
+                  "kind": {"const": "clamp_r"},
+                  "r": {"type": "integer", "minimum": 1, "maximum": 1024}
+                }
+              }
+            ]
+          }
+        }
+      }
+    },
+    "context_kernel": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema", "schema_version", "max_arity"],
+      "properties": {
+        "schema": {"const": "onto_context_kernel_spec_v1"},
+        "schema_version": {"type": "integer", "const": 1},
+        "max_arity": {"type": "integer"}
+      }
+    },
+    "training": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema", "schema_version", "method", "stop_if_gain_bits_lt"],
+      "properties": {
+        "schema": {"const": "onto_training_spec_v1"},
+        "schema_version": {"type": "integer", "const": 1},
+        "method": {"const": "greedy_forward_select_v1"},
+        "stop_if_gain_bits_lt": {"type": "integer"}
+      }
+    },
+    "x-meta": {"type": "object"}
+  }
+}

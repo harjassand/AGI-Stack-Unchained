@@ -1,0 +1,25 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v17_0/v16_1_smoke_receipt_v1",
+  "title": "v16.1 downstream smoke receipt v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "fixture_state_dir",
+    "return_code",
+    "stdout_hash",
+    "stderr_hash",
+    "result",
+    "pass"
+  ],
+  "properties": {
+    "schema_version": { "const": "v16_1_smoke_receipt_v1" },
+    "fixture_state_dir": { "type": "string", "minLength": 1 },
+    "return_code": { "type": "integer", "minimum": 0 },
+    "stdout_hash": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" },
+    "stderr_hash": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" },
+    "result": { "type": "string", "minLength": 1 },
+    "pass": { "type": "boolean" }
+  }
+}

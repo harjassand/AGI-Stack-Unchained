@@ -1,0 +1,54 @@
+{
+  "suite_name": "runs_full",
+  "claim_complete": true,
+  "claims": {
+    "C1_non_interference": {
+      "audit_full_runs": ["base_bounded", "capacity_exhaustion"]
+    },
+    "C2_append_only": {
+      "audit_fast_runs": [
+        "base_bounded",
+        "reuse_bounded",
+        "capacity_exhaustion",
+        "distractor_before_v2",
+        "distractor_interleave10",
+        "proof_heavy",
+        "mixed_reuse"
+      ]
+    },
+    "C3_addressability": {
+      "runs": ["distractor_before_v2", "distractor_interleave10"],
+      "max_median_closure_ratio": 0.1,
+      "max_closure_slope": 0.1
+    },
+    "C3_scan_baseline": {
+      "indexed_run": "distractor_before_v2",
+      "scan_run": "distractor_before_scan",
+      "min_scan_to_indexed_ratio": 5.0
+    },
+    "C4_capacity": {
+      "run": "capacity_exhaustion_v2",
+      "min_capacity_reject_ratio": 0.8
+    },
+    "C5_certificate_knob": {
+      "bounded_run": "base_bounded",
+      "proof_run": "proof_heavy",
+      "min_proof_total_nodes": 1,
+      "min_proof_reject_ratio": 0.01
+    },
+    "C6_reuse_control": {
+      "baseline_run": "fragmentation_base",
+      "reuse_run": "fragmentation_reuse_v2",
+      "min_reuse_ratio_delta": 0.01
+    },
+    "C7_cache_equivalence": {
+      "baseline_run": "base_bounded",
+      "cache_run": "base_bounded_cache_on"
+    },
+    "C8_hygiene": {
+      "baseline_run": "fragmentation_base",
+      "reuse_run": "fragmentation_reuse_v2",
+      "min_unused_fraction_delta": 0.0
+    }
+  }
+}

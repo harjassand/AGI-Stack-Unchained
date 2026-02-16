@@ -1,0 +1,120 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v1_5r/failure_witness_v1.jsonschema",
+  "title": "Failure witness v1",
+  "type": "object",
+  "additionalProperties": false,
+  "patternProperties": {
+    "^x-": {}
+  },
+  "oneOf": [
+    {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema",
+        "schema_version",
+        "epoch_id",
+        "subject",
+        "candidate_id",
+        "family_id",
+        "theta",
+        "inst_hash",
+        "failure_kind",
+        "trace_hashes",
+        "shrink_proof_ref"
+      ],
+      "properties": {
+        "schema": {
+          "const": "failure_witness_v1"
+        },
+        "schema_version": {
+          "type": "integer",
+          "const": 1
+        },
+        "epoch_id": {
+          "type": "string"
+        },
+        "subject": {
+          "type": "string",
+          "enum": [
+            "base",
+            "candidate"
+          ]
+        },
+        "candidate_id": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "family_id": {
+          "type": "string",
+          "pattern": "^sha256:[a-f0-9]{64}$"
+        },
+        "theta": {
+          "type": "object"
+        },
+        "inst_hash": {
+          "type": "string",
+          "pattern": "^sha256:[a-f0-9]{64}$"
+        },
+        "failure_kind": {
+          "type": "string",
+          "enum": [
+            "GOAL_FAIL",
+            "SAFETY_FAIL",
+            "INVARIANCE_FAIL",
+            "DO_FAIL",
+            "TIMEOUT_FAIL",
+            "GAS_EXHAUST_FAIL",
+            "PARSE_FAIL"
+          ]
+        },
+        "trace_hashes": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^sha256:[a-f0-9]{64}$"
+          }
+        },
+        "shrink_proof_ref": {
+          "anyOf": [
+            {
+              "type": "string",
+              "pattern": "^sha256:[a-f0-9]{64}$"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema",
+        "schema_version",
+        "witnesses"
+      ],
+      "properties": {
+        "schema": {
+          "const": "failure_witness_index_v1"
+        },
+        "schema_version": {
+          "type": "integer",
+          "const": 1
+        },
+        "witnesses": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^sha256:[a-f0-9]{64}$"
+          }
+        }
+      }
+    }
+  ]
+}

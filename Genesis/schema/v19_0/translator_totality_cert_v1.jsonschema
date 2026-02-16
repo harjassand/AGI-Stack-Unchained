@@ -1,0 +1,67 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v19_0/translator_totality_cert_v1",
+  "title": "Translator totality cert v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_name",
+    "schema_version",
+    "cert_id",
+    "overlap_profile_id",
+    "translator_bundle_id",
+    "budget_spec_id",
+    "budget_spec",
+    "results"
+  ],
+  "$defs": {
+    "sha256": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "budget_spec_v1": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema_name",
+        "schema_version",
+        "max_steps",
+        "max_bytes_read",
+        "max_bytes_write",
+        "max_items",
+        "seed",
+        "policy"
+      ],
+      "properties": {
+        "schema_name": {"const": "budget_spec_v1"},
+        "schema_version": {"const": "v19_0"},
+        "max_steps": {"type": "integer", "minimum": 1},
+        "max_bytes_read": {"type": "integer", "minimum": 0},
+        "max_bytes_write": {"type": "integer", "minimum": 0},
+        "max_items": {"type": "integer", "minimum": 1},
+        "seed": {"type": "integer", "minimum": 0},
+        "policy": {"type": "string", "enum": ["HARD_FAIL", "SAFE_HALT", "SAFE_SPLIT"]}
+      }
+    }
+  },
+  "properties": {
+    "schema_name": {"const": "translator_totality_cert_v1"},
+    "schema_version": {"const": "v19_0"},
+    "cert_id": {"$ref": "#/$defs/sha256"},
+    "overlap_profile_id": {"$ref": "#/$defs/sha256"},
+    "translator_bundle_id": {"$ref": "#/$defs/sha256"},
+    "budget_spec_id": {"$ref": "#/$defs/sha256"},
+    "budget_spec": {"$ref": "#/$defs/budget_spec_v1"},
+    "results": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["input_artifact_id", "status"],
+        "properties": {
+          "input_artifact_id": {"$ref": "#/$defs/sha256"},
+          "status": {"type": "string", "enum": ["OK", "FAIL", "BUDGET_EXHAUSTED"]},
+          "output_artifact_id": {"$ref": "#/$defs/sha256"},
+          "failure_reason_code": {"type": "string"}
+        }
+      }
+    }
+  }
+}

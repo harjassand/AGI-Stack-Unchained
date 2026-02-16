@@ -1,0 +1,63 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v3_0/swarm_result_manifest_v1",
+  "title": "Swarm result manifest v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "spec_version",
+    "task_id",
+    "agent_id",
+    "status",
+    "failure_reason",
+    "agent_receipt_relpath",
+    "artifacts",
+    "optional_barrier_proposal"
+  ],
+  "properties": {
+    "schema": {"const": "swarm_result_manifest_v1"},
+    "spec_version": {"const": "v3_0"},
+    "task_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "agent_id": {"type": "string", "pattern": "^agent_[0-9]{4}$"},
+    "status": {"type": "string", "enum": ["OK", "FAIL"]},
+    "failure_reason": {"type": "string"},
+    "agent_receipt_relpath": {"type": "string"},
+    "artifacts": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/artifact"}
+    },
+    "optional_barrier_proposal": {"$ref": "#/$defs/optional_barrier_proposal"}
+  },
+  "$defs": {
+    "artifact": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "relpath", "sha256", "bytes"],
+      "properties": {
+        "kind": {"type": "string"},
+        "relpath": {"type": "string"},
+        "sha256": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+        "bytes": {"type": "integer", "minimum": 0}
+      }
+    },
+    "optional_barrier_proposal": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["present"],
+      "properties": {
+        "present": {"type": "boolean"},
+        "barrier_prev": {"type": "integer"},
+        "barrier_next": {"type": "integer"},
+        "recovery_bundle_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+        "proposal_relpath": {"type": "string"}
+      },
+      "allOf": [
+        {
+          "if": {"properties": {"present": {"const": true}}},
+          "then": {"required": ["barrier_prev", "barrier_next", "recovery_bundle_id", "proposal_relpath"]}
+        }
+      ]
+    }
+  }
+}

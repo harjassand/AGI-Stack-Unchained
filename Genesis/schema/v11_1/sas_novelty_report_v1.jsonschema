@@ -1,0 +1,25 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v11_0/sas_novelty_report_v1",
+  "title": "SAS novelty report v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "baseline_arch_id",
+    "candidate_arch_id",
+    "baseline_fingerprint_hash",
+    "candidate_fingerprint_hash",
+    "novelty_score_q32",
+    "components_q32"
+  ],
+  "properties": {
+    "schema_version": {"const": "sas_novelty_report_v1"},
+    "baseline_arch_id": {"type": "string"},
+    "candidate_arch_id": {"type": "string"},
+    "baseline_fingerprint_hash": {"type": "string"},
+    "candidate_fingerprint_hash": {"type": "string"},
+    "novelty_score_q32": {"$ref": "q32_v1.jsonschema"},
+    "components_q32": {"type": "array", "items": {"$ref": "q32_v1.jsonschema"}}
+  }
+}

@@ -1,0 +1,48 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v18_0/vision_perception_run_manifest_v1",
+  "title": "vision_perception_run_manifest_v1",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "schema_id": {"const": "vision_perception_run_manifest_v1"},
+    "session_manifest_ref": {"$ref": "https://genesis.engine/specs/v18_0/eudrs_u_artifact_ref_v1"},
+    "perception_config_ref": {"$ref": "https://genesis.engine/specs/v18_0/eudrs_u_artifact_ref_v1"},
+    "frame_reports": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "frame_index_u32": {"type": "integer", "minimum": 0, "maximum": 4294967295},
+          "report_ref": {"$ref": "https://genesis.engine/specs/v18_0/eudrs_u_artifact_ref_v1"}
+        },
+        "required": ["frame_index_u32", "report_ref"]
+      }
+    },
+    "track_manifest_ref": {"$ref": "https://genesis.engine/specs/v18_0/eudrs_u_artifact_ref_v1"},
+    "event_manifest_ref": {"$ref": "https://genesis.engine/specs/v18_0/eudrs_u_artifact_ref_v1"},
+    "qxwmr_states": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "frame_index_u32": {"type": "integer", "minimum": 0, "maximum": 4294967295},
+          "state_ref": {"$ref": "https://genesis.engine/specs/v18_0/eudrs_u_artifact_ref_v1"}
+        },
+        "required": ["frame_index_u32", "state_ref"]
+      }
+    }
+  },
+  "required": [
+    "schema_id",
+    "session_manifest_ref",
+    "perception_config_ref",
+    "frame_reports",
+    "track_manifest_ref",
+    "event_manifest_ref",
+    "qxwmr_states"
+  ]
+}
+

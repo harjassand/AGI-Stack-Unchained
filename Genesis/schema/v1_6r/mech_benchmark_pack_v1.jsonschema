@@ -1,0 +1,48 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v1_6r/mech_benchmark_pack_v1",
+  "title": "Mech benchmark pack v1",
+  "type": "object",
+  "additionalProperties": false,
+  "patternProperties": {
+    "^x-": {}
+  },
+  "required": [
+    "schema",
+    "schema_version",
+    "cases"
+  ],
+  "properties": {
+    "schema": {"const": "mech_benchmark_pack_v1"},
+    "schema_version": {"type": "integer", "const": 1},
+    "cases": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "case_id",
+          "env",
+          "instance_pack_path",
+          "epoch_key",
+          "budget"
+        ],
+        "properties": {
+          "case_id": {"type": "string"},
+          "env": {"type": "string"},
+          "instance_pack_path": {"type": "string"},
+          "epoch_key": {"type": "string", "pattern": "^sha256:[a-f0-9]{64}$"},
+          "budget": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["max_env_steps_total", "max_bytes_hashed_total"],
+            "properties": {
+              "max_env_steps_total": {"type": "integer", "minimum": 0},
+              "max_bytes_hashed_total": {"type": "integer", "minimum": 0}
+            }
+          }
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,88 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v3_3/meta_block_v1",
+  "title": "Meta block v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "spec_version",
+    "meta_block_id",
+    "meta_block_hash",
+    "root_swarm_run_id",
+    "icore_id",
+    "meta_epoch_index",
+    "prev_meta_block_id",
+    "accepted_update_ids",
+    "rejected_updates",
+    "meta_state_hash",
+    "meta_state_path",
+    "meta_policy_hash",
+    "meta_policy_path",
+    "stats"
+  ],
+  "properties": {
+    "schema": {"const": "meta_block_v1"},
+    "spec_version": {"const": "v3_3"},
+    "meta_block_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "meta_block_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "root_swarm_run_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "icore_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "meta_epoch_index": {"type": "integer", "minimum": 0},
+    "prev_meta_block_id": {"type": "string", "pattern": "^(sha256:[0-9a-f]{64}|GENESIS)$"},
+    "accepted_update_ids": {
+      "type": "array",
+      "items": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"}
+    },
+    "rejected_updates": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/rejected_update"}
+    },
+    "meta_state_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "meta_state_path": {"type": "string"},
+    "meta_policy_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "meta_policy_path": {"type": "string"},
+    "stats": {"$ref": "#/$defs/stats"}
+  },
+  "$defs": {
+    "rejected_update": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["update_id", "reason"],
+      "properties": {
+        "update_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+        "reason": {
+          "type": "string",
+          "enum": [
+            "SCHEMA_INVALID",
+            "HASH_MISMATCH",
+            "PROVENANCE_INVALID",
+            "EVIDENCE_MISSING",
+            "KIND_NOT_ALLOWED",
+            "POLICY_OUT_OF_BOUNDS",
+            "CAPACITY_EXCEEDED",
+            "DUPLICATE"
+          ]
+        }
+      }
+    },
+    "stats": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "candidate_updates",
+        "accepted_updates",
+        "rejected_updates",
+        "total_assertions",
+        "total_subscriptions_add"
+      ],
+      "properties": {
+        "candidate_updates": {"type": "integer", "minimum": 0},
+        "accepted_updates": {"type": "integer", "minimum": 0},
+        "rejected_updates": {"type": "integer", "minimum": 0},
+        "total_assertions": {"type": "integer", "minimum": 0},
+        "total_subscriptions_add": {"type": "integer", "minimum": 0}
+      }
+    }
+  }
+}

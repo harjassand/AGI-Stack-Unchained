@@ -1,0 +1,60 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v11_0/rsi_sas_math_pack_v1",
+  "title": "RSI SAS-MATH pack v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "icore_id",
+    "meta_hash",
+    "superego_policy_hash",
+    "lease_token_path",
+    "boundless_math_pack_path_dev",
+    "boundless_math_pack_path_heldout",
+    "toolchain_manifest_paths",
+    "baseline_policy_ir_path",
+    "policy_allowlist_path",
+    "search_config_path",
+    "thresholds"
+  ],
+  "properties": {
+    "schema_version": {"const": "rsi_sas_math_pack_v1"},
+    "icore_id": {"type": "string"},
+    "meta_hash": {"type": "string"},
+    "superego_policy_hash": {"type": "string"},
+    "lease_token_path": {"type": "string"},
+    "boundless_math_pack_path_dev": {"type": "string"},
+    "boundless_math_pack_path_heldout": {"type": "string"},
+    "toolchain_manifest_paths": {
+      "type": "array",
+      "minItems": 1,
+      "items": {"type": "string"}
+    },
+    "baseline_policy_ir_path": {"type": "string"},
+    "policy_allowlist_path": {"type": "string"},
+    "search_config_path": {"type": "string"},
+    "capabilities": {
+      "type": "array",
+      "items": {"type": "string"}
+    },
+    "thresholds": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "min_utility_delta_q32",
+        "min_efficiency_delta_q32",
+        "max_utility_regression_q32",
+        "require_novelty",
+        "min_novelty_q32"
+      ],
+      "properties": {
+        "min_utility_delta_q32": {"$ref": "q32_v1.jsonschema"},
+        "min_efficiency_delta_q32": {"$ref": "q32_v1.jsonschema"},
+        "max_utility_regression_q32": {"$ref": "q32_v1.jsonschema"},
+        "require_novelty": {"type": "boolean"},
+        "min_novelty_q32": {"$ref": "q32_v1.jsonschema"}
+      }
+    }
+  }
+}

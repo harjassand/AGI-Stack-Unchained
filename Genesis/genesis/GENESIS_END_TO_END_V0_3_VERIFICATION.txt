@@ -1,0 +1,26 @@
+Commands:
+  CDEL_ROOT=cdel ./genesis/run_end_to_end_v0_3.sh
+  shasum -a 256 genesis_run.jsonl
+  cat genesis_summary.json
+  ls genesis/receipts
+
+Determinism check:
+  CDEL_ROOT=cdel ./genesis/run_end_to_end_v0_3.sh
+  shasum -a 256 genesis_run.jsonl
+  CDEL_ROOT=cdel ./genesis/run_end_to_end_v0_3.sh
+  shasum -a 256 genesis_run.jsonl
+
+Outputs:
+  genesis_run.jsonl sha256: 5b37cce806f30c21a9deda219f431c79cbc68348a21e59b22704c6c1e7bb973c
+  genesis_summary.json:
+    shadow_pass: 6
+    promoted_pass: 1
+    promoted_fail: 0
+  receipts dir entries:
+    promotion_state.json
+    receipt_<hash>.json
+    receipts.jsonl
+
+Notes:
+  - PASS receipts verified locally by promotion receipt verification.
+  - Additional shadow-pass candidates were skipped when local caps/budgets disallowed promotion; no receipts were written for SKIP/FAIL.

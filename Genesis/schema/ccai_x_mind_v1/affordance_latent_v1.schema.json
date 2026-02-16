@@ -1,0 +1,36 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/ccai_x_mind_v1/affordance_latent_v1.schema.json",
+  "title": "CCAI-X Mind v1 Affordance Latent Attestation",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "format",
+    "schema_version",
+    "episode_id",
+    "psi_seed_commitment",
+    "do_map_permutation_digest"
+  ],
+  "properties": {
+    "format": {"const": "affordance_latent_v1"},
+    "schema_version": {"const": "1"},
+    "episode_id": {"type": "string"},
+    "psi_seed_commitment": {"$ref": "#/$defs/hash"},
+    "do_map_permutation_digest": {"$ref": "#/$defs/hash"},
+    "psi_class": {
+      "type": "string",
+      "enum": ["swap_actions_v1", "swap_payloads_v1", "none"]
+    },
+    "x_extensions": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {}
+    }
+  },
+  "$defs": {
+    "hash": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    }
+  }
+}

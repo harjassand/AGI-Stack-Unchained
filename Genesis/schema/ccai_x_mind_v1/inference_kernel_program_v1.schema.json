@@ -1,0 +1,120 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/ccai_x_mind_v1/inference_kernel_program_v1.schema.json",
+  "title": "CCAI-X Mind v1 Inference Kernel Program",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "format",
+    "schema_version",
+    "program_id",
+    "isa_ref",
+    "program",
+    "schedule",
+    "tie_break_rules"
+  ],
+  "properties": {
+    "format": {"const": "inference_kernel_program_v1"},
+    "schema_version": {"const": "1"},
+    "program_id": {"$ref": "#/$defs/identifier"},
+    "isa_ref": {"$ref": "#/$defs/isa_ref"},
+    "program": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/instruction"},
+      "minItems": 1,
+      "maxItems": 256
+    },
+    "schedule": {"$ref": "#/$defs/schedule"},
+    "tie_break_rules": {"$ref": "#/$defs/tie_break_rules"},
+    "x_extensions": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {}
+    }
+  },
+  "$defs": {
+    "identifier": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9_./-]{0,127}$"
+    },
+    "hash": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "isa_ref": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["isa_id", "sha256"],
+      "properties": {
+        "isa_id": {"$ref": "#/$defs/identifier"},
+        "sha256": {"$ref": "#/$defs/hash"}
+      }
+    },
+    "instruction": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["op", "args"],
+      "properties": {
+        "op": {
+          "type": "string",
+          "enum": [
+            "LOAD_MSG",
+            "LOAD_CONST",
+            "STORE_BELIEF",
+            "ADD_FP",
+            "MUL_FP",
+            "NORM_FP",
+            "CLAMP_FP",
+            "SOFTMAX_FP"
+          ]
+        },
+        "args": {
+          "type": "array",
+          "items": {"$ref": "#/$defs/arg"},
+          "maxItems": 8
+        }
+      }
+    },
+    "arg": {
+      "anyOf": [
+        {"type": "string"},
+        {"type": "integer"}
+      ]
+    },
+    "schedule": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["stages", "max_total_iters"],
+      "properties": {
+        "stages": {
+          "type": "array",
+          "items": {"$ref": "#/$defs/stage"},
+          "minItems": 1,
+          "maxItems": 32
+        },
+        "max_total_iters": {"type": "integer", "minimum": 1, "maximum": 10000}
+      }
+    },
+    "stage": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["stage_id", "start_ip", "end_ip", "max_iters"],
+      "properties": {
+        "stage_id": {"$ref": "#/$defs/identifier"},
+        "start_ip": {"type": "integer", "minimum": 0},
+        "end_ip": {"type": "integer", "minimum": 0},
+        "max_iters": {"type": "integer", "minimum": 1, "maximum": 10000}
+      }
+    },
+    "tie_break_rules": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["primary", "secondary", "tertiary"],
+      "properties": {
+        "primary": {"const": "min_total_G"},
+        "secondary": {"const": "min_risk"},
+        "tertiary": {"const": "lexicographic_action_token"}
+      }
+    }
+  }
+}

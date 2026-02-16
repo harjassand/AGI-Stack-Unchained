@@ -1,0 +1,23 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v2_2/rsi_real_csi_pack_v1",
+  "title": "RSI real CSI pack v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "cdel_version",
+    "run_kind",
+    "attempt_pack_path",
+    "K_required_patches",
+    "max_attempts_total"
+  ],
+  "properties": {
+    "schema": {"const": "rsi_real_csi_pack_v1"},
+    "cdel_version": {"type": "string", "const": "v2_2"},
+    "run_kind": {"type": "string", "const": "csi_v2_2"},
+    "attempt_pack_path": {"type": "string"},
+    "K_required_patches": {"type": "integer", "minimum": 1},
+    "max_attempts_total": {"type": "integer", "minimum": 1}
+  }
+}

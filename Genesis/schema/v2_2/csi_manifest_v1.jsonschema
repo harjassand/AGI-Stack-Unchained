@@ -1,0 +1,27 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v2_2/csi_manifest_v1",
+  "title": "CSI manifest v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "run_id",
+    "attempt_id",
+    "base_tree_hash",
+    "candidate_rank",
+    "generated_patch_relpath",
+    "patch_id",
+    "manifest_head_hash"
+  ],
+  "properties": {
+    "schema": {"const": "csi_manifest_v1"},
+    "run_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "attempt_id": {"type": "string"},
+    "base_tree_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "candidate_rank": {"type": "integer", "minimum": 0},
+    "generated_patch_relpath": {"type": "string"},
+    "patch_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "manifest_head_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"}
+  }
+}

@@ -1,0 +1,6 @@
+{
+  "family_id": "sha256:golden_ticket_family_v1",
+  "schema": "family_v1",
+  "theta": { "param_1": 0.5 },
+  "signature": { "hash": "sha256:golden" }
+}

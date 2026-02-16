@@ -1,0 +1,74 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v18_0/ge_audit_report_v1",
+  "title": "Genesis Engine audit report v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "ge_config_id",
+    "authority_pins_hash",
+    "receipt_stream_hash",
+    "kpi",
+    "sentinel_mix",
+    "novelty",
+    "falsification_flags"
+  ],
+  "properties": {
+    "schema_version": {"const": "ge_audit_report_v1"},
+    "ge_config_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "authority_pins_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "receipt_stream_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "kpi": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["promote_u64", "total_wall_ms_u64", "yield_promotions_per_wall_ms_q32"],
+      "properties": {
+        "promote_u64": {"type": "integer", "minimum": 0},
+        "total_wall_ms_u64": {"type": "integer", "minimum": 0},
+        "yield_promotions_per_wall_ms_q32": {"type": "integer", "minimum": 0}
+      }
+    },
+    "sentinel_mix": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["busy_fail_u64", "logic_fail_u64", "safety_fail_u64", "ok_u64"],
+      "properties": {
+        "busy_fail_u64": {"type": "integer", "minimum": 0},
+        "logic_fail_u64": {"type": "integer", "minimum": 0},
+        "safety_fail_u64": {"type": "integer", "minimum": 0},
+        "ok_u64": {"type": "integer", "minimum": 0}
+      }
+    },
+    "novelty": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "reservoir_size_u64",
+        "min_novelty_bits_u64",
+        "novel_u64",
+        "total_u64",
+        "novelty_coverage_q32"
+      ],
+      "properties": {
+        "reservoir_size_u64": {"type": "integer", "minimum": 0},
+        "min_novelty_bits_u64": {"type": "integer", "minimum": 0},
+        "novel_u64": {"type": "integer", "minimum": 0},
+        "total_u64": {"type": "integer", "minimum": 0},
+        "novelty_coverage_q32": {"type": "integer", "minimum": 0}
+      }
+    },
+    "falsification_flags": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["code", "detail"],
+        "properties": {
+          "code": {"type": "string"},
+          "detail": {"type": "string"}
+        }
+      }
+    }
+  }
+}

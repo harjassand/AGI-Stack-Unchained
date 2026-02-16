@@ -1,0 +1,45 @@
+{
+  "runs": [
+    {
+      "run_id": "bounded_low_budget",
+      "tasks_file": "tasks/stream_1000_bounded.jsonl",
+      "generator_mode": "enum",
+      "certificate_mode": "bounded",
+      "load_mode": "indexed",
+      "budget": 500,
+      "cost_weights": {"alpha": 1, "beta": 1, "gamma": 1},
+      "spec_domain": {"int_min": -2, "int_max": 2, "list_max_len": 3},
+      "eval_step_limit": 100000,
+      "closure_cache": false,
+      "seed": 0
+    },
+    {
+      "run_id": "proof_low_beta",
+      "tasks_file": "tasks/stream_1000_proofheavy.jsonl",
+      "generator_mode": "enum",
+      "certificate_mode": "proof",
+      "load_mode": "indexed",
+      "budget": 500,
+      "cost_weights": {"alpha": 1, "beta": 1, "gamma": 1},
+      "spec_domain": {"int_min": -2, "int_max": 2, "list_max_len": 3},
+      "eval_step_limit": 100000,
+      "closure_cache": false,
+      "proof_synth": true,
+      "seed": 0
+    },
+    {
+      "run_id": "proof_high_beta",
+      "tasks_file": "tasks/stream_1000_proofheavy.jsonl",
+      "generator_mode": "enum",
+      "certificate_mode": "proof",
+      "load_mode": "indexed",
+      "budget": 500,
+      "cost_weights": {"alpha": 1, "beta": 20, "gamma": 1},
+      "spec_domain": {"int_min": -2, "int_max": 2, "list_max_len": 3},
+      "eval_step_limit": 100000,
+      "closure_cache": false,
+      "proof_synth": true,
+      "seed": 0
+    }
+  ]
+}

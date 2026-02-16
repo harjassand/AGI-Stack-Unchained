@@ -1,0 +1,19 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v9_0/science_suitepack_v1",
+  "title": "Science suitepack v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "suite_id", "tasks"],
+  "properties": {
+    "schema_version": {"const": "science_suitepack_v1"},
+    "suite_id": {"type": "string"},
+    "tasks": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/task"}
+    }
+  },
+  "$defs": {
+    "task": {"$ref": "science_task_spec_v1.jsonschema"}
+  }
+}

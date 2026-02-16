@@ -1,0 +1,105 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v18_0/eudrs_u_promotion_summary_v1",
+  "title": "EUDRS-U Promotion Summary v1",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "schema_id": {"const": "eudrs_u_promotion_summary_v1"},
+    "proposed_root_tuple_ref": {"$ref": "https://genesis.engine/specs/v18_0/eudrs_u_artifact_ref_v1"},
+    "staged_registry_tree_relpath": {"type": "string", "minLength": 1},
+    "evidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "weights_manifest_ref": {"$ref": "https://genesis.engine/specs/v18_0/eudrs_u_artifact_ref_v1"},
+        "ml_index_manifest_ref": {"$ref": "https://genesis.engine/specs/v18_0/eudrs_u_artifact_ref_v1"},
+        "cac_ref": {"$ref": "https://genesis.engine/specs/v18_0/eudrs_u_artifact_ref_v1"},
+        "ufc_ref": {"$ref": "https://genesis.engine/specs/v18_0/eudrs_u_artifact_ref_v1"},
+        "cooldown_ledger_ref": {"$ref": "https://genesis.engine/specs/v18_0/eudrs_u_artifact_ref_v1"},
+        "stability_metrics_ref": {"$ref": "https://genesis.engine/specs/v18_0/eudrs_u_artifact_ref_v1"},
+        "determinism_cert_ref": {"$ref": "https://genesis.engine/specs/v18_0/eudrs_u_artifact_ref_v1"},
+        "universality_cert_ref": {"$ref": "https://genesis.engine/specs/v18_0/eudrs_u_artifact_ref_v1"},
+
+        "vision_ingest_run_manifest_ref": {"$ref": "https://genesis.engine/specs/v18_0/eudrs_u_artifact_ref_v1"},
+        "vision_stage0_verify_receipt_ref": {"$ref": "https://genesis.engine/specs/v18_0/eudrs_u_artifact_ref_v1"}
+      },
+      "required": [
+        "weights_manifest_ref",
+        "ml_index_manifest_ref",
+        "cac_ref",
+        "ufc_ref",
+        "cooldown_ledger_ref",
+        "stability_metrics_ref",
+        "determinism_cert_ref",
+        "universality_cert_ref"
+      ]
+    },
+
+    "dmpl_evidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "schema_id": {"const": "dmpl_evidence_v1"},
+        "plan_evidence": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "schema_id": {"const": "dmpl_plan_evidence_v1"},
+              "plan_query_ref": {"$ref": "https://genesis.engine/specs/v18_0/eudrs_u_artifact_ref_v1"},
+              "rollout_trace_ref": {"$ref": "https://genesis.engine/specs/v18_0/eudrs_u_artifact_ref_v1"},
+              "action_receipt_ref": {"$ref": "https://genesis.engine/specs/v18_0/eudrs_u_artifact_ref_v1"}
+            },
+            "required": ["schema_id", "plan_query_ref", "rollout_trace_ref", "action_receipt_ref"]
+          }
+        },
+        "train_evidence": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "schema_id": {"const": "dmpl_train_evidence_v1"},
+            "dmpl_train_run_ref": {"$ref": "https://genesis.engine/specs/v18_0/eudrs_u_artifact_ref_v1"},
+            "dmpl_train_trace_ref": {"$ref": "https://genesis.engine/specs/v18_0/eudrs_u_artifact_ref_v1"},
+            "dmpl_train_receipt_ref": {"$ref": "https://genesis.engine/specs/v18_0/eudrs_u_artifact_ref_v1"}
+          },
+          "required": ["schema_id", "dmpl_train_run_ref", "dmpl_train_trace_ref", "dmpl_train_receipt_ref"]
+        },
+        "certificate_refs": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "dmpl_cac_pack_ref": {
+              "anyOf": [
+                {"type": "null"},
+                {"$ref": "https://genesis.engine/specs/v18_0/eudrs_u_artifact_ref_v1"}
+              ]
+            },
+            "dmpl_ufc_flow_ref": {
+              "anyOf": [
+                {"type": "null"},
+                {"$ref": "https://genesis.engine/specs/v18_0/eudrs_u_artifact_ref_v1"}
+              ]
+            },
+            "dmpl_stab_report_ref": {
+              "anyOf": [
+                {"type": "null"},
+                {"$ref": "https://genesis.engine/specs/v18_0/eudrs_u_artifact_ref_v1"}
+              ]
+            },
+            "dmpl_lasum_report_ref": {
+              "anyOf": [
+                {"type": "null"},
+                {"$ref": "https://genesis.engine/specs/v18_0/eudrs_u_artifact_ref_v1"}
+              ]
+            }
+          },
+          "required": ["dmpl_cac_pack_ref", "dmpl_ufc_flow_ref", "dmpl_stab_report_ref", "dmpl_lasum_report_ref"]
+        }
+      },
+      "required": ["schema_id", "plan_evidence", "certificate_refs", "train_evidence"]
+    }
+  },
+  "required": ["schema_id", "proposed_root_tuple_ref", "staged_registry_tree_relpath", "evidence"]
+}

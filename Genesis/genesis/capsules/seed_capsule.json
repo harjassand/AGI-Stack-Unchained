@@ -1,0 +1,170 @@
+{
+  "schema_version": "1.0.1",
+  "capsule_version": "1.0.0",
+  "forward_compat": "x_prefix_only",
+  "canonicalization": "gcj-1",
+  "capsule_id": "1b2f2a6b-0eaf-4b0e-8f5c-2a0c7a8f0d11",
+  "artifact_type": "ALGORITHM",
+  "parents": [],
+  "operators_used": [
+    "compose"
+  ],
+  "build_hashes": {
+    "ir_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "container_hash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    "dependency_hashes": []
+  },
+  "commitments": {
+    "capsule_hash": "0000000000000000000000000000000000000000000000000000000000000000",
+    "checkpoint_merkle_root": "1111111111111111111111111111111111111111111111111111111111111111"
+  },
+  "ir_payload": {
+    "format": "GIR1",
+    "version": "1.0",
+    "payload_base64": "AA=="
+  },
+  "entrypoints": [
+    {
+      "name": "run",
+      "signature": {
+        "inputs": [
+          {
+            "name": "x",
+            "type": "Tensor<float32>[n]"
+          }
+        ],
+        "outputs": [
+          {
+            "name": "y",
+            "type": "Tensor<float32>[n]"
+          }
+        ]
+      }
+    }
+  ],
+  "effects": {
+    "allow": [
+      "filesystem_read"
+    ],
+    "deny": [
+      "network",
+      "filesystem_write",
+      "process_spawn"
+    ]
+  },
+  "contract": {
+    "functional_spec": {
+      "spec_language": "DSL1",
+      "clauses": [
+        {
+          "id": "fs-1",
+          "clause_type": "functional",
+          "text": "Output y matches input shape."
+        }
+      ]
+    },
+    "safety_spec": {
+      "invariants": [
+        {
+          "id": "s-1",
+          "clause_type": "safety",
+          "text": "No NaNs in output."
+        }
+      ],
+      "forbidden_behaviors": []
+    },
+    "resource_spec": {
+      "max_wall_time_ms": 1000,
+      "max_memory_mb": 256,
+      "max_sample_count": 4,
+      "max_gpu_seconds": 0
+    },
+    "statistical_spec": {
+      "metrics": [
+        {
+          "name": "accuracy",
+          "direction": "maximize",
+          "target": -10
+        }
+      ],
+      "decision_rule": "threshold",
+      "confidence_requirement": {
+        "delta": 0.001
+      }
+    },
+    "robustness_spec": {
+      "mode": "certified_slices",
+      "slice_family": {
+        "family": "finite_template",
+        "capacity": {
+          "parameters": {
+            "templates": 3
+          }
+        }
+      },
+      "risk_metric": "accuracy",
+      "risk_bound": -10
+    }
+  },
+  "assumptions": [
+    {
+      "assumption_id": "A-1",
+      "statement": "Dataset rows are well-formed with label/prediction/group fields.",
+      "scope": "epoch dataset",
+      "falsification_test": {
+        "method": "schema_check",
+        "power_target": 0.99,
+        "min_detectable_delta": 0.1,
+        "anytime_valid": true
+      },
+      "uncertainty_set": {
+        "class": "row_schema",
+        "radius": 0.0
+      },
+      "failure_probability": 0.001
+    }
+  ],
+  "budget_bid": {
+    "grade": "DeploymentGrade",
+    "alpha_bid": "0.001",
+    "privacy_bid": {
+      "epsilon": "1",
+      "delta": "0"
+    },
+    "compute_bid": {
+      "max_compute_units": 15,
+      "max_wall_time_ms": 5000,
+      "max_adversary_strength": 3
+    }
+  },
+  "evidence": {
+    "certificates": [],
+    "unit_tests": [
+      {
+        "name": "unit_basic",
+        "hash": "2222222222222222222222222222222222222222222222222222222222222222"
+      }
+    ],
+    "property_tests": [],
+    "checkpoints": []
+  },
+  "reproducibility": {
+    "determinism_mode": "seeded",
+    "seed_policy": "harness_seeded",
+    "runtime_env": {
+      "os": "linux",
+      "arch": "x86_64",
+      "kernel_isa": "KISA-1"
+    }
+  },
+  "provenance": {
+    "created_by": "genesis",
+    "timestamp": "2025-01-03T00:00:00Z",
+    "source_repo": "genesis"
+  },
+  "x-harness": {
+    "mode": "python_script",
+    "script": "tests/fixtures/harness_eval.py",
+    "args": []
+  }
+}

@@ -1,0 +1,63 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v1_5r/rsi_portfolio_window_report_v1",
+  "title": "RSI portfolio window report v1",
+  "type": "object",
+  "additionalProperties": false,
+  "patternProperties": {
+    "^x-": {}
+  },
+  "required": [
+    "schema",
+    "schema_version",
+    "epoch_id",
+    "base_integrity_ignition",
+    "insertions_used",
+    "checks",
+    "portfolio_ignition",
+    "reason_codes"
+  ],
+  "properties": {
+    "schema": {"const": "rsi_portfolio_window_report_v1"},
+    "schema_version": {"type": "integer", "const": 1},
+    "epoch_id": {"type": "string"},
+    "base_integrity_ignition": {"type": "boolean"},
+    "insertions_used": {
+      "type": "array",
+      "items": {"type": "string", "pattern": "^sha256:[a-f0-9]{64}$"}
+    },
+    "checks": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "portfolio_envs_present",
+        "insertions_semantic_novelty",
+        "insertions_key_sensitive",
+        "meta_patch_promoted_translation_valid",
+        "barrier_accel_env_steps",
+        "barrier_accel_bytes_hashed"
+      ],
+      "properties": {
+        "portfolio_envs_present": {"$ref": "#/$defs/check"},
+        "insertions_semantic_novelty": {"$ref": "#/$defs/check"},
+        "insertions_key_sensitive": {"$ref": "#/$defs/check"},
+        "meta_patch_promoted_translation_valid": {"$ref": "#/$defs/check"},
+        "barrier_accel_env_steps": {"$ref": "#/$defs/check"},
+        "barrier_accel_bytes_hashed": {"$ref": "#/$defs/check"}
+      }
+    },
+    "portfolio_ignition": {"type": "boolean"},
+    "reason_codes": {"type": "array", "items": {"type": "string"}}
+  },
+  "$defs": {
+    "check": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["ok", "reason_codes"],
+      "properties": {
+        "ok": {"type": "boolean"},
+        "reason_codes": {"type": "array", "items": {"type": "string"}}
+      }
+    }
+  }
+}

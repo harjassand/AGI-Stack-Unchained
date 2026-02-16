@@ -1,0 +1,109 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v18_0/qxrl_training_manifest_v1",
+  "title": "qxrl_training_manifest_v1",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "schema_id": {"const": "qxrl_training_manifest_v1"},
+    "training_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+
+    "opset_id": {"type": "string", "pattern": "^opset:eudrs_u_v1:sha256:[0-9a-f]{64}$"},
+    "dc1_id": {"type": "string", "const": "dc1:q32_v1"},
+
+    "model_manifest_ref": {"$ref": "https://genesis.engine/specs/v18_0/eudrs_u_artifact_ref_v1"},
+    "dataset_manifest_ref": {"$ref": "https://genesis.engine/specs/v18_0/eudrs_u_artifact_ref_v1"},
+
+    "dot_kind": {"type": "string", "enum": ["DOT_Q32_SHIFT_END_V1", "DOT_Q32_SHIFT_EACH_DIM_V1"]},
+    "optimizer_kind": {"type": "string", "enum": ["SGD_MOMENTUM_Q32_V1", "ADAMW_Q32_V1"]},
+    "init_scale_q32": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {"q": {"type": "integer"}},
+      "required": ["q"]
+    },
+
+    "train_steps_u64": {"type": "integer", "minimum": 1},
+    "batch_size_u32": {"type": "integer", "minimum": 1, "maximum": 4294967295},
+    "checkpoint_every_steps_u32": {"type": "integer", "minimum": 1, "maximum": 4294967295},
+
+    "mask_prob_q32": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {"q": {"type": "integer", "minimum": 0}},
+      "required": ["q"]
+    },
+    "max_masks_per_seq_u32": {"type": "integer", "minimum": 0, "maximum": 4294967295},
+    "mlm_neg_k_u32": {"type": "integer", "minimum": 1, "maximum": 4294967295},
+    "NEG_RESAMPLE_CAP_u32": {"type": "integer", "minimum": 0, "maximum": 4294967295},
+
+    "mlm_margin_q32": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {"q": {"type": "integer"}},
+      "required": ["q"]
+    },
+    "ctr_margin_q32": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {"q": {"type": "integer"}},
+      "required": ["q"]
+    },
+    "mlm_loss_weight_q32": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {"q": {"type": "integer", "minimum": 0}},
+      "required": ["q"]
+    },
+    "ctr_loss_weight_q32": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {"q": {"type": "integer", "minimum": 0}},
+      "required": ["q"]
+    },
+
+    "lr_q32": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {"q": {"type": "integer", "minimum": 0}},
+      "required": ["q"]
+    },
+    "momentum_q32": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {"q": {"type": "integer", "minimum": 0}},
+      "required": ["q"]
+    },
+
+    "grad_clip_abs_q32": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {"q": {"type": "integer", "minimum": 0}},
+      "required": ["q"]
+    }
+  },
+  "required": [
+    "schema_id",
+    "training_id",
+    "opset_id",
+    "dc1_id",
+    "model_manifest_ref",
+    "dataset_manifest_ref",
+    "dot_kind",
+    "optimizer_kind",
+    "init_scale_q32",
+    "train_steps_u64",
+    "batch_size_u32",
+    "checkpoint_every_steps_u32",
+    "mask_prob_q32",
+    "max_masks_per_seq_u32",
+    "mlm_neg_k_u32",
+    "NEG_RESAMPLE_CAP_u32",
+    "mlm_margin_q32",
+    "ctr_margin_q32",
+    "mlm_loss_weight_q32",
+    "ctr_loss_weight_q32",
+    "lr_q32",
+    "momentum_q32"
+  ]
+}

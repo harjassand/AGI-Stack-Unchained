@@ -1,0 +1,70 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v11_1/sas_conjecture_bundle_v1",
+  "title": "SAS conjecture bundle v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "bundle_id",
+    "created_utc",
+    "generator_seed",
+    "generator_config_hash",
+    "conjectures"
+  ],
+  "properties": {
+    "schema_version": {"const": "sas_conjecture_bundle_v1"},
+    "bundle_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "created_utc": {"type": "string"},
+    "generator_seed": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "generator_config_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "conjectures": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "conjecture_id",
+          "statement_hash",
+          "fingerprint_hash",
+          "metrics",
+          "triviality_checks",
+          "status"
+        ],
+        "properties": {
+          "conjecture_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+          "statement_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+          "fingerprint_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+          "novelty_score": {"type": "integer", "minimum": 0},
+          "metrics": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["node_count", "binder_count", "depth"],
+            "properties": {
+              "node_count": {"type": "integer", "minimum": 1},
+              "binder_count": {"type": "integer", "minimum": 0},
+              "depth": {"type": "integer", "minimum": 1}
+            }
+          },
+          "triviality_checks": {
+            "type": "array",
+            "minItems": 2,
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["method", "sealed_receipt_sha256", "result"],
+              "properties": {
+                "method": {"type": "string", "enum": ["rfl", "simp"]},
+                "sealed_receipt_sha256": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+                "result": {"type": "string", "enum": ["PASS", "FAIL", "TIMEOUT", "ERROR"]}
+              }
+            }
+          },
+          "status": {"type": "string", "enum": ["ACCEPTED", "TRIVIAL_REJECTED"]},
+          "rejection_reason": {"type": "string"}
+        }
+      }
+    }
+  }
+}

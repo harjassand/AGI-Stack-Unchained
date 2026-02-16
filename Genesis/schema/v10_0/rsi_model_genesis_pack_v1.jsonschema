@@ -1,0 +1,156 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v10_0/rsi_model_genesis_pack_v1",
+  "title": "RSI model genesis pack v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "icore_id",
+    "meta_hash",
+    "superego_policy_hash",
+    "smg_root",
+    "sources",
+    "split_policy",
+    "toolchain_manifest_path",
+    "training_config_path",
+    "eval_config_path",
+    "thresholds"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "rsi_model_genesis_pack_v1"
+    },
+    "icore_id": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "meta_hash": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "superego_policy_hash": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "smg_root": {
+      "type": "string"
+    },
+    "sources": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "v8_math_runs",
+        "v9_science_runs"
+      ],
+      "properties": {
+        "v8_math_runs": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "state_dir",
+              "mode"
+            ],
+            "properties": {
+              "state_dir": {
+                "type": "string"
+              },
+              "mode": {
+                "type": "string",
+                "enum": [
+                  "prefix",
+                  "full"
+                ]
+              }
+            }
+          }
+        },
+        "v9_science_runs": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "state_dir",
+              "mode"
+            ],
+            "properties": {
+              "state_dir": {
+                "type": "string"
+              },
+              "mode": {
+                "type": "string",
+                "enum": [
+                  "prefix",
+                  "full"
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    "split_policy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "math_train_allowlist_path",
+        "science_use_dev_only"
+      ],
+      "properties": {
+        "math_train_allowlist_path": {
+          "type": "string"
+        },
+        "science_use_dev_only": {
+          "type": "boolean"
+        }
+      }
+    },
+    "toolchain_manifest_path": {
+      "type": "string"
+    },
+    "training_config_path": {
+      "type": "string"
+    },
+    "eval_config_path": {
+      "type": "string"
+    },
+    "thresholds": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "math_pass_min_num",
+        "math_pass_min_den",
+        "science_metric_min_num",
+        "science_metric_min_den",
+        "safety_regression_max_num",
+        "safety_regression_max_den"
+      ],
+      "properties": {
+        "math_pass_min_num": {
+          "type": "integer"
+        },
+        "math_pass_min_den": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "science_metric_min_num": {
+          "type": "integer"
+        },
+        "science_metric_min_den": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "safety_regression_max_num": {
+          "type": "integer"
+        },
+        "safety_regression_max_den": {
+          "type": "integer",
+          "minimum": 1
+        }
+      }
+    }
+  }
+}

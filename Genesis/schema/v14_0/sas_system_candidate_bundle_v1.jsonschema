@@ -1,0 +1,30 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v14_0/sas_system_candidate_bundle_v1",
+  "title": "SAS System candidate bundle v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "spec_version",
+    "candidate_id",
+    "reference_ir_sha256",
+    "candidate_ir_sha256",
+    "codegen_version",
+    "sealed_build_receipt_hash",
+    "rust_module"
+  ],
+  "properties": {
+    "schema_version": {"const": "sas_system_candidate_bundle_v1"},
+    "spec_version": {"const": "v14_0"},
+    "candidate_id": {"type": "string"},
+    "reference_ir_sha256": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "candidate_ir_sha256": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "codegen_version": {"type": "string"},
+    "proof_sha256": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "sealed_proof_receipt_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "sealed_build_receipt_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "rust_module": {"type": "string"},
+    "rust_source_tar_sha256": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"}
+  }
+}

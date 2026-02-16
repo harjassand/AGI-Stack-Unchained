@@ -1,0 +1,45 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v9_0/science_lease_token_v1",
+  "title": "Science lease token v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "lease_id",
+    "daemon_id",
+    "icore_id",
+    "meta_hash",
+    "superego_policy_hash",
+    "domains_allowed",
+    "max_hazard_class",
+    "budgets",
+    "not_before_utc",
+    "not_after_utc",
+    "operator_signatures"
+  ],
+  "properties": {
+    "schema_version": {"const": "science_lease_token_v1"},
+    "lease_id": {"type": "string"},
+    "daemon_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "icore_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "meta_hash": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "superego_policy_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "domains_allowed": {"type": "array", "items": {"type": "string"}},
+    "max_hazard_class": {"type": "string", "enum": ["H0_BENIGN", "H1_LOW_RISK", "H2_RESTRICTED_DUAL_USE", "H3_PROHIBITED"]},
+    "budgets": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["max_ticks", "max_work_units", "max_artifact_bytes", "max_wall_ms"],
+      "properties": {
+        "max_ticks": {"type": "integer", "minimum": 1},
+        "max_work_units": {"type": "integer", "minimum": 1},
+        "max_artifact_bytes": {"type": "integer", "minimum": 1},
+        "max_wall_ms": {"type": "integer", "minimum": 1}
+      }
+    },
+    "not_before_utc": {"type": "string"},
+    "not_after_utc": {"type": "string"},
+    "operator_signatures": {"type": "array", "items": {"type": "string"}}
+  }
+}

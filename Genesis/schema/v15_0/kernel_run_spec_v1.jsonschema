@@ -1,0 +1,100 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v15_0/kernel_run_spec_v1",
+  "title": "Kernel run spec v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "run_id",
+    "seed_u64",
+    "capability_id",
+    "capability_registry_rel",
+    "paths",
+    "sealed",
+    "toolchains",
+    "kernel_policy_rel"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "kernel_run_spec_v1"
+    },
+    "run_id": {
+      "type": "string"
+    },
+    "seed_u64": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 18446744073709551615
+    },
+    "capability_id": {
+      "type": "string"
+    },
+    "capability_registry_rel": {
+      "type": "string"
+    },
+    "paths": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "repo_root_rel",
+        "daemon_root_rel",
+        "out_dir_rel"
+      ],
+      "properties": {
+        "repo_root_rel": {
+          "const": "."
+        },
+        "daemon_root_rel": {
+          "const": "daemon"
+        },
+        "out_dir_rel": {
+          "type": "string"
+        }
+      }
+    },
+    "sealed": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "sealed_config_toml_rel",
+        "mount_policy_id"
+      ],
+      "properties": {
+        "sealed_config_toml_rel": {
+          "type": "string"
+        },
+        "mount_policy_id": {
+          "type": "string"
+        }
+      }
+    },
+    "toolchains": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "kernel_manifest_rel",
+        "py_manifest_rel",
+        "rust_manifest_rel",
+        "lean_manifest_rel"
+      ],
+      "properties": {
+        "kernel_manifest_rel": {
+          "type": "string"
+        },
+        "py_manifest_rel": {
+          "type": "string"
+        },
+        "rust_manifest_rel": {
+          "type": "string"
+        },
+        "lean_manifest_rel": {
+          "type": "string"
+        }
+      }
+    },
+    "kernel_policy_rel": {
+      "type": "string"
+    }
+  }
+}

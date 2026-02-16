@@ -1,0 +1,17 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v1_8r/translation_case_output_v1",
+  "title": "Translation case output v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema", "schema_version", "case_id", "hashes"],
+  "properties": {
+    "schema": {"const": "translation_case_output_v1"},
+    "schema_version": {"type": "integer", "const": 1},
+    "case_id": {"type": "string"},
+    "hashes": {
+      "type": "array",
+      "items": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"}
+    }
+  }
+}

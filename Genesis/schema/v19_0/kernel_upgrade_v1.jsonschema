@@ -1,0 +1,47 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v19_0/kernel_upgrade_v1",
+  "title": "Kernel upgrade morphism v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_name",
+    "schema_version",
+    "upgrade_id",
+    "old_kernel_ref",
+    "new_kernel_ref",
+    "bootstrap_receipt_ref",
+    "receipt_translator_bundle_ref",
+    "determinism_conformance_tests_ref",
+    "polarity"
+  ],
+  "$defs": {
+    "sha256": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "artifact_ref_v1": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["artifact_id", "artifact_relpath"],
+      "properties": {
+        "artifact_id": {"$ref": "#/$defs/sha256"},
+        "artifact_relpath": {"type": "string", "minLength": 1}
+      }
+    }
+  },
+  "properties": {
+    "schema_name": {"const": "kernel_upgrade_v1"},
+    "schema_version": {"const": "v19_0"},
+    "upgrade_id": {"$ref": "#/$defs/sha256"},
+    "old_kernel_ref": {"$ref": "#/$defs/artifact_ref_v1"},
+    "new_kernel_ref": {"$ref": "#/$defs/artifact_ref_v1"},
+    "bootstrap_receipt_ref": {"$ref": "#/$defs/artifact_ref_v1"},
+    "receipt_translator_bundle_ref": {"$ref": "#/$defs/artifact_ref_v1"},
+    "determinism_conformance_tests_ref": {"$ref": "#/$defs/artifact_ref_v1"},
+    "polarity": {"type": "string", "enum": ["K_PLUS", "K_MINUS"]},
+    "equivalence_or_extension_proof_ref": {
+      "anyOf": [
+        {"type": "null"},
+        {"$ref": "#/$defs/artifact_ref_v1"}
+      ]
+    }
+  }
+}

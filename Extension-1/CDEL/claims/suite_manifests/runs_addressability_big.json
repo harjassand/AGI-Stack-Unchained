@@ -1,0 +1,16 @@
+{
+  "suite_name": "runs_addressability_big",
+  "claim_complete": false,
+  "claims": {
+    "C3_addressability": {
+      "runs": ["big_before_10k", "big_interleave_10k", "big_before_100k"],
+      "max_median_closure_ratio": 0.1,
+      "max_closure_slope": 0.1
+    },
+    "C3_scan_baseline": {
+      "indexed_run": "big_before_10k",
+      "scan_run": "scan_200_10k",
+      "min_scan_to_indexed_ratio": 5.0
+    }
+  }
+}

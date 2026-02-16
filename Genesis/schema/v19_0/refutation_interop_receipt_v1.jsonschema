@@ -1,0 +1,88 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v19_0/refutation_interop_receipt_v1",
+  "title": "Refutation interoperability receipt v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_name",
+    "schema_version",
+    "receipt_id",
+    "treaty_id",
+    "input_overlap_object_id",
+    "translated_object_id",
+    "witness_id",
+    "witness_valid_b",
+    "budgets",
+    "outcome",
+    "reason_code"
+  ],
+  "properties": {
+    "schema_name": {
+      "const": "refutation_interop_receipt_v1"
+    },
+    "schema_version": {
+      "const": "v19_0"
+    },
+    "receipt_id": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "treaty_id": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "input_overlap_object_id": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "translated_object_id": {
+      "anyOf": [
+        {
+          "type": "null"
+        },
+        {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        }
+      ]
+    },
+    "witness_id": {
+      "anyOf": [
+        {
+          "type": "null"
+        },
+        {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        }
+      ]
+    },
+    "witness_valid_b": {
+      "type": "boolean"
+    },
+    "budgets": {
+      "$ref": "https://genesis.engine/specs/v19_0/budget_spec_v1"
+    },
+    "outcome": {
+      "type": "string",
+      "enum": [
+        "ACCEPT",
+        "REJECT",
+        "SAFE_HALT",
+        "SAFE_SPLIT"
+      ]
+    },
+    "reason_code": {
+      "type": "string",
+      "enum": [
+        "SATISFACTION_PRESERVED",
+        "VALID_REFUTATION",
+        "MISSING_REFUTATION",
+        "INVALID_REFUTATION",
+        "MISSING_INPUT",
+        "BUDGET_EXHAUSTED"
+      ]
+    }
+  }
+}

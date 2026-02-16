@@ -1,0 +1,71 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v19_0/treaty_coherence_receipt_v1",
+  "title": "Treaty path coherence receipt v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_name",
+    "schema_version",
+    "receipt_id",
+    "treaty_path_ids",
+    "ican_profile_id",
+    "coherence_test_set_ids",
+    "budgets",
+    "outcome",
+    "reason_code"
+  ],
+  "properties": {
+    "schema_name": {
+      "const": "treaty_coherence_receipt_v1"
+    },
+    "schema_version": {
+      "const": "v19_0"
+    },
+    "receipt_id": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "treaty_path_ids": {
+      "type": "array",
+      "minItems": 2,
+      "items": {
+        "type": "string",
+        "pattern": "^sha256:[0-9a-f]{64}$"
+      }
+    },
+    "ican_profile_id": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "coherence_test_set_ids": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "string",
+        "pattern": "^sha256:[0-9a-f]{64}$"
+      }
+    },
+    "budgets": {
+      "$ref": "https://genesis.engine/specs/v19_0/budget_spec_v1"
+    },
+    "outcome": {
+      "type": "string",
+      "enum": [
+        "ACCEPT",
+        "REJECT",
+        "SAFE_HALT",
+        "SAFE_SPLIT"
+      ]
+    },
+    "reason_code": {
+      "type": "string",
+      "enum": [
+        "COHERENT",
+        "COMMUTATIVITY_FAIL",
+        "MISSING_INPUT",
+        "BUDGET_EXHAUSTED"
+      ]
+    }
+  }
+}

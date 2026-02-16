@@ -1,0 +1,50 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v12_0/sas_code_candidate_bundle_v1",
+  "title": "SAS-CODE candidate bundle v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "bundle_id",
+    "created_utc",
+    "generator_seed",
+    "generator_config_hash",
+    "baseline_algo_id",
+    "candidates"
+  ],
+  "properties": {
+    "schema_version": {"const": "sas_code_candidate_bundle_v1"},
+    "bundle_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "created_utc": {"type": "string"},
+    "generator_seed": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "generator_config_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "baseline_algo_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "candidates": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["algo_id", "algo_kind", "tags", "status", "forbidden_token_scan"],
+        "properties": {
+          "algo_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+          "algo_kind": {
+            "type": "string",
+            "enum": ["BUBBLE_SORT_V1", "MERGE_SORT_V1", "INSERTION_SORT_V1", "QUICK_SORT_V1"]
+          },
+          "tags": {"type": "array", "items": {"type": "string"}},
+          "status": {"type": "string", "enum": ["CANDIDATE", "REJECTED", "SELECTED"]},
+          "forbidden_token_scan": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["passed", "hits"],
+            "properties": {
+              "passed": {"type": "boolean"},
+              "hits": {"type": "array", "items": {"type": "string"}}
+            }
+          }
+        }
+      }
+    }
+  }
+}

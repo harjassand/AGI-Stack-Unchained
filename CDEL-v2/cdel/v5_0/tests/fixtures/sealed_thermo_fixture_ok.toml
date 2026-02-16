@@ -1,0 +1,12 @@
+[powermetrics]
+sample_interval_ms = 1000
+sample_count = 5
+
+[runner]
+fixture_mode = true
+
+[fixtures]
+powermetrics_stdout_path = "CDEL-v2/cdel/v5_0/tests/fixtures/powermetrics_good.txt"
+thermal_log_path = "CDEL-v2/cdel/v5_0/tests/fixtures/thermal_ok.log"
+powermetrics_help_stdout_path = "CDEL-v2/cdel/v5_0/tests/fixtures/powermetrics_help.txt"
+

@@ -1,0 +1,98 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v2_1/opt_ontology_ledger_v1",
+  "title": "Optimization ontology ledger v1 (JSONL line)",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "event",
+    "run_id",
+    "seq",
+    "prev_entry_hash",
+    "entry_hash",
+    "payload"
+  ],
+  "properties": {
+    "schema": {"const": "opt_ontology_ledger_event_v1"},
+    "event": {
+      "type": "string",
+      "enum": [
+        "OPT_ONTO_INIT_V1",
+        "OPT_ONTO_CONCEPT_REJECT_V1",
+        "OPT_ONTO_CONCEPT_ACCEPT_V1"
+      ]
+    },
+    "run_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "seq": {"type": "integer", "minimum": 0},
+    "prev_entry_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "entry_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "payload": {"type": "object"}
+  },
+  "allOf": [
+    {
+      "if": {"properties": {"event": {"const": "OPT_ONTO_INIT_V1"}}},
+      "then": {"properties": {"payload": {"$ref": "#/$defs/init_payload"}}}
+    },
+    {
+      "if": {"properties": {"event": {"const": "OPT_ONTO_CONCEPT_ACCEPT_V1"}}},
+      "then": {"properties": {"payload": {"$ref": "#/$defs/accept_payload"}}}
+    },
+    {
+      "if": {"properties": {"event": {"const": "OPT_ONTO_CONCEPT_REJECT_V1"}}},
+      "then": {"properties": {"payload": {"$ref": "#/$defs/reject_payload"}}}
+    }
+  ],
+  "$defs": {
+    "rational_pair": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["num", "den"],
+      "properties": {
+        "num": {"type": "integer", "minimum": 0},
+        "den": {"type": "integer", "minimum": 1}
+      }
+    },
+    "init_payload": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "message": {"type": "string"}
+      }
+    },
+    "accept_payload": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "concept_id",
+        "patch_id",
+        "source_receipt_relpath",
+        "target_receipt_relpath",
+        "rho_source",
+        "rho_target"
+      ],
+      "properties": {
+        "concept_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+        "patch_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+        "source_receipt_relpath": {"type": "string"},
+        "target_receipt_relpath": {"type": "string"},
+        "rho_source": {"$ref": "#/$defs/rational_pair"},
+        "rho_target": {"$ref": "#/$defs/rational_pair"}
+      }
+    },
+    "reject_payload": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["reason", "diagnostics_relpaths"],
+      "properties": {
+        "reason": {"type": "string"},
+        "concept_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+        "patch_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+        "diagnostics_relpaths": {
+          "type": "array",
+          "items": {"type": "string"}
+        }
+      }
+    }
+  }
+}

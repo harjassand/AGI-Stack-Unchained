@@ -1,0 +1,45 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v3_2/bridge_import_receipt_v1",
+  "title": "Bridge import receipt v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "spec_version",
+    "offer_id",
+    "verdict",
+    "checks",
+    "receipt_hash"
+  ],
+  "properties": {
+    "schema": {"const": "bridge_import_receipt_v1"},
+    "spec_version": {"const": "v3_2"},
+    "offer_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "verdict": {"type": "string", "enum": ["ACCEPTED"]},
+    "checks": {"$ref": "#/$defs/checks"},
+    "receipt_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"}
+  },
+  "$defs": {
+    "checks": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "offer_schema_valid",
+        "root_match",
+        "icore_match",
+        "blobs_present",
+        "blob_hashes_valid",
+        "publisher_provenance_valid"
+      ],
+      "properties": {
+        "offer_schema_valid": {"type": "boolean"},
+        "root_match": {"type": "boolean"},
+        "icore_match": {"type": "boolean"},
+        "blobs_present": {"type": "boolean"},
+        "blob_hashes_valid": {"type": "boolean"},
+        "publisher_provenance_valid": {"type": "boolean"}
+      }
+    }
+  }
+}

@@ -1,0 +1,66 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v2_3/rsi_hardening_receipt_v1",
+  "title": "RSI hardening receipt v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "run_id",
+    "pack_hash",
+    "constitution_hash",
+    "K_required_patches",
+    "accepted_patches",
+    "verdict",
+    "reasons",
+    "ledger_head_hash"
+  ],
+  "properties": {
+    "schema": {"const": "rsi_hardening_receipt_v1"},
+    "run_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "pack_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "constitution_hash": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "K_required_patches": {"type": "integer", "minimum": 1},
+    "accepted_patches": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/accepted_patch"}
+    },
+    "verdict": {"type": "string", "enum": ["VALID", "INVALID"]},
+    "reasons": {
+      "type": "array",
+      "items": {"type": "string"}
+    },
+    "ledger_head_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"}
+  },
+  "$defs": {
+    "rational_pair": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["num", "den"],
+      "properties": {
+        "num": {"type": "integer", "minimum": 0},
+        "den": {"type": "integer", "minimum": 1}
+      }
+    },
+    "accepted_patch": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "patch_id",
+        "concept_id",
+        "attempt_relpath",
+        "base_tree_hash",
+        "after_tree_hash",
+        "rho_csi"
+      ],
+      "properties": {
+        "patch_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+        "concept_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+        "attempt_relpath": {"type": "string"},
+        "base_tree_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+        "after_tree_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+        "rho_csi": {"$ref": "#/$defs/rational_pair"}
+      }
+    }
+  }
+}

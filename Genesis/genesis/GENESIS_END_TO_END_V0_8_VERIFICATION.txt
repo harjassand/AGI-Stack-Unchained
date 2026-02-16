@@ -1,0 +1,8 @@
+Commands:
+
+CDEL_ROOT=cdel bash genesis/run_end_to_end_v0_8.sh
+
+Results:
+- PASS promotion present with verified receipt
+- Local refusal due to protocol caps recorded
+- Logs deterministic under fixed seed

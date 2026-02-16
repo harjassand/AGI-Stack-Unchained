@@ -1,0 +1,66 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v18_0/ge_xs_snapshot_v1",
+  "title": "Genesis Engine experience store snapshot v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "xs_id",
+    "ge_config_id",
+    "authority_pins_hash",
+    "receipt_stream_hash",
+    "pd_rows",
+    "hard_avoid_set"
+  ],
+  "properties": {
+    "schema_version": {"const": "ge_xs_snapshot_v1"},
+    "xs_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "ge_config_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "authority_pins_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "receipt_stream_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "pd_rows": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "pd_id",
+          "seen_u64",
+          "promote_u64",
+          "reject_u64",
+          "busy_fail_u64",
+          "logic_fail_u64",
+          "safety_fail_u64",
+          "cost_cpu_ms_u64",
+          "cost_wall_ms_u64",
+          "mean_yield_q32"
+        ],
+        "properties": {
+          "pd_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+          "seen_u64": {"type": "integer", "minimum": 0},
+          "promote_u64": {"type": "integer", "minimum": 0},
+          "reject_u64": {"type": "integer", "minimum": 0},
+          "busy_fail_u64": {"type": "integer", "minimum": 0},
+          "logic_fail_u64": {"type": "integer", "minimum": 0},
+          "safety_fail_u64": {"type": "integer", "minimum": 0},
+          "cost_cpu_ms_u64": {"type": "integer", "minimum": 0},
+          "cost_wall_ms_u64": {"type": "integer", "minimum": 0},
+          "mean_yield_q32": {"type": "integer", "minimum": 0}
+        }
+      }
+    },
+    "hard_avoid_set": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["refutation_code", "touched_paths_hash_prefix_hex"],
+        "properties": {
+          "refutation_code": {"type": "string"},
+          "touched_paths_hash_prefix_hex": {"type": "string", "pattern": "^[0-9a-f]*$"}
+        }
+      }
+    }
+  }
+}

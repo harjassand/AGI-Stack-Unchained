@@ -1,0 +1,6 @@
+task_id,accepted,rejection_code,cost,remaining_budget,closure_symbols,closure_modules,candidates_tried,spec_work
+T1,False,SPEC_FAIL,,,0,0,37,
+T2,False,SPEC_FAIL,,,0,0,54,
+T3,False,DEPS_MISMATCH,,,0,0,0,
+T4,False,SPEC_FAIL,,,0,0,67,
+T5,False,SPEC_FAIL,,,0,0,67,

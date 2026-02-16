@@ -1,0 +1,19 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "agi-orchestrator"
+version = "0.1.0"
+description = "Untrusted orchestrator for CDEL"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+  "cdel[sealed] @ git+https://github.com/harjassand/CDEL-v2.git@1c4947aab4dac51f888325e9ad848ea1735b24e1",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=7.4"]
+
+[tool.setuptools]
+packages = ["orchestrator", "orchestrator.eval", "orchestrator.proposer", "orchestrator.domains"]

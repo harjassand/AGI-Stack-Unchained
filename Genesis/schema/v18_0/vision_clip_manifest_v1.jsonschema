@@ -1,0 +1,28 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v18_0/vision_clip_manifest_v1",
+  "title": "vision_clip_manifest_v1",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "schema_id": {"const": "vision_clip_manifest_v1"},
+    "session_manifest_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "clip_index_u32": {"type": "integer", "minimum": 0, "maximum": 4294967295},
+
+    "frame_index_start_u32": {"type": "integer", "minimum": 0, "maximum": 4294967295},
+    "frame_count_u32": {"type": "integer", "minimum": 1, "maximum": 4294967295},
+
+    "frames_merkle_fanout_u32": {"type": "integer", "minimum": 0, "maximum": 4294967295},
+    "frames_merkle_root32": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"}
+  },
+  "required": [
+    "schema_id",
+    "session_manifest_id",
+    "clip_index_u32",
+    "frame_index_start_u32",
+    "frame_count_u32",
+    "frames_merkle_fanout_u32",
+    "frames_merkle_root32"
+  ]
+}
+

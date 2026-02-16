@@ -1,0 +1,17 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v18_0/omega_trace_hash_chain_v1",
+  "title": "Omega trace hash chain v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "H0", "artifact_hashes", "H_final"],
+  "properties": {
+    "schema_version": {"const": "omega_trace_hash_chain_v1"},
+    "H0": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "artifact_hashes": {
+      "type": "array",
+      "items": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"}
+    },
+    "H_final": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"}
+  }
+}

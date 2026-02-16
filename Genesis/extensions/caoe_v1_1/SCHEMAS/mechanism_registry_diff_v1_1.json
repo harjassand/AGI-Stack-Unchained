@@ -1,0 +1,59 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "mechanism_registry_diff_v1_1",
+  "$defs": {
+    "mechanism": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["mechanism_id", "inputs", "outputs", "transition", "params"],
+      "properties": {
+        "mechanism_id": {"type": "string", "minLength": 1},
+        "inputs": {"type": "array", "items": {"type": "string"}},
+        "outputs": {"type": "array", "items": {"type": "string"}},
+        "transition": {"type": "object"},
+        "params": {"type": "object"}
+      }
+    },
+    "op": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["op"],
+      "properties": {
+        "op": {"enum": ["add_mechanism", "remove_mechanism", "replace_mechanism"]},
+        "mechanism": {"$ref": "#/$defs/mechanism"},
+        "mechanism_id": {"type": "string"}
+      },
+      "allOf": [
+        {
+          "if": {"properties": {"op": {"const": "add_mechanism"}}},
+          "then": {"required": ["mechanism"]}
+        },
+        {
+          "if": {"properties": {"op": {"const": "remove_mechanism"}}},
+          "then": {"required": ["mechanism_id"]}
+        },
+        {
+          "if": {"properties": {"op": {"const": "replace_mechanism"}}},
+          "then": {"required": ["mechanism"]}
+        }
+      ]
+    }
+  },
+  "oneOf": [
+    {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["format", "schema_version", "base_mech_hash", "ops"],
+      "properties": {
+        "format": {"const": "mechanism_registry_diff_v1_1"},
+        "schema_version": {"const": 1},
+        "base_mech_hash": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "ops": {"type": "array", "items": {"$ref": "#/$defs/op"}}
+      }
+    },
+    {
+      "type": "object",
+      "maxProperties": 0
+    }
+  ]
+}

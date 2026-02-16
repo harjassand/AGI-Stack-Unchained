@@ -1,0 +1,29 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v13_0/sas_science_selection_receipt_v1",
+  "title": "SAS-Science selection receipt v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "receipt_id",
+    "created_utc",
+    "selected_theory_id",
+    "candidate_ids",
+    "eval_kind",
+    "mdl_total_q32",
+    "selection_pass",
+    "reasons"
+  ],
+  "properties": {
+    "schema_version": {"const": "sas_science_selection_receipt_v1"},
+    "receipt_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "created_utc": {"type": "string"},
+    "selected_theory_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "candidate_ids": {"type": "array", "items": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"}},
+    "eval_kind": {"type": "string", "enum": ["HELDOUT"]},
+    "mdl_total_q32": {"$ref": "q32_v1.jsonschema"},
+    "selection_pass": {"type": "boolean"},
+    "reasons": {"type": "array", "items": {"type": "string"}}
+  }
+}

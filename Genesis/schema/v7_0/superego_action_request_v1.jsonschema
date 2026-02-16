@@ -1,0 +1,104 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v7_0/superego_action_request_v1",
+  "title": "Superego action request v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "request_id",
+    "daemon_id",
+    "tick",
+    "objective_class",
+    "objective_text",
+    "capabilities",
+    "target_paths",
+    "sealed_eval_required"
+  ],
+  "properties": {
+    "schema_version": {"const": "superego_action_request_v1"},
+    "request_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "daemon_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "tick": {"type": "integer", "minimum": 0},
+    "objective_class": {
+      "type": "string",
+      "enum": [
+        "MAINTENANCE",
+        "VALIDATION",
+        "IMPROVEMENT_BOUNDED",
+        "RESEARCH_BOUNDED",
+        "BOUNDLESS_RESEARCH",
+        "BOUNDLESS_SCIENCE"
+      ]
+    },
+    "objective_text": {"type": "string", "maxLength": 512},
+    "capabilities": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/capability"}
+    },
+    "target_paths": {
+      "type": "array",
+      "items": {"type": "string", "pattern": "^/"}
+    },
+    "inputs": {
+      "type": "array",
+      "items": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"}
+    },
+    "outputs_planned": {
+      "type": "array",
+      "items": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"}
+    },
+    "sealed_eval_required": {"type": "boolean"}
+    ,
+    "science": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["domain", "vector", "hazard_class", "task_id"],
+      "properties": {
+        "domain": {"type": "string"},
+        "vector": {"type": "string"},
+        "hazard_class": {
+          "type": "string",
+          "enum": ["H0_BENIGN", "H1_LOW_RISK", "H2_RESTRICTED_DUAL_USE", "H3_PROHIBITED"]
+        },
+        "task_id": {"type": "string"},
+        "lease_id": {"type": "string"}
+      }
+    },
+    "model_genesis": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["stage", "lease_id"],
+      "properties": {
+        "stage": {"type": "string"},
+        "lease_id": {"type": "string"},
+        "heldout_ids": {
+          "type": "array",
+          "items": {"type": "string"}
+        }
+      }
+    }
+  },
+  "$defs": {
+    "capability": {
+      "type": "string",
+      "enum": [
+        "FS_READ_WORKSPACE",
+        "FS_WRITE_RUNS_NEW",
+        "FS_WRITE_DAEMON_STATE",
+        "FS_WRITE_STAGE",
+        "SUBPROCESS_PYTHON",
+        "SUBPROCESS_TOOLCHAIN",
+        "NETWORK_NONE",
+        "NETWORK_LOOPBACK_ONLY",
+        "NETWORK_ANY",
+        "SEALEDEXEC",
+        "PROMOTION_SUBMIT",
+        "THERMO_IMPORT_ONLY",
+        "SEALED_RUN_REQUIRED",
+        "FS_WRITE_SCIENCE_ONLY",
+        "SUBPROCESS_TRAINER"
+      ]
+    }
+  }
+}

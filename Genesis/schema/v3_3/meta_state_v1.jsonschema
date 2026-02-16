@@ -1,0 +1,81 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v3_3/meta_state_v1",
+  "title": "Meta state v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "spec_version",
+    "root_swarm_run_id",
+    "icore_id",
+    "meta_epoch_index",
+    "prev_meta_state_hash",
+    "knowledge_graph",
+    "state_hash"
+  ],
+  "properties": {
+    "schema": {"const": "meta_state_v1"},
+    "spec_version": {"const": "v3_3"},
+    "root_swarm_run_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "icore_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "meta_epoch_index": {"type": "integer", "minimum": 0},
+    "prev_meta_state_hash": {"type": "string", "pattern": "^(sha256:[0-9a-f]{64}|GENESIS)$"},
+    "knowledge_graph": {"$ref": "#/$defs/knowledge_graph"},
+    "state_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"}
+  },
+  "$defs": {
+    "knowledge_graph": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["assertions"],
+      "properties": {
+        "assertions": {
+          "type": "array",
+          "items": {"$ref": "#/$defs/assertion"}
+        }
+      }
+    },
+    "assertion": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "assertion_id",
+        "triple",
+        "confidence_num",
+        "confidence_den",
+        "evidence_refs"
+      ],
+      "properties": {
+        "assertion_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+        "triple": {"$ref": "#/$defs/triple"},
+        "confidence_num": {"type": "integer", "minimum": 0},
+        "confidence_den": {"type": "integer", "minimum": 1, "maximum": 100},
+        "evidence_refs": {
+          "type": "array",
+          "items": {"$ref": "#/$defs/evidence_ref"}
+        }
+      }
+    },
+    "triple": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["subject", "predicate", "object"],
+      "properties": {
+        "subject": {"type": "string"},
+        "predicate": {"type": "string"},
+        "object": {"type": "string"}
+      }
+    },
+    "evidence_ref": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "offer_id", "blob_sha256"],
+      "properties": {
+        "kind": {"const": "BRIDGE_OFFER_ARTIFACT"},
+        "offer_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+        "blob_sha256": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"}
+      }
+    }
+  }
+}

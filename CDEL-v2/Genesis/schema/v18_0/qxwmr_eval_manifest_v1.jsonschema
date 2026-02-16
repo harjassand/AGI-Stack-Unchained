@@ -1,0 +1,34 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v18_0/qxwmr_eval_manifest_v1",
+  "title": "qxwmr_eval_manifest_v1",
+  "type": "object",
+  "additionalProperties": true,
+  "properties": {
+    "schema_id": {"const": "qxwmr_eval_manifest_v1"},
+    "epoch_u64": {"type": "integer", "minimum": 0},
+    "dc1_id": {"type": "string"},
+    "opset_id": {"type": "string"},
+    "canon_caps": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "wl_max_rounds_u32": {"type": "integer", "minimum": 1, "maximum": 4294967295},
+        "tie_total_cap_u32": {"type": "integer", "minimum": 1, "maximum": 4294967295},
+        "tie_branch_cap_u32": {"type": "integer", "minimum": 1, "maximum": 4294967295},
+        "tie_depth_cap_u32": {"type": "integer", "minimum": 1, "maximum": 4294967295},
+        "fal_enabled": {"type": "boolean"},
+        "abstracts_out_cap_u32": {"type": "integer", "minimum": 0, "maximum": 4294967295},
+        "abstracts_in_cap_u32": {"type": "integer", "minimum": 0, "maximum": 4294967295}
+      },
+      "required": ["wl_max_rounds_u32", "tie_total_cap_u32", "tie_branch_cap_u32", "tie_depth_cap_u32", "fal_enabled"],
+      "allOf": [
+        {
+          "if": {"properties": {"fal_enabled": {"const": true}}, "required": ["fal_enabled"]},
+          "then": {"required": ["abstracts_out_cap_u32", "abstracts_in_cap_u32"]}
+        }
+      ]
+    }
+  },
+  "required": ["schema_id"]
+}

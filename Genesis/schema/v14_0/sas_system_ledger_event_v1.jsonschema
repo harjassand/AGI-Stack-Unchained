@@ -1,0 +1,16 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v14_0/sas_system_ledger_event_v1",
+  "title": "SAS System ledger event v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema", "spec_version", "event_ref_hash", "prev_event_ref_hash", "event_type", "payload"],
+  "properties": {
+    "schema": {"const": "sas_system_ledger_event_v1"},
+    "spec_version": {"const": "v14_0"},
+    "event_ref_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "prev_event_ref_hash": {"type": "string"},
+    "event_type": {"type": "string"},
+    "payload": {"type": "object"}
+  }
+}

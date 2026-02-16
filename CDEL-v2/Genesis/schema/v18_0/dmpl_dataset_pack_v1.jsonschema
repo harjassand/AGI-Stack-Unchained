@@ -1,0 +1,43 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v18_0/dmpl_dataset_pack_v1",
+  "title": "DMPL Dataset Pack v1",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "schema_id": {"const": "dmpl_dataset_pack_v1"},
+    "dc1_id": {"type": "string", "const": "dc1:q32_v1"},
+    "opset_id": {"type": "string", "pattern": "^opset:eudrs_u_v1:sha256:[0-9a-f]{64}$"},
+
+    "sample_count_u64": {"type": "integer", "minimum": 0, "maximum": 18446744073709551615},
+
+    "chunk_size_bytes_u32": {"const": 1048576},
+    "chunks": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "chunk_index_u32": {"type": "integer", "minimum": 0, "maximum": 4294967295},
+          "chunk_bin_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+          "chunk_bytes_u32": {"type": "integer", "minimum": 0, "maximum": 4294967295}
+        },
+        "required": ["chunk_index_u32", "chunk_bin_id", "chunk_bytes_u32"]
+      }
+    },
+
+    "samples_chain_final": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "chunks_merkle_root": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"}
+  },
+  "required": [
+    "schema_id",
+    "dc1_id",
+    "opset_id",
+    "sample_count_u64",
+    "chunk_size_bytes_u32",
+    "chunks",
+    "samples_chain_final",
+    "chunks_merkle_root"
+  ]
+}
+

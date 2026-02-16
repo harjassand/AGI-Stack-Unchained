@@ -1,0 +1,31 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v9_0/science_ledger_v1_jsonl",
+  "title": "Science ledger v1 JSONL",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["seq", "tick", "event_type", "event_payload", "prev_entry_hash", "entry_hash"],
+  "properties": {
+    "seq": {"type": "integer", "minimum": 1},
+    "tick": {"type": "integer", "minimum": 0},
+    "event_type": {
+      "type": "string",
+      "enum": [
+        "SCI_BOOT",
+        "SCI_LEASE_ACTIVATED",
+        "SCI_TASK_SELECTED",
+        "SCI_ATTEMPT_STARTED",
+        "SCI_SEALED_RECEIPT_RECORDED",
+        "SCI_HELDOUT_EVAL_RECORDED",
+        "SCI_ACCEPTED",
+        "SCI_SKIPPED_DENY",
+        "SCI_PAUSED_REASON",
+        "SCI_CHECKPOINT_BOUND",
+        "SCI_FATAL"
+      ]
+    },
+    "event_payload": {"type": "object"},
+    "prev_entry_hash": {"type": "string"},
+    "entry_hash": {"type": "string"}
+  }
+}

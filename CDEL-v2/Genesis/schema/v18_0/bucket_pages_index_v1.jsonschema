@@ -1,0 +1,25 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v18_0/bucket_pages_index_v1",
+  "title": "Bucket Pages Index v1",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "schema_id": {"const": "bucket_pages_index_v1"},
+    "bucket_id_u32": {"type": "integer", "minimum": 0},
+    "pages": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "page_index_u32": {"type": "integer", "minimum": 0},
+          "artifact_ref": {"$ref": "https://genesis.engine/specs/v18_0/eudrs_u_artifact_ref_v1"}
+        },
+        "required": ["page_index_u32", "artifact_ref"]
+      }
+    }
+  },
+  "required": ["schema_id", "bucket_id_u32", "pages"]
+}
+

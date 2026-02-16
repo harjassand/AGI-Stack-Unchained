@@ -1,0 +1,168 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v14_0/sas_system_ir_v1",
+  "title": "SAS System IR v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema", "spec_version", "ir_id", "target_id", "program_kind", "locals", "stmts", "return"],
+  "properties": {
+    "schema": {"const": "sas_system_ir_v1"},
+    "spec_version": {"const": "v14_0"},
+    "ir_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "target_id": {"type": "string"},
+    "program_kind": {"const": "IMPERATIVE_INT64_V1"},
+    "locals": {"type": "array", "items": {"type": "string"}},
+    "stmts": {"type": "array", "items": {"$ref": "#/$defs/stmt"}},
+    "return": {"$ref": "#/$defs/return_obj"}
+  },
+  "$defs": {
+    "return_obj": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema", "sqrt_calls", "div_calls", "pair_terms_evaluated", "work_cost_total"],
+      "properties": {
+        "schema": {"const": "sas_science_workmeter_out_v1"},
+        "sqrt_calls": {"$ref": "#/$defs/ret_var"},
+        "div_calls": {"$ref": "#/$defs/ret_var"},
+        "pair_terms_evaluated": {"$ref": "#/$defs/ret_var"},
+        "work_cost_total": {"$ref": "#/$defs/ret_var"}
+      }
+    },
+    "ret_var": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["var"],
+      "properties": {
+        "var": {"type": "string"}
+      }
+    },
+    "stmt": {
+      "oneOf": [
+        {"$ref": "#/$defs/assign"},
+        {"$ref": "#/$defs/add_assign"},
+        {"$ref": "#/$defs/if"},
+        {"$ref": "#/$defs/for_range"}
+      ]
+    },
+    "assign": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["op", "lhs", "rhs"],
+      "properties": {
+        "op": {"const": "assign"},
+        "lhs": {"type": "string"},
+        "rhs": {"$ref": "#/$defs/expr"}
+      }
+    },
+    "add_assign": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["op", "lhs", "rhs"],
+      "properties": {
+        "op": {"const": "add_assign"},
+        "lhs": {"type": "string"},
+        "rhs": {"$ref": "#/$defs/expr"}
+      }
+    },
+    "if": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["op", "cond", "then", "else"],
+      "properties": {
+        "op": {"const": "if"},
+        "cond": {"$ref": "#/$defs/cond"},
+        "then": {"type": "array", "items": {"$ref": "#/$defs/stmt"}},
+        "else": {"type": "array", "items": {"$ref": "#/$defs/stmt"}}
+      }
+    },
+    "for_range": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["op", "var", "start", "end", "body"],
+      "properties": {
+        "op": {"const": "for_range"},
+        "var": {"type": "string"},
+        "start": {"$ref": "#/$defs/expr"},
+        "end": {"$ref": "#/$defs/expr"},
+        "body": {"type": "array", "items": {"$ref": "#/$defs/stmt"}}
+      }
+    },
+    "expr": {
+      "oneOf": [
+        {"$ref": "#/$defs/lit"},
+        {"$ref": "#/$defs/var"},
+        {"$ref": "#/$defs/get"},
+        {"$ref": "#/$defs/bin"}
+      ]
+    },
+    "cond": {
+      "oneOf": [
+        {"$ref": "#/$defs/cmp"},
+        {"$ref": "#/$defs/bool"},
+        {"$ref": "#/$defs/not"}
+      ]
+    },
+    "lit": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["lit"],
+      "properties": {
+        "lit": {"type": "integer"}
+      }
+    },
+    "var": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["var"],
+      "properties": {
+        "var": {"type": "string"}
+      }
+    },
+    "get": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["get"],
+      "properties": {
+        "get": {"type": "string"}
+      }
+    },
+    "bin": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["bin", "a", "b"],
+      "properties": {
+        "bin": {"type": "string", "enum": ["add", "sub", "mul", "div"]},
+        "a": {"$ref": "#/$defs/expr"},
+        "b": {"$ref": "#/$defs/expr"}
+      }
+    },
+    "cmp": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["cmp", "a", "b"],
+      "properties": {
+        "cmp": {"type": "string", "enum": ["lt", "le", "eq"]},
+        "a": {"$ref": "#/$defs/expr"},
+        "b": {"$ref": "#/$defs/expr"}
+      }
+    },
+    "bool": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["bool", "a", "b"],
+      "properties": {
+        "bool": {"type": "string", "enum": ["and", "or"]},
+        "a": {"$ref": "#/$defs/cond"},
+        "b": {"$ref": "#/$defs/cond"}
+      }
+    },
+    "not": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["not"],
+      "properties": {
+        "not": {"$ref": "#/$defs/cond"}
+      }
+    }
+  }
+}

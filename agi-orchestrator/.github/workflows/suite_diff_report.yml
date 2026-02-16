@@ -1,0 +1,218 @@
+name: suite-diff-report
+
+on:
+  pull_request:
+    branches: [main]
+
+jobs:
+  suite-diff:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install dependencies
+        run: |
+          python -m pip install -U pip
+          pip install blake3
+      - name: Detect pointer change
+        id: pointer
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          python - <<'PY'
+          import os
+          import subprocess
+          from pathlib import Path
+
+          base = os.environ["BASE_SHA"]
+          head = os.environ["HEAD_SHA"]
+          diff = subprocess.check_output(["git", "diff", "--name-only", base, head], text=True)
+          changed = {line.strip() for line in diff.splitlines() if line.strip()}
+          pointer_changed = "suites/pyut_dev_current.json" in changed
+          output = Path(os.environ["GITHUB_OUTPUT"])
+          output.write_text(f"pointer_changed={'true' if pointer_changed else 'false'}\n")
+          PY
+      - name: Check suite gate override label
+        id: gate_override
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          REPO: ${{ github.repository }}
+        run: |
+          python - <<'PY'
+          import json
+          import os
+          import urllib.request
+          import urllib.error
+          from pathlib import Path
+
+          token = os.environ.get("GH_TOKEN")
+          repo = os.environ["REPO"]
+          pr_number = os.environ["PR_NUMBER"]
+          url = f"https://api.github.com/repos/{repo}/issues/{pr_number}/labels"
+          skip = False
+          summary = os.environ.get("GITHUB_STEP_SUMMARY")
+          try:
+              req = urllib.request.Request(url)
+              if token:
+                  req.add_header("Authorization", f"Bearer {token}")
+              with urllib.request.urlopen(req, timeout=10) as resp:
+                  data = json.load(resp)
+              labels = {item.get("name") for item in data if isinstance(item, dict)}
+              skip = "suite-gate-override" in labels
+              if skip and summary:
+                  Path(summary).write_text("Suite gate overridden via label.\n")
+          except Exception as exc:
+              if summary:
+                  Path(summary).write_text(
+                      f"Suite gate override label check failed: {exc}\n"
+                  )
+          Path(os.environ["GITHUB_OUTPUT"]).write_text(f"skip={'true' if skip else 'false'}\n")
+          PY
+      - name: Generate suite diff report
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          python - <<'PY'
+          from __future__ import annotations
+
+          import json
+          import os
+          import subprocess
+          import tempfile
+          from pathlib import Path
+          import tomllib
+
+          repo_root = Path(".").resolve()
+          base = os.environ["BASE_SHA"]
+          head = os.environ["HEAD_SHA"]
+
+          def run(cmd: list[str]) -> str:
+            return subprocess.check_output(cmd, text=True).strip()
+
+          def git_show(commit: str, path: str) -> str | None:
+            try:
+              return run(["git", "show", f"{commit}:{path}"])
+            except subprocess.CalledProcessError:
+              return None
+
+          def write_temp(contents: str) -> Path:
+            fd, name = tempfile.mkstemp(suffix=".jsonl")
+            Path(name).write_text(contents, encoding="utf-8")
+            os.close(fd)
+            return Path(name)
+
+          changed = run(["git", "diff", "--name-only", base, head]).splitlines()
+          relevant = []
+          for path in changed:
+            if path.startswith("sealed_suites/") and path.endswith(".jsonl"):
+              relevant.append(path)
+            if path.startswith("suites/") and path.endswith(".json"):
+              relevant.append(path)
+            if path.startswith("configs/") and any(
+              key in path
+              for key in ("io", "env", "pyut", "tooluse", "agent_reliability", "transfer")
+            ):
+              relevant.append(path)
+
+          if not relevant or relevant == [""]:
+            print("No suite/config changes detected.")
+            raise SystemExit(0)
+
+          artifact_dir = repo_root / "artifacts" / "suite_diff"
+          artifact_dir.mkdir(parents=True, exist_ok=True)
+
+          def parse_pointer(text: str) -> str | None:
+            data = json.loads(text)
+            suite_hash = data.get("suite_hash")
+            return suite_hash if isinstance(suite_hash, str) else None
+
+          def parse_config(text: str) -> str | None:
+            data = tomllib.loads(text)
+            sealed = data.get("sealed", {})
+            suite_hash = sealed.get("eval_suite_hash")
+            return suite_hash if isinstance(suite_hash, str) else None
+
+          def write_report(name: str, old_hash: str | None, new_hash: str | None, body: str) -> None:
+            old_part = old_hash or "missing"
+            new_part = new_hash or "missing"
+            report_path = artifact_dir / f"{name}_{old_part}_to_{new_part}.txt"
+            report_path.write_text(body, encoding="utf-8")
+
+          def diff_suites(name: str, old_hash: str | None, new_hash: str | None) -> None:
+            if not old_hash or not new_hash:
+              write_report(name, old_hash, new_hash, "missing suite hash\n")
+              return
+            old_suite = git_show(base, f"sealed_suites/{old_hash}.jsonl")
+            new_suite = git_show(head, f"sealed_suites/{new_hash}.jsonl")
+            if old_suite is None or new_suite is None:
+              msg = (
+                f"suite bytes missing for diff\\n"
+                f"old_hash={old_hash} new_hash={new_hash}\\n"
+              )
+              write_report(name, old_hash, new_hash, msg)
+              return
+            old_path = write_temp(old_suite)
+            new_path = write_temp(new_suite)
+            output = run(
+              [
+                "python",
+                str(repo_root / "scripts" / "suite_diff.py"),
+                "--old",
+                str(old_path),
+                "--new",
+                str(new_path),
+              ]
+            )
+            write_report(name, old_hash, new_hash, output + "\n")
+
+          seen = set()
+          for path in relevant:
+            if path in seen:
+              continue
+            seen.add(path)
+            if path.startswith("suites/") and path.endswith(".json"):
+              old_text = git_show(base, path)
+              new_text = git_show(head, path)
+              old_hash = parse_pointer(old_text) if old_text else None
+              new_hash = parse_pointer(new_text) if new_text else None
+              diff_suites(Path(path).stem, old_hash, new_hash)
+              continue
+            if path.startswith("configs/") and path.endswith(".toml"):
+              old_text = git_show(base, path)
+              new_text = git_show(head, path)
+              old_hash = parse_config(old_text) if old_text else None
+              new_hash = parse_config(new_text) if new_text else None
+              diff_suites(Path(path).stem, old_hash, new_hash)
+              continue
+
+          summary_path = Path(os.environ.get("GITHUB_STEP_SUMMARY", ""))
+          if summary_path:
+            summary_lines = ["Suite diff reports:"]
+            for report in sorted(artifact_dir.glob("*.txt")):
+              summary_lines.append(f"### {report.name}")
+              summary_lines.extend(report.read_text(encoding="utf-8").splitlines()[:50])
+              summary_lines.append("")
+            summary_path.write_text("\n".join(summary_lines), encoding="utf-8")
+          PY
+      - name: Suite quality gate
+        if: steps.pointer.outputs.pointer_changed == 'true' && steps.gate_override.outputs.skip != 'true'
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          python scripts/check_suite_quality_gate.py \
+            --base-sha "$BASE_SHA" \
+            --head-sha "$HEAD_SHA"
+      - name: Upload suite diff artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: suite-diff
+          path: artifacts/suite_diff

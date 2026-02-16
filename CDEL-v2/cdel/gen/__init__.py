@@ -1,0 +1,1 @@
+"""Untrusted generator package."""

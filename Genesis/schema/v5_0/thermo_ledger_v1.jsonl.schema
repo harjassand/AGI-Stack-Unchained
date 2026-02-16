@@ -1,0 +1,37 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v5_0/thermo_ledger_v1",
+  "title": "Thermo ledger v1 (JSONL line)",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "spec_version",
+    "event_ref_hash",
+    "prev_event_ref_hash",
+    "event_type",
+    "payload"
+  ],
+  "properties": {
+    "schema": {"const": "thermo_ledger_event_v1"},
+    "spec_version": {"const": "v5_0"},
+    "event_ref_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "prev_event_ref_hash": {"type": "string"},
+    "event_type": {
+      "type": "string",
+      "enum": [
+        "THERMO_ENV_SNAPSHOT",
+        "THERMO_EPOCH_CLOSE",
+        "THERMO_PROBE_START",
+        "THERMO_PROBE_END",
+        "THERMO_PROMOTION_PROPOSE",
+        "THERMO_PROMOTION_EVAL_RESULT",
+        "THERMO_PROMOTION_APPLY",
+        "THERMO_CHECKPOINT_WRITE",
+        "THERMO_STOP"
+      ]
+    },
+    "payload": {"type": "object"}
+  }
+}
+

@@ -1,0 +1,11 @@
+{
+  "suite_name": "runs_repl",
+  "claim_complete": false,
+  "claims": {
+    "C3_addressability": {
+      "runs": ["repl_addr_10k"],
+      "max_median_closure_ratio": 0.1,
+      "max_closure_slope": 0.1
+    }
+  }
+}

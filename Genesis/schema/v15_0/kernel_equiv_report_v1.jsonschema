@@ -1,0 +1,43 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v15_0/kernel_equiv_report_v1",
+  "title": "Kernel equivalence report v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "capability_id",
+    "snapshot_ref_root_hash",
+    "snapshot_kernel_root_hash",
+    "promotion_bundle_hash_ref",
+    "promotion_bundle_hash_kernel",
+    "all_pass"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "kernel_equiv_report_v1"
+    },
+    "capability_id": {
+      "type": "string"
+    },
+    "snapshot_ref_root_hash": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "snapshot_kernel_root_hash": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "promotion_bundle_hash_ref": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "promotion_bundle_hash_kernel": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "all_pass": {
+      "type": "boolean"
+    }
+  }
+}

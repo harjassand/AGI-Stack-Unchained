@@ -1,0 +1,116 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v9_0/rsi_daemon_pack_v9",
+  "title": "RSI daemon pack v9",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "icore_id",
+    "meta_hash",
+    "daemon_id",
+    "state_dir",
+    "control",
+    "checkpoint_policy",
+    "budgets",
+    "activities",
+    "alignment",
+    "science_boundless"
+  ],
+  "properties": {
+    "schema_version": {"const": "rsi_daemon_pack_v9"},
+    "icore_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "meta_hash": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "daemon_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "state_dir": {"type": "string"},
+    "control": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "stop",
+        "pause",
+        "enable_research",
+        "enable_boundless_science",
+        "enable_science_physics",
+        "enable_science_chemistry",
+        "enable_science_biology"
+      ],
+      "properties": {
+        "stop": {"type": "string"},
+        "pause": {"type": "string"},
+        "enable_research": {"type": "string"},
+        "enable_boundless_science": {"type": "string"},
+        "enable_science_physics": {"type": "string"},
+        "enable_science_chemistry": {"type": "string"},
+        "enable_science_biology": {"type": "string"}
+      }
+    },
+    "checkpoint_policy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["every_ticks", "retain_last_n"],
+      "properties": {
+        "every_ticks": {"type": "integer", "minimum": 1},
+        "retain_last_n": {"type": "integer", "minimum": 1}
+      }
+    },
+    "budgets": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["max_ticks_per_boot", "max_work_units_per_day"],
+      "properties": {
+        "max_ticks_per_boot": {"type": "integer", "minimum": 1},
+        "max_work_units_per_day": {"type": "integer", "minimum": 1}
+      }
+    },
+    "activities": {"type": "array", "items": {"type": "object"}},
+    "alignment": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "alignment_pack_path",
+        "policy_lock_path",
+        "clearance_required_for_research_bounded",
+        "clearance_required_for_boundless",
+        "require_enable_research_file_for_boundless",
+        "clearance_refresh_ticks"
+      ],
+      "properties": {
+        "alignment_pack_path": {"type": "string"},
+        "policy_lock_path": {"type": "string"},
+        "clearance_required_for_research_bounded": {"type": "boolean"},
+        "clearance_required_for_boundless": {"type": "boolean"},
+        "require_enable_research_file_for_boundless": {"type": "boolean"},
+        "clearance_refresh_ticks": {"type": "integer", "minimum": 0}
+      }
+    },
+    "science_boundless": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "enabled",
+        "boundless_pack_path",
+        "toolchain_manifest_path",
+        "require_enable_research_file",
+        "require_enable_boundless_science_file",
+        "require_domain_enable_file",
+        "attempts_per_tick_max",
+        "daily_attempt_budget",
+        "heldout_eval_every_k_attempts",
+        "problem_selection_policy"
+      ],
+      "properties": {
+        "enabled": {"type": "boolean"},
+        "boundless_pack_path": {"type": "string"},
+        "toolchain_manifest_path": {"type": "string"},
+        "require_enable_research_file": {"type": "boolean"},
+        "require_enable_boundless_science_file": {"type": "boolean"},
+        "require_domain_enable_file": {"type": "boolean"},
+        "attempts_per_tick_max": {"type": "integer", "minimum": 1},
+        "daily_attempt_budget": {"type": "integer", "minimum": 1},
+        "heldout_eval_every_k_attempts": {"type": "integer", "minimum": 1},
+        "problem_selection_policy": {"type": "string"}
+      }
+    }
+  }
+}

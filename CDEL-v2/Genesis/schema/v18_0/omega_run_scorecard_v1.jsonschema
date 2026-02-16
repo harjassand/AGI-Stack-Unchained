@@ -1,0 +1,135 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v18_0/omega_run_scorecard_v1",
+  "title": "Omega run scorecard v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "scorecard_id",
+    "tick_u64",
+    "window_size_u64",
+    "window_rows",
+    "run_ticks_u64",
+    "non_noop_ticks_u64",
+    "promotion_success_u64",
+    "promotion_reject_candidates_u64",
+    "total_ns_u64",
+    "non_noop_tpm_rat",
+    "promotion_tpm_rat",
+    "avg_dispatch_ns_u64",
+    "avg_subverifier_ns_u64",
+    "avg_promotion_ns_u64",
+    "median_stps_total_q32",
+    "median_stps_non_noop_q32",
+    "median_stps_promotion_q32",
+    "median_stps_activation_q32",
+    "promotion_success_rate_rat",
+    "runaway_blocked_noop_rate_rat",
+    "goals_by_capability"
+  ],
+  "properties": {
+    "schema_version": {"const": "omega_run_scorecard_v1"},
+    "scorecard_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "tick_u64": {"type": "integer", "minimum": 0},
+    "window_size_u64": {"type": "integer", "minimum": 1},
+    "window_rows": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "tick_u64",
+          "total_ns_u64",
+          "dispatch_ns_u64",
+          "subverifier_ns_u64",
+          "promotion_ns_u64",
+          "non_noop_b",
+          "promotion_success_b",
+          "promotion_reject_candidate_b",
+          "runaway_blocked_noop_b",
+          "stps_total_q32",
+          "stps_non_noop_q32",
+          "stps_promotion_q32",
+          "stps_activation_q32"
+        ],
+        "properties": {
+          "tick_u64": {"type": "integer", "minimum": 0},
+          "total_ns_u64": {"type": "integer", "minimum": 0},
+          "dispatch_ns_u64": {"type": "integer", "minimum": 0},
+          "subverifier_ns_u64": {"type": "integer", "minimum": 0},
+          "promotion_ns_u64": {"type": "integer", "minimum": 0},
+          "non_noop_b": {"type": "boolean"},
+          "promotion_success_b": {"type": "boolean"},
+          "promotion_reject_candidate_b": {"type": "boolean"},
+          "runaway_blocked_noop_b": {"type": "boolean"},
+          "stps_total_q32": {"type": "integer", "minimum": 0},
+          "stps_non_noop_q32": {"type": "integer", "minimum": 0},
+          "stps_promotion_q32": {"type": "integer", "minimum": 0},
+          "stps_activation_q32": {"type": "integer", "minimum": 0}
+        }
+      }
+    },
+    "run_ticks_u64": {"type": "integer", "minimum": 0},
+    "non_noop_ticks_u64": {"type": "integer", "minimum": 0},
+    "promotion_success_u64": {"type": "integer", "minimum": 0},
+    "promotion_reject_candidates_u64": {"type": "integer", "minimum": 0},
+    "total_ns_u64": {"type": "integer", "minimum": 0},
+    "non_noop_tpm_rat": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["num_u64", "den_u64"],
+      "properties": {
+        "num_u64": {"type": "integer", "minimum": 0},
+        "den_u64": {"type": "integer", "minimum": 1}
+      }
+    },
+    "promotion_tpm_rat": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["num_u64", "den_u64"],
+      "properties": {
+        "num_u64": {"type": "integer", "minimum": 0},
+        "den_u64": {"type": "integer", "minimum": 1}
+      }
+    },
+    "avg_dispatch_ns_u64": {"type": "integer", "minimum": 0},
+    "avg_subverifier_ns_u64": {"type": "integer", "minimum": 0},
+    "avg_promotion_ns_u64": {"type": "integer", "minimum": 0},
+    "median_stps_total_q32": {"type": "integer", "minimum": 0},
+    "median_stps_non_noop_q32": {"type": "integer", "minimum": 0},
+    "median_stps_promotion_q32": {"type": "integer", "minimum": 0},
+    "median_stps_activation_q32": {"type": "integer", "minimum": 0},
+    "promotion_success_rate_rat": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["num_u64", "den_u64"],
+      "properties": {
+        "num_u64": {"type": "integer", "minimum": 0},
+        "den_u64": {"type": "integer", "minimum": 1}
+      }
+    },
+    "runaway_blocked_noop_rate_rat": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["num_u64", "den_u64"],
+      "properties": {
+        "num_u64": {"type": "integer", "minimum": 0},
+        "den_u64": {"type": "integer", "minimum": 1}
+      }
+    },
+    "goals_by_capability": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["pending_u64", "done_u64", "failed_u64"],
+        "properties": {
+          "pending_u64": {"type": "integer", "minimum": 0},
+          "done_u64": {"type": "integer", "minimum": 0},
+          "failed_u64": {"type": "integer", "minimum": 0}
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,11 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v18_0/concept_bank_manifest_v1",
+  "title": "concept_bank_manifest_v1",
+  "type": "object",
+  "additionalProperties": true,
+  "properties": {
+    "schema_id": {"const": "concept_bank_manifest_v1"}
+  },
+  "required": ["schema_id"]
+}

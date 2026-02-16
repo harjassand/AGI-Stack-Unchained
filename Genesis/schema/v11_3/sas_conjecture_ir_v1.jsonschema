@@ -1,0 +1,54 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v11_1/sas_conjecture_ir_v1",
+  "title": "SAS conjecture IR v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "conjecture_id",
+    "domain",
+    "vars",
+    "goal"
+  ],
+  "properties": {
+    "schema_version": {"const": "sas_conjecture_ir_v1"},
+    "conjecture_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "domain": {"type": "string", "enum": ["NAT_ARITH"]},
+    "vars": {
+      "type": "array",
+      "minItems": 0,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["name", "type"],
+        "properties": {
+          "name": {"type": "string", "pattern": "^[a-z][a-z0-9_]*$"},
+          "type": {"type": "string", "enum": ["Nat"]}
+        }
+      }
+    },
+    "goal": {"$ref": "#/$defs/expr"}
+  },
+  "$defs": {
+    "expr": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["op"],
+      "properties": {
+        "op": {"type": "string", "enum": ["Var", "NatLit", "Add", "Mul", "Succ", "Eq"]},
+        "name": {"type": "string"},
+        "value": {"type": "integer", "minimum": 0},
+        "lhs": {"$ref": "#/$defs/expr"},
+        "rhs": {"$ref": "#/$defs/expr"},
+        "arg": {"$ref": "#/$defs/expr"},
+        "args": {
+          "type": "array",
+          "minItems": 2,
+          "maxItems": 2,
+          "items": {"$ref": "#/$defs/expr"}
+        }
+      }
+    }
+  }
+}

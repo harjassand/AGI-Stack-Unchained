@@ -1,0 +1,41 @@
+{
+  "runs": [
+    {
+      "run_id": "repl_base_bounded",
+      "tasks_file": "tasks/stream_1000_bounded.jsonl",
+      "generator_mode": "enum",
+      "certificate_mode": "bounded",
+      "load_mode": "indexed",
+      "budget": 1000000,
+      "cost_weights": {"alpha": 1, "beta": 1, "gamma": 1},
+      "spec_domain": {"int_min": -2, "int_max": 2, "list_max_len": 3},
+      "eval_step_limit": 100000,
+      "closure_cache": false
+    },
+    {
+      "run_id": "repl_proof_synth",
+      "tasks_file": "tasks/stream_1000_proofheavy.jsonl",
+      "generator_mode": "enum",
+      "certificate_mode": "proof",
+      "load_mode": "indexed",
+      "budget": 1000000,
+      "cost_weights": {"alpha": 1, "beta": 1, "gamma": 1},
+      "spec_domain": {"int_min": -2, "int_max": 2, "list_max_len": 3},
+      "eval_step_limit": 100000,
+      "closure_cache": false,
+      "proof_synth": true
+    },
+    {
+      "run_id": "repl_addr_10k",
+      "tasks_file": "tasks/stream_1000_with_10k_before.jsonl",
+      "generator_mode": "enum",
+      "certificate_mode": "bounded",
+      "load_mode": "indexed",
+      "budget": 3000000,
+      "cost_weights": {"alpha": 1, "beta": 1, "gamma": 1},
+      "spec_domain": {"int_min": -2, "int_max": 2, "list_max_len": 3},
+      "eval_step_limit": 100000,
+      "closure_cache": false
+    }
+  ]
+}

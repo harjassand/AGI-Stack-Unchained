@@ -1,0 +1,75 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v18_0/qxrl_eval_scorecard_v1",
+  "title": "qxrl_eval_scorecard_v1",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "schema_id": {"const": "qxrl_eval_scorecard_v1"},
+    "scorecard_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+
+    "opset_id": {"type": "string", "pattern": "^opset:eudrs_u_v1:sha256:[0-9a-f]{64}$"},
+    "dc1_id": {"type": "string", "const": "dc1:q32_v1"},
+
+    "model_manifest_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "weights_manifest_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "dataset_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "eval_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+
+    "metrics": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "masked_total_u64": {"type": "integer", "minimum": 0},
+        "masked_hits_u64": {"type": "integer", "minimum": 0},
+        "masked_acc_at_1_q32": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {"q": {"type": "integer", "minimum": 0}},
+          "required": ["q"]
+        },
+
+        "ctr_total_u64": {"type": "integer", "minimum": 0},
+        "ctr_hits_u64": {"type": "integer", "minimum": 0},
+        "recall_k_u32": {"type": "integer", "minimum": 1, "maximum": 4294967295},
+        "recall_at_k_q32": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {"q": {"type": "integer", "minimum": 0}},
+          "required": ["q"]
+        }
+      },
+      "required": [
+        "masked_total_u64",
+        "masked_hits_u64",
+        "masked_acc_at_1_q32",
+        "ctr_total_u64",
+        "ctr_hits_u64",
+        "recall_k_u32",
+        "recall_at_k_q32"
+      ]
+    },
+
+    "tails": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "h_eval_tail32_hex": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+      },
+      "required": ["h_eval_tail32_hex"]
+    }
+  },
+  "required": [
+    "schema_id",
+    "scorecard_id",
+    "opset_id",
+    "dc1_id",
+    "model_manifest_id",
+    "weights_manifest_id",
+    "dataset_id",
+    "eval_id",
+    "metrics",
+    "tails"
+  ]
+}
+

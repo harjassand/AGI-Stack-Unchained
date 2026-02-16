@@ -1,0 +1,28 @@
+{
+  "schema_version": "1.0.1",
+  "receipt_version": "1.0.0",
+  "canonicalization": "gcj-1",
+  "receipt_id": "6c6d6f32-2e3d-4f63-9cc5-9b6d0f2f5b10",
+  "capsule_hash": "5371df0d2a0a2835649fd37eea20f86b6e4bdbbb1275ea56974cc980c5127996",
+  "epoch_id": "epoch-2025-01",
+  "budgets_spent": {
+    "alpha_spent": "0.001",
+    "privacy_spent": {
+      "epsilon_spent": "0.05",
+      "delta_spent": "0.000001"
+    },
+    "compute_spent": {
+      "compute_units": 800,
+      "wall_time_ms": 4000,
+      "adversary_strength_used": 1
+    }
+  },
+  "rng_commitment_id": "rngc-001",
+  "measurement_transcript_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "admission_token": "admit-001",
+  "signature": {
+    "alg": "ed25519",
+    "key_id": "cdel-key-1",
+    "signature_base64": "AA=="
+  }
+}

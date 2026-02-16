@@ -1,0 +1,1 @@
+{"budget": 1, "cost": {"alpha": 1, "beta": 1, "gamma": 1}, "dsl_version": 1, "evaluator": {"step_limit": 100000}, "generator": "enum", "generator_config": {"max_candidates": 300, "max_size": 6, "mode": "baseline", "step_limit": 2000}, "schema_version": 1, "seed": 0, "spec_defaults": {"int_max": 3, "int_min": -3, "list_max_len": 4}, "tasks_path": "tasks/stream_min.jsonl"}

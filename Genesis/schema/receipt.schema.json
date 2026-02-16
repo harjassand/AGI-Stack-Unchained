@@ -1,0 +1,93 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/level1/receipt.schema.json",
+  "title": "Genesis CDEL PASS Receipt (Level-1)",
+  "type": "object",
+  "additionalProperties": false,
+  "patternProperties": {
+    "^x-": {}
+  },
+  "required": [
+    "schema_version",
+    "receipt_version",
+    "canonicalization",
+    "receipt_id",
+    "capsule_hash",
+    "epoch_id",
+    "budgets_spent",
+    "rng_commitment_id",
+    "measurement_transcript_hash",
+    "admission_token",
+    "signature"
+  ],
+  "properties": {
+    "schema_version": {
+      "type": "string",
+      "pattern": "^1\\.0\\.1$",
+      "description": "MUST equal 1.0.1 for Level-1 receipts."
+    },
+    "receipt_version": {
+      "type": "string",
+      "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$"
+    },
+    "canonicalization": {
+      "type": "string",
+      "enum": ["gcj-1"],
+      "description": "Canonical JSON scheme used for hashing (GCJ-1)."
+    },
+    "receipt_id": {"type": "string", "format": "uuid"},
+    "capsule_hash": {"$ref": "#/$defs/hash"},
+    "epoch_id": {"type": "string"},
+    "budgets_spent": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["alpha_spent", "privacy_spent", "compute_spent"],
+      "properties": {
+        "alpha_spent": {"$ref": "#/$defs/decimal_string"},
+        "privacy_spent": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["epsilon_spent", "delta_spent"],
+          "properties": {
+            "epsilon_spent": {"$ref": "#/$defs/decimal_string"},
+            "delta_spent": {"$ref": "#/$defs/decimal_string"}
+          }
+        },
+        "compute_spent": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["compute_units", "wall_time_ms", "adversary_strength_used"],
+          "properties": {
+            "compute_units": {"type": "integer", "minimum": 0},
+            "wall_time_ms": {"type": "integer", "minimum": 0},
+            "adversary_strength_used": {"type": "integer", "minimum": 0}
+          }
+        }
+      }
+    },
+    "rng_commitment_id": {"type": "string"},
+    "measurement_transcript_hash": {"$ref": "#/$defs/hash"},
+    "admission_token": {"type": "string"},
+    "signature": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["alg", "key_id", "signature_base64"],
+      "properties": {
+        "alg": {"type": "string"},
+        "key_id": {"type": "string"},
+        "signature_base64": {"type": "string", "contentEncoding": "base64"}
+      }
+    }
+  },
+  "$defs": {
+    "hash": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    },
+    "decimal_string": {
+      "type": "string",
+      "pattern": "^-?(0|[1-9][0-9]*)(\\.[0-9]*[1-9])?$",
+      "description": "Canonical decimal string (no exponent, no trailing zeros)."
+    }
+  }
+}

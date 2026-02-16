@@ -1,0 +1,56 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/ccai_x_mind_v1/policy_prior_v1.schema.json",
+  "title": "CCAI-X Mind v1 Policy Prior",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "format",
+    "schema_version",
+    "prior_id",
+    "default_logprior_fp",
+    "policy_logprior",
+    "complexity_weights"
+  ],
+  "properties": {
+    "format": {"const": "policy_prior_v1"},
+    "schema_version": {"const": "1"},
+    "prior_id": {"$ref": "#/$defs/identifier"},
+    "default_logprior_fp": {"type": "integer"},
+    "policy_logprior": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/policy_logprior"},
+      "uniqueItems": true
+    },
+    "complexity_weights": {"$ref": "#/$defs/complexity_weights"},
+    "x_extensions": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {}
+    }
+  },
+  "$defs": {
+    "identifier": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9_./-]{0,127}$"
+    },
+    "policy_logprior": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["policy_id", "logprior_fp"],
+      "properties": {
+        "policy_id": {"$ref": "#/$defs/identifier"},
+        "logprior_fp": {"type": "integer"}
+      }
+    },
+    "complexity_weights": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["length_weight_fp", "compute_weight_fp"],
+      "properties": {
+        "length_weight_fp": {"type": "integer"},
+        "compute_weight_fp": {"type": "integer"}
+      }
+    }
+  }
+}

@@ -1,0 +1,1 @@
+{"allowed_eval_plan_ids":["eval_plan_default_v1"],"allowed_path_globs":["README.md"],"forbidden_path_globs":[],"max_files_changed":5,"max_lines_changed":10,"max_patch_bytes":10000}

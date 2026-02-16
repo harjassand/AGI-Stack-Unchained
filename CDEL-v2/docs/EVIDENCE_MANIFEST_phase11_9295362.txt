@@ -1,0 +1,7 @@
+commit: 92953629cbf667980dd99eba4f63cfb037e96c5e
+config_hash: 0a211c3586faf16c334a3d9571cef9c4abfb39af546454937aaa3ee286fd7923
+eval_harness_hash: harness-hash
+eval_suite_hash: suite-hash
+ablations_results_json_sha256: 1eac1f2bc3ce3aed6b7802854cb8cc12e2621d9e23d30490eb0e15e698e2bd9c
+ablations_summary_md_sha256: a24f3bf03562a97e4f9ebc09cf4413d270048d7a2e5679acd40d12389b96a152
+command_solve_suite_ablations: cdel solve-suite-ablations --suite trackA --limit 12 --strategies baseline_enum,hybrid --budget-per-task 100000 --max-candidates 2 --episodes 32 --seed-key phase11-seed --outdir /private/tmp/cdel_phase11_ablations_9295362

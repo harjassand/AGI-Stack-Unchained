@@ -1,0 +1,65 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "ontology_spec_v1_1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "format",
+    "schema_version",
+    "ontology_hash",
+    "isa_version",
+    "symbols",
+    "measurement_phi",
+    "lowering_lambda",
+    "supports_macro_do",
+    "lifting_psi",
+    "complexity_limits"
+  ],
+  "properties": {
+    "format": {"const": "ontology_spec_v1_1"},
+    "schema_version": {"const": 1},
+    "ontology_hash": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "isa_version": {"const": "caoe_absop_isa_v1_2"},
+    "symbols": {"type": "array", "items": {"$ref": "#/$defs/symbol"}},
+    "measurement_phi": {"type": "object"},
+    "lowering_lambda": {"type": "object"},
+    "supports_macro_do": {"type": "boolean"},
+    "supports_repeat_action_options": {"type": "boolean"},
+    "lifting_psi": {"oneOf": [{"type": "null"}, {"type": "object"}]},
+    "complexity_limits": {"$ref": "#/$defs/complexity_limits"}
+  },
+  "$defs": {
+    "symbol": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "type", "domain"],
+      "properties": {
+        "name": {"type": "string", "minLength": 1},
+        "type": {"enum": ["bit", "int", "finite_enum"]},
+        "domain": {"type": "object"}
+      }
+    },
+    "complexity_limits": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["phi_max_ops", "lambda_max_ops", "psi_max_ops", "max_constants", "max_state_history"],
+      "properties": {
+        "phi_max_ops": {"type": "integer", "minimum": 0},
+        "lambda_max_ops": {"type": "integer", "minimum": 0},
+        "psi_max_ops": {"type": "integer", "minimum": 0},
+        "max_constants": {"type": "integer", "minimum": 0},
+        "max_state_history": {"type": "integer", "minimum": 0}
+      }
+    }
+  },
+  "allOf": [
+    {
+      "if": {"properties": {"supports_macro_do": {"const": false}}},
+      "then": {"properties": {"lifting_psi": {"type": "null"}}}
+    },
+    {
+      "if": {"properties": {"supports_macro_do": {"const": true}}},
+      "then": {"properties": {"lifting_psi": {"type": "object"}}}
+    }
+  ]
+}

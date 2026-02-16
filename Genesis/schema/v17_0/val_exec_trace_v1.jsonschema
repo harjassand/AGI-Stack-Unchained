@@ -1,0 +1,33 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v17_0/val_exec_trace_v1",
+  "title": "VAL exec trace row v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "seq_u64",
+    "event_type",
+    "status",
+    "mode",
+    "exec_backend",
+    "input_hash",
+    "output_hash",
+    "val_cycles",
+    "prev_hash",
+    "hash"
+  ],
+  "properties": {
+    "schema_version": { "const": "val_exec_trace_v1" },
+    "seq_u64": { "type": "integer", "minimum": 0 },
+    "event_type": { "enum": ["VAL_EXEC_START", "VAL_EXEC_END"] },
+    "status": { "type": "string", "minLength": 1 },
+    "mode": { "enum": ["baseline_ref", "patch_native"] },
+    "exec_backend": { "type": "string", "minLength": 1 },
+    "input_hash": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" },
+    "output_hash": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" },
+    "val_cycles": { "type": "integer", "minimum": 0 },
+    "prev_hash": { "type": "string", "minLength": 1 },
+    "hash": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" }
+  }
+}

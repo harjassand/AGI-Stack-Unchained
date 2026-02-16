@@ -1,0 +1,16 @@
+{"env": "gridworld-v1", "episode": 0, "goal": {"x": 3, "y": 0}, "max_steps": 6, "start": {"x": 0, "y": 0}, "walls": []}
+{"env": "gridworld-v1", "episode": 1, "goal": {"x": 0, "y": 3}, "max_steps": 6, "start": {"x": 0, "y": 0}, "walls": []}
+{"env": "gridworld-v1", "episode": 2, "goal": {"x": 3, "y": 1}, "max_steps": 8, "start": {"x": 1, "y": 1}, "walls": [{"x": 2, "y": 1}]}
+{"env": "gridworld-v1", "episode": 3, "goal": {"x": 0, "y": 0}, "max_steps": 10, "start": {"x": 3, "y": 3}, "walls": [{"x": 1, "y": 2}, {"x": 2, "y": 1}]}
+{"env": "gridworld-v1", "episode": 4, "goal": {"x": 3, "y": 2}, "max_steps": 8, "start": {"x": 0, "y": 2}, "walls": [{"x": 1, "y": 2}, {"x": 2, "y": 2}]}
+{"env": "gridworld-v1", "episode": 5, "goal": {"x": 2, "y": 3}, "max_steps": 8, "start": {"x": 2, "y": 0}, "walls": [{"x": 2, "y": 1}]}
+{"env": "gridworld-v1", "episode": 6, "goal": {"x": 3, "y": 1}, "max_steps": 10, "start": {"x": 1, "y": 3}, "walls": [{"x": 2, "y": 2}]}
+{"env": "gridworld-v1", "episode": 7, "goal": {"x": 0, "y": 3}, "max_steps": 12, "start": {"x": 3, "y": 0}, "walls": [{"x": 1, "y": 1}, {"x": 2, "y": 2}]}
+{"env": "gridworld-v1", "episode": 8, "goal": {"x": 3, "y": 1}, "max_steps": 8, "start": {"x": 0, "y": 1}, "walls": [{"x": 1, "y": 1}]}
+{"env": "gridworld-v1", "episode": 9, "goal": {"x": 1, "y": 3}, "max_steps": 9, "start": {"x": 1, "y": 0}, "walls": [{"x": 1, "y": 1}, {"x": 1, "y": 2}]}
+{"env": "gridworld-v1", "episode": 10, "goal": {"x": 3, "y": 0}, "max_steps": 12, "start": {"x": 0, "y": 3}, "walls": [{"x": 1, "y": 2}, {"x": 2, "y": 1}]}
+{"env": "gridworld-v1", "episode": 11, "goal": {"x": 0, "y": 2}, "max_steps": 8, "start": {"x": 2, "y": 2}, "walls": [{"x": 1, "y": 2}]}
+{"env": "gridworld-v1", "episode": 12, "goal": {"x": 2, "y": 2}, "max_steps": 8, "start": {"x": 0, "y": 0}, "walls": [{"x": 1, "y": 0}, {"x": 1, "y": 1}]}
+{"env": "gridworld-v1", "episode": 13, "goal": {"x": 1, "y": 3}, "max_steps": 10, "start": {"x": 3, "y": 1}, "walls": [{"x": 2, "y": 2}, {"x": 2, "y": 1}]}
+{"env": "gridworld-v1", "episode": 14, "goal": {"x": 0, "y": 1}, "max_steps": 10, "start": {"x": 2, "y": 3}, "walls": [{"x": 1, "y": 3}, {"x": 1, "y": 2}]}
+{"env": "gridworld-v1", "episode": 15, "goal": {"x": 0, "y": 2}, "max_steps": 9, "start": {"x": 3, "y": 2}, "walls": [{"x": 2, "y": 2}, {"x": 1, "y": 2}]}

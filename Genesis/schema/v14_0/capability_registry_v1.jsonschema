@@ -1,0 +1,61 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v14_0/capability_registry_v1",
+  "title": "Capability registry v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "spec_version",
+    "capabilities"
+  ],
+  "properties": {
+    "schema": {
+      "const": "capability_registry_v1"
+    },
+    "spec_version": {
+      "const": "v1"
+    },
+    "capabilities": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/capability"
+      }
+    }
+  },
+  "$defs": {
+    "capability": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "capability_id",
+        "latest_pack_schema",
+        "verifier",
+        "daemon_root_rel"
+      ],
+      "properties": {
+        "capability_id": {
+          "type": "string"
+        },
+        "latest_pack_schema": {
+          "type": "string"
+        },
+        "verifier": {
+          "type": "string"
+        },
+        "daemon_root_rel": {
+          "type": "string"
+        },
+        "verifier_module": {
+          "type": "string"
+        },
+        "orchestrator_module": {
+          "type": "string"
+        },
+        "campaign_pack_rel": {
+          "type": "string"
+        }
+      }
+    }
+  }
+}

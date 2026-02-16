@@ -1,0 +1,5 @@
+[sealed]
+eval_harness_id = "env-harness-v1"
+eval_harness_hash = "env-harness-v1-hash"
+eval_suite_hash = "09da46fab636cafa4c3138e1f4af037091ae7f02a27b7238c63dda0e2533ae13"
+episodes = 3

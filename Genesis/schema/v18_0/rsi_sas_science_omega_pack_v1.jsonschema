@@ -1,0 +1,27 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v18_0/rsi_sas_science_omega_pack_v1",
+  "title": "RSI SAS-Science Omega pack v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "base_campaign_pack_rel",
+    "base_campaign_pack_hash",
+    "dataset_csv_rel",
+    "dataset_csv_hash",
+    "dataset_manifest_rel",
+    "dataset_manifest_hash",
+    "campaign_tag"
+  ],
+  "properties": {
+    "schema_version": {"const": "rsi_sas_science_omega_pack_v1"},
+    "base_campaign_pack_rel": {"type": "string", "minLength": 1},
+    "base_campaign_pack_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "dataset_csv_rel": {"type": "string", "minLength": 1},
+    "dataset_csv_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "dataset_manifest_rel": {"type": "string", "minLength": 1},
+    "dataset_manifest_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "campaign_tag": {"const": "rsi_sas_science_v13_0"}
+  }
+}

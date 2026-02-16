@@ -1,0 +1,44 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "ConstraintSpec v1",
+  "type": "object",
+  "required": ["schema_version", "kind", "domain", "constraints"],
+  "properties": {
+    "schema_version": {
+      "type": "integer",
+      "const": 1
+    },
+    "kind": {
+      "type": "string",
+      "const": "constraint_spec"
+    },
+    "domain": {
+      "type": "string",
+      "minLength": 1
+    },
+    "constraints": {
+      "type": "object",
+      "required": [
+        "banned_tools",
+        "max_steps",
+        "max_file_writes",
+        "allow_path_escape",
+        "allow_network",
+        "allow_subprocess"
+      ],
+      "properties": {
+        "banned_tools": {
+          "type": "array",
+          "items": {"type": "string"}
+        },
+        "max_steps": {"type": "integer", "minimum": 0},
+        "max_file_writes": {"type": "integer", "minimum": 0},
+        "allow_path_escape": {"type": "boolean"},
+        "allow_network": {"type": "boolean"},
+        "allow_subprocess": {"type": "boolean"}
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false
+}

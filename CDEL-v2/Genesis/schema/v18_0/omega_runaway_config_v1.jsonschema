@@ -1,0 +1,77 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v18_0/omega_runaway_config_v1",
+  "title": "Omega runaway config v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "enabled",
+    "objective_set_path_rel",
+    "tighten_factor_q32",
+    "min_improve_delta_q32",
+    "stall_window_ticks_u64",
+    "stall_escalate_after_u64",
+    "max_escalation_level_u64",
+    "per_metric_route_table",
+    "per_campaign_intensity_table"
+  ],
+  "properties": {
+    "schema_version": {"const": "omega_runaway_config_v1"},
+    "enabled": {"type": "boolean"},
+    "objective_set_path_rel": {"type": "string"},
+    "tighten_factor_q32": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["q"],
+      "properties": {"q": {"type": "integer"}}
+    },
+    "min_improve_delta_q32": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["q"],
+        "properties": {"q": {"type": "integer"}}
+      }
+    },
+    "stall_window_ticks_u64": {"type": "integer", "minimum": 1},
+    "stall_escalate_after_u64": {"type": "integer", "minimum": 1},
+    "max_escalation_level_u64": {"type": "integer", "minimum": 0},
+    "per_metric_route_table": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "array",
+        "minItems": 1,
+        "items": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["level_u64", "campaign_id"],
+          "properties": {
+            "level_u64": {"type": "integer", "minimum": 0},
+            "campaign_id": {"type": "string"}
+          }
+        }
+      }
+    },
+    "per_campaign_intensity_table": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "array",
+        "minItems": 1,
+        "items": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["level_u64", "env_overrides"],
+          "properties": {
+            "level_u64": {"type": "integer", "minimum": 0},
+            "env_overrides": {
+              "type": "object",
+              "additionalProperties": {"type": "string"}
+            }
+          }
+        }
+      }
+    }
+  }
+}

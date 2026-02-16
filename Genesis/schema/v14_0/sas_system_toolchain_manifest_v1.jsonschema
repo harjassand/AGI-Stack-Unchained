@@ -1,0 +1,32 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v14_0/sas_system_toolchain_manifest_v1",
+  "title": "SAS System toolchain manifest v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "checker_name",
+    "checker_version",
+    "checker_executable_hash",
+    "library_name",
+    "library_commit",
+    "os",
+    "arch",
+    "invocation_template",
+    "toolchain_id"
+  ],
+  "properties": {
+    "schema_version": {"const": "sas_system_toolchain_manifest_v1"},
+    "checker_name": {"type": "string"},
+    "checker_version": {"type": "string"},
+    "checker_executable_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "library_name": {"type": "string"},
+    "library_commit": {"type": "string"},
+    "os": {"type": "string"},
+    "arch": {"type": "string"},
+    "invocation_template": {"type": "array", "items": {}},
+    "determinism_notes": {"type": "string"},
+    "toolchain_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"}
+  }
+}

@@ -1,0 +1,68 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v18_0/omega_subverifier_receipt_v1",
+  "title": "Omega subverifier receipt v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "receipt_id",
+    "tick_u64",
+    "campaign_id",
+    "verifier_module",
+    "verifier_mode",
+    "state_dir_hash",
+    "replay_repo_root_rel",
+    "replay_repo_root_hash",
+    "result",
+    "stdout_hash",
+    "stderr_hash"
+  ],
+  "properties": {
+    "schema_version": {"const": "omega_subverifier_receipt_v1"},
+    "receipt_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "tick_u64": {"type": "integer", "minimum": 0},
+    "campaign_id": {"type": "string"},
+    "verifier_module": {"type": "string"},
+    "verifier_mode": {"const": "full"},
+    "state_dir_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "replay_repo_root_rel": {
+      "anyOf": [
+        {"type": "null"},
+        {"type": "string"}
+      ]
+    },
+    "replay_repo_root_hash": {
+      "anyOf": [
+        {"type": "null"},
+        {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"}
+      ]
+    },
+    "result": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["status", "reason_code"],
+      "properties": {
+        "status": {"type": "string", "enum": ["VALID", "INVALID"]},
+        "reason_code": {
+          "anyOf": [
+            {"type": "null"},
+            {
+              "type": "string",
+              "enum": [
+                "SCHEMA_FAIL",
+                "MISSING_STATE_INPUT",
+                "NONDETERMINISTIC",
+                "MODE_UNSUPPORTED",
+                "VERIFY_ERROR",
+                "UNKNOWN"
+              ]
+            }
+          ]
+        }
+      }
+    },
+    "stdout_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "stderr_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"}
+  }
+}

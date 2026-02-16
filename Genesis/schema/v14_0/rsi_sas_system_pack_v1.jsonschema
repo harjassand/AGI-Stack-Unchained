@@ -1,0 +1,37 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v14_0/rsi_sas_system_pack_v1",
+  "title": "RSI SAS System pack v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "policy_path",
+    "policy_hash",
+    "target_catalog_path",
+    "target_catalog_hash",
+    "suitepack_path_dev",
+    "suitepack_path_heldout",
+    "toolchain_manifest_py_path",
+    "toolchain_manifest_py_hash",
+    "toolchain_manifest_lean_path",
+    "toolchain_manifest_lean_hash",
+    "toolchain_manifest_rust_path",
+    "toolchain_manifest_rust_hash"
+  ],
+  "properties": {
+    "schema_version": {"const": "rsi_sas_system_pack_v1"},
+    "policy_path": {"type": "string"},
+    "policy_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "target_catalog_path": {"type": "string"},
+    "target_catalog_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "suitepack_path_dev": {"type": "string"},
+    "suitepack_path_heldout": {"type": "string"},
+    "toolchain_manifest_py_path": {"type": "string"},
+    "toolchain_manifest_py_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "toolchain_manifest_lean_path": {"type": "string"},
+    "toolchain_manifest_lean_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "toolchain_manifest_rust_path": {"type": "string"},
+    "toolchain_manifest_rust_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"}
+  }
+}

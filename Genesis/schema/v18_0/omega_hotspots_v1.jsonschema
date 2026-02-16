@@ -1,0 +1,56 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v18_0/omega_hotspots_v1",
+  "title": "Omega hotspots v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "hotspots_id",
+    "tick_u64",
+    "total_ns_u64",
+    "top_hotspots"
+  ],
+  "properties": {
+    "schema_version": {"const": "omega_hotspots_v1"},
+    "hotspots_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "tick_u64": {"type": "integer", "minimum": 0},
+    "total_ns_u64": {"type": "integer", "minimum": 0},
+    "top_hotspots": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 5,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["stage_id", "ns_u64", "pct_of_total_q32"],
+        "properties": {
+          "stage_id": {
+            "type": "string",
+            "enum": [
+              "observe",
+              "diagnose",
+              "decide",
+              "dispatch",
+              "subverify",
+              "promote",
+              "activate",
+              "verifier",
+              "tree_hash",
+              "schema_validate"
+            ]
+          },
+          "ns_u64": {"type": "integer", "minimum": 0},
+          "pct_of_total_q32": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["q"],
+            "properties": {
+              "q": {"type": "integer", "minimum": 0}
+            }
+          }
+        }
+      }
+    }
+  }
+}

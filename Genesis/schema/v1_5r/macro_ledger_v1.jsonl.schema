@@ -1,0 +1,52 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v1_5r/macro_ledger_v1.jsonl.schema",
+  "title": "Macro ledger event v1 (JSONL line)",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "schema_version",
+    "event",
+    "macro_id",
+    "ref_hash",
+    "epoch_id",
+    "prev_ledger_hash",
+    "line_hash"
+  ],
+  "properties": {
+    "schema": {
+      "const": "macro_ledger_event_v1"
+    },
+    "schema_version": {
+      "type": "integer",
+      "const": 1
+    },
+    "event": {
+      "type": "string",
+      "enum": [
+        "ADMIT",
+        "DEACTIVATE"
+      ]
+    },
+    "macro_id": {
+      "type": "string",
+      "pattern": "^sha256:[a-f0-9]{64}$"
+    },
+    "ref_hash": {
+      "type": "string",
+      "pattern": "^sha256:[a-f0-9]{64}$"
+    },
+    "epoch_id": {
+      "type": "string"
+    },
+    "prev_ledger_hash": {
+      "type": "string",
+      "pattern": "^sha256:[a-f0-9]{64}$"
+    },
+    "line_hash": {
+      "type": "string",
+      "pattern": "^sha256:[a-f0-9]{64}$"
+    }
+  }
+}

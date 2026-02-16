@@ -1,0 +1,127 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v18_0/omega_tick_stats_v1",
+  "title": "Omega tick stats v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "stats_id",
+    "tick_u64",
+    "window_size_u64",
+    "window_rows",
+    "run_ticks_u64",
+    "promoted_u64",
+    "rejected_u64",
+    "invalid_u64",
+    "activation_success_u64",
+    "activation_denied_u64",
+    "activation_pointer_swap_failed_u64",
+    "activation_binding_mismatch_u64",
+    "runaway_blocked_noops_u64",
+    "promotion_reject_rate_rat",
+    "invalid_rate_rat",
+    "runaway_blocked_noop_rate_rat",
+    "recent_noop_reasons",
+    "recent_promoted_families",
+    "recent_family_counts"
+  ],
+  "properties": {
+    "schema_version": {"const": "omega_tick_stats_v1"},
+    "stats_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "tick_u64": {"type": "integer", "minimum": 0},
+    "window_size_u64": {"type": "integer", "minimum": 1},
+    "window_rows": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "tick_u64",
+          "action_kind",
+          "noop_reason",
+          "promoted_b",
+          "rejected_b",
+          "invalid_b",
+          "activation_success_b",
+          "activation_denied_b",
+          "activation_pointer_swap_failed_b",
+          "activation_binding_mismatch_b",
+          "runaway_blocked_noop_b",
+          "promoted_families"
+        ],
+        "properties": {
+          "tick_u64": {"type": "integer", "minimum": 0},
+          "action_kind": {"type": "string", "enum": ["RUN_CAMPAIGN", "RUN_GOAL_TASK", "NOOP", "SAFE_HALT"]},
+          "noop_reason": {"type": "string"},
+          "promoted_b": {"type": "boolean"},
+          "rejected_b": {"type": "boolean"},
+          "invalid_b": {"type": "boolean"},
+          "activation_success_b": {"type": "boolean"},
+          "activation_denied_b": {"type": "boolean"},
+          "activation_pointer_swap_failed_b": {"type": "boolean"},
+          "activation_binding_mismatch_b": {"type": "boolean"},
+          "runaway_blocked_noop_b": {"type": "boolean"},
+          "promoted_families": {
+            "type": "array",
+            "items": {"type": "string", "enum": ["CODE", "SYSTEM", "KERNEL", "METASEARCH", "VAL", "SCIENCE"]},
+            "uniqueItems": true
+          }
+        }
+      }
+    },
+    "run_ticks_u64": {"type": "integer", "minimum": 0},
+    "promoted_u64": {"type": "integer", "minimum": 0},
+    "rejected_u64": {"type": "integer", "minimum": 0},
+    "invalid_u64": {"type": "integer", "minimum": 0},
+    "activation_success_u64": {"type": "integer", "minimum": 0},
+    "activation_denied_u64": {"type": "integer", "minimum": 0},
+    "activation_pointer_swap_failed_u64": {"type": "integer", "minimum": 0},
+    "activation_binding_mismatch_u64": {"type": "integer", "minimum": 0},
+    "runaway_blocked_noops_u64": {"type": "integer", "minimum": 0},
+    "promotion_reject_rate_rat": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["num_u64", "den_u64"],
+      "properties": {
+        "num_u64": {"type": "integer", "minimum": 0},
+        "den_u64": {"type": "integer", "minimum": 1}
+      }
+    },
+    "invalid_rate_rat": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["num_u64", "den_u64"],
+      "properties": {
+        "num_u64": {"type": "integer", "minimum": 0},
+        "den_u64": {"type": "integer", "minimum": 1}
+      }
+    },
+    "runaway_blocked_noop_rate_rat": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["num_u64", "den_u64"],
+      "properties": {
+        "num_u64": {"type": "integer", "minimum": 0},
+        "den_u64": {"type": "integer", "minimum": 1}
+      }
+    },
+    "recent_noop_reasons": {
+      "type": "array",
+      "items": {"type": "string"}
+    },
+    "recent_promoted_families": {
+      "type": "array",
+      "maxItems": 32,
+      "items": {"type": "string", "enum": ["CODE", "SYSTEM", "KERNEL", "METASEARCH", "VAL", "SCIENCE"]}
+    },
+    "recent_family_counts": {
+      "type": "object",
+      "additionalProperties": false,
+      "propertyNames": {"enum": ["CODE", "SYSTEM", "KERNEL", "METASEARCH", "VAL", "SCIENCE"]},
+      "patternProperties": {
+        "^(CODE|SYSTEM|KERNEL|METASEARCH|VAL|SCIENCE)$": {"type": "integer", "minimum": 0}
+      }
+    }
+  }
+}

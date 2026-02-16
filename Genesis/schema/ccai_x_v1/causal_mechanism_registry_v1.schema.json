@@ -1,0 +1,147 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/ccai_x_v1/causal_mechanism_registry_v1.schema.json",
+  "title": "CCAI-X v1 Causal Mechanism Registry",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "format",
+    "schema_version",
+    "registry_id",
+    "variables",
+    "mechanisms"
+  ],
+  "properties": {
+    "format": {"const": "causal_mechanism_registry_v1"},
+    "schema_version": {"const": "1"},
+    "registry_id": {"$ref": "#/$defs/identifier"},
+    "variables": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/variable"},
+      "uniqueItems": true
+    },
+    "mechanisms": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/mechanism"},
+      "uniqueItems": true
+    },
+    "x_extensions": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {}
+    }
+  },
+  "$defs": {
+    "identifier": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9_./-]{0,127}$"
+    },
+    "domain": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind"],
+      "properties": {
+        "kind": {
+          "type": "string",
+          "enum": ["int_range", "int_enum"]
+        },
+        "min_int": {"type": "integer"},
+        "max_int": {"type": "integer"},
+        "values": {
+          "type": "array",
+          "items": {"type": "integer"},
+          "uniqueItems": true
+        }
+      },
+      "allOf": [
+        {
+          "if": {"properties": {"kind": {"const": "int_range"}}},
+          "then": {"required": ["min_int", "max_int"]}
+        },
+        {
+          "if": {"properties": {"kind": {"const": "int_enum"}}},
+          "then": {"required": ["values"]}
+        }
+      ]
+    },
+    "variable": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["var_id", "domain"],
+      "properties": {
+        "var_id": {"$ref": "#/$defs/identifier"},
+        "domain": {"$ref": "#/$defs/domain"}
+      }
+    },
+    "params": {
+      "type": "object",
+      "additionalProperties": false,
+      "patternProperties": {
+        "^[a-z0-9][a-z0-9_./-]{0,127}$": {"type": "integer"}
+      },
+      "properties": {}
+    },
+    "invariance_claim": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["claim_id", "scope", "evidence_hint"],
+      "properties": {
+        "claim_id": {"$ref": "#/$defs/identifier"},
+        "scope": {
+          "type": "string",
+          "enum": [
+            "across_regimes",
+            "across_policies",
+            "across_interventions"
+          ]
+        },
+        "evidence_hint": {"type": "string"}
+      }
+    },
+    "identifiability": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["identified_by_interventions"],
+      "properties": {
+        "identified_by_interventions": {
+          "type": "array",
+          "items": {"$ref": "#/$defs/identifier"},
+          "uniqueItems": true
+        }
+      }
+    },
+    "mechanism": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "mechanism_id",
+        "output_var",
+        "parents",
+        "kind",
+        "params",
+        "invariance_claims",
+        "identifiability"
+      ],
+      "properties": {
+        "mechanism_id": {"$ref": "#/$defs/identifier"},
+        "output_var": {"$ref": "#/$defs/identifier"},
+        "parents": {
+          "type": "array",
+          "items": {"$ref": "#/$defs/identifier"},
+          "uniqueItems": true
+        },
+        "kind": {
+          "type": "string",
+          "enum": ["linear", "switch", "noisy_sensor", "table"]
+        },
+        "params": {"$ref": "#/$defs/params"},
+        "invariance_claims": {
+          "type": "array",
+          "items": {"$ref": "#/$defs/invariance_claim"},
+          "uniqueItems": true
+        },
+        "identifiability": {"$ref": "#/$defs/identifiability"}
+      }
+    }
+  }
+}

@@ -1,0 +1,38 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v14_0/sas_system_perf_report_v1",
+  "title": "SAS System perf report v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "spec_version", "suite_id", "ref_cost_total", "cand_cost_total", "speedup_num", "speedup_den", "tier_costs"],
+  "properties": {
+    "schema_version": {"const": "sas_system_perf_report_v1"},
+    "spec_version": {"const": "v14_0"},
+    "suite_id": {"type": "string"},
+    "ref_cost_total": {"type": "integer"},
+    "cand_cost_total": {"type": "integer"},
+    "speedup_num": {"type": "integer"},
+    "speedup_den": {"type": "integer"},
+    "tier_costs": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["S", "M", "L"],
+      "properties": {
+        "S": {"$ref": "#/$defs/tier"},
+        "M": {"$ref": "#/$defs/tier"},
+        "L": {"$ref": "#/$defs/tier"}
+      }
+    }
+  },
+  "$defs": {
+    "tier": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["ref_cost", "cand_cost"],
+      "properties": {
+        "ref_cost": {"type": "integer"},
+        "cand_cost": {"type": "integer"}
+      }
+    }
+  }
+}

@@ -1,0 +1,55 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v10_0/eval_config_v1",
+  "title": "Eval config v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "math_eval_mode",
+    "science_eval_mode",
+    "safety_eval_mode",
+    "suites"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "eval_config_v1"
+    },
+    "math_eval_mode": {
+      "type": "string"
+    },
+    "science_eval_mode": {
+      "type": "string"
+    },
+    "safety_eval_mode": {
+      "type": "string"
+    },
+    "suites": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "suite_id",
+          "kind",
+          "dataset_path"
+        ],
+        "properties": {
+          "suite_id": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string"
+          },
+          "dataset_path": {
+            "type": "string"
+          },
+          "suite_hash": {
+            "type": "string",
+            "pattern": "^sha256:[0-9a-f]{64}$"
+          }
+        }
+      }
+    }
+  }
+}

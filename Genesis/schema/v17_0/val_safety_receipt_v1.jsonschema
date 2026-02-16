@@ -1,0 +1,48 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v17_0/val_safety_receipt_v1",
+  "title": "VAL safety receipt v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "ir_hash",
+    "patch_id",
+    "policy_hash",
+    "status",
+    "pass",
+    "fail_code",
+    "mem_bounds_summary",
+    "cfg_summary",
+    "trace_hash_chain_head"
+  ],
+  "properties": {
+    "schema_version": { "const": "val_safety_receipt_v1" },
+    "ir_hash": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" },
+    "patch_id": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" },
+    "policy_hash": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" },
+    "status": { "type": "string", "enum": ["SAFE", "UNSAFE"] },
+    "pass": { "type": "boolean" },
+    "fail_code": { "type": ["string", "null"] },
+    "mem_bounds_summary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["state_max_read_end_bytes", "state_max_write_end_bytes", "blocks_max_read_end_bytes"],
+      "properties": {
+        "state_max_read_end_bytes": { "type": "integer", "minimum": 0 },
+        "state_max_write_end_bytes": { "type": "integer", "minimum": 0 },
+        "blocks_max_read_end_bytes": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "cfg_summary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["loop_count", "backedge_pc_u32"],
+      "properties": {
+        "loop_count": { "type": "integer", "minimum": 0 },
+        "backedge_pc_u32": { "type": ["integer", "null"], "minimum": 0 }
+      }
+    },
+    "trace_hash_chain_head": { "type": "string", "pattern": "^(GENESIS|sha256:[0-9a-f]{64})$" }
+  }
+}

@@ -1,0 +1,91 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v19_0/translator_bundle_v1",
+  "title": "Translator bundle v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_name",
+    "schema_version",
+    "translator_bundle_id",
+    "translator_ir_kind",
+    "translator_ir",
+    "translator_domain",
+    "termination_profile"
+  ],
+  "$defs": {
+    "sha256": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "json_pointer": {
+      "type": "string",
+      "pattern": "^(/([^/~]|~[01])*)*$"
+    },
+    "translator_op": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["op"],
+      "properties": {
+        "op": {
+          "type": "string",
+          "enum": ["ADD", "REMOVE", "REPLACE", "MOVE", "COPY", "TEST"]
+        },
+        "path": {"$ref": "#/$defs/json_pointer"},
+        "from_path": {"$ref": "#/$defs/json_pointer"},
+        "to_path": {"$ref": "#/$defs/json_pointer"},
+        "value": {}
+      },
+      "allOf": [
+        {
+          "if": {"properties": {"op": {"const": "ADD"}}},
+          "then": {"required": ["op", "path", "value"]}
+        },
+        {
+          "if": {"properties": {"op": {"const": "REMOVE"}}},
+          "then": {"required": ["op", "path"]}
+        },
+        {
+          "if": {"properties": {"op": {"const": "REPLACE"}}},
+          "then": {"required": ["op", "path", "value"]}
+        },
+        {
+          "if": {"properties": {"op": {"const": "MOVE"}}},
+          "then": {"required": ["op", "from_path", "to_path"]}
+        },
+        {
+          "if": {"properties": {"op": {"const": "COPY"}}},
+          "then": {"required": ["op", "from_path", "to_path"]}
+        },
+        {
+          "if": {"properties": {"op": {"const": "TEST"}}},
+          "then": {"required": ["op", "path", "value"]}
+        }
+      ]
+    }
+  },
+  "properties": {
+    "schema_name": {"const": "translator_bundle_v1"},
+    "schema_version": {"const": "v19_0"},
+    "translator_bundle_id": {"$ref": "#/$defs/sha256"},
+    "translator_ir_kind": {
+      "type": "string",
+      "enum": ["JSON_PATCH_OPS_V1", "TOTAL_DSL_V1"]
+    },
+    "translator_ir": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/translator_op"}
+    },
+    "translator_domain": {
+      "type": "string",
+      "enum": ["ARTIFACT_JSON", "RECEIPT_JSON", "OVERLAP_OK_IR"]
+    },
+    "termination_profile": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["max_ops", "max_depth"],
+      "properties": {
+        "max_ops": {"type": "integer", "minimum": 0},
+        "max_depth": {"type": "integer", "minimum": 1}
+      }
+    },
+    "output_schema_name": {"type": "string"}
+  }
+}

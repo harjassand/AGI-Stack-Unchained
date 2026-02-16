@@ -1,0 +1,36 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v1_7r/ontology_admit_receipt_v3",
+  "title": "Ontology admit receipt v3",
+  "type": "object",
+  "additionalProperties": false,
+  "patternProperties": {
+    "^x-": {}
+  },
+  "required": [
+    "schema",
+    "schema_version",
+    "epoch_id",
+    "ontology_id",
+    "snapshot_id",
+    "ontology_def_hash",
+    "ontology_snapshot_hash",
+    "ontology_eval_report_hash",
+    "state_ledger_head_hash",
+    "verdict",
+    "x-meta"
+  ],
+  "properties": {
+    "schema": {"const": "ontology_admit_receipt_v3"},
+    "schema_version": {"type": "integer", "const": 3},
+    "epoch_id": {"type": "string"},
+    "ontology_id": {"type": "string", "pattern": "^sha256:[a-f0-9]{64}$"},
+    "snapshot_id": {"type": "string", "pattern": "^sha256:[a-f0-9]{64}$"},
+    "ontology_def_hash": {"type": "string", "pattern": "^sha256:[a-f0-9]{64}$"},
+    "ontology_snapshot_hash": {"type": "string", "pattern": "^sha256:[a-f0-9]{64}$"},
+    "ontology_eval_report_hash": {"type": "string", "pattern": "^sha256:[a-f0-9]{64}$"},
+    "state_ledger_head_hash": {"type": "string", "pattern": "^sha256:[a-f0-9]{64}$"},
+    "verdict": {"type": "string"},
+    "x-meta": {"type": "object"}
+  }
+}

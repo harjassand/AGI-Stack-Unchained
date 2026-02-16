@@ -1,0 +1,22 @@
+{
+  "epoch_id": "epoch-1",
+  "alpha_total": "0.001",
+  "alpha_spent": "0.0006079271018540266760593628727",
+  "attempt_counter": 1,
+  "fdr_target": "0.1",
+  "fdr_wealth": "0.05",
+  "research_attempt_counter": 0,
+  "research_rejections": [],
+  "epsilon_total": "1.0",
+  "delta_total": "0.000001",
+  "epsilon_spent": "1",
+  "delta_spent": "0",
+  "compute_total_units": 1000000000,
+  "compute_total_wall_ms": 1000000000,
+  "adversary_strength_cap": 10,
+  "compute_spent_units": 10,
+  "compute_spent_wall_ms": 5000,
+  "audit_head": "2680ec39aa7739ed2d2a8191c03a2c582cbc7ead5103bf654deb6e149d92f048",
+  "audit_length": 1,
+  "call_count": 1
+}

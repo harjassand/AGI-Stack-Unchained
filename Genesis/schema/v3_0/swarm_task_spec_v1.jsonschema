@@ -1,0 +1,59 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v3_0/swarm_task_spec_v1",
+  "title": "Swarm task spec v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "spec_version",
+    "task_type",
+    "domain",
+    "required_capabilities",
+    "base_barrier_head_hash",
+    "base_frontier_state_head_hash",
+    "inputs",
+    "budgets"
+  ],
+  "properties": {
+    "schema": {"const": "swarm_task_spec_v1"},
+    "spec_version": {"const": "v3_0"},
+    "task_type": {
+      "type": "string",
+      "enum": ["SUBPROOF_V1", "CSI_PATCH_PROPOSE_V1", "ONTOLOGY_OPT_V1", "REDTEAM_V1"]
+    },
+    "domain": {
+      "type": "string",
+      "enum": ["formal_math_v1", "env_gridworld_v1", "python_ut_v1", "io_algorithms_v1"]
+    },
+    "required_capabilities": {
+      "type": "array",
+      "minItems": 1,
+      "items": {"type": "string"}
+    },
+    "base_barrier_head_hash": {"type": "string", "pattern": "^(sha256:[0-9a-f]{64}|GENESIS)$"},
+    "base_frontier_state_head_hash": {"type": "string", "pattern": "^(sha256:[0-9a-f]{64}|GENESIS)$"},
+    "inputs": {"$ref": "#/$defs/inputs"},
+    "budgets": {"$ref": "#/$defs/budgets"}
+  },
+  "$defs": {
+    "inputs": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["problem_id", "problem_payload_relpath"],
+      "properties": {
+        "problem_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+        "problem_payload_relpath": {"type": "string"}
+      }
+    },
+    "budgets": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["work_cost_limit", "max_attempts"],
+      "properties": {
+        "work_cost_limit": {"type": "integer", "minimum": 0},
+        "max_attempts": {"type": "integer", "minimum": 1}
+      }
+    }
+  }
+}

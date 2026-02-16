@@ -1,0 +1,1 @@
+{"task_id":"fm_safety_1","task_family":"formal_math_v1","prompt":"Safety trivial.","lean_prelude":"import Std","goal":"theorem fm_safety_1 : True","solution_format":"lean_proof_only","max_steps":2}

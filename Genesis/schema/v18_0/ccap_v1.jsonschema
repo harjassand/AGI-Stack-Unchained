@@ -1,0 +1,174 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v18_0/ccap_v1",
+  "title": "Certified capsule proposal v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "meta",
+    "payload",
+    "build",
+    "eval",
+    "budgets"
+  ],
+  "properties": {
+    "meta": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "ccap_version",
+        "base_tree_id",
+        "auth_hash",
+        "dsbx_profile_id",
+        "env_contract_id",
+        "toolchain_root_id",
+        "ek_id",
+        "op_pool_id",
+        "canon_version_ids"
+      ],
+      "properties": {
+        "ccap_version": {"type": "integer", "minimum": 0, "maximum": 4294967295},
+        "base_tree_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+        "auth_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+        "dsbx_profile_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+        "env_contract_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+        "toolchain_root_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+        "ek_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+        "op_pool_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+        "canon_version_ids": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "ccap_can_v",
+            "ir_can_v",
+            "op_can_v",
+            "obs_can_v"
+          ],
+          "properties": {
+            "ccap_can_v": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+            "ir_can_v": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+            "op_can_v": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+            "obs_can_v": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"}
+          }
+        }
+      }
+    },
+    "payload": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "patch_blob_id"
+          ],
+          "properties": {
+            "kind": {"const": "PATCH"},
+            "patch_blob_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+            "extra_assets": {
+              "type": "array",
+              "items": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"}
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "gir_blob_id",
+            "gir_integrator_id"
+          ],
+          "properties": {
+            "kind": {"const": "GIR"},
+            "gir_blob_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+            "gir_integrator_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+            "extra_assets": {
+              "type": "array",
+              "items": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"}
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "action_seq"
+          ],
+          "properties": {
+            "kind": {"const": "ACTIONSEQ"},
+            "action_seq": {"$ref": "https://genesis.engine/specs/v18_0/actionseq_v1"},
+            "extra_assets": {
+              "type": "array",
+              "items": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"}
+            }
+          }
+        }
+      ]
+    },
+    "build": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "build_recipe_id",
+        "build_targets",
+        "artifact_bindings"
+      ],
+      "properties": {
+        "build_recipe_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+        "build_targets": {
+          "type": "array",
+          "items": {"type": "string"}
+        },
+        "artifact_bindings": {
+          "type": "object",
+          "additionalProperties": {"type": "string"}
+        }
+      }
+    },
+    "eval": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "stages",
+        "final_suite_id"
+      ],
+      "properties": {
+        "stages": {
+          "type": "array",
+          "items": {
+            "$ref": "https://genesis.engine/specs/v18_0/evaluation_kernel_v1#/$defs/stage_spec"
+          }
+        },
+        "final_suite_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+        "stat_policy_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+        "budget_policy_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"}
+      }
+    },
+    "budgets": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "cpu_ms_max",
+        "wall_ms_max",
+        "mem_mb_max",
+        "disk_mb_max",
+        "fds_max",
+        "procs_max",
+        "threads_max",
+        "net"
+      ],
+      "properties": {
+        "cpu_ms_max": {"type": "integer", "minimum": 0},
+        "wall_ms_max": {"type": "integer", "minimum": 0},
+        "mem_mb_max": {"type": "integer", "minimum": 0},
+        "disk_mb_max": {"type": "integer", "minimum": 0},
+        "fds_max": {"type": "integer", "minimum": 0},
+        "procs_max": {"type": "integer", "minimum": 0},
+        "threads_max": {"type": "integer", "minimum": 0},
+        "net": {"const": "forbidden"}
+      }
+    }
+  }
+}

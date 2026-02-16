@@ -1,0 +1,125 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v18_0/vpvm_public_inputs_v1",
+  "title": "vpvm_public_inputs_v1",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "schema_id": {"const": "vpvm_public_inputs_v1"},
+    "vpvm_id": {"const": "vpvm_q32_v1"},
+    "vpvm_config_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "program_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "public_inputs_hash32_hex": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "public_inputs_base_hash32_hex": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "public_inputs": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "opset_id": {"type": "string", "pattern": "^opset:eudrs_u_v1:sha256:[0-9a-f]{64}$"},
+        "dc1_id": {"type": "string", "const": "dc1:q32_v1"},
+        "training_manifest_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+        "dataset_manifest_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+        "eval_manifest_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+        "lut_manifest_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+        "wroot_before_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+        "wroot_after_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+        "h_train_tail32_hex_expected": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "h_eval_tail32_hex_expected": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "scorecard_artifact_id_expected": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+        "caps": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "mem": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "max_addr_u64": {"type": "integer", "minimum": 0, "maximum": 18446744073709551615},
+                "allowed_segs_u8": {
+                  "type": "array",
+                  "items": {"type": "integer", "minimum": 0, "maximum": 255},
+                  "minItems": 1,
+                  "uniqueItems": true
+                },
+                "seg_limits": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "properties": {
+                      "seg_u8": {"type": "integer", "minimum": 0, "maximum": 255},
+                      "max_addr_u64": {"type": "integer", "minimum": 0, "maximum": 18446744073709551615}
+                    },
+                    "required": ["seg_u8", "max_addr_u64"]
+                  },
+                  "minItems": 1
+                }
+              },
+              "required": ["max_addr_u64", "allowed_segs_u8", "seg_limits"]
+            }
+          },
+          "required": ["mem"]
+        },
+        "commitments": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "commit_algo_id": {"const": "rollhash32x2_v1"},
+            "r_bind_u64_0": {"type": "integer", "minimum": 0, "maximum": 18446744073709551615},
+            "r_bind_u64_1": {"type": "integer", "minimum": 0, "maximum": 18446744073709551615},
+            "program_commit_f0": {"type": "integer", "minimum": 0, "maximum": 18446744073709551615},
+            "program_commit_f1": {"type": "integer", "minimum": 0, "maximum": 18446744073709551615},
+            "lut_commit_f0": {"type": "integer", "minimum": 0, "maximum": 18446744073709551615},
+            "lut_commit_f1": {"type": "integer", "minimum": 0, "maximum": 18446744073709551615},
+            "dataset_commit_f0": {"type": "integer", "minimum": 0, "maximum": 18446744073709551615},
+            "dataset_commit_f1": {"type": "integer", "minimum": 0, "maximum": 18446744073709551615},
+            "weights_before_commit_f0": {"type": "integer", "minimum": 0, "maximum": 18446744073709551615},
+            "weights_before_commit_f1": {"type": "integer", "minimum": 0, "maximum": 18446744073709551615},
+            "weights_after_commit_f0": {"type": "integer", "minimum": 0, "maximum": 18446744073709551615},
+            "weights_after_commit_f1": {"type": "integer", "minimum": 0, "maximum": 18446744073709551615}
+          },
+          "required": [
+            "commit_algo_id",
+            "r_bind_u64_0",
+            "r_bind_u64_1",
+            "program_commit_f0",
+            "program_commit_f1",
+            "lut_commit_f0",
+            "lut_commit_f1",
+            "dataset_commit_f0",
+            "dataset_commit_f1",
+            "weights_before_commit_f0",
+            "weights_before_commit_f1",
+            "weights_after_commit_f0",
+            "weights_after_commit_f1"
+          ]
+        }
+      },
+      "required": [
+        "opset_id",
+        "dc1_id",
+        "training_manifest_id",
+        "dataset_manifest_id",
+        "eval_manifest_id",
+        "lut_manifest_id",
+        "wroot_before_id",
+        "wroot_after_id",
+        "h_train_tail32_hex_expected",
+        "h_eval_tail32_hex_expected",
+        "scorecard_artifact_id_expected",
+        "caps",
+        "commitments"
+      ]
+    }
+  },
+  "required": [
+    "schema_id",
+    "vpvm_id",
+    "vpvm_config_id",
+    "program_id",
+    "public_inputs_hash32_hex",
+    "public_inputs_base_hash32_hex",
+    "public_inputs"
+  ]
+}
+

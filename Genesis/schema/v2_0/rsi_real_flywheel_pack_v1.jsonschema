@@ -1,0 +1,29 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v2_0/rsi_real_flywheel_pack_v1",
+  "title": "RSI real flywheel pack v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "schema_version",
+    "inner_campaign_pack_path",
+    "max_attempts",
+    "retryable_reasons",
+    "fatal_reasons"
+  ],
+  "properties": {
+    "schema": {"const": "rsi_real_flywheel_pack_v1"},
+    "schema_version": {"type": "integer", "const": 1},
+    "inner_campaign_pack_path": {"type": "string"},
+    "max_attempts": {"type": "integer", "minimum": 1},
+    "retryable_reasons": {
+      "type": "array",
+      "items": {"type": "string"}
+    },
+    "fatal_reasons": {
+      "type": "array",
+      "items": {"type": "string"}
+    }
+  }
+}

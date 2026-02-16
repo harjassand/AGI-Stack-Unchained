@@ -1,0 +1,56 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v1_6r/macro_cross_env_support_report_v1",
+  "title": "Macro cross-env support report v1",
+  "type": "object",
+  "additionalProperties": false,
+  "patternProperties": {
+    "^x-": {}
+  },
+  "required": [
+    "schema",
+    "schema_version",
+    "epoch_id",
+    "macro_active_set_hash",
+    "macros"
+  ],
+  "properties": {
+    "schema": {"const": "macro_cross_env_support_report_v1"},
+    "schema_version": {"type": "integer", "const": 1},
+    "epoch_id": {"type": "string"},
+    "macro_active_set_hash": {"type": "string", "pattern": "^sha256:[a-f0-9]{64}$"},
+    "macros": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "macro_id",
+          "occurrences_by_env_kind",
+          "support_families_hold_by_env_kind",
+          "support_total_hold_by_env_kind",
+          "support_envs_hold"
+        ],
+        "properties": {
+          "macro_id": {"type": "string", "pattern": "^sha256:[a-f0-9]{64}$"},
+          "occurrences_by_env_kind": {"$ref": "#/$defs/env_counts"},
+          "support_families_hold_by_env_kind": {"$ref": "#/$defs/env_counts"},
+          "support_total_hold_by_env_kind": {"$ref": "#/$defs/env_counts"},
+          "support_envs_hold": {"type": "integer", "minimum": 0}
+        }
+      }
+    }
+  },
+  "$defs": {
+    "env_counts": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["gridworld-v1", "lineworld-v1", "editworld-v1"],
+      "properties": {
+        "gridworld-v1": {"type": "integer", "minimum": 0},
+        "lineworld-v1": {"type": "integer", "minimum": 0},
+        "editworld-v1": {"type": "integer", "minimum": 0}
+      }
+    }
+  }
+}

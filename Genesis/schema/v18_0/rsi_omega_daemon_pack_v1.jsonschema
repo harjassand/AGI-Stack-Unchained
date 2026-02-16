@@ -1,0 +1,35 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v18_0/rsi_omega_daemon_pack_v1",
+  "title": "RSI Omega daemon pack v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "omega_policy_ir_rel",
+    "omega_capability_registry_rel",
+    "omega_objectives_rel",
+    "omega_runaway_config_rel",
+    "omega_budgets_rel",
+    "omega_allowlists_rel",
+    "healthcheck_suitepack_rel",
+    "baseline_metrics_rel",
+    "goal_queue_rel",
+    "allow_unbound_observer_fallback",
+    "seed_u64"
+  ],
+  "properties": {
+    "schema_version": {"const": "rsi_omega_daemon_pack_v1"},
+    "omega_policy_ir_rel": {"type": "string", "const": "omega_policy_ir_v1.json"},
+    "omega_capability_registry_rel": {"type": "string", "const": "omega_capability_registry_v2.json"},
+    "omega_objectives_rel": {"type": "string", "const": "omega_objectives_v1.json"},
+    "omega_runaway_config_rel": {"type": "string", "const": "omega_runaway_config_v1.json"},
+    "omega_budgets_rel": {"type": "string", "const": "omega_budgets_v1.json"},
+    "omega_allowlists_rel": {"type": "string", "const": "omega_allowlists_v1.json"},
+    "healthcheck_suitepack_rel": {"type": "string", "const": "healthcheck_suitepack_v1.json"},
+    "baseline_metrics_rel": {"type": "string", "const": "baselines/baseline_metrics_v1.json"},
+    "goal_queue_rel": {"type": "string", "const": "goals/omega_goal_queue_v1.json"},
+    "allow_unbound_observer_fallback": {"type": "boolean"},
+    "seed_u64": {"type": "integer", "minimum": 0}
+  }
+}

@@ -1,0 +1,96 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v19_0/continuity_constitution_v1",
+  "title": "Continuity constitution (C-CONT) v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_name",
+    "schema_version",
+    "constitution_id",
+    "admissible_upgrade_types",
+    "required_proof_map",
+    "epsilon_terms",
+    "debt_amortization_horizons",
+    "required_reason_codes",
+    "safe_policy_defaults",
+    "kernel_polarity_rules"
+  ],
+  "$defs": {
+    "sha256": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "proof_name": {
+      "type": "string",
+      "enum": [
+        "TRANSLATOR_TOTALITY",
+        "CONTINUITY_CHECK",
+        "BACKREFUTE_LANE",
+        "NO_NEW_ACCEPT_PATH",
+        "REPLAY_DETERMINISM",
+        "J_DOMINANCE_RENT_PAID",
+        "KERNEL_BOOTSTRAP_RECEIPT",
+        "KERNEL_POLARITY",
+        "ENV_REDUCTION_WITNESS",
+        "META_LAW_COMPLIANCE",
+        "CONSTITUTION_KERNEL_COMPLIANCE"
+      ]
+    }
+  },
+  "properties": {
+    "schema_name": {"const": "continuity_constitution_v1"},
+    "schema_version": {"const": "v19_0"},
+    "constitution_id": {"$ref": "#/$defs/sha256"},
+    "admissible_upgrade_types": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "enum": ["M_SIGMA", "M_PI", "M_D", "M_H", "M_A", "M_K", "M_E", "M_M", "M_C", "M_W", "M_T"]
+      },
+      "uniqueItems": true
+    },
+    "required_proof_map": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "array",
+        "items": {"$ref": "#/$defs/proof_name"},
+        "uniqueItems": true
+      }
+    },
+    "epsilon_terms": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["epsilon_J", "epsilon_udc"],
+      "properties": {
+        "epsilon_J": {"type": "integer", "minimum": 1},
+        "epsilon_udc": {"type": "integer", "minimum": 0}
+      }
+    },
+    "debt_amortization_horizons": {
+      "type": "object",
+      "additionalProperties": {"type": "integer", "minimum": 1}
+    },
+    "required_reason_codes": {
+      "type": "array",
+      "items": {"type": "string", "minLength": 1},
+      "uniqueItems": true
+    },
+    "safe_policy_defaults": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["on_missing_artifact", "on_budget_exhausted", "on_unresolved_overlap"],
+      "properties": {
+        "on_missing_artifact": {"type": "string", "enum": ["SAFE_HALT", "REJECT"]},
+        "on_budget_exhausted": {"type": "string", "enum": ["SAFE_HALT", "REJECT", "SAFE_SPLIT"]},
+        "on_unresolved_overlap": {"type": "string", "enum": ["SAFE_HALT", "REJECT"]}
+      }
+    },
+    "kernel_polarity_rules": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["single_k_plus_required", "default_other_polarity"],
+      "properties": {
+        "single_k_plus_required": {"type": "boolean"},
+        "default_other_polarity": {"type": "string", "enum": ["K_MINUS", "K_PLUS"]}
+      }
+    }
+  }
+}

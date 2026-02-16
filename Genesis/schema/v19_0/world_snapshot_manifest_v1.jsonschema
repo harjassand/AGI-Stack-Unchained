@@ -1,0 +1,132 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v19_0/world_snapshot_manifest_v1",
+  "title": "World snapshot manifest v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_name",
+    "schema_version",
+    "manifest_id",
+    "path_normalization",
+    "ordering_rule",
+    "entries"
+  ],
+  "properties": {
+    "schema_name": {
+      "const": "world_snapshot_manifest_v1"
+    },
+    "schema_version": {
+      "const": "v19_0"
+    },
+    "manifest_id": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "path_normalization": {
+      "const": "NFC_FORWARD_SLASH"
+    },
+    "ordering_rule": {
+      "const": "UNICODE_CODEPOINT_THEN_UTF8_BYTES"
+    },
+    "entries": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "logical_path",
+          "content_id",
+          "content_length_bytes",
+          "content_kind",
+          "content_artifact_ref"
+        ],
+        "properties": {
+          "logical_path": {
+            "type": "string",
+            "minLength": 1
+          },
+          "content_id": {
+            "type": "string",
+            "pattern": "^sha256:[0-9a-f]{64}$"
+          },
+          "content_length_bytes": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "content_kind": {
+            "type": "string",
+            "enum": [
+              "RAW_BYTES",
+              "CANON_JSON"
+            ]
+          },
+          "canon_version": {
+            "anyOf": [
+              {
+                "type": "null"
+              },
+              {
+                "type": "string",
+                "minLength": 1
+              }
+            ]
+          },
+          "content_artifact_ref": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "schema_name",
+              "schema_version",
+              "id"
+            ],
+            "properties": {
+              "schema_name": {
+                "type": "string"
+              },
+              "schema_version": {
+                "type": "string"
+              },
+              "id": {
+                "type": "string",
+                "pattern": "^sha256:[0-9a-f]{64}$"
+              }
+            }
+          }
+        },
+        "allOf": [
+          {
+            "if": {
+              "properties": {
+                "content_kind": {
+                  "const": "CANON_JSON"
+                }
+              },
+              "required": [
+                "content_kind"
+              ]
+            },
+            "then": {
+              "required": [
+                "canon_version"
+              ],
+              "properties": {
+                "canon_version": {
+                  "type": "string",
+                  "minLength": 1
+                }
+              }
+            },
+            "else": {
+              "properties": {
+                "canon_version": {
+                  "type": "null"
+                }
+              }
+            }
+          }
+        ]
+      }
+    }
+  }
+}

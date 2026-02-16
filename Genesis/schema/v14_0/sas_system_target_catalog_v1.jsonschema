@@ -1,0 +1,50 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v14_0/sas_system_target_catalog_v1",
+  "title": "SAS System target catalog v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema", "spec_version", "targets"],
+  "properties": {
+    "schema": {"const": "sas_system_target_catalog_v1"},
+    "spec_version": {"const": "v14_0"},
+    "targets": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 1,
+      "items": {"$ref": "#/$defs/target"}
+    }
+  },
+  "$defs": {
+    "target": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["target_id", "ref_impl", "io_contract", "upgrade_allowed"],
+      "properties": {
+        "target_id": {"type": "string"},
+        "ref_impl": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["language", "module_path", "callable"],
+          "properties": {
+            "language": {"type": "string"},
+            "module_path": {"type": "string"},
+            "callable": {"type": "string"}
+          }
+        },
+        "io_contract": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["input_schema", "output_schema", "deterministic", "side_effects"],
+          "properties": {
+            "input_schema": {"type": "string"},
+            "output_schema": {"type": "string"},
+            "deterministic": {"type": "boolean"},
+            "side_effects": {"type": "string"}
+          }
+        },
+        "upgrade_allowed": {"type": "boolean"}
+      }
+    }
+  }
+}

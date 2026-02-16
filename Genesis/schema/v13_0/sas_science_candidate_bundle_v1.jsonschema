@@ -1,0 +1,49 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v13_0/sas_science_candidate_bundle_v1",
+  "title": "SAS-Science candidate bundle v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "bundle_id",
+    "created_utc",
+    "generator_version",
+    "candidates"
+  ],
+  "properties": {
+    "schema_version": {"const": "sas_science_candidate_bundle_v1"},
+    "bundle_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "created_utc": {"type": "string"},
+    "generator_version": {"type": "string"},
+    "generator_seed": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "generator_config_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "candidates": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["theory_id", "theory_kind", "norm_pow_p", "tags", "status", "forbidden_scan"],
+        "properties": {
+          "theory_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+          "theory_kind": {
+            "type": "string",
+            "enum": ["CANDIDATE_CENTRAL_POWERLAW_V1", "CANDIDATE_NBODY_POWERLAW_V1"]
+          },
+          "norm_pow_p": {"type": "integer", "enum": [1, 2, 3, 4]},
+          "tags": {"type": "array", "items": {"type": "string"}},
+          "status": {"type": "string", "enum": ["CANDIDATE", "REJECTED", "SELECTED"]},
+          "forbidden_scan": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["passed", "hits"],
+            "properties": {
+              "passed": {"type": "boolean"},
+              "hits": {"type": "array", "items": {"type": "string"}}
+            }
+          }
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,76 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "caoe_proposer_state_v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "format",
+    "schema_version",
+    "current_epoch",
+    "operator_weights",
+    "operator_quarantine_until_epoch",
+    "recent_anomaly_regimes",
+    "history",
+    "macro_stage_enabled",
+    "retest_candidate_id",
+    "retest_candidate_op_id",
+    "retest_pending"
+  ],
+  "properties": {
+    "format": {"const": "caoe_proposer_state_v1"},
+    "schema_version": {"const": 1},
+    "current_epoch": {"type": "integer", "minimum": 0},
+    "operator_weights": {
+      "type": "object",
+      "additionalProperties": {"type": "integer"}
+    },
+    "operator_quarantine_until_epoch": {
+      "type": "object",
+      "additionalProperties": {"type": "integer"}
+    },
+    "recent_anomaly_regimes": {
+      "type": "array",
+      "items": {"type": "string"},
+      "maxItems": 64
+    },
+    "history": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/history_entry"},
+      "maxItems": 50
+    },
+    "macro_stage_enabled": {"type": "boolean"},
+    "allow_macro_ops": {"type": "boolean"},
+    "retest_candidate_id": {"type": "string"},
+    "retest_candidate_op_id": {"type": "string"},
+    "retest_pending": {"type": "boolean"}
+  },
+  "$defs": {
+    "history_entry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "epoch",
+        "selected_candidate_id",
+        "selected_op_id",
+        "decision",
+        "worst_case_success",
+        "mdl_bits",
+        "anti_pass",
+        "do_pass"
+      ],
+      "properties": {
+        "epoch": {"type": "integer"},
+        "selected_candidate_id": {"type": "string"},
+        "selected_op_id": {"type": "string"},
+        "decision": {"enum": ["PASS", "FAIL", "NONE"]},
+        "worst_case_success": {"type": "number"},
+        "mdl_bits": {"type": "number"},
+        "anti_pass": {"type": "boolean"},
+        "do_pass": {"type": "boolean"},
+        "any_c_anti_fail": {"type": "boolean"},
+        "had_any_pass": {"type": "boolean"},
+        "best_pass_wcs": {"type": "number"}
+      }
+    }
+  }
+}

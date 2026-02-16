@@ -1,0 +1,111 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v18_0/strategy_def_v1",
+  "title": "strategy_def_v1",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "schema_id": {
+      "const": "strategy_def_v1"
+    },
+    "strategy_id": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "dc1_id": {
+      "const": "dc1:q32_v1"
+    },
+    "opset_id": {
+      "type": "string",
+      "pattern": "^opset:eudrs_u_v1:sha256:[0-9a-f]{64}$"
+    },
+    "handle": {
+      "type": "string",
+      "pattern": "^strategy/[a-z0-9][a-z0-9._/-]{0,127}$"
+    },
+    "cartridge_ref": {
+      "$ref": "https://genesis.engine/specs/v18_0/eudrs_u_artifact_ref_v1"
+    },
+    "concept_deps": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "pattern": "^concept/[a-z0-9][a-z0-9._/-]{0,127}$"
+      },
+      "uniqueItems": true
+    },
+    "budgets": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "instr_cap_u64": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "cost_cap_u64": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "log_cap_u32": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "retrieve_cap_u32": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "unify_cap_u32": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "apply_cap_u32": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "lift_cap_u32": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "project_cap_u32": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "plan_cap_u32": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "max_state_bytes_u32": {
+          "type": "integer",
+          "minimum": 64
+        },
+        "urc_cap_u32": {
+          "type": "integer",
+          "minimum": 1
+        }
+      },
+      "required": [
+        "instr_cap_u64",
+        "cost_cap_u64",
+        "log_cap_u32",
+        "retrieve_cap_u32",
+        "unify_cap_u32",
+        "apply_cap_u32",
+        "lift_cap_u32",
+        "project_cap_u32",
+        "plan_cap_u32",
+        "urc_cap_u32",
+        "max_state_bytes_u32"
+      ]
+    }
+  },
+  "required": [
+    "schema_id",
+    "strategy_id",
+    "dc1_id",
+    "opset_id",
+    "handle",
+    "cartridge_ref",
+    "concept_deps",
+    "budgets"
+  ]
+}

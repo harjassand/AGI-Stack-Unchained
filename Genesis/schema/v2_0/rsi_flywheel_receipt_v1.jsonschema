@@ -1,0 +1,56 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v2_0/rsi_flywheel_receipt_v1",
+  "title": "RSI flywheel receipt v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "schema_version",
+    "verdict",
+    "max_attempts",
+    "attempts_executed",
+    "winning_attempt_index",
+    "winning_attempt_dir",
+    "winning"
+  ],
+  "properties": {
+    "schema": {"const": "rsi_flywheel_receipt_v1"},
+    "schema_version": {"type": "integer", "const": 1},
+    "verdict": {"type": "string", "enum": ["VALID", "INVALID"]},
+    "max_attempts": {"type": "integer", "minimum": 1},
+    "attempts_executed": {"type": "integer", "minimum": 0},
+    "winning_attempt_index": {"type": "integer", "minimum": 0},
+    "winning_attempt_dir": {
+      "anyOf": [
+        {"type": "string", "pattern": "^attempts/attempt_[0-9]{4}$"},
+        {"type": "string", "const": ""}
+      ]
+    },
+    "winning": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["active_patch_id", "rho_met"],
+      "properties": {
+        "active_patch_id": {
+          "anyOf": [
+            {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+            {"type": "string", "const": ""}
+          ]
+        },
+        "rho_met": {"$ref": "#/$defs/rational_pair"}
+      }
+    }
+  },
+  "$defs": {
+    "rational_pair": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["num", "den"],
+      "properties": {
+        "num": {"type": "integer", "minimum": 0},
+        "den": {"type": "integer", "minimum": 1}
+      }
+    }
+  }
+}

@@ -1,0 +1,50 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v2_3/immutable_core_lock_v1",
+  "title": "Immutable core lock v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "spec_version",
+    "lock_id",
+    "core_id",
+    "source_roots",
+    "excludes",
+    "files",
+    "core_tree_hash_v1",
+    "lock_head_hash"
+  ],
+  "properties": {
+    "schema": {"const": "immutable_core_lock_v1"},
+    "spec_version": {"type": "string", "const": "v2_3"},
+    "lock_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "core_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "source_roots": {
+      "type": "array",
+      "items": {"type": "string"}
+    },
+    "excludes": {
+      "type": "array",
+      "items": {"type": "string"}
+    },
+    "files": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/file_entry"}
+    },
+    "core_tree_hash_v1": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "lock_head_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"}
+  },
+  "$defs": {
+    "file_entry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["relpath", "sha256", "bytes"],
+      "properties": {
+        "relpath": {"type": "string"},
+        "sha256": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+        "bytes": {"type": "integer", "minimum": 0}
+      }
+    }
+  }
+}

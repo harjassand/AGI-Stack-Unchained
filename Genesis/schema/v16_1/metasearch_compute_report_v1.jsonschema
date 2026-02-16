@@ -1,0 +1,33 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v16_1/metasearch_compute_report_v1",
+  "title": "Metasearch compute report v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "report_id",
+    "baseline_eval_trace_hash",
+    "candidate_eval_trace_hash",
+    "baseline_selection_receipt_hash",
+    "candidate_selection_receipt_hash",
+    "c_base_work_cost_total",
+    "c_cand_work_cost_total",
+    "baseline_dev_eval_count_u64",
+    "candidate_dev_eval_count_u64",
+    "efficiency_gate_pass"
+  ],
+  "properties": {
+    "schema_version": { "const": "metasearch_compute_report_v1" },
+    "report_id": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" },
+    "baseline_eval_trace_hash": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" },
+    "candidate_eval_trace_hash": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" },
+    "baseline_selection_receipt_hash": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" },
+    "candidate_selection_receipt_hash": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" },
+    "c_base_work_cost_total": { "type": "integer", "minimum": 0 },
+    "c_cand_work_cost_total": { "type": "integer", "minimum": 0 },
+    "baseline_dev_eval_count_u64": { "type": "integer", "minimum": 0 },
+    "candidate_dev_eval_count_u64": { "type": "integer", "minimum": 0 },
+    "efficiency_gate_pass": { "type": "boolean" }
+  }
+}

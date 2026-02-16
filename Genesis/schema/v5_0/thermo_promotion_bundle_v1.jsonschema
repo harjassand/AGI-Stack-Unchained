@@ -1,0 +1,16 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v5_0/thermo_promotion_bundle_v1",
+  "title": "Thermo promotion bundle v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema", "spec_version", "bundle_id", "kind", "payload"],
+  "properties": {
+    "schema": {"const": "thermo_promotion_bundle_v1"},
+    "spec_version": {"const": "v5_0"},
+    "bundle_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "kind": {"type": "string", "enum": ["COMPILER_FLAGSET_V1", "CODEGEN_TEMPLATE_V1", "MICROKERNEL_VARIANT_V1"]},
+    "payload": {"type": "object"}
+  }
+}
+

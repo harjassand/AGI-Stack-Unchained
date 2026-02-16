@@ -1,0 +1,41 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v13_0/sas_science_split_receipt_v1",
+  "title": "SAS-Science split receipt v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "created_utc",
+    "split_id",
+    "dataset_id",
+    "split_policy_hash",
+    "row_count",
+    "dev_range_start",
+    "dev_range_end",
+    "heldout_range_start",
+    "heldout_range_end",
+    "guard_steps",
+    "dev_eval_start",
+    "dev_eval_end",
+    "heldout_eval_start",
+    "heldout_eval_end"
+  ],
+  "properties": {
+    "schema_version": {"const": "sas_science_split_receipt_v1"},
+    "created_utc": {"type": "string"},
+    "split_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "dataset_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "split_policy_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "row_count": {"type": "integer", "minimum": 1},
+    "dev_range_start": {"type": "integer", "minimum": 0},
+    "dev_range_end": {"type": "integer", "minimum": 0},
+    "heldout_range_start": {"type": "integer", "minimum": 0},
+    "heldout_range_end": {"type": "integer", "minimum": 0},
+    "guard_steps": {"type": "integer", "minimum": 0},
+    "dev_eval_start": {"type": "integer", "minimum": 0},
+    "dev_eval_end": {"type": "integer", "minimum": 0},
+    "heldout_eval_start": {"type": "integer", "minimum": 0},
+    "heldout_eval_end": {"type": "integer", "minimum": 0}
+  }
+}

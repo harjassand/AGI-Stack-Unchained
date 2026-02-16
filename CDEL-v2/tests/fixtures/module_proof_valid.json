@@ -1,0 +1,30 @@
+{
+  "schema_version": 1,
+  "dsl_version": 1,
+  "parent": "GENESIS",
+  "payload": {
+    "new_symbols": ["const_three"],
+    "definitions": [
+      {
+        "name": "const_three",
+        "params": [],
+        "ret_type": {"tag": "int"},
+        "body": {"tag": "int", "value": 3},
+        "termination": {"kind": "structural", "decreases_param": null}
+      }
+    ],
+    "declared_deps": [],
+    "specs": [
+      {
+        "kind": "proof",
+        "goal": {
+          "tag": "eq",
+          "lhs": {"tag": "app", "fn": {"tag": "sym", "name": "const_three"}, "args": []},
+          "rhs": {"tag": "int", "value": 3}
+        },
+        "proof": {"tag": "by_eval"}
+      }
+    ]
+  },
+  "meta": {"note": "valid proof fixture"}
+}

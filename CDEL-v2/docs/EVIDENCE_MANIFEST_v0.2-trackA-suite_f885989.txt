@@ -1,0 +1,11 @@
+tag: v0.2-trackA-suite
+commit: f885989e51c607b4f435dad2d4494fd458113000
+config_hash: 7bdebb3b3e38cbd6b0da24c40f6e1465642e71c5d5238df5d83b2b97fe1ae233
+eval_harness_hash: harness-hash
+eval_suite_hash: suite-hash
+evidence_results.json_sha256: 2034b4a4e9f1c4e6b0e9e7db3b211e5f5e3a49104c858bfad0df8a566ff5f39c
+evidence_summary.md_sha256: 7e5e16a415d465c51fe8b0e33a1b04ef51d76568ddd93024d8e3f7c31fb6d0d4
+scaling_results.json_sha256: 457244be73372762f232512deebcbd854c8932cad608cd6e883c842de44ea25c
+scaling_summary.md_sha256: f6ed5594a6a3a1ff77e94a75db67ac82a5ac213145b25a60c6dc1d304997d2d9
+command_evidence_suite: cdel run-evidence-suite --out /private/tmp/cdel_trackA_evidence_f885989 --tasks-per-family 10 --episodes 64 --eval-episodes 64 --budget 1000000
+command_scaling_experiment: cdel run-scaling-experiment --out /private/tmp/cdel_trackA_scaling_f885989 --modules 1000 --step 200 --budget 1000000

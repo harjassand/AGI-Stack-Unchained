@@ -1,0 +1,39 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v18_0/vision_stage0_verify_receipt_v1",
+  "title": "vision_stage0_verify_receipt_v1",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "schema_id": {"const": "vision_stage0_verify_receipt_v1"},
+    "verdict": {"type": "string", "enum": ["VALID", "INVALID"]},
+    "reason_code": {"type": ["string", "null"]}
+  },
+  "required": ["schema_id", "verdict", "reason_code"],
+  "allOf": [
+    {
+      "if": {"properties": {"verdict": {"const": "VALID"}}},
+      "then": {"properties": {"reason_code": {"type": "null"}}}
+    },
+    {
+      "if": {"properties": {"verdict": {"const": "INVALID"}}},
+      "then": {
+        "properties": {
+          "reason_code": {
+            "type": "string",
+            "enum": [
+              "EUDRSU_VISION0_SCHEMA_INVALID",
+              "EUDRSU_VISION0_CAPS_VIOLATION",
+              "EUDRSU_VISION0_FRAME_DECODE_FAIL",
+              "EUDRSU_VISION0_FRAME_HASH_MISMATCH",
+              "EUDRSU_VISION0_SESSION_ORDER_INVALID",
+              "EUDRSU_VISION0_MERKLE_ROOT_MISMATCH",
+              "EUDRSU_VISION0_CLIP_BLOB_MISMATCH"
+            ]
+          }
+        }
+      }
+    }
+  ]
+}
+

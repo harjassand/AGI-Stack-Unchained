@@ -1,0 +1,75 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v1_5r/family_semantics_report_v1",
+  "title": "Family semantics report v1",
+  "type": "object",
+  "additionalProperties": false,
+  "patternProperties": {
+    "^x-": {}
+  },
+  "required": [
+    "schema",
+    "schema_version",
+    "epoch_id",
+    "family_id",
+    "env_kind",
+    "semantic_fingerprint",
+    "probe",
+    "checks"
+  ],
+  "properties": {
+    "schema": {"const": "family_semantics_report_v1"},
+    "schema_version": {"type": "integer", "const": 1},
+    "epoch_id": {"type": "string"},
+    "family_id": {"type": "string", "pattern": "^sha256:[a-f0-9]{64}$"},
+    "env_kind": {"type": "string", "enum": ["gridworld-v1", "lineworld-v1", "unknown"]},
+    "semantic_fingerprint": {"type": "string", "pattern": "^sha256:[a-f0-9]{64}$"},
+    "probe": {"$ref": "#/$defs/probe"},
+    "checks": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "key_sensitive",
+        "fingerprint_unique_vs_prev_frontier",
+        "signature_matches_recomputed"
+      ],
+      "properties": {
+        "key_sensitive": {"$ref": "#/$defs/check"},
+        "fingerprint_unique_vs_prev_frontier": {"$ref": "#/$defs/check"},
+        "signature_matches_recomputed": {"$ref": "#/$defs/check"},
+        "parent_witness_present": {"$ref": "#/$defs/check"}
+      }
+    }
+  },
+  "$defs": {
+    "check": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["ok", "reason_codes"],
+      "properties": {
+        "ok": {"type": "boolean"},
+        "reason_codes": {"type": "array", "items": {"type": "string"}}
+      }
+    },
+    "probe": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "probe_key_a",
+        "probe_key_b",
+        "inst_hash_a",
+        "inst_hash_b",
+        "suite_row_hash_a",
+        "suite_row_hash_b"
+      ],
+      "properties": {
+        "probe_key_a": {"type": "string", "pattern": "^sha256:[a-f0-9]{64}$"},
+        "probe_key_b": {"type": "string", "pattern": "^sha256:[a-f0-9]{64}$"},
+        "inst_hash_a": {"type": "string", "pattern": "^sha256:[a-f0-9]{64}$"},
+        "inst_hash_b": {"type": "string", "pattern": "^sha256:[a-f0-9]{64}$"},
+        "suite_row_hash_a": {"type": "string", "pattern": "^sha256:[a-f0-9]{64}$"},
+        "suite_row_hash_b": {"type": "string", "pattern": "^sha256:[a-f0-9]{64}$"}
+      }
+    }
+  }
+}

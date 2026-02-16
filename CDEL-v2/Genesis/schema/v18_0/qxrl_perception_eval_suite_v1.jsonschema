@@ -1,0 +1,64 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v18_0/qxrl_perception_eval_suite_v1",
+  "title": "qxrl_perception_eval_suite_v1",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "schema_id": {"const": "qxrl_perception_eval_suite_v1"},
+    "suite_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "dc1_id": {"const": "dc1:q32_v1"},
+    "opset_id": {"type": "string", "pattern": "^opset:eudrs_u_v1:sha256:[0-9a-f]{64}$"},
+    "metric_mix": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "masked_acc_at_1_weight_q32": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {"q": {"type": "integer"}},
+          "required": ["q"]
+        },
+        "recall_at_k_weight_q32": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {"q": {"type": "integer"}},
+          "required": ["q"]
+        },
+        "track_recall_weight_q32": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {"q": {"type": "integer"}},
+          "required": ["q"]
+        }
+      },
+      "required": ["masked_acc_at_1_weight_q32", "recall_at_k_weight_q32"]
+    },
+    "thresholds": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "ufc_min_q32": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {"q": {"type": "integer"}},
+          "required": ["q"]
+        },
+        "cac_delta_min_q32": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {"q": {"type": "integer"}},
+          "required": ["q"]
+        },
+        "cac_delta_rob_min_q32": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {"q": {"type": "integer"}},
+          "required": ["q"]
+        }
+      },
+      "required": ["ufc_min_q32", "cac_delta_min_q32", "cac_delta_rob_min_q32"]
+    }
+  },
+  "required": ["schema_id", "suite_id", "dc1_id", "opset_id", "metric_mix", "thresholds"]
+}

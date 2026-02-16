@@ -1,0 +1,29 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v11_0/sas_weights_bundle_v1",
+  "title": "SAS weights bundle v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "bundle_id",
+    "arch_id",
+    "arch_graph_hash",
+    "weights_sha256",
+    "training_ledger_head_hash",
+    "training_config_hash",
+    "corpus_id",
+    "toolchain_hash"
+  ],
+  "properties": {
+    "schema_version": {"const": "sas_weights_bundle_v1"},
+    "bundle_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "arch_id": {"type": "string"},
+    "arch_graph_hash": {"type": "string"},
+    "weights_sha256": {"type": "string"},
+    "training_ledger_head_hash": {"type": "string"},
+    "training_config_hash": {"type": "string"},
+    "corpus_id": {"type": "string"},
+    "toolchain_hash": {"type": "string"}
+  }
+}

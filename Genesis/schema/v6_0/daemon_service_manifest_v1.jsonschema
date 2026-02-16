@@ -1,0 +1,21 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v6_0/daemon_service_manifest_v1",
+  "title": "Daemon service manifest v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "plist_path",
+    "plist_hash",
+    "invocation",
+    "invocation_hash"
+  ],
+  "properties": {
+    "schema_version": {"const": "daemon_service_manifest_v1"},
+    "plist_path": {"type": "string"},
+    "plist_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "invocation": {"type": "string"},
+    "invocation_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"}
+  }
+}

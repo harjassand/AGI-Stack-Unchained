@@ -1,0 +1,39 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v11_1/sas_conjecture_selection_receipt_v1",
+  "title": "SAS conjecture selection receipt v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "receipt_id",
+    "created_utc",
+    "selected_conjecture_id",
+    "bundle_hash",
+    "selection_policy_hash",
+    "selection_metrics"
+  ],
+  "properties": {
+    "schema_version": {"const": "sas_conjecture_selection_receipt_v1"},
+    "receipt_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "created_utc": {"type": "string"},
+    "selected_conjecture_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "bundle_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "selection_policy_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "selection_metrics": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["node_count", "binder_count", "depth", "score"],
+      "properties": {
+        "node_count": {"type": "integer", "minimum": 1},
+        "binder_count": {"type": "integer", "minimum": 0},
+        "depth": {"type": "integer", "minimum": 1},
+        "score": {"type": "integer"}
+      }
+    },
+    "reasons": {
+      "type": "array",
+      "items": {"type": "string"}
+    }
+  }
+}

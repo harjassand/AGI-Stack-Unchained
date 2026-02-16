@@ -1,0 +1,46 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v5_0/thermo_checkpoint_receipt_v1",
+  "title": "Thermo checkpoint receipt v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "spec_version",
+    "receipt_hash",
+    "checkpoint_index",
+    "closed_epoch_index",
+    "active_promotion_bundle_id",
+    "probes_completed",
+    "rolling_density",
+    "density_ratio_num",
+    "density_ratio_den",
+    "consecutive_windows"
+  ],
+  "properties": {
+    "schema": {"const": "thermo_checkpoint_receipt_v1"},
+    "spec_version": {"const": "v5_0"},
+    "receipt_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "checkpoint_index": {"type": "integer", "minimum": 0},
+    "closed_epoch_index": {"type": "integer", "minimum": 0},
+    "active_promotion_bundle_id": {"type": ["string", "null"]},
+    "probes_completed": {"type": "integer", "minimum": 0},
+    "rolling_density": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["window_index", "passes", "energy_mJ"],
+        "properties": {
+          "window_index": {"type": "integer", "minimum": 0},
+          "passes": {"type": "integer", "minimum": 0},
+          "energy_mJ": {"type": "integer", "minimum": 0}
+        }
+      }
+    },
+    "density_ratio_num": {"type": "integer", "minimum": 0},
+    "density_ratio_den": {"type": "integer", "minimum": 1},
+    "consecutive_windows": {"type": "integer", "minimum": 0}
+  }
+}
+

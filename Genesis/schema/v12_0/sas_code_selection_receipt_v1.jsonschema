@@ -1,0 +1,26 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v12_0/sas_code_selection_receipt_v1",
+  "title": "SAS-CODE selection receipt v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "bundle_id", "selection_policy_hash", "selected_algo_id", "rejected"],
+  "properties": {
+    "schema_version": {"const": "sas_code_selection_receipt_v1"},
+    "bundle_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "selection_policy_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "selected_algo_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "rejected": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["algo_id", "reason"],
+        "properties": {
+          "algo_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+          "reason": {"type": "string", "enum": ["PROOF_FAIL", "NO_PERF_GAIN"]}
+        }
+      }
+    }
+  }
+}

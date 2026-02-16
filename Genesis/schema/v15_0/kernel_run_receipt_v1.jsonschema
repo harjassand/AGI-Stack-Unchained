@@ -1,0 +1,53 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v15_0/kernel_run_receipt_v1",
+  "title": "Kernel run receipt v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "capability_id",
+    "ledger_head_hash",
+    "trace_head_hash",
+    "snapshot_root_hash",
+    "promotion_bundle_hash",
+    "run_spec_hash",
+    "receipt_hash"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "kernel_run_receipt_v1"
+    },
+    "capability_id": {
+      "type": "string"
+    },
+    "run_id": {
+      "type": "string"
+    },
+    "generated_utc": {
+      "type": "string"
+    },
+    "ledger_head_hash": {
+      "type": "string"
+    },
+    "trace_head_hash": {
+      "type": "string"
+    },
+    "snapshot_root_hash": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "promotion_bundle_hash": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "run_spec_hash": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "receipt_hash": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    }
+  }
+}

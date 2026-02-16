@@ -1,0 +1,29 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v9_0/dataset_manifest_v1",
+  "title": "Dataset manifest v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "datasets"],
+  "properties": {
+    "schema_version": {"const": "dataset_manifest_v1"},
+    "datasets": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/dataset"}
+    }
+  },
+  "$defs": {
+    "dataset": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["dataset_id", "path", "sha256", "domain"],
+      "properties": {
+        "dataset_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+        "path": {"type": "string"},
+        "sha256": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+        "domain": {"type": "string"},
+        "description": {"type": "string"}
+      }
+    }
+  }
+}

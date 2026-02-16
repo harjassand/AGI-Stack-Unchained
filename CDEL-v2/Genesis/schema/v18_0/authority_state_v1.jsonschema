@@ -1,0 +1,56 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v18_0/authority_state_v1",
+  "title": "Authority state v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "authority_state_id",
+    "auth_hash",
+    "re1_constitution_state_id",
+    "re2_verifier_state_id",
+    "active_ek_id",
+    "active_op_pool_ids",
+    "active_dsbx_profile_ids",
+    "env_contract_id",
+    "toolchain_root_id",
+    "ccap_patch_allowlists_id",
+    "canon_version_ids"
+  ],
+  "properties": {
+    "schema_version": {"const": "authority_state_v1"},
+    "authority_state_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "auth_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "re1_constitution_state_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "re2_verifier_state_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "active_ek_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "active_op_pool_ids": {
+      "type": "array",
+      "items": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"}
+    },
+    "active_dsbx_profile_ids": {
+      "type": "array",
+      "items": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"}
+    },
+    "env_contract_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "toolchain_root_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "ccap_patch_allowlists_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "canon_version_ids": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "ccap_can_v",
+        "ir_can_v",
+        "op_can_v",
+        "obs_can_v"
+      ],
+      "properties": {
+        "ccap_can_v": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+        "ir_can_v": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+        "op_can_v": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+        "obs_can_v": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"}
+      }
+    }
+  }
+}

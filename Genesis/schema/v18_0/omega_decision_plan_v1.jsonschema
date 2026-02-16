@@ -1,0 +1,69 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v18_0/omega_decision_plan_v1",
+  "title": "Omega decision plan v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "plan_id",
+    "tick_u64",
+    "observation_report_hash",
+    "issue_bundle_hash",
+    "policy_hash",
+    "registry_hash",
+    "budgets_hash",
+    "action_kind",
+    "tie_break_path",
+    "recompute_proof"
+  ],
+  "properties": {
+    "schema_version": {"const": "omega_decision_plan_v1"},
+    "plan_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "tick_u64": {"type": "integer", "minimum": 0},
+    "observation_report_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "issue_bundle_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "policy_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "registry_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "budgets_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "action_kind": {"type": "string", "enum": ["RUN_CAMPAIGN", "RUN_GOAL_TASK", "NOOP", "SAFE_HALT"]},
+    "campaign_id": {"type": "string"},
+    "capability_id": {"type": "string"},
+    "campaign_pack_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "expected_verifier_module": {"type": "string"},
+    "priority_q32": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["q"],
+      "properties": {"q": {"type": "integer"}}
+    },
+    "goal_id": {"type": "string"},
+    "assigned_capability_id": {"type": "string"},
+    "runaway_selected_metric_id": {"type": "string"},
+    "runaway_escalation_level_u64": {"type": "integer", "minimum": 0},
+    "runaway_env_overrides": {
+      "type": "object",
+      "additionalProperties": {"type": "string"}
+    },
+    "tie_break_path": {"type": "array", "items": {"type": "string"}},
+    "recompute_proof": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["inputs_hash", "plan_hash"],
+      "properties": {
+        "inputs_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+        "plan_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"}
+      }
+    }
+  },
+  "allOf": [
+    {
+      "if": {"properties": {"action_kind": {"const": "RUN_CAMPAIGN"}}},
+      "then": {"required": ["campaign_id", "capability_id", "campaign_pack_hash", "expected_verifier_module", "priority_q32"]}
+    },
+    {
+      "if": {"properties": {"action_kind": {"const": "RUN_GOAL_TASK"}}},
+      "then": {"required": ["goal_id", "assigned_capability_id"]}
+    }
+  ]
+}

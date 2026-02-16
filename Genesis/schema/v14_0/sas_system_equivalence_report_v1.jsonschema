@@ -1,0 +1,29 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v14_0/sas_system_equivalence_report_v1",
+  "title": "SAS System equivalence report v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "spec_version", "suite_id", "all_pass", "case_results"],
+  "properties": {
+    "schema_version": {"const": "sas_system_equivalence_report_v1"},
+    "spec_version": {"const": "v14_0"},
+    "suite_id": {"type": "string"},
+    "all_pass": {"type": "boolean"},
+    "case_results": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/case"}
+    }
+  },
+  "$defs": {
+    "case": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["case_id", "pass"],
+      "properties": {
+        "case_id": {"type": "string"},
+        "pass": {"type": "boolean"}
+      }
+    }
+  }
+}

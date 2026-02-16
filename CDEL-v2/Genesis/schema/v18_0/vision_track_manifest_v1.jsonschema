@@ -1,0 +1,51 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v18_0/vision_track_manifest_v1",
+  "title": "vision_track_manifest_v1",
+  "type": "object",
+  "additionalProperties": false,
+  "$defs": {
+    "bbox_u32": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "x0_u32": {"type": "integer", "minimum": 0, "maximum": 4294967295},
+        "y0_u32": {"type": "integer", "minimum": 0, "maximum": 4294967295},
+        "x1_u32": {"type": "integer", "minimum": 0, "maximum": 4294967295},
+        "y1_u32": {"type": "integer", "minimum": 0, "maximum": 4294967295}
+      },
+      "required": ["x0_u32", "y0_u32", "x1_u32", "y1_u32"]
+    }
+  },
+  "properties": {
+    "schema_id": {"const": "vision_track_manifest_v1"},
+    "session_manifest_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "tracks": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "track_id_u32": {"type": "integer", "minimum": 1, "maximum": 4294967295},
+          "birth_frame_u32": {"type": "integer", "minimum": 0, "maximum": 4294967295},
+          "death_frame_u32": {"type": "integer", "minimum": 0, "maximum": 4294967295},
+          "detections": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "frame_index_u32": {"type": "integer", "minimum": 0, "maximum": 4294967295},
+                "obj_local_id_u32": {"type": "integer", "minimum": 1, "maximum": 4294967295},
+                "bbox": {"$ref": "https://genesis.engine/specs/v18_0/vision_track_manifest_v1#/$defs/bbox_u32"}
+              },
+              "required": ["frame_index_u32", "obj_local_id_u32", "bbox"]
+            }
+          }
+        },
+        "required": ["track_id_u32", "birth_frame_u32", "death_frame_u32", "detections"]
+      }
+    }
+  },
+  "required": ["schema_id", "session_manifest_id", "tracks"]
+}

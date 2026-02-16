@@ -1,0 +1,1 @@
+{"base_registry_hash":"4d0f9bf38c6f622d18aa39aeb611905ac62cb52c1abbfc1d98babbb86a860d8f","format":"mechanism_registry_diff_v1","ops":[{"identifiability_metadata":{"identified_by_interventions":[]},"invariance_claims":[],"mechanism_id":"mech_y","op_id":"op_bad","op_type":"BAD_OP"}],"schema_version":"1"}

@@ -1,0 +1,15 @@
+ledger_head: GENESIS
+total_tasks: 5
+accepted: 0
+rejected: 5
+accept_rate: 0.000
+closure_symbols_p50: None
+closure_symbols_p90: None
+closure_symbols_p99: None
+closure_modules_p50: None
+closure_modules_p90: None
+closure_modules_p99: None
+median_cost: None
+rejection_breakdown:
+  DEPS_MISMATCH: 1
+  SPEC_FAIL: 4

@@ -1,0 +1,32 @@
+{"episode": 0, "fn_name": "abs_int", "signature": "def abs_int(x: int) -> int:", "task_id": "abs_int_v1", "tests": [{"args": [-3], "expected": 3}]}
+{"episode": 1, "fn_name": "abs_int", "signature": "def abs_int(x: int) -> int:", "task_id": "abs_int_v1", "tests": [{"args": [-1], "expected": 1}]}
+{"episode": 2, "fn_name": "abs_int", "signature": "def abs_int(x: int) -> int:", "task_id": "abs_int_v1", "tests": [{"args": [0], "expected": 0}]}
+{"episode": 3, "fn_name": "abs_int", "signature": "def abs_int(x: int) -> int:", "task_id": "abs_int_v1", "tests": [{"args": [2], "expected": 2}]}
+{"episode": 4, "fn_name": "is_even", "signature": "def is_even(n: int) -> bool:", "task_id": "is_even_v1", "tests": [{"args": [0], "expected": true}]}
+{"episode": 5, "fn_name": "is_even", "signature": "def is_even(n: int) -> bool:", "task_id": "is_even_v1", "tests": [{"args": [1], "expected": false}]}
+{"episode": 6, "fn_name": "is_even", "signature": "def is_even(n: int) -> bool:", "task_id": "is_even_v1", "tests": [{"args": [2], "expected": true}]}
+{"episode": 7, "fn_name": "is_even", "signature": "def is_even(n: int) -> bool:", "task_id": "is_even_v1", "tests": [{"args": [3], "expected": false}]}
+{"episode": 8, "fn_name": "clamp_0_10", "signature": "def clamp_0_10(n: int) -> int:", "task_id": "clamp_0_10_v1", "tests": [{"args": [-5], "expected": 0}]}
+{"episode": 9, "fn_name": "clamp_0_10", "signature": "def clamp_0_10(n: int) -> int:", "task_id": "clamp_0_10_v1", "tests": [{"args": [0], "expected": 0}]}
+{"episode": 10, "fn_name": "clamp_0_10", "signature": "def clamp_0_10(n: int) -> int:", "task_id": "clamp_0_10_v1", "tests": [{"args": [7], "expected": 7}]}
+{"episode": 11, "fn_name": "clamp_0_10", "signature": "def clamp_0_10(n: int) -> int:", "task_id": "clamp_0_10_v1", "tests": [{"args": [12], "expected": 10}]}
+{"episode": 12, "fn_name": "reverse_str", "signature": "def reverse_str(s: str) -> str:", "task_id": "reverse_str_v1", "tests": [{"args": ["abc"], "expected": "cba"}]}
+{"episode": 13, "fn_name": "reverse_str", "signature": "def reverse_str(s: str) -> str:", "task_id": "reverse_str_v1", "tests": [{"args": [""], "expected": ""}]}
+{"episode": 14, "fn_name": "reverse_str", "signature": "def reverse_str(s: str) -> str:", "task_id": "reverse_str_v1", "tests": [{"args": ["race"], "expected": "ecar"}]}
+{"episode": 15, "fn_name": "reverse_str", "signature": "def reverse_str(s: str) -> str:", "task_id": "reverse_str_v1", "tests": [{"args": ["xy"], "expected": "yx"}]}
+{"episode": 16, "fn_name": "count_vowels", "signature": "def count_vowels(s: str) -> int:", "task_id": "count_vowels_v1", "tests": [{"args": ["abc"], "expected": 1}]}
+{"episode": 17, "fn_name": "count_vowels", "signature": "def count_vowels(s: str) -> int:", "task_id": "count_vowels_v1", "tests": [{"args": ["aeiou"], "expected": 5}]}
+{"episode": 18, "fn_name": "count_vowels", "signature": "def count_vowels(s: str) -> int:", "task_id": "count_vowels_v1", "tests": [{"args": ["xyz"], "expected": 0}]}
+{"episode": 19, "fn_name": "count_vowels", "signature": "def count_vowels(s: str) -> int:", "task_id": "count_vowels_v1", "tests": [{"args": ["bEe"], "expected": 1}]}
+{"episode": 20, "fn_name": "sum_list", "signature": "def sum_list(xs: list[int]) -> int:", "task_id": "sum_list_v1", "tests": [{"args": [[]], "expected": 0}]}
+{"episode": 21, "fn_name": "sum_list", "signature": "def sum_list(xs: list[int]) -> int:", "task_id": "sum_list_v1", "tests": [{"args": [[1, 2]], "expected": 3}]}
+{"episode": 22, "fn_name": "sum_list", "signature": "def sum_list(xs: list[int]) -> int:", "task_id": "sum_list_v1", "tests": [{"args": [[3, -1]], "expected": 2}]}
+{"episode": 23, "fn_name": "sum_list", "signature": "def sum_list(xs: list[int]) -> int:", "task_id": "sum_list_v1", "tests": [{"args": [[10]], "expected": 10}]}
+{"episode": 24, "fn_name": "parse_int_or_zero", "signature": "def parse_int_or_zero(s: str) -> int:", "task_id": "parse_int_or_zero_v1", "tests": [{"args": ["12"], "expected": 12}]}
+{"episode": 25, "fn_name": "parse_int_or_zero", "signature": "def parse_int_or_zero(s: str) -> int:", "task_id": "parse_int_or_zero_v1", "tests": [{"args": ["-3"], "expected": -3}]}
+{"episode": 26, "fn_name": "parse_int_or_zero", "signature": "def parse_int_or_zero(s: str) -> int:", "task_id": "parse_int_or_zero_v1", "tests": [{"args": ["foo"], "expected": 0}]}
+{"episode": 27, "fn_name": "parse_int_or_zero", "signature": "def parse_int_or_zero(s: str) -> int:", "task_id": "parse_int_or_zero_v1", "tests": [{"args": ["7"], "expected": 7}]}
+{"episode": 28, "fn_name": "max2", "signature": "def max2(a: int, b: int) -> int:", "task_id": "max2_v1", "tests": [{"args": [1, 2], "expected": 2}]}
+{"episode": 29, "fn_name": "max2", "signature": "def max2(a: int, b: int) -> int:", "task_id": "max2_v1", "tests": [{"args": [2, 1], "expected": 2}]}
+{"episode": 30, "fn_name": "max2", "signature": "def max2(a: int, b: int) -> int:", "task_id": "max2_v1", "tests": [{"args": [-1, 5], "expected": 5}]}
+{"episode": 31, "fn_name": "max2", "signature": "def max2(a: int, b: int) -> int:", "task_id": "max2_v1", "tests": [{"args": [0, 0], "expected": 0}]}

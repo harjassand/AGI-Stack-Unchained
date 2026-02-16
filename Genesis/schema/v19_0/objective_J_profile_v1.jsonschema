@@ -1,0 +1,95 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v19_0/objective_J_profile_v1",
+  "title": "Objective J profile v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_name",
+    "schema_version",
+    "profile_id",
+    "enabled_terms",
+    "weights",
+    "epsilon",
+    "amortization_horizons",
+    "measurement_kernels"
+  ],
+  "$defs": {
+    "sha256": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "artifact_ref_v1": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["artifact_id", "artifact_relpath"],
+      "properties": {
+        "artifact_id": {"$ref": "#/$defs/sha256"},
+        "artifact_relpath": {"type": "string", "minLength": 1}
+      }
+    }
+  },
+  "properties": {
+    "schema_name": {"const": "objective_J_profile_v1"},
+    "schema_version": {"const": "v19_0"},
+    "profile_id": {"$ref": "#/$defs/sha256"},
+    "enabled_terms": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "enum": [
+          "UDC_BASE",
+          "UDC_META",
+          "INV",
+          "TDL",
+          "KDL",
+          "EDL",
+          "CDL",
+          "CoDL",
+          "IDL"
+        ]
+      },
+      "uniqueItems": true
+    },
+    "weights": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["lambda", "mu", "nu", "alpha", "beta", "gamma", "delta", "eta"],
+      "properties": {
+        "lambda": {"type": "integer"},
+        "mu": {"type": "integer"},
+        "nu": {"type": "integer"},
+        "alpha": {"type": "integer"},
+        "beta": {"type": "integer"},
+        "gamma": {"type": "integer"},
+        "delta": {"type": "integer"},
+        "eta": {"type": "integer"}
+      }
+    },
+    "epsilon": {"type": "integer", "minimum": 1},
+    "amortization_horizons": {
+      "type": "object",
+      "additionalProperties": {"type": "integer", "minimum": 1}
+    },
+    "measurement_kernels": {
+      "type": "object",
+      "additionalProperties": {"$ref": "#/$defs/artifact_ref_v1"}
+    },
+    "udc_schedule_ref": {
+      "anyOf": [
+        {"type": "null"},
+        {"$ref": "#/$defs/artifact_ref_v1"}
+      ]
+    },
+    "meta_schedule_ref": {
+      "anyOf": [
+        {"type": "null"},
+        {"$ref": "#/$defs/artifact_ref_v1"}
+      ]
+    },
+    "debt_sources": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "array",
+        "items": {"$ref": "#/$defs/artifact_ref_v1"}
+      }
+    }
+  }
+}

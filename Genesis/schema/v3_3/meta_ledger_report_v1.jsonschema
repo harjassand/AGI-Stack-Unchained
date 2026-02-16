@@ -1,0 +1,36 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v3_3/meta_ledger_report_v1",
+  "title": "Meta ledger report v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "spec_version",
+    "root_swarm_run_id",
+    "icore_id",
+    "max_epochs",
+    "meta_blocks",
+    "meta_updates_published",
+    "meta_updates_accepted",
+    "meta_updates_rejected",
+    "final_meta_block_id",
+    "final_meta_state_hash",
+    "final_meta_policy_hash"
+  ],
+  "properties": {
+    "schema": {"const": "meta_ledger_report_v1"},
+    "spec_version": {"const": "v3_3"},
+    "root_swarm_run_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "icore_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "max_epochs": {"type": "integer", "minimum": 0},
+    "meta_blocks": {"type": "integer", "minimum": 0},
+    "meta_updates_published": {"type": "integer", "minimum": 0},
+    "meta_updates_accepted": {"type": "integer", "minimum": 0},
+    "meta_updates_rejected": {"type": "integer", "minimum": 0},
+    "final_meta_block_id": {"type": "string", "pattern": "^(sha256:[0-9a-f]{64}|GENESIS)$"},
+    "final_meta_state_hash": {"type": "string", "pattern": "^(sha256:[0-9a-f]{64}|GENESIS)$"},
+    "final_meta_policy_hash": {"type": "string", "pattern": "^(sha256:[0-9a-f]{64}|GENESIS)$"},
+    "omega_ready": {"type": "boolean"}
+  }
+}

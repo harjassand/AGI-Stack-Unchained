@@ -1,0 +1,29 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v14_0/sas_system_suitepack_v1",
+  "title": "SAS System suitepack v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "suite_id", "cases"],
+  "properties": {
+    "schema_version": {"const": "sas_system_suitepack_v1"},
+    "suite_id": {"type": "string"},
+    "is_stub": {"type": "boolean"},
+    "cases": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/case"}
+    }
+  },
+  "$defs": {
+    "case": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["case_id", "tier", "job"],
+      "properties": {
+        "case_id": {"type": "string"},
+        "tier": {"type": "string", "enum": ["S", "M", "L"]},
+        "job": {"$ref": "sas_science_workmeter_job_v1.jsonschema"}
+      }
+    }
+  }
+}

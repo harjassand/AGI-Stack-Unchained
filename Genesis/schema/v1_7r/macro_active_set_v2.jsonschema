@@ -1,0 +1,27 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v1_7r/macro_active_set_v2",
+  "title": "Macro active set v2",
+  "type": "object",
+  "additionalProperties": false,
+  "patternProperties": {
+    "^x-": {}
+  },
+  "required": [
+    "schema",
+    "schema_version",
+    "active_macro_ids",
+    "activation_epoch",
+    "x-meta"
+  ],
+  "properties": {
+    "schema": {"const": "macro_active_set_v2"},
+    "schema_version": {"type": "integer", "const": 2},
+    "active_macro_ids": {
+      "type": "array",
+      "items": {"type": "string", "pattern": "^sha256:[a-f0-9]{64}$"}
+    },
+    "activation_epoch": {"anyOf": [{"type": "integer"}, {"type": "null"}]},
+    "x-meta": {"type": "object"}
+  }
+}

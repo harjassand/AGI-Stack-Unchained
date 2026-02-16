@@ -1,0 +1,39 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v1_8r/meta_patch_def_v1",
+  "title": "Meta patch definition v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "schema_version",
+    "patch_id",
+    "patch_kind",
+    "params",
+    "x-meta"
+  ],
+  "properties": {
+    "schema": {"const": "meta_patch_def_v1"},
+    "schema_version": {"type": "integer", "const": 1},
+    "patch_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "patch_kind": {"type": "string", "enum": ["ctx_hash_cache_v1"]},
+    "params": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["capacity"],
+      "properties": {
+        "capacity": {"type": "integer", "minimum": 1, "maximum": 65536}
+      }
+    },
+    "x-meta": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["KERNEL_HASH", "META_HASH", "constants_hash"],
+      "properties": {
+        "KERNEL_HASH": {"type": "string"},
+        "META_HASH": {"type": "string"},
+        "constants_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"}
+      }
+    }
+  }
+}

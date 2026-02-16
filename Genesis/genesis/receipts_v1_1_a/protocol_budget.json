@@ -1,0 +1,15 @@
+{
+  "epochs": {
+    "epoch-1": {
+      "attempt_index": 2,
+      "cdel_calls": 2,
+      "dp_queries": 4,
+      "promotions": 2,
+      "robust_queries": 2,
+      "seen_descriptors": [
+        "c09ba6718182"
+      ],
+      "stat_queries": 4
+    }
+  }
+}

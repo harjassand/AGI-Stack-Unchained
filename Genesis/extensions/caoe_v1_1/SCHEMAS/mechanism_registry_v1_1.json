@@ -1,0 +1,27 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "mechanism_registry_v1_1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["format", "schema_version", "ontology_hash", "mechanisms"],
+  "properties": {
+    "format": {"const": "mechanism_registry_v1_1"},
+    "schema_version": {"const": 1},
+    "ontology_hash": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "mechanisms": {"type": "array", "items": {"$ref": "#/$defs/mechanism"}}
+  },
+  "$defs": {
+    "mechanism": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["mechanism_id", "inputs", "outputs", "transition", "params"],
+      "properties": {
+        "mechanism_id": {"type": "string", "minLength": 1},
+        "inputs": {"type": "array", "items": {"type": "string"}},
+        "outputs": {"type": "array", "items": {"type": "string"}},
+        "transition": {"type": "object"},
+        "params": {"type": "object"}
+      }
+    }
+  }
+}

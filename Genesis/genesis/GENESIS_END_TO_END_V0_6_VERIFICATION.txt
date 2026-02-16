@@ -1,0 +1,12 @@
+GENESIS_END_TO_END_V0_6 verification
+
+Commands:
+
+export CDEL_ROOT=/path/to/cdel
+./genesis/run_end_to_end_v0_6.sh
+
+Results:
+- system run completed without errors
+- at least one SYSTEM promotion PASS with verified receipt
+- FAIL responses contained no receipts
+- logs written deterministically to genesis_run.jsonl

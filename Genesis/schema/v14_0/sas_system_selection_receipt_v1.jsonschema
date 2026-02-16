@@ -1,0 +1,24 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v14_0/sas_system_selection_receipt_v1",
+  "title": "SAS System selection receipt v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "spec_version",
+    "target_id",
+    "selected_candidate_id",
+    "reason",
+    "profile_report_hash"
+  ],
+  "properties": {
+    "schema_version": {"const": "sas_system_selection_receipt_v1"},
+    "spec_version": {"const": "v14_0"},
+    "target_id": {"const": "SAS_SCIENCE_WORKMETER_V1"},
+    "selected_candidate_id": {"type": "string"},
+    "reason": {"type": "string"},
+    "profile_report_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "receipt_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"}
+  }
+}

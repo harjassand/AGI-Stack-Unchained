@@ -1,0 +1,55 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v1_8r/meta_patch_ledger_entry_v1",
+  "title": "Meta patch ledger entry v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "schema_version",
+    "event",
+    "epoch_id",
+    "patch_id",
+    "patch_def_hash",
+    "meta_patch_admit_receipt_hash",
+    "prev_line_hash",
+    "line_hash",
+    "x-meta"
+  ],
+  "properties": {
+    "schema": {"const": "meta_patch_ledger_entry_v1"},
+    "schema_version": {"type": "integer", "const": 1},
+    "event": {"type": "string", "enum": ["ADMIT", "ACTIVATE", "DEACTIVATE", "EVICT"]},
+    "epoch_id": {"type": "string"},
+    "patch_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "patch_def_hash": {
+      "anyOf": [
+        {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+        {"type": "null"}
+      ]
+    },
+    "meta_patch_admit_receipt_hash": {
+      "anyOf": [
+        {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+        {"type": "null"}
+      ]
+    },
+    "prev_line_hash": {
+      "anyOf": [
+        {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+        {"type": "null"}
+      ]
+    },
+    "line_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "x-meta": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["KERNEL_HASH", "META_HASH", "constants_hash"],
+      "properties": {
+        "KERNEL_HASH": {"type": "string"},
+        "META_HASH": {"type": "string"},
+        "constants_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"}
+      }
+    }
+  }
+}

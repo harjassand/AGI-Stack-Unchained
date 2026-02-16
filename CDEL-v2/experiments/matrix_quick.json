@@ -1,0 +1,84 @@
+{
+  "runs": [
+    {
+      "run_id": "quick_base",
+      "tasks_file": "tasks/stream_50_bounded.jsonl",
+      "generator_mode": "enum",
+      "certificate_mode": "bounded",
+      "load_mode": "indexed",
+      "budget": 200000,
+      "cost_weights": {"alpha": 1, "beta": 1, "gamma": 1},
+      "spec_domain": {"int_min": -2, "int_max": 2, "list_max_len": 3},
+      "eval_step_limit": 100000,
+      "closure_cache": false,
+      "seed": 0
+    },
+    {
+      "run_id": "quick_before_indexed",
+      "tasks_file": "tasks/stream_50_with_1k_before.jsonl",
+      "generator_mode": "enum",
+      "certificate_mode": "bounded",
+      "load_mode": "indexed",
+      "budget": 400000,
+      "cost_weights": {"alpha": 1, "beta": 1, "gamma": 1},
+      "spec_domain": {"int_min": -2, "int_max": 2, "list_max_len": 3},
+      "eval_step_limit": 100000,
+      "closure_cache": false,
+      "seed": 0
+    },
+    {
+      "run_id": "quick_before_scan",
+      "tasks_file": "tasks/stream_50_with_1k_before.jsonl",
+      "generator_mode": "enum",
+      "certificate_mode": "bounded",
+      "load_mode": "scan",
+      "budget": 400000,
+      "cost_weights": {"alpha": 1, "beta": 1, "gamma": 1},
+      "spec_domain": {"int_min": -2, "int_max": 2, "list_max_len": 3},
+      "eval_step_limit": 100000,
+      "closure_cache": false,
+      "seed": 0
+    },
+    {
+      "run_id": "quick_capacity",
+      "tasks_file": "tasks/stream_50_bounded.jsonl",
+      "generator_mode": "enum",
+      "certificate_mode": "bounded",
+      "load_mode": "indexed",
+      "budget": 200,
+      "cost_weights": {"alpha": 1, "beta": 1, "gamma": 1},
+      "spec_domain": {"int_min": -2, "int_max": 2, "list_max_len": 3},
+      "eval_step_limit": 100000,
+      "closure_cache": false,
+      "seed": 0
+    },
+    {
+      "run_id": "quick_proof_on",
+      "tasks_file": "tasks/stream_50_proofheavy.jsonl",
+      "generator_mode": "enum",
+      "certificate_mode": "proof",
+      "load_mode": "indexed",
+      "budget": 200000,
+      "cost_weights": {"alpha": 1, "beta": 1, "gamma": 1},
+      "spec_domain": {"int_min": -2, "int_max": 2, "list_max_len": 3},
+      "eval_step_limit": 100000,
+      "closure_cache": false,
+      "proof_synth": true,
+      "seed": 0
+    },
+    {
+      "run_id": "quick_proof_off",
+      "tasks_file": "tasks/stream_50_proofheavy.jsonl",
+      "generator_mode": "enum",
+      "certificate_mode": "proof",
+      "load_mode": "indexed",
+      "budget": 200000,
+      "cost_weights": {"alpha": 1, "beta": 1, "gamma": 1},
+      "spec_domain": {"int_min": -2, "int_max": 2, "list_max_len": 3},
+      "eval_step_limit": 100000,
+      "closure_cache": false,
+      "proof_synth": false,
+      "seed": 0
+    }
+  ]
+}

@@ -1,0 +1,61 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v18_0/dmpl_train_run_v1",
+  "title": "DMPL Train Run v1",
+  "type": "object",
+  "additionalProperties": false,
+  "$defs": {
+    "sha256_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "q32_i64": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {"q": {"type": "integer", "minimum": -9223372036854775808, "maximum": 9223372036854775807}},
+      "required": ["q"]
+    },
+    "u32": {"type": "integer", "minimum": 0, "maximum": 4294967295},
+    "u64": {"type": "integer", "minimum": 0, "maximum": 18446744073709551615}
+  },
+  "properties": {
+    "schema_id": {"const": "dmpl_train_run_v1"},
+    "dc1_id": {"type": "string", "const": "dc1:q32_v1"},
+    "opset_id": {"type": "string", "pattern": "^opset:eudrs_u_v1:sha256:[0-9a-f]{64}$"},
+
+    "baseline_droot_id": {"$ref": "#/$defs/sha256_id"},
+    "dataset_pack_id": {"$ref": "#/$defs/sha256_id"},
+
+    "initial_fparams_bundle_id": {"$ref": "#/$defs/sha256_id"},
+    "initial_vparams_bundle_id": {"$ref": "#/$defs/sha256_id"},
+
+    "train_steps_u32": {"$ref": "#/$defs/u32"},
+    "batch_size_u32": {"$ref": "#/$defs/u32"},
+
+    "lr_q32": {"$ref": "#/$defs/q32_i64"},
+    "max_grad_norm_q32": {"$ref": "#/$defs/q32_i64"},
+
+    "trainable_tensors": {
+      "type": "array",
+      "minItems": 6,
+      "maxItems": 6,
+      "uniqueItems": true,
+      "items": {"type": "string", "enum": ["A0", "B0", "Wg", "b0", "v0", "w0"]}
+    },
+
+    "expected_output_kind": {"const": "FULL_TENSORS_EACH_STEP_V1"}
+  },
+  "required": [
+    "schema_id",
+    "dc1_id",
+    "opset_id",
+    "baseline_droot_id",
+    "dataset_pack_id",
+    "initial_fparams_bundle_id",
+    "initial_vparams_bundle_id",
+    "train_steps_u32",
+    "batch_size_u32",
+    "lr_q32",
+    "max_grad_norm_q32",
+    "trainable_tensors",
+    "expected_output_kind"
+  ]
+}
+

@@ -1,0 +1,49 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v1_5r/shrink_proof_v1",
+  "title": "Shrink proof v1",
+  "type": "object",
+  "additionalProperties": false,
+  "patternProperties": {
+    "^x-": {}
+  },
+  "required": [
+    "schema",
+    "schema_version",
+    "shrinker_version",
+    "rules_applied",
+    "gas_used",
+    "final_prefix_steps",
+    "repro_command"
+  ],
+  "properties": {
+    "schema": {
+      "const": "shrink_proof_v1"
+    },
+    "schema_version": {
+      "type": "integer",
+      "const": 1
+    },
+    "shrinker_version": {
+      "type": "integer",
+      "const": 1
+    },
+    "rules_applied": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "gas_used": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "final_prefix_steps": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "repro_command": {
+      "type": "string"
+    }
+  }
+}

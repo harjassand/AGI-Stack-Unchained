@@ -1,0 +1,53 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v19_0/budget_spec_v1",
+  "title": "Deterministic budget spec v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_name",
+    "schema_version",
+    "max_steps",
+    "max_bytes_read",
+    "max_bytes_write",
+    "max_items",
+    "seed",
+    "policy"
+  ],
+  "properties": {
+    "schema_name": {
+      "const": "budget_spec_v1"
+    },
+    "schema_version": {
+      "const": "v19_0"
+    },
+    "max_steps": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "max_bytes_read": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "max_bytes_write": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "max_items": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "seed": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "policy": {
+      "type": "string",
+      "enum": [
+        "HARD_FAIL",
+        "SAFE_HALT",
+        "SAFE_SPLIT"
+      ]
+    }
+  }
+}

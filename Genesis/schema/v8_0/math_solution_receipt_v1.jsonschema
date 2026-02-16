@@ -1,0 +1,29 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v8_0/math_solution_receipt_v1",
+  "title": "Math solution receipt v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "attempt_id",
+    "problem_id",
+    "tick",
+    "daemon_id",
+    "toolchain_manifest_hash",
+    "sealed_proof_check_receipt_hash",
+    "proof_artifact_hash",
+    "created_utc"
+  ],
+  "properties": {
+    "schema_version": {"const": "math_solution_receipt_v1"},
+    "attempt_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "problem_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "tick": {"type": "integer", "minimum": 0},
+    "daemon_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "toolchain_manifest_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "sealed_proof_check_receipt_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "proof_artifact_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "created_utc": {"type": "string", "format": "date-time"}
+  }
+}

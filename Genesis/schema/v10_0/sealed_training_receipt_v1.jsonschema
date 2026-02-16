@@ -1,0 +1,74 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v10_0/sealed_training_receipt_v1",
+  "title": "Sealed training receipt v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "toolchain_id",
+    "toolchain_manifest_hash",
+    "training_config_hash",
+    "corpus_id",
+    "corpus_manifest_hash",
+    "result",
+    "weights_hash",
+    "stdout_hash",
+    "stderr_hash",
+    "time_ms",
+    "network_used"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "sealed_training_receipt_v1"
+    },
+    "toolchain_id": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "toolchain_manifest_hash": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "training_config_hash": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "corpus_id": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "corpus_manifest_hash": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "result": {
+      "type": "string",
+      "enum": [
+        "OK",
+        "TIMEOUT",
+        "OOM",
+        "ERROR"
+      ]
+    },
+    "weights_hash": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "stdout_hash": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "stderr_hash": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "time_ms": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "network_used": {
+      "type": "boolean"
+    }
+  }
+}

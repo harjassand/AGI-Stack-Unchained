@@ -1,0 +1,34 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "kernel_brain_perf_report_v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "baseline_brain_opcodes_total",
+    "candidate_brain_opcodes_total",
+    "gate_multiplier",
+    "gate_pass",
+    "per_case"
+  ],
+  "properties": {
+    "schema_version": {"const": "kernel_brain_perf_report_v1"},
+    "baseline_brain_opcodes_total": {"type": "integer", "minimum": 0},
+    "candidate_brain_opcodes_total": {"type": "integer", "minimum": 0},
+    "gate_multiplier": {"const": 1000},
+    "gate_pass": {"type": "boolean"},
+    "per_case": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["case_id", "baseline_opcodes", "candidate_opcodes"],
+        "properties": {
+          "case_id": {"type": "string", "minLength": 1},
+          "baseline_opcodes": {"type": "integer", "minimum": 0},
+          "candidate_opcodes": {"type": "integer", "minimum": 0}
+        }
+      }
+    }
+  }
+}

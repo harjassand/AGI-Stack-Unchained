@@ -1,0 +1,98 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v16_0/sas_metasearch_promotion_bundle_v1",
+  "title": "SAS Metasearch promotion bundle v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "bundle_id",
+    "created_utc",
+    "pack_hash",
+    "policy_hash",
+    "baseline_search_config_hash",
+    "candidate_search_config_hash",
+    "trace_corpus_hash",
+    "prior_hash",
+    "plan_hash",
+    "compute_report_hash",
+    "selected_theory_id",
+    "selected_law_kind",
+    "acceptance_decision"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "sas_metasearch_promotion_bundle_v1"
+    },
+    "bundle_id": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "created_utc": {
+      "type": "string"
+    },
+    "pack_hash": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "policy_hash": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "baseline_search_config_hash": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "candidate_search_config_hash": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "trace_corpus_hash": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "prior_hash": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "plan_hash": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "compute_report_hash": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "selected_theory_id": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "selected_law_kind": {
+      "type": "string",
+      "enum": [
+        "NEWTON_CENTRAL_V1",
+        "NEWTON_NBODY_V1",
+        "NON_NEWTON_V1"
+      ]
+    },
+    "acceptance_decision": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "pass",
+        "reasons"
+      ],
+      "properties": {
+        "pass": {
+          "type": "boolean"
+        },
+        "reasons": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    }
+  }
+}

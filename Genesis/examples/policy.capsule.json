@@ -1,0 +1,162 @@
+{
+  "schema_version": "1.0.1",
+  "capsule_version": "1.0.0",
+  "forward_compat": "x_prefix_only",
+  "canonicalization": "gcj-1",
+  "capsule_id": "4a2b6c1d-1b5e-4f7a-9a6e-3c4d5e6f7a44",
+  "artifact_type": "POLICY",
+  "parents": [
+    "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+  ],
+  "operators_used": [
+    "dualize"
+  ],
+  "build_hashes": {
+    "ir_hash": "3333333333333333333333333333333333333333333333333333333333333333",
+    "container_hash": "4444444444444444444444444444444444444444444444444444444444444444",
+    "dependency_hashes": []
+  },
+  "commitments": {
+    "capsule_hash": "4763dacc45ca8a50c64d528fa95015e2698d30d31d372e4474404f30f20d20e7",
+    "checkpoint_merkle_root": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+  },
+  "ir_payload": {
+    "format": "GIR1-POLICY",
+    "version": "1.0",
+    "payload_base64": "AA=="
+  },
+  "entrypoints": [
+    {
+      "name": "act",
+      "signature": {
+        "inputs": [
+          {
+            "name": "state",
+            "type": "Tensor<float32>[d]"
+          }
+        ],
+        "outputs": [
+          {
+            "name": "action",
+            "type": "Tensor<float32>[a]"
+          }
+        ]
+      }
+    }
+  ],
+  "effects": {
+    "allow": [
+      "read_only"
+    ],
+    "deny": [
+      "network",
+      "filesystem_write",
+      "process_spawn"
+    ]
+  },
+  "contract": {
+    "functional_spec": {
+      "spec_language": "DSL1",
+      "clauses": [
+        {
+          "id": "fs-1",
+          "clause_type": "functional",
+          "text": "Action bounds respected for all inputs."
+        }
+      ]
+    },
+    "safety_spec": {
+      "invariants": [
+        {
+          "id": "s-1",
+          "clause_type": "safety",
+          "text": "No unsafe action in forbidden region."
+        }
+      ],
+      "forbidden_behaviors": []
+    },
+    "resource_spec": {
+      "max_wall_time_ms": 20,
+      "max_memory_mb": 128,
+      "max_sample_count": 0,
+      "max_gpu_seconds": 0
+    },
+    "statistical_spec": {
+      "metrics": [
+        {
+          "name": "reward",
+          "direction": "maximize",
+          "target": 0.8
+        }
+      ],
+      "decision_rule": "threshold",
+      "confidence_requirement": {
+        "delta": 0.01
+      }
+    },
+    "robustness_spec": {
+      "mode": "certified_slices",
+      "slice_family": {
+        "family": "finite_template",
+        "capacity": {
+          "parameters": {
+            "templates": 25
+          }
+        }
+      },
+      "risk_metric": "reward",
+      "risk_bound": 0.7
+    }
+  },
+  "assumptions": [
+    {
+      "assumption_id": "A-1",
+      "statement": "State inputs are normalized to zero mean and unit variance.",
+      "scope": "policy inputs",
+      "falsification_test": {
+        "method": "moment_check",
+        "power_target": 0.9,
+        "min_detectable_delta": 0.2,
+        "anytime_valid": true
+      },
+      "uncertainty_set": {
+        "class": "mean_shift",
+        "radius": 0.2
+      },
+      "failure_probability": 0.01
+    }
+  ],
+  "budget_bid": {
+    "grade": "DeploymentGrade",
+    "alpha_bid": "0.002",
+    "privacy_bid": {
+      "epsilon": "0.1",
+      "delta": "0.000001"
+    },
+    "compute_bid": {
+      "max_compute_units": 2000,
+      "max_wall_time_ms": 10000,
+      "max_adversary_strength": 1
+    }
+  },
+  "evidence": {
+    "certificates": [],
+    "unit_tests": [],
+    "property_tests": [],
+    "checkpoints": []
+  },
+  "reproducibility": {
+    "determinism_mode": "seeded",
+    "seed_policy": "harness_seeded",
+    "runtime_env": {
+      "os": "linux",
+      "arch": "x86_64",
+      "kernel_isa": "KISA-1"
+    }
+  },
+  "provenance": {
+    "created_by": "genesis",
+    "timestamp": "2025-01-01T00:00:00Z",
+    "source_repo": "local"
+  }
+}

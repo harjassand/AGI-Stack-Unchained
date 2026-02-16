@@ -1,0 +1,25 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v17_0/val_exec_backend_v1",
+  "title": "VAL exec backend receipt v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "exec_backend",
+    "runner_bin_hash",
+    "code_bytes_hash",
+    "input_hash",
+    "output_hash",
+    "sealed_run_receipt_hash"
+  ],
+  "properties": {
+    "schema_version": { "const": "val_exec_backend_v1" },
+    "exec_backend": { "type": "string", "minLength": 1 },
+    "runner_bin_hash": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" },
+    "code_bytes_hash": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" },
+    "input_hash": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" },
+    "output_hash": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" },
+    "sealed_run_receipt_hash": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" }
+  }
+}

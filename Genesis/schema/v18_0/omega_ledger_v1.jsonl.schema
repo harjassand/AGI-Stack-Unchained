@@ -1,0 +1,6 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v18_0/omega_ledger_v1",
+  "title": "Omega ledger v1 (JSONL line)",
+  "$ref": "omega_ledger_event_v1.jsonschema"
+}

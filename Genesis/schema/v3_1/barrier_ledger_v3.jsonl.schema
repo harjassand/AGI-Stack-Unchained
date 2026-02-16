@@ -1,0 +1,6 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v3_1/barrier_ledger_v3",
+  "title": "Barrier ledger v3 (JSONL line)",
+  "$ref": "barrier_entry_v3.jsonschema"
+}

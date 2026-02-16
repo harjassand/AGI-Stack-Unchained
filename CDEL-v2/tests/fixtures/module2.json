@@ -1,0 +1,26 @@
+{
+  "schema_version": 1,
+  "dsl_version": 1,
+  "parent": "GENESIS",
+  "payload": {
+    "new_symbols": ["add2"],
+    "definitions": [
+      {
+        "name": "add2",
+        "params": [{"name": "n", "type": {"tag": "int"}}],
+        "ret_type": {"tag": "int"},
+        "body": {
+          "tag": "app",
+          "fn": {"tag": "sym", "name": "inc"},
+          "args": [
+            {"tag": "app", "fn": {"tag": "sym", "name": "inc"}, "args": [{"tag": "var", "name": "n"}]}
+          ]
+        },
+        "termination": {"kind": "structural", "decreases_param": null}
+      }
+    ],
+    "declared_deps": ["inc"],
+    "specs": []
+  },
+  "meta": {"note": "fixture module2"}
+}

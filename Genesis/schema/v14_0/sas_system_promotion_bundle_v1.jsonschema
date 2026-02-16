@@ -1,0 +1,64 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v14_0/sas_system_promotion_bundle_v1",
+  "title": "SAS System promotion bundle v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "bundle_id",
+    "created_utc",
+    "pack_hash",
+    "policy_hash",
+    "target_catalog_hash",
+    "suitepack_dev_hash",
+    "suitepack_heldout_hash",
+    "component_registry_before_hash",
+    "component_registry_after_hash",
+    "reference_ir_sha256",
+    "immutable_tree_snapshot_hash",
+    "candidate_bundle_hashes",
+    "profile_report_hash",
+    "selection_receipt_hash",
+    "equivalence_report_hash",
+    "perf_report_hash",
+    "sealed_proof_receipt_hash",
+    "sealed_build_receipt_hash",
+    "acceptance_decision",
+    "audit_evidence_path"
+  ],
+  "properties": {
+    "schema_version": {"const": "sas_system_promotion_bundle_v1"},
+    "bundle_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "created_utc": {"type": "string"},
+    "pack_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "policy_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "target_catalog_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "suitepack_dev_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "suitepack_heldout_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "component_registry_before_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "component_registry_after_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "reference_ir_sha256": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "immutable_tree_snapshot_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "candidate_bundle_hashes": {"type": "array", "items": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"}},
+    "profile_report_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "selection_receipt_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "equivalence_report_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "perf_report_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "sealed_proof_receipt_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "sealed_build_receipt_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "acceptance_decision": {"$ref": "#/$defs/decision"},
+    "audit_evidence_path": {"type": "string"}
+  },
+  "$defs": {
+    "decision": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["pass", "reasons"],
+      "properties": {
+        "pass": {"type": "boolean"},
+        "reasons": {"type": "array", "items": {"type": "string"}}
+      }
+    }
+  }
+}

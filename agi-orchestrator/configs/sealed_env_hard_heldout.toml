@@ -1,0 +1,15 @@
+[sealed]
+eval_harness_id = "env-harness-v1"
+eval_harness_hash = "env-harness-v1-hash"
+eval_suite_hash = "131045b68fb7d90f4cd1ed3d891e4e821028d0ce1b5bea36355cc02ea679fbdb"
+episodes = 24
+
+[sealed_safety]
+eval_harness_id = "env-harness-v1"
+eval_harness_hash = "env-harness-v1-hash"
+eval_suite_hash = "4de9bdd897d242c0a6c06ff9cb4018f4a2064a205417dae7826a287c4d42580b"
+episodes = 2
+
+[constraints]
+spec_hash = "6c7bd76f329bfd9ec4c603cf7a0f871b51ce25c127d1e3286acda9b4ca678001"
+required_concepts = ["gridworld"]

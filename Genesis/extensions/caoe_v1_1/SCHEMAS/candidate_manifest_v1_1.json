@@ -1,0 +1,36 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "caoe_candidate_manifest_v1_1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "format",
+    "schema_version",
+    "candidate_id",
+    "isa_version",
+    "base_ontology_hash",
+    "base_mech_hash",
+    "target_env_id",
+    "suite_ids",
+    "claimed_supports_macro_do"
+  ],
+  "properties": {
+    "format": {"const": "caoe_candidate_manifest_v1_1"},
+    "schema_version": {"const": 1},
+    "candidate_id": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "isa_version": {"const": "caoe_absop_isa_v1_2"},
+    "base_ontology_hash": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "base_mech_hash": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "target_env_id": {"const": "switchboard_v1"},
+    "suite_ids": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["dev", "heldout"],
+      "properties": {
+        "dev": {"type": "string"},
+        "heldout": {"type": "string"}
+      }
+    },
+    "claimed_supports_macro_do": {"type": "boolean"}
+  }
+}

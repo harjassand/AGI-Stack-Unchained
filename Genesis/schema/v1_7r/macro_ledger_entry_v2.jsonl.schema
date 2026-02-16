@@ -1,0 +1,34 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v1_7r/macro_ledger_entry_v2",
+  "title": "Macro ledger entry v2",
+  "type": "object",
+  "additionalProperties": false,
+  "patternProperties": {
+    "^x-": {}
+  },
+  "required": [
+    "schema",
+    "schema_version",
+    "event",
+    "epoch_id",
+    "macro_id",
+    "macro_def_hash",
+    "macro_admit_receipt_hash",
+    "prev_line_hash",
+    "line_hash",
+    "x-meta"
+  ],
+  "properties": {
+    "schema": {"const": "macro_ledger_entry_v2"},
+    "schema_version": {"type": "integer", "const": 2},
+    "event": {"enum": ["ADMIT", "ACTIVATE", "DEACTIVATE", "EVICT"]},
+    "epoch_id": {"type": "string"},
+    "macro_id": {"anyOf": [{"type": "string", "pattern": "^sha256:[a-f0-9]{64}$"}, {"type": "null"}]},
+    "macro_def_hash": {"anyOf": [{"type": "string", "pattern": "^sha256:[a-f0-9]{64}$"}, {"type": "null"}]},
+    "macro_admit_receipt_hash": {"anyOf": [{"type": "string", "pattern": "^sha256:[a-f0-9]{64}$"}, {"type": "null"}]},
+    "prev_line_hash": {"anyOf": [{"type": "string", "pattern": "^sha256:[a-f0-9]{64}$"}, {"type": "null"}]},
+    "line_hash": {"type": "string", "pattern": "^sha256:[a-f0-9]{64}$"},
+    "x-meta": {"type": "object"}
+  }
+}

@@ -1,0 +1,25 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v2_1/opt_ontology_active_set_v1",
+  "title": "Optimization ontology active set v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema", "run_id", "accepted_concepts", "active_set_head_hash"],
+  "properties": {
+    "schema": {"const": "opt_ontology_active_set_v1"},
+    "run_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "accepted_concepts": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["concept_id", "patch_id"],
+        "properties": {
+          "concept_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+          "patch_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"}
+        }
+      }
+    },
+    "active_set_head_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"}
+  }
+}

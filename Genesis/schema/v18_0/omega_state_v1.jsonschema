@@ -1,0 +1,105 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v18_0/omega_state_v1",
+  "title": "Omega state v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "state_id",
+    "tick_u64",
+    "prev_state_id",
+    "active_manifest_hash",
+    "policy_hash",
+    "registry_hash",
+    "objectives_hash",
+    "budgets_hash",
+    "allowlists_hash",
+    "cooldowns",
+    "budget_remaining",
+    "last_actions",
+    "goal_queue_hash",
+    "goals"
+  ],
+  "properties": {
+    "schema_version": {"const": "omega_state_v1"},
+    "state_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "tick_u64": {"type": "integer", "minimum": 0},
+    "prev_state_id": {
+      "anyOf": [
+        {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+        {"type": "null"}
+      ]
+    },
+    "active_manifest_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "policy_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "registry_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "objectives_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "budgets_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "allowlists_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "cooldowns": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["next_tick_allowed_u64"],
+        "properties": {
+          "next_tick_allowed_u64": {"type": "integer", "minimum": 0}
+        }
+      }
+    },
+    "budget_remaining": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["cpu_cost_q32", "build_cost_q32", "verifier_cost_q32", "disk_bytes_u64"],
+      "properties": {
+        "cpu_cost_q32": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["q"],
+          "properties": {"q": {"type": "integer", "minimum": 0}}
+        },
+        "build_cost_q32": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["q"],
+          "properties": {"q": {"type": "integer", "minimum": 0}}
+        },
+        "verifier_cost_q32": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["q"],
+          "properties": {"q": {"type": "integer", "minimum": 0}}
+        },
+        "disk_bytes_u64": {"type": "integer", "minimum": 0}
+      }
+    },
+    "last_actions": {
+      "type": "array",
+      "maxItems": 64,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["tick_u64", "action_kind", "summary_code"],
+        "properties": {
+          "tick_u64": {"type": "integer", "minimum": 0},
+          "action_kind": {"type": "string", "enum": ["RUN_CAMPAIGN", "RUN_GOAL_TASK", "NOOP", "SAFE_HALT"]},
+          "summary_code": {"type": "string", "enum": ["OK", "NO_MATCH", "BUDGET_BLOCK", "COOLDOWN_BLOCK", "SAFE_HALT"]}
+        }
+      }
+    },
+    "goal_queue_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "goals": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["status", "last_tick_u64"],
+        "properties": {
+          "status": {"type": "string", "enum": ["PENDING", "DONE", "FAILED"]},
+          "last_tick_u64": {"type": "integer", "minimum": 0}
+        }
+      }
+    }
+  }
+}

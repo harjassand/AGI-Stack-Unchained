@@ -1,0 +1,67 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v1_6r/instance_witness_v1",
+  "title": "Instance witness v1",
+  "type": "object",
+  "additionalProperties": false,
+  "patternProperties": {
+    "^x-": {}
+  },
+  "required": [
+    "schema",
+    "schema_version",
+    "epoch_id",
+    "env_kind",
+    "instance_kind",
+    "suite_row",
+    "suite_row_hash",
+    "inst_hash",
+    "failure_mode",
+    "trace_hash",
+    "trace_excerpt",
+    "workvec"
+  ],
+  "properties": {
+    "schema": {"const": "instance_witness_v1"},
+    "schema_version": {"type": "integer", "const": 1},
+    "epoch_id": {"type": "string"},
+    "env_kind": {"type": "string"},
+    "instance_kind": {
+      "type": "string",
+      "enum": ["anchor", "pressure", "gate"]
+    },
+    "suite_row": {"type": "object"},
+    "suite_row_hash": {"type": "string", "pattern": "^sha256:[a-f0-9]{64}$"},
+    "inst_hash": {"type": "string", "pattern": "^sha256:[a-f0-9]{64}$"},
+    "failure_mode": {
+      "type": "string",
+      "enum": [
+        "INVALID_SUITE_ROW",
+        "TIMEOUT_MAX_STEPS",
+        "OUT_OF_BOUNDS_ACTION",
+        "VOCAB_TOKEN_INVALID",
+        "NO_PROGRESS_STALL",
+        "UNKNOWN"
+      ]
+    },
+    "trace_hash": {"type": "string", "pattern": "^sha256:[a-f0-9]{64}$"},
+    "trace_excerpt": {
+      "type": "array",
+      "items": {"type": "object"},
+      "maxItems": 32
+    },
+    "workvec": {
+      "type": "object",
+      "required": [
+        "env_steps_total",
+        "bytes_hashed_total",
+        "verifier_gas_total"
+      ],
+      "properties": {
+        "env_steps_total": {"type": "integer", "minimum": 0},
+        "bytes_hashed_total": {"type": "integer", "minimum": 0},
+        "verifier_gas_total": {"type": "integer", "minimum": 0}
+      }
+    }
+  }
+}

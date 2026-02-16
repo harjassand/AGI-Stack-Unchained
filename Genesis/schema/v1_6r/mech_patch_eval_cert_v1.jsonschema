@@ -1,0 +1,75 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v1_6r/mech_patch_eval_cert_v1",
+  "title": "Mech patch eval cert v1",
+  "type": "object",
+  "additionalProperties": false,
+  "patternProperties": {
+    "^x-": {}
+  },
+  "required": [
+    "schema",
+    "schema_version",
+    "epoch_id",
+    "patch_id",
+    "patch_hash",
+    "base_patch_set_hash",
+    "benchmark_pack_hash",
+    "cases",
+    "overall"
+  ],
+  "properties": {
+    "schema": {"const": "mech_patch_eval_cert_v1"},
+    "schema_version": {"type": "integer", "const": 1},
+    "epoch_id": {"type": "string"},
+    "patch_id": {"type": "string", "pattern": "^sha256:[a-f0-9]{64}$"},
+    "patch_hash": {"type": "string", "pattern": "^sha256:[a-f0-9]{64}$"},
+    "base_patch_set_hash": {"type": "string", "pattern": "^sha256:[a-f0-9]{64}$"},
+    "benchmark_pack_hash": {"type": "string", "pattern": "^sha256:[a-f0-9]{64}$"},
+    "cases": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["case_id", "base_metrics", "new_metrics", "pass", "reason_codes"],
+        "properties": {
+          "case_id": {"type": "string"},
+          "base_metrics": {"$ref": "#/$defs/metrics"},
+          "new_metrics": {"$ref": "#/$defs/metrics"},
+          "pass": {"type": "boolean"},
+          "reason_codes": {"type": "array", "items": {"type": "string"}}
+        }
+      }
+    },
+    "overall": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["pass", "selected", "reason_codes"],
+      "properties": {
+        "pass": {"type": "boolean"},
+        "selected": {"type": "boolean"},
+        "reason_codes": {"type": "array", "items": {"type": "string"}}
+      }
+    }
+  },
+  "$defs": {
+    "metrics": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "episodes_total",
+        "episodes_solved",
+        "env_steps_total",
+        "bytes_hashed_total",
+        "verifier_gas_total"
+      ],
+      "properties": {
+        "episodes_total": {"type": "integer", "minimum": 0},
+        "episodes_solved": {"type": "integer", "minimum": 0},
+        "env_steps_total": {"type": "integer", "minimum": 0},
+        "bytes_hashed_total": {"type": "integer", "minimum": 0},
+        "verifier_gas_total": {"type": "integer", "minimum": 0}
+      }
+    }
+  }
+}

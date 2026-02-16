@@ -1,0 +1,27 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v14_0/sas_system_immutable_tree_snapshot_v1",
+  "title": "SAS System immutable tree snapshot v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "spec_version", "files"],
+  "properties": {
+    "schema_version": {"const": "sas_system_immutable_tree_snapshot_v1"},
+    "spec_version": {"const": "v14_0"},
+    "files": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/file"}
+    }
+  },
+  "$defs": {
+    "file": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "sha256"],
+      "properties": {
+        "path": {"type": "string"},
+        "sha256": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"}
+      }
+    }
+  }
+}

@@ -1,0 +1,23 @@
+tag: v1.0-rc1
+commit: 657e5504195e5d90c2d710af92d40849df3c20e1
+suite_config_hash: 6c11f312f50db0a2b9c2eda4fe2492859c3d9bdd8442288bab7a7b6ac1cc00c2
+ablations_config_hash: 1c5a76eed4faa3b58ab29e45b9f93c37fd226764f2d28f68964d4def39d8b853
+stress_config_hash: 1d214025e8e60bfda399e16d696967a608c711b0e4c233eb621e06dc6d6c0aaa
+consolidation_config_hash: 6c11f312f50db0a2b9c2eda4fe2492859c3d9bdd8442288bab7a7b6ac1cc00c2
+eval_harness_hash: harness-hash
+eval_suite_hash: suite-hash
+
+suite_scoreboard_json_sha256: 6b5f895d1eb12e346c006efe6be855351c841d6fd27dbb9bc31ad97cc20189f6
+suite_summary_md_sha256: d91881ef3047a658c86d7b5efab968c645e092aeb8299ccf7a8af0b1d789ff3f
+ablations_results_json_sha256: 7c5fd2654ae2d9f46c68f32df8bcb57288f919d5828ec5e0aee306f8d71a5c7d
+ablations_summary_md_sha256: 54440073fdf549f6dcc595e7338b1b56f73a29d96241f4635c8108b85067b5ef
+stress_results_json_sha256: 83360fbd13ef7e94e9ad6e46e5102e3df6c7591fc5fb539a144dc27a5a1f11d4
+stress_summary_md_sha256: a48a9528c0408d54dcbb7e4a3ec62bb937d91b9d1d0f780a9b238fe828c224c0
+consolidation_report_json_sha256: b95e34e47d69bc7589eb06d85ca0a0d7904ccf1ca6726562577dbad3ba4b8c60
+consolidation_report_md_sha256: 5658be55f3803f7dfe5f0fc20b44a72fc647df4f3557df4178663e8014bed7a9
+
+workdir: /tmp/cdel_phase14_2JSS3P
+command_solve_suite: cdel --root /tmp/cdel_phase14_2JSS3P solve-suite --suite trackA --limit 10 --budget-per-task 100000 --max-candidates 2 --episodes 16 --seed-key phase14-seed --outdir /tmp/cdel_phase14_2JSS3P/out/suite
+command_ablations: cdel solve-suite-ablations --suite trackA --limit 10 --strategies baseline_enum,hybrid --budget-per-task 100000 --max-candidates 2 --episodes 16 --seed-key phase14-seed --deterministic --outdir /tmp/cdel_phase14_2JSS3P/out/ablations
+command_solve_stress: cdel run-solve-stress --out /tmp/cdel_phase14_2JSS3P/out/stress --tasks 100 --max-candidates 2 --episodes 16 --seed-key phase14-seed --budget 1000000 --strategy template_guided --reuse-every 5
+command_consolidate: cdel --root /tmp/cdel_phase14_2JSS3P consolidate --concept arith.add_k.0 --outdir /tmp/cdel_phase14_2JSS3P/out/consolidate/arith_add_k_0

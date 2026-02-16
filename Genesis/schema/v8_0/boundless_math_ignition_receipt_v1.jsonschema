@@ -1,0 +1,27 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v8_0/boundless_math_ignition_receipt_v1",
+  "title": "Boundless math ignition receipt v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "daemon_id",
+    "icore_id",
+    "meta_hash",
+    "tick",
+    "ledger_head_hash",
+    "toolchain_manifest_hash",
+    "created_utc"
+  ],
+  "properties": {
+    "schema_version": {"const": "boundless_math_ignition_receipt_v1"},
+    "daemon_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "icore_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "meta_hash": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "tick": {"type": "integer", "minimum": 0},
+    "ledger_head_hash": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "toolchain_manifest_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "created_utc": {"type": "string", "format": "date-time"}
+  }
+}

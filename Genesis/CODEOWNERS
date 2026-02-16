@@ -1,0 +1,5 @@
+* @genesis-owners
+/schema/ @genesis-schema-owners
+/docs/ @genesis-docs-owners
+/ledger_sim/ @genesis-ledger-owners
+/tools/ @genesis-tools-owners

@@ -1,0 +1,497 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "evidence_report_v1_1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "format",
+    "schema_version",
+    "candidate_id",
+    "base_ontology_hash",
+    "base_mech_hash",
+    "ontology_hash",
+    "mech_hash",
+    "suite_ids",
+    "suitepack_sha256",
+    "base_metrics",
+    "candidate_metrics",
+    "contracts",
+    "decision",
+    "failed_contract",
+    "artifacts"
+  ],
+  "properties": {
+    "format": {
+      "const": "evidence_report_v1_1"
+    },
+    "schema_version": {
+      "const": 1
+    },
+    "candidate_id": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "base_ontology_hash": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "base_mech_hash": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "ontology_hash": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "mech_hash": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "suite_ids": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "dev",
+        "heldout"
+      ],
+      "properties": {
+        "dev": {
+          "type": "string"
+        },
+        "heldout": {
+          "type": "string"
+        }
+      }
+    },
+    "suitepack_sha256": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "dev",
+        "heldout"
+      ],
+      "properties": {
+        "dev": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "heldout": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        }
+      }
+    },
+    "base_metrics": {
+      "$ref": "#/$defs/metrics_bundle"
+    },
+    "candidate_metrics": {
+      "$ref": "#/$defs/metrics_bundle"
+    },
+    "contracts": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "C-MDL",
+        "C-DO",
+        "C-INV",
+        "C-ANTI",
+        "C-LIFE"
+      ],
+      "properties": {
+        "C-MDL": {
+          "$ref": "#/$defs/contract"
+        },
+        "C-DO": {
+          "$ref": "#/$defs/contract"
+        },
+        "C-INV": {
+          "$ref": "#/$defs/contract"
+        },
+        "C-ANTI": {
+          "$ref": "#/$defs/contract"
+        },
+        "C-LIFE": {
+          "$ref": "#/$defs/contract"
+        }
+      }
+    },
+    "decision": {
+      "enum": [
+        "PASS",
+        "FAIL"
+      ]
+    },
+    "failed_contract": {
+      "enum": [
+        "C-ANTI",
+        "C-DO",
+        "C-MDL",
+        "C-INV",
+        "C-LIFE",
+        "NONE"
+      ]
+    },
+    "artifacts": {
+      "$ref": "#/$defs/artifacts"
+    },
+    "coverage": {
+      "$ref": "#/$defs/coverage"
+    },
+    "format_error": {
+      "type": "boolean"
+    },
+    "runtime": {
+      "type": "object"
+    }
+  },
+  "$defs": {
+    "coverage": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "dev",
+        "heldout"
+      ],
+      "properties": {
+        "dev": {
+          "$ref": "#/$defs/coverage_track"
+        },
+        "heldout": {
+          "$ref": "#/$defs/coverage_track"
+        }
+      }
+    },
+    "coverage_track": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "regimes_evaluated",
+        "families_evaluated"
+      ],
+      "properties": {
+        "regimes_evaluated": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "families_evaluated": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "metrics_bundle": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "c_inv",
+        "c_mdl",
+        "c_anti",
+        "ccai_x",
+        "diagnostics"
+      ],
+      "properties": {
+        "c_inv": {
+          "$ref": "#/$defs/c_inv_metrics"
+        },
+        "c_mdl": {
+          "$ref": "#/$defs/c_mdl_metrics"
+        },
+        "c_anti": {
+          "$ref": "#/$defs/c_anti_metrics"
+        },
+        "ccai_x": {
+          "$ref": "#/$defs/ccai_x_metrics"
+        },
+        "diagnostics": {
+          "$ref": "#/$defs/diagnostics_metrics"
+        }
+      }
+    },
+    "c_inv_metrics": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "per_regime_success",
+        "per_regime_efficiency",
+        "heldout_worst_case_success",
+        "heldout_worst_case_efficiency"
+      ],
+      "properties": {
+        "per_regime_success": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "number"
+          }
+        },
+        "per_regime_efficiency": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "number"
+          }
+        },
+        "heldout_worst_case_success": {
+          "type": "number"
+        },
+        "heldout_worst_case_efficiency": {
+          "type": "number"
+        },
+        "heldout_worst_case_success_eval": {
+          "type": "number"
+        },
+        "heldout_worst_case_efficiency_eval": {
+          "type": "number"
+        },
+        "per_family": {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/$defs/c_inv_family"
+          }
+        },
+        "evaluated_families": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "evaluated_regimes": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "c_inv_family": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "avg_success",
+        "avg_efficiency",
+        "worst_case_success",
+        "worst_case_efficiency",
+        "regimes_evaluated"
+      ],
+      "properties": {
+        "avg_success": {
+          "type": "number"
+        },
+        "avg_efficiency": {
+          "type": "number"
+        },
+        "worst_case_success": {
+          "type": "number"
+        },
+        "worst_case_efficiency": {
+          "type": "number"
+        },
+        "regimes_evaluated": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "c_mdl_metrics": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "dev_tml_bits",
+        "heldout_tml_bits",
+        "dev_tml_bits_base",
+        "dev_tml_bits_candidate",
+        "heldout_tml_bits_base",
+        "heldout_tml_bits_candidate",
+        "delta_min_bits",
+        "pass_reason",
+        "failure_reason"
+      ],
+      "properties": {
+        "dev_tml_bits": {
+          "type": "integer"
+        },
+        "heldout_tml_bits": {
+          "type": "integer"
+        },
+        "dev_tml_bits_base": {
+          "type": "integer"
+        },
+        "dev_tml_bits_candidate": {
+          "type": "integer"
+        },
+        "heldout_tml_bits_base": {
+          "type": "integer"
+        },
+        "heldout_tml_bits_candidate": {
+          "type": "integer"
+        },
+        "delta_min_bits": {
+          "type": "integer"
+        },
+        "pass_reason": {
+          "type": "string"
+        },
+        "failure_reason": {
+          "type": "string"
+        },
+        "per_regime_bits": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "integer"
+          }
+        }
+      }
+    },
+    "c_anti_metrics": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "leakage_sensitivity",
+        "relabel_sensitivity"
+      ],
+      "properties": {
+        "leakage_sensitivity": {
+          "type": "number"
+        },
+        "relabel_sensitivity": {
+          "type": "number"
+        }
+      }
+    },
+    "ccai_x_metrics": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "per_regime"
+      ],
+      "properties": {
+        "per_regime": {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/$defs/ccai_x_regime"
+          }
+        }
+      }
+    },
+    "ccai_x_regime": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "efe_risk_avg",
+        "efe_ambiguity_avg",
+        "efe_complexity_avg",
+        "efe_total_avg",
+        "belief_inconsistency_rate"
+      ],
+      "properties": {
+        "efe_risk_avg": {
+          "type": "integer"
+        },
+        "efe_ambiguity_avg": {
+          "type": "integer"
+        },
+        "efe_complexity_avg": {
+          "type": "integer"
+        },
+        "efe_total_avg": {
+          "type": "integer"
+        },
+        "belief_inconsistency_rate": {
+          "type": "number"
+        }
+      }
+    },
+    "contract": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "metrics",
+        "pass",
+        "failure_reason"
+      ],
+      "properties": {
+        "metrics": {
+          "type": "object"
+        },
+        "pass": {
+          "type": "boolean"
+        },
+        "failure_reason": {
+          "type": "string"
+        }
+      }
+    },
+    "artifacts": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "intervention_logs"
+      ],
+      "properties": {
+        "intervention_logs": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/intervention_log_ref"
+          }
+        }
+      }
+    },
+    "intervention_log_ref": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "suite_track",
+        "variant",
+        "episode_id",
+        "log_sha256",
+        "relative_path"
+      ],
+      "properties": {
+        "suite_track": {
+          "enum": [
+            "dev",
+            "heldout"
+          ]
+        },
+        "variant": {
+          "enum": [
+            "base",
+            "candidate"
+          ]
+        },
+        "episode_id": {
+          "type": "string"
+        },
+        "log_sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "relative_path": {
+          "type": "string"
+        }
+      }
+    },
+    "diagnostics_metrics": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "phi_fingerprint",
+        "policy_fingerprint"
+      ],
+      "properties": {
+        "phi_fingerprint": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "policy_fingerprint": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        }
+      }
+    }
+  }
+}

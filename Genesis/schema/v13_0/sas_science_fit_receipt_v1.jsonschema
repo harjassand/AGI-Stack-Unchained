@@ -1,0 +1,43 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v13_0/sas_science_fit_receipt_v1",
+  "title": "SAS-Science fit receipt v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "receipt_id",
+    "created_utc",
+    "theory_id",
+    "dataset_id",
+    "split_id",
+    "fit_kind",
+    "status",
+    "params_fitted",
+    "numeric_mode",
+    "precision_config_hash"
+  ],
+  "properties": {
+    "schema_version": {"const": "sas_science_fit_receipt_v1"},
+    "receipt_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "created_utc": {"type": "string"},
+    "theory_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "dataset_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "split_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "fit_kind": {"type": "string", "enum": ["DEV"]},
+    "status": {"type": "string", "enum": ["OK", "SINGULAR", "NONFINITE"]},
+    "params_fitted": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "mu_sources_q32": {"type": "array", "items": {"$ref": "q32_v1.jsonschema"}},
+        "k_param_q32": {"$ref": "q32_v1.jsonschema"},
+        "G_param_q32": {"$ref": "q32_v1.jsonschema"},
+        "mass_params_q32": {"type": "array", "items": {"$ref": "q32_v1.jsonschema"}}
+      }
+    },
+    "numeric_mode": {"type": "string"},
+    "precision_config_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "fit_residual_sum_q64": {"type": "integer"}
+  }
+}

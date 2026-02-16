@@ -1,0 +1,55 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v2_0/rsi_demon_receipt_v6",
+  "title": "RSI demon receipt v6",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema", "schema_version", "verdict", "metabolism_v1"],
+  "properties": {
+    "schema": {"const": "rsi_demon_receipt_v6"},
+    "schema_version": {"type": "integer", "const": 6},
+    "verdict": {"type": "string", "enum": ["VALID", "INVALID"]},
+    "metabolism_v1": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "admitted",
+        "activated",
+        "active_patch_id",
+        "latest_eval_epoch",
+        "work_cost_base",
+        "work_cost_patch",
+        "rho_met",
+        "rho_coupled",
+        "efficiency_gate_passed"
+      ],
+      "properties": {
+        "admitted": {"type": "integer", "minimum": 0},
+        "activated": {"type": "integer", "minimum": 0},
+        "active_patch_id": {
+          "anyOf": [
+            {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+            {"type": "string", "const": ""}
+          ]
+        },
+        "latest_eval_epoch": {"type": "integer"},
+        "work_cost_base": {"type": "integer", "minimum": 0},
+        "work_cost_patch": {"type": "integer", "minimum": 0},
+        "rho_met": {"$ref": "#/$defs/rational_pair"},
+        "rho_coupled": {"$ref": "#/$defs/rational_pair"},
+        "efficiency_gate_passed": {"type": "boolean"}
+      }
+    }
+  },
+  "$defs": {
+    "rational_pair": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["num", "den"],
+      "properties": {
+        "num": {"type": "integer", "minimum": 0},
+        "den": {"type": "integer", "minimum": 1}
+      }
+    }
+  }
+}

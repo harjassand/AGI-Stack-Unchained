@@ -1,0 +1,23 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v18_0/meta_core_promo_verify_receipt_v1",
+  "title": "Meta-core promotion verify receipt v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "return_code",
+    "stdout_hash",
+    "stderr_hash",
+    "verifier_out_hash",
+    "pass"
+  ],
+  "properties": {
+    "schema_version": {"const": "meta_core_promo_verify_receipt_v1"},
+    "return_code": {"type": "integer", "minimum": 0},
+    "stdout_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "stderr_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "verifier_out_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "pass": {"type": "boolean"}
+  }
+}

@@ -1,0 +1,55 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v18_0/omega_episodic_memory_v1",
+  "title": "Omega episodic memory v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "memory_id",
+    "tick_u64",
+    "window_size_u64",
+    "episodes"
+  ],
+  "properties": {
+    "schema_version": {"const": "omega_episodic_memory_v1"},
+    "memory_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "tick_u64": {"type": "integer", "minimum": 0},
+    "window_size_u64": {"type": "integer", "minimum": 1, "maximum": 256},
+    "episodes": {
+      "type": "array",
+      "maxItems": 256,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "tick_u64",
+          "capability_id",
+          "campaign_id",
+          "goal_id_prefix",
+          "outcome",
+          "reason_codes",
+          "context_hash",
+          "touched_families"
+        ],
+        "properties": {
+          "tick_u64": {"type": "integer", "minimum": 0},
+          "capability_id": {"type": "string"},
+          "campaign_id": {"type": "string"},
+          "goal_id_prefix": {"type": "string"},
+          "outcome": {"type": "string", "enum": ["PROMOTED", "REJECTED", "INVALID", "NOOP"]},
+          "reason_codes": {
+            "type": "array",
+            "items": {"type": "string"}
+          },
+          "context_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+          "touched_families": {
+            "type": "array",
+            "items": {"type": "string", "enum": ["CODE", "SYSTEM", "KERNEL", "METASEARCH", "VAL", "SCIENCE"]},
+            "uniqueItems": true
+          }
+        }
+      }
+    }
+  }
+}

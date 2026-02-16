@@ -1,0 +1,31 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v15_0/kernel_trace_event_v1",
+  "title": "Kernel trace event v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "event_ref_hash",
+    "prev_event_ref_hash",
+    "event_type",
+    "payload"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "kernel_trace_event_v1"
+    },
+    "event_ref_hash": {
+      "type": "string"
+    },
+    "prev_event_ref_hash": {
+      "type": "string"
+    },
+    "event_type": {
+      "type": "string"
+    },
+    "payload": {
+      "type": "object"
+    }
+  }
+}

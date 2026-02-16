@@ -1,0 +1,52 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v18_0/omega_capability_registry_v2",
+  "title": "Omega capability registry v2",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "capabilities"],
+  "properties": {
+    "schema_version": {"const": "omega_capability_registry_v2"},
+    "capabilities": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "campaign_id",
+          "capability_id",
+          "orchestrator_module",
+          "verifier_module",
+          "campaign_pack_rel",
+          "state_dir_rel",
+          "promotion_bundle_rel",
+          "risk_class",
+          "cooldown_ticks_u64",
+          "budget_cost_hint_q32",
+          "enabled"
+        ],
+        "properties": {
+          "campaign_id": {"type": "string"},
+          "capability_id": {"type": "string"},
+          "orchestrator_module": {"type": "string"},
+          "verifier_module": {"type": "string"},
+          "ccap_relpath": {"type": "string"},
+          "enable_ccap": {"type": "integer", "enum": [0, 1]},
+          "campaign_pack_rel": {"type": "string"},
+          "state_dir_rel": {"type": "string"},
+          "promotion_bundle_rel": {"type": "string"},
+          "risk_class": {"type": "string", "enum": ["LOW", "MED", "HIGH"]},
+          "cooldown_ticks_u64": {"type": "integer", "minimum": 0},
+          "budget_cost_hint_q32": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["q"],
+            "properties": {"q": {"type": "integer"}}
+          },
+          "enabled": {"type": "boolean"}
+        }
+      }
+    }
+  }
+}

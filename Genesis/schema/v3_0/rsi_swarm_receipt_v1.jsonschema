@@ -1,0 +1,33 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v3_0/rsi_swarm_receipt_v1",
+  "title": "RSI swarm receipt v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "spec_version",
+    "run_id",
+    "pack_hash",
+    "constitution_hash",
+    "verdict",
+    "reason",
+    "num_agents",
+    "epochs_executed",
+    "swarm_ledger_head_hash",
+    "barrier_ledger_head_hash"
+  ],
+  "properties": {
+    "schema": {"const": "rsi_swarm_receipt_v1"},
+    "spec_version": {"const": "v3_0"},
+    "run_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "pack_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "constitution_hash": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "verdict": {"type": "string", "enum": ["VALID", "INVALID"]},
+    "reason": {"type": "string"},
+    "num_agents": {"type": "integer", "minimum": 1},
+    "epochs_executed": {"type": "integer", "minimum": 0},
+    "swarm_ledger_head_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "barrier_ledger_head_hash": {"type": "string", "pattern": "^(sha256:[0-9a-f]{64}|GENESIS)$"}
+  }
+}

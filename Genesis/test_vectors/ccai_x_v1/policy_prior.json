@@ -1,0 +1,1 @@
+{"complexity_weights":{"compute_weight_fp":2,"length_weight_fp":1},"default_logprior_fp":-100,"format":"policy_prior_v1","policy_logprior":[{"logprior_fp":-10,"policy_id":"pi_a"},{"logprior_fp":-20,"policy_id":"pi_b"}],"prior_id":"prior_v1","schema_version":"1"}

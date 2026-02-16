@@ -1,0 +1,62 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v16_1/metasearch_trace_corpus_suitepack_v1",
+  "title": "Metasearch trace corpus suitepack v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "suite_id", "theory_index", "cases"],
+  "properties": {
+    "schema_version": { "const": "metasearch_trace_corpus_suitepack_v1" },
+    "suite_id": { "type": "string" },
+    "theory_index": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["theory_id", "theory_kind", "norm_pow_p"],
+        "properties": {
+          "theory_id": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" },
+          "theory_kind": { "type": "string" },
+          "norm_pow_p": { "type": "integer", "enum": [1, 2, 3, 4] }
+        }
+      }
+    },
+    "cases": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["case_id", "source_run_rel", "best_theory_id_dev", "best_theory_kind", "best_norm_pow_p", "dev_evals"],
+        "properties": {
+          "case_id": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" },
+          "source_run_rel": { "type": "string" },
+          "best_theory_id_dev": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" },
+          "best_theory_kind": { "type": "string" },
+          "best_norm_pow_p": { "type": "integer", "enum": [1, 2, 3, 4] },
+          "dev_evals": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["theory_id", "rmse_pos1_q32", "work_cost_total"],
+              "properties": {
+                "theory_id": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" },
+                "rmse_pos1_q32": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": ["schema_version", "shift", "q"],
+                  "properties": {
+                    "schema_version": { "const": "q32_v1" },
+                    "shift": { "const": 32 },
+                    "q": { "type": "string" }
+                  }
+                },
+                "work_cost_total": { "type": "integer", "minimum": 0 }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

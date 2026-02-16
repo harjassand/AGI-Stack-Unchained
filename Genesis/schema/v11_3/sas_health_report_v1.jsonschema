@@ -1,0 +1,12 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v11_0/sas_health_report_v1",
+  "title": "SAS health report v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["last_run", "status"],
+  "properties": {
+    "last_run": {"type": "string"},
+    "status": {"type": "string"}
+  }
+}

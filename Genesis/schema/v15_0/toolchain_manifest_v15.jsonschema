@@ -1,0 +1,33 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v15_0/toolchain_manifest_v15",
+  "title": "Toolchain manifest v15",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "checker_name",
+    "invocation_template",
+    "checker_executable_hash",
+    "toolchain_id"
+  ],
+  "properties": {
+    "checker_name": {
+      "type": "string"
+    },
+    "invocation_template": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "string"
+      }
+    },
+    "checker_executable_hash": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "toolchain_id": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    }
+  }
+}

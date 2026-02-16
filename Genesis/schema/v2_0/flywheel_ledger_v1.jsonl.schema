@@ -1,0 +1,49 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v2_0/flywheel_ledger_v1",
+  "title": "Flywheel ledger v1 (JSONL line)",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "schema_version",
+    "attempt_index",
+    "attempt_dir",
+    "verifier_verdict",
+    "verifier_reason",
+    "observed"
+  ],
+  "properties": {
+    "schema": {"const": "flywheel_event_v1"},
+    "schema_version": {"type": "integer", "const": 1},
+    "attempt_index": {"type": "integer", "minimum": 1},
+    "attempt_dir": {"type": "string", "pattern": "^attempts/attempt_[0-9]{4}$"},
+    "verifier_verdict": {"type": "string", "enum": ["VALID", "INVALID"]},
+    "verifier_reason": {"type": "string"},
+    "observed": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["active_patch_id", "rho_met"],
+      "properties": {
+        "active_patch_id": {
+          "anyOf": [
+            {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+            {"type": "string", "const": ""}
+          ]
+        },
+        "rho_met": {"$ref": "#/$defs/rational_pair"}
+      }
+    }
+  },
+  "$defs": {
+    "rational_pair": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["num", "den"],
+      "properties": {
+        "num": {"type": "integer", "minimum": 0},
+        "den": {"type": "integer", "minimum": 1}
+      }
+    }
+  }
+}

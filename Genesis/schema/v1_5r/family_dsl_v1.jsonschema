@@ -1,0 +1,497 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v1_5r/family_dsl_v1",
+  "title": "Family DSL v1",
+  "type": "object",
+  "additionalProperties": false,
+  "patternProperties": {
+    "^x-": {}
+  },
+  "required": [
+    "schema",
+    "schema_version",
+    "dsl_version",
+    "family_id",
+    "params_schema",
+    "resource_bounds",
+    "instantiator",
+    "signature"
+  ],
+  "properties": {
+    "schema": {
+      "const": "family_dsl_v1"
+    },
+    "schema_version": {
+      "type": "integer",
+      "const": 1
+    },
+    "dsl_version": {
+      "type": "integer",
+      "const": 1
+    },
+    "family_id": {
+      "type": "string",
+      "pattern": "^sha256:[a-f0-9]{64}$"
+    },
+    "params_schema": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/param_descriptor"
+      }
+    },
+    "resource_bounds": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "max_env_steps_per_instance",
+        "max_instance_bytes",
+        "max_instantiation_gas",
+        "max_shrink_gas"
+      ],
+      "properties": {
+        "max_env_steps_per_instance": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "max_instance_bytes": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "max_instantiation_gas": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "max_shrink_gas": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    },
+    "instantiator": {
+      "$ref": "#/$defs/ast"
+    },
+    "pressure_rule": {
+      "$ref": "#/$defs/ast"
+    },
+    "signature": {
+      "$ref": "#/$defs/family_signature"
+    }
+  },
+  "$defs": {
+    "decimal_string": {
+      "type": "string",
+      "pattern": "^-?(0|[1-9][0-9]*)(\\.[0-9]+)?$",
+      "description": "Decimal string with optional fractional part; no exponent or leading zeros."
+    },
+    "gcj1_value": {
+      "anyOf": [
+        {
+          "type": "null"
+        },
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "integer"
+        },
+        {
+          "type": "string"
+        },
+        {
+          "type": "object"
+        },
+        {
+          "type": "array"
+        }
+      ]
+    },
+    "param_descriptor": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "type",
+        "min",
+        "max",
+        "step",
+        "inclusive"
+      ],
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "type": {
+          "type": "string",
+          "enum": [
+            "int",
+            "fixed"
+          ]
+        },
+        "min": {},
+        "max": {},
+        "step": {},
+        "inclusive": {
+          "const": true
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "int"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "min": {
+                "type": "integer"
+              },
+              "max": {
+                "type": "integer"
+              },
+              "step": {
+                "type": "integer",
+                "minimum": 1
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "fixed"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "min": {
+                "$ref": "#/$defs/decimal_string"
+              },
+              "max": {
+                "$ref": "#/$defs/decimal_string"
+              },
+              "step": {
+                "$ref": "#/$defs/decimal_string"
+              }
+            }
+          }
+        }
+      ]
+    },
+    "family_signature": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema",
+        "schema_version",
+        "signature_version",
+        "fields"
+      ],
+      "properties": {
+        "schema": {
+          "const": "family_signature_v1"
+        },
+        "schema_version": {
+          "type": "integer",
+          "const": 1
+        },
+        "signature_version": {
+          "type": "integer",
+          "const": 1
+        },
+        "fields": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "obs_class",
+            "nuisance_class",
+            "action_remap_class",
+            "delay_class",
+            "noise_class",
+            "render_class"
+          ],
+          "properties": {
+            "obs_class": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 15
+            },
+            "nuisance_class": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 15
+            },
+            "action_remap_class": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 15
+            },
+            "delay_class": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 15
+            },
+            "noise_class": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 15
+            },
+            "render_class": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 15
+            }
+          }
+        }
+      }
+    },
+    "ast": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "op",
+            "value"
+          ],
+          "properties": {
+            "op": {
+              "const": "CONST"
+            },
+            "value": {
+              "$ref": "#/$defs/gcj1_value"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "op",
+            "name"
+          ],
+          "properties": {
+            "op": {
+              "const": "PARAM"
+            },
+            "name": {
+              "type": "string"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "op",
+            "parts"
+          ],
+          "properties": {
+            "op": {
+              "const": "BYTES"
+            },
+            "parts": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/ast"
+              }
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "op",
+            "x"
+          ],
+          "properties": {
+            "op": {
+              "const": "SHA256"
+            },
+            "x": {
+              "$ref": "#/$defs/ast"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "op",
+            "seed",
+            "n_bytes"
+          ],
+          "properties": {
+            "op": {
+              "const": "PRNG_CHACHA20"
+            },
+            "seed": {
+              "$ref": "#/$defs/ast"
+            },
+            "n_bytes": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "op",
+            "x"
+          ],
+          "properties": {
+            "op": {
+              "const": "U32_LE"
+            },
+            "x": {
+              "$ref": "#/$defs/ast"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "op",
+            "u32",
+            "min",
+            "max"
+          ],
+          "properties": {
+            "op": {
+              "const": "RANGE_INT"
+            },
+            "u32": {
+              "$ref": "#/$defs/ast"
+            },
+            "min": {
+              "type": "integer"
+            },
+            "max": {
+              "type": "integer"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "op",
+            "min",
+            "max",
+            "tag"
+          ],
+          "properties": {
+            "op": {
+              "const": "KEYED_RAND_INT_V1"
+            },
+            "min": {
+              "type": "integer"
+            },
+            "max": {
+              "type": "integer"
+            },
+            "tag": {
+              "type": "string"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "op",
+            "length",
+            "start",
+            "goal",
+            "walls_k",
+            "max_steps",
+            "slip_ppm"
+          ],
+          "properties": {
+            "op": {
+              "const": "LINEWORLD_BUILD_V1"
+            },
+            "length": {
+              "$ref": "#/$defs/ast"
+            },
+            "start": {
+              "$ref": "#/$defs/ast"
+            },
+            "goal": {
+              "$ref": "#/$defs/ast"
+            },
+            "walls_k": {
+              "$ref": "#/$defs/ast"
+            },
+            "max_steps": {
+              "$ref": "#/$defs/ast"
+            },
+            "slip_ppm": {
+              "$ref": "#/$defs/ast"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "op",
+            "width",
+            "height",
+            "start",
+            "goal",
+            "walls_k",
+            "max_steps"
+          ],
+          "properties": {
+            "op": {
+              "const": "GRIDWORLD_BUILD_V1"
+            },
+            "width": {
+              "$ref": "#/$defs/ast"
+            },
+            "height": {
+              "$ref": "#/$defs/ast"
+            },
+            "start": {
+              "$ref": "#/$defs/ast"
+            },
+            "goal": {
+              "$ref": "#/$defs/ast"
+            },
+            "walls_k": {
+              "$ref": "#/$defs/ast"
+            },
+            "max_steps": {
+              "$ref": "#/$defs/ast"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "op",
+            "instance_spec"
+          ],
+          "properties": {
+            "op": {
+              "const": "EMIT_INSTANCE"
+            },
+            "instance_spec": {
+              "$ref": "#/$defs/ast"
+            }
+          }
+        }
+      ]
+    }
+  }
+}

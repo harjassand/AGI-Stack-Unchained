@@ -1,0 +1,137 @@
+{
+  "schema_version": "1.0.1",
+  "capsule_version": "1.0.0",
+  "forward_compat": "x_prefix_only",
+  "canonicalization": "gcj-1",
+  "capsule_id": "00000000-0000-4000-8000-000000000000",
+  "artifact_type": "ALGORITHM",
+  "parents": [],
+  "operators_used": [],
+  "build_hashes": {
+    "ir_hash": "0000000000000000000000000000000000000000000000000000000000000000",
+    "container_hash": "1111111111111111111111111111111111111111111111111111111111111111",
+    "dependency_hashes": []
+  },
+  "commitments": {
+    "capsule_hash": "0000000000000000000000000000000000000000000000000000000000000000",
+    "checkpoint_merkle_root": "2222222222222222222222222222222222222222222222222222222222222222"
+  },
+  "ir_payload": {
+    "format": "GIR1",
+    "version": "1.0",
+    "payload_base64": "AA=="
+  },
+  "entrypoints": [
+    {
+      "name": "run",
+      "signature": {
+        "inputs": [
+          {
+            "name": "x",
+            "type": "int32"
+          }
+        ],
+        "outputs": [
+          {
+            "name": "y",
+            "type": "int32"
+          }
+        ]
+      }
+    }
+  ],
+  "effects": {
+    "allow": [
+      "pure"
+    ],
+    "deny": []
+  },
+  "contract": {
+    "functional_spec": {
+      "spec_language": "DSL1",
+      "clauses": [
+        {
+          "id": "f1",
+          "clause_type": "functional",
+          "text": "y = x"
+        }
+      ]
+    },
+    "safety_spec": {
+      "invariants": [
+        {
+          "id": "s1",
+          "clause_type": "safety",
+          "text": "Output finite"
+        }
+      ],
+      "forbidden_behaviors": []
+    },
+    "resource_spec": {
+      "max_wall_time_ms": 1,
+      "max_memory_mb": 1,
+      "max_sample_count": 0,
+      "max_gpu_seconds": 0
+    },
+    "statistical_spec": {
+      "metrics": [
+        {
+          "name": "acc",
+          "direction": "maximize",
+          "target": 1
+        }
+      ],
+      "decision_rule": "threshold",
+      "confidence_requirement": {
+        "delta": 0.01
+      }
+    },
+    "robustness_spec": {
+      "mode": "certified_slices",
+      "slice_family": {
+        "family": "decision_tree",
+        "capacity": {
+          "parameters": {
+            "depth": 1
+          }
+        }
+      },
+      "risk_metric": "acc",
+      "risk_bound": 0.9
+    }
+  },
+  "assumptions": [],
+  "budget_bid": {
+    "grade": "DeploymentGrade",
+    "alpha_bid": "0.01",
+    "privacy_bid": {
+      "epsilon": "0.1",
+      "delta": "0.000001"
+    },
+    "compute_bid": {
+      "max_compute_units": 1,
+      "max_wall_time_ms": 1,
+      "max_adversary_strength": 0
+    }
+  },
+  "evidence": {
+    "certificates": [],
+    "unit_tests": [],
+    "property_tests": [],
+    "checkpoints": []
+  },
+  "reproducibility": {
+    "determinism_mode": "deterministic",
+    "seed_policy": "harness_seeded",
+    "runtime_env": {
+      "os": "linux",
+      "arch": "x86_64",
+      "kernel_isa": "KISA-1"
+    }
+  },
+  "provenance": {
+    "created_by": "genesis",
+    "timestamp": "2025-01-01T00:00:00Z",
+    "source_repo": "local"
+  }
+}

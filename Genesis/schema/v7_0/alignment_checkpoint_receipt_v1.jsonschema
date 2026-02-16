@@ -1,0 +1,27 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v7_0/alignment_checkpoint_receipt_v1",
+  "title": "Alignment checkpoint receipt v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "policy_hash",
+    "icore_id",
+    "meta_hash",
+    "tick",
+    "alignment_report_hash",
+    "ledger_head_hash",
+    "created_utc"
+  ],
+  "properties": {
+    "schema_version": {"const": "alignment_checkpoint_receipt_v1"},
+    "policy_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "icore_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "meta_hash": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "tick": {"type": "integer", "minimum": 0},
+    "alignment_report_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "ledger_head_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "created_utc": {"type": "string"}
+  }
+}

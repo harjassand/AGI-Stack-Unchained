@@ -1,0 +1,81 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/ccai_x_mind_v1/workspace_state_v1.schema.json",
+  "title": "CCAI-X Mind v1 Workspace State",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "format",
+    "schema_version",
+    "t",
+    "prev_state_hash",
+    "beliefs",
+    "state_hash"
+  ],
+  "properties": {
+    "format": {"const": "workspace_state_v1"},
+    "schema_version": {"const": "1"},
+    "t": {"type": "integer", "minimum": 0},
+    "prev_state_hash": {"$ref": "#/$defs/hash"},
+    "beliefs": {"$ref": "#/$defs/beliefs"},
+    "state_hash": {"$ref": "#/$defs/hash"},
+    "x_extensions": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {}
+    }
+  },
+  "$defs": {
+    "identifier": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9_./-]{0,127}$"
+    },
+    "hash": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "variable_marginal": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["var_id", "support", "prob_fp"],
+      "properties": {
+        "var_id": {"$ref": "#/$defs/identifier"},
+        "support": {
+          "type": "array",
+          "items": {"type": "integer"},
+          "uniqueItems": true
+        },
+        "prob_fp": {
+          "type": "array",
+          "items": {"type": "integer"}
+        }
+      }
+    },
+    "parameter_estimate": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["param_id", "value_fp"],
+      "properties": {
+        "param_id": {"$ref": "#/$defs/identifier"},
+        "value_fp": {"type": "integer"}
+      }
+    },
+    "beliefs": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["variable_marginals", "parameter_estimates"],
+      "properties": {
+        "variable_marginals": {
+          "type": "array",
+          "items": {"$ref": "#/$defs/variable_marginal"},
+          "uniqueItems": true
+        },
+        "parameter_estimates": {
+          "type": "array",
+          "items": {"$ref": "#/$defs/parameter_estimate"},
+          "uniqueItems": true
+        }
+      }
+    }
+  }
+}

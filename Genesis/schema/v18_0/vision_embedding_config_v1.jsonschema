@@ -1,0 +1,80 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v18_0/vision_embedding_config_v1",
+  "title": "vision_embedding_config_v1",
+  "type": "object",
+  "$defs": {
+    "q32_s64": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {"q": {"type": "integer"}},
+      "required": ["q"]
+    }
+  },
+  "oneOf": [
+    {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "schema_id": {"const": "vision_embedding_config_v1"},
+        "embedding_kind": {"const": "VISION_EMBED_BASE_V1"},
+        "item_kind": {"type": "string", "enum": ["OBJECT_CROP_V1"]},
+        "crop": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "crop_width_u32": {"type": "integer", "minimum": 1, "maximum": 4294967295},
+            "crop_height_u32": {"type": "integer", "minimum": 1, "maximum": 4294967295},
+            "pixel_format": {"type": "string", "enum": ["GRAY8"]},
+            "resize_kind": {"type": "string", "enum": ["NEAREST_NEIGHBOR_V1"]}
+          },
+          "required": ["crop_width_u32", "crop_height_u32", "pixel_format", "resize_kind"]
+        },
+        "key_dim_u32": {"type": "integer", "minimum": 1, "maximum": 4294967295},
+        "base_embed_v1": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "block_w_u32": {"type": "integer", "minimum": 1, "maximum": 4294967295},
+            "block_h_u32": {"type": "integer", "minimum": 1, "maximum": 4294967295},
+            "center_subtract_b": {"type": "boolean"}
+          },
+          "required": ["block_w_u32", "block_h_u32", "center_subtract_b"]
+        }
+      },
+      "required": ["schema_id", "embedding_kind", "item_kind", "crop", "key_dim_u32", "base_embed_v1"]
+    },
+    {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "schema_id": {"const": "vision_embedding_config_v1"},
+        "embedding_kind": {"const": "QXRL_EMBED_V1"},
+        "item_kind": {"type": "string", "enum": ["OBJECT_CROP_V1"]},
+        "crop": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "crop_width_u32": {"type": "integer", "minimum": 1, "maximum": 4294967295},
+            "crop_height_u32": {"type": "integer", "minimum": 1, "maximum": 4294967295},
+            "pixel_format": {"type": "string", "enum": ["GRAY8"]},
+            "resize_kind": {"type": "string", "enum": ["NEAREST_NEIGHBOR_V1"]}
+          },
+          "required": ["crop_width_u32", "crop_height_u32", "pixel_format", "resize_kind"]
+        },
+        "key_dim_u32": {"type": "integer", "minimum": 1, "maximum": 4294967295},
+        "qxrl_embed_v1": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "qxrl_model_manifest_ref": {"$ref": "https://genesis.engine/specs/v18_0/eudrs_u_artifact_ref_v1"},
+            "keyproj_tensor_name": {"type": "string", "minLength": 1}
+          },
+          "required": ["qxrl_model_manifest_ref", "keyproj_tensor_name"]
+        }
+      },
+      "required": ["schema_id", "embedding_kind", "item_kind", "crop", "key_dim_u32", "qxrl_embed_v1"]
+    }
+  ]
+}
+

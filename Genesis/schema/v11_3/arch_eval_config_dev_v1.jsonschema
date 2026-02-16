@@ -1,0 +1,31 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v11_0/arch_eval_config_dev_v1",
+  "title": "Architecture eval config (dev) v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "dataset_path",
+    "primary_metric_name",
+    "primary_metric_direction",
+    "min_primary_metric_q32",
+    "param_penalty_exponent"
+  ],
+  "properties": {
+    "schema_version": {"const": "arch_eval_config_dev_v1"},
+    "dataset_path": {"type": "string"},
+    "primary_metric_name": {"type": "string"},
+    "primary_metric_direction": {"enum": ["higher_is_better", "lower_is_better"]},
+    "min_primary_metric_q32": {"$ref": "q32_v1.jsonschema"},
+    "param_penalty_exponent": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["num", "den"],
+      "properties": {
+        "num": {"type": "integer"},
+        "den": {"type": "integer"}
+      }
+    }
+  }
+}

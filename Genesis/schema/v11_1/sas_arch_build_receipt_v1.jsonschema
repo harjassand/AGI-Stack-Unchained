@@ -1,0 +1,43 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v11_0/sas_arch_build_receipt_v1",
+  "title": "SAS arch build receipt v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "arch_id",
+    "arch_graph_hash",
+    "init_weights_hash",
+    "arch_manifest_hash",
+    "fingerprint_hash",
+    "toolchain_hash",
+    "allowlist_hash",
+    "family_registry_hash",
+    "opset_hash",
+    "builder_version",
+    "arch_ir_path",
+    "arch_manifest_path",
+    "fingerprint_path",
+    "network_used",
+    "time_ms"
+  ],
+  "properties": {
+    "schema_version": {"const": "sas_arch_build_receipt_v1"},
+    "arch_id": {"type": "string"},
+    "arch_graph_hash": {"type": "string"},
+    "init_weights_hash": {"type": "string"},
+    "arch_manifest_hash": {"type": "string"},
+    "fingerprint_hash": {"type": "string"},
+    "toolchain_hash": {"type": "string"},
+    "allowlist_hash": {"type": "string"},
+    "family_registry_hash": {"type": "string"},
+    "opset_hash": {"type": "string"},
+    "builder_version": {"type": "string"},
+    "arch_ir_path": {"type": "string"},
+    "arch_manifest_path": {"type": "string"},
+    "fingerprint_path": {"type": "string"},
+    "network_used": {"type": "boolean"},
+    "time_ms": {"type": "integer"}
+  }
+}

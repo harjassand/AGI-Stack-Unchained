@@ -1,0 +1,60 @@
+{
+  "seed": 0,
+  "iterations": 4,
+  "repair_attempts": 2,
+  "run_log_path": "genesis_run.jsonl",
+  "epoch_id": "epoch-1",
+  "policy_env_config": "genesis/configs/policy_envs.json",
+  "policy_env_id": "policy_env_tiny",
+  "forager_max_tests": 3,
+  "system_return_target": -3.0,
+  "system_cost_target": 4.0,
+  "system_return_direction": "maximize",
+  "system_cost_direction": "minimize",
+  "system_risk_bound": -1.0,
+  "system_max_wall_time_ms": 1000,
+  "system_max_memory_mb": 256,
+  "system_max_sample_count": 0,
+  "planning_horizon": 2,
+  "planning_branching": 2,
+  "component_store_dir": "genesis/components",
+  "cdel_url": "http://127.0.0.1:8000/evaluate",
+  "max_cdel_calls_per_epoch": 2,
+  "max_compute_units_per_eval": 10,
+  "promotions_max": 1,
+  "receipts_dir": "genesis/receipts_v0_6",
+  "shadow_margin": 0.05,
+  "shadow_margin_step": 0.02,
+  "shadow_margin_max": 0.2,
+  "shadow_calibration_path": "genesis/shadow_calibration.json",
+  "local_budget": {
+    "alpha_total": "0.002",
+    "epsilon_total": "2",
+    "delta_total": "0",
+    "compute_total_units": 20
+  },
+  "default_bid": {
+    "grade": "DeploymentGrade",
+    "alpha_bid": "0.001",
+    "privacy_bid": {
+      "epsilon": "1",
+      "delta": "0"
+    },
+    "compute_bid": {
+      "max_compute_units": 10,
+      "max_wall_time_ms": 5000,
+      "max_adversary_strength": 1
+    }
+  },
+  "bid_policy": {
+    "metric_threshold": -1.0,
+    "alpha_mult_low": "0.5",
+    "alpha_mult_high": "1",
+    "epsilon_mult_low": "0.5",
+    "epsilon_mult_high": "1",
+    "call_mult_final": "1",
+    "alpha_mult_repaired": "0.8",
+    "epsilon_mult_repaired": "0.8",
+    "min_compute_units": 10
+  }
+}

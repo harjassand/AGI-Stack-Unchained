@@ -1,0 +1,26 @@
+{
+  "format": "caoe_anomaly_buffer_v1",
+  "schema_version": 1,
+  "epoch_id": "epoch_test_guided_order",
+  "base_ontology_hash": "0000000000000000000000000000000000000000000000000000000000000000",
+  "failure_signatures": {
+    "nuisance_k2_00": {
+      "action_conditioned_effect_map": {
+        "action_0": {"changed_indices": [1, 3], "n": 10},
+        "action_1": {"changed_indices": [2], "n": 2}
+      },
+      "flip_rate_summary": {
+        "per_index_flip_rate": {"0": 0.9, "2": 0.2}
+      },
+      "action_correlation_score": 0.7,
+      "noise_score": 0.6,
+      "terminal_reason": "max_steps",
+      "episode_len": 8,
+      "dev_episode_ids_used": ["ep_0"]
+    }
+  },
+  "signals": {
+    "worst_regimes": [],
+    "worst_families": []
+  }
+}

@@ -1,0 +1,36 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v1_6r/ontology_snapshot_v2",
+  "title": "Ontology snapshot v2",
+  "type": "object",
+  "additionalProperties": false,
+  "patternProperties": {
+    "^x-": {}
+  },
+  "required": [
+    "schema",
+    "schema_version",
+    "epoch_id",
+    "ontology_id",
+    "trained_on",
+    "params",
+    "x-meta"
+  ],
+  "properties": {
+    "schema": {"const": "ontology_snapshot_v2"},
+    "schema_version": {"type": "integer", "const": 2},
+    "epoch_id": {"type": "string"},
+    "ontology_id": {"type": "string", "pattern": "^sha256:[a-f0-9]{64}$"},
+    "trained_on": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["window_epochs", "corpus_hash"],
+      "properties": {
+        "window_epochs": {"type": "array", "items": {"type": "integer"}},
+        "corpus_hash": {"type": "string", "pattern": "^sha256:[a-f0-9]{64}$"}
+      }
+    },
+    "params": {"type": "object"},
+    "x-meta": {"type": "object"}
+  }
+}

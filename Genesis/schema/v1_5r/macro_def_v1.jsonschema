@@ -1,0 +1,158 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v1_5r/macro_def_v1",
+  "title": "Macro definition v1",
+  "type": "object",
+  "additionalProperties": false,
+  "patternProperties": {
+    "^x-": {}
+  },
+  "required": [
+    "schema",
+    "schema_version",
+    "macro_id",
+    "body",
+    "guard",
+    "admission_epoch",
+    "rent_bits"
+  ],
+  "properties": {
+    "schema": {
+      "const": "macro_def_v1"
+    },
+    "schema_version": {
+      "type": "integer",
+      "const": 1
+    },
+    "macro_id": {
+      "type": "string",
+      "pattern": "^sha256:[a-f0-9]{64}$"
+    },
+    "body": {
+      "type": "array",
+      "minItems": 2,
+      "maxItems": 64,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "name",
+          "args"
+        ],
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "args": {
+            "type": "object"
+          }
+        }
+      }
+    },
+    "guard": {
+      "anyOf": [
+        {
+          "type": "null"
+        },
+        {
+          "$ref": "#/$defs/guard"
+        }
+      ]
+    },
+    "admission_epoch": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "rent_bits": {
+      "type": "integer",
+      "minimum": 0
+    }
+  },
+  "$defs": {
+    "fixed_or_int": {
+      "anyOf": [
+        {
+          "type": "integer"
+        },
+        {
+          "type": "string",
+          "pattern": "^-?(0|[1-9][0-9]*)(\\.[0-9]+)?$",
+          "description": "Decimal string with optional fractional part; no exponent or leading zeros."
+        }
+      ]
+    },
+    "guard": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "op"
+          ],
+          "properties": {
+            "op": {
+              "const": "TRUE"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "op",
+            "xs"
+          ],
+          "properties": {
+            "op": {
+              "const": "AND"
+            },
+            "xs": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/guard"
+              },
+              "maxItems": 8
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "op",
+            "obs_hash"
+          ],
+          "properties": {
+            "op": {
+              "const": "OBS_EQUALS"
+            },
+            "obs_hash": {
+              "type": "string",
+              "pattern": "^sha256:[a-f0-9]{64}$"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "op",
+            "feature",
+            "value"
+          ],
+          "properties": {
+            "op": {
+              "const": "HAS_FEATURE"
+            },
+            "feature": {
+              "type": "string"
+            },
+            "value": {
+              "$ref": "#/$defs/fixed_or_int"
+            }
+          }
+        }
+      ]
+    }
+  }
+}

@@ -1,0 +1,13 @@
+set -euo pipefail
+export CDEL_ROOT=/path/to/cdel
+
+./run_end_to_end_v1_1.sh
+
+results:
+- pipeline A: PASS promotion, release pack created and verified
+- key rotated and pipeline B: PASS promotion, release pack created and verified
+- revocation applied to pipeline A cert; re-verify marks A revoked, B valid
+- registry updated: release_registry_v1_1.jsonl
+notes:
+- receipts stored in receipts_v1_1_a/ and receipts_v1_1_b/
+- release packs stored in release_packs_v1_1/

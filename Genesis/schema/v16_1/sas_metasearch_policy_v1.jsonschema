@@ -1,0 +1,37 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v16_1/sas_metasearch_policy_v1",
+  "title": "SAS Metasearch policy v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "allowed_theory_kinds",
+    "allowed_norm_pow_p",
+    "efficiency_gate",
+    "forbidden_rust_tokens",
+    "rust_forbidden_syscalls",
+    "rust_restricted_syscalls",
+    "rust_syscall_allow_modules",
+    "determinism_replay_runs"
+  ],
+  "properties": {
+    "schema_version": { "const": "sas_metasearch_policy_v1" },
+    "allowed_theory_kinds": { "type": "array", "items": { "type": "string" }, "minItems": 1 },
+    "allowed_norm_pow_p": { "type": "array", "items": { "type": "integer" }, "minItems": 1 },
+    "efficiency_gate": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["cand_mul", "base_mul"],
+      "properties": {
+        "cand_mul": { "type": "integer", "minimum": 1 },
+        "base_mul": { "type": "integer", "minimum": 1 }
+      }
+    },
+    "forbidden_rust_tokens": { "type": "array", "items": { "type": "string" } },
+    "rust_forbidden_syscalls": { "type": "array", "items": { "type": "string" } },
+    "rust_restricted_syscalls": { "type": "array", "items": { "type": "string" } },
+    "rust_syscall_allow_modules": { "type": "array", "items": { "type": "string" } },
+    "determinism_replay_runs": { "type": "integer", "minimum": 1 }
+  }
+}

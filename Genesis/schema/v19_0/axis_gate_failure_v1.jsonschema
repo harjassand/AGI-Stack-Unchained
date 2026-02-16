@@ -1,0 +1,28 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v19_0/axis_gate_failure_v1",
+  "title": "Axis gate failure v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_name",
+    "schema_version",
+    "outcome",
+    "detail"
+  ],
+  "properties": {
+    "schema_name": {"const": "axis_gate_failure_v1"},
+    "schema_version": {"const": "v19_0"},
+    "outcome": {
+      "type": "string",
+      "enum": [
+        "SAFE_HALT",
+        "SAFE_SPLIT"
+      ]
+    },
+    "detail": {
+      "type": "string",
+      "minLength": 1
+    }
+  }
+}

@@ -1,0 +1,55 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v18_0/stark_vm_proof_v1",
+  "title": "stark_vm_proof_v1",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "schema_id": {"const": "stark_vm_proof_v1"},
+    "proof_system_id": {"const": "stark_vm_v1"},
+    "vpvm_id": {"const": "vpvm_q32_v1"},
+    "vpvm_config_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "program_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "public_inputs_hash32_hex": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "trace_len_u32": {"type": "integer", "minimum": 1},
+    "main_trace_root32_hex": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "aux_trace_root32_hex": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "composition_root32_hex": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "fri_roots32_hex": {
+      "type": "array",
+      "items": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+    },
+    "commitment_hash_id": {"const": "poseidon_gld_v1"},
+    "fri_params": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "folding_factor_u32": {"type": "integer"},
+        "num_queries_u32": {"type": "integer"},
+        "grinding_bits_u32": {"type": "integer"},
+        "max_remainder_degree_u32": {"type": "integer"}
+      },
+      "required": ["folding_factor_u32", "num_queries_u32", "grinding_bits_u32", "max_remainder_degree_u32"]
+    },
+    "proof_payload_len_u32": {"type": "integer", "minimum": 0},
+    "proof_payload_sha256_hex": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+  },
+  "required": [
+    "schema_id",
+    "proof_system_id",
+    "vpvm_id",
+    "vpvm_config_id",
+    "program_id",
+    "public_inputs_hash32_hex",
+    "trace_len_u32",
+    "main_trace_root32_hex",
+    "aux_trace_root32_hex",
+    "composition_root32_hex",
+    "fri_roots32_hex",
+    "commitment_hash_id",
+    "fri_params",
+    "proof_payload_len_u32",
+    "proof_payload_sha256_hex"
+  ]
+}
+

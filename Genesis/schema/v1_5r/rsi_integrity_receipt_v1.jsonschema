@@ -1,0 +1,93 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v1_5r/rsi_integrity_receipt_v1",
+  "title": "RSI integrity receipt v1",
+  "type": "object",
+  "additionalProperties": false,
+  "patternProperties": {
+    "^x-": {}
+  },
+  "required": [
+    "schema",
+    "schema_version",
+    "epoch_id",
+    "META_HASH",
+    "KERNEL_HASH",
+    "constants_hash",
+    "toolchain_root",
+    "rsi_ignition_receipt_hash",
+    "insertions_used",
+    "eval_budget_report_hashes",
+    "mining_report_hashes",
+    "checks",
+    "evidence"
+  ],
+  "properties": {
+    "schema": {"const": "rsi_integrity_receipt_v1"},
+    "schema_version": {"type": "integer", "const": 1},
+    "epoch_id": {"type": "string"},
+    "META_HASH": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+    "KERNEL_HASH": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+    "constants_hash": {"type": "string", "pattern": "^sha256:[a-f0-9]{64}$"},
+    "toolchain_root": {"type": "string", "pattern": "^sha256:[a-f0-9]{64}$"},
+    "rsi_ignition_receipt_hash": {"type": "string", "pattern": "^sha256:[a-f0-9]{64}$"},
+    "insertions_used": {
+      "type": "array",
+      "items": {"type": "string", "pattern": "^sha256:[a-f0-9]{64}$"}
+    },
+    "eval_budget_report_hashes": {
+      "type": "array",
+      "items": {"type": "string", "pattern": "^sha256:[a-f0-9]{64}$"}
+    },
+    "mining_report_hashes": {
+      "type": "array",
+      "items": {"type": "string", "pattern": "^sha256:[a-f0-9]{64}$"}
+    },
+    "checks": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "budget_stable",
+        "nontrivial_recovery",
+        "barrier_accel_bytes_hashed",
+        "rho_provenance_mined"
+      ],
+      "properties": {
+        "budget_stable": {"$ref": "#/$defs/check"},
+        "nontrivial_recovery": {"$ref": "#/$defs/check"},
+        "barrier_accel_bytes_hashed": {"$ref": "#/$defs/check"},
+        "rho_provenance_mined": {"$ref": "#/$defs/check"}
+      }
+    },
+    "evidence": {"$ref": "#/$defs/evidence"}
+  },
+  "$defs": {
+    "check": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["ok", "reason_codes"],
+      "properties": {
+        "ok": {"type": "boolean"},
+        "reason_codes": {
+          "type": "array",
+          "items": {"type": "string"}
+        }
+      }
+    },
+    "evidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "rsi_integrity_window_report_hash",
+        "barrier_ledger_entry_hashes"
+      ],
+      "properties": {
+        "rsi_integrity_window_report_hash": {"type": "string", "pattern": "^sha256:[a-f0-9]{64}$"},
+        "barrier_ledger_entry_hashes": {
+          "type": "array",
+          "items": {"type": "string", "pattern": "^sha256:[a-f0-9]{64}$"}
+        }
+      }
+    }
+  }
+}

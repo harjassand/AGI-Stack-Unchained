@@ -1,0 +1,31 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v18_0/omega_activation_binding_v1",
+  "title": "Omega activation binding v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "binding_id",
+    "tick_u64",
+    "campaign_id",
+    "capability_id",
+    "promotion_bundle_hash",
+    "activation_key",
+    "source_run_root_rel",
+    "subverifier_receipt_hash",
+    "meta_core_promo_verify_receipt_hash"
+  ],
+  "properties": {
+    "schema_version": {"const": "omega_activation_binding_v1"},
+    "binding_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "tick_u64": {"type": "integer", "minimum": 0},
+    "campaign_id": {"type": "string"},
+    "capability_id": {"type": "string"},
+    "promotion_bundle_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "activation_key": {"type": "string"},
+    "source_run_root_rel": {"type": "string"},
+    "subverifier_receipt_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "meta_core_promo_verify_receipt_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"}
+  }
+}

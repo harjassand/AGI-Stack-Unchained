@@ -1,0 +1,176 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v15_0/kernel_plan_ir_v1",
+  "title": "Kernel plan IR v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "capability_id",
+    "steps"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "kernel_plan_ir_v1"
+    },
+    "capability_id": {
+      "type": "string"
+    },
+    "steps": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/step"
+      }
+    }
+  },
+  "$defs": {
+    "step": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "src_rel",
+            "dst_rel"
+          ],
+          "properties": {
+            "kind": {
+              "const": "COPY_FROZEN_CONFIG_V1"
+            },
+            "src_rel": {
+              "type": "string"
+            },
+            "dst_rel": {
+              "type": "string"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "dst_rel",
+            "json_obj"
+          ],
+          "properties": {
+            "kind": {
+              "const": "WRITE_JSON_CANON_V1"
+            },
+            "dst_rel": {
+              "type": "string"
+            },
+            "json_obj": {}
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "worker_kind",
+            "argv",
+            "stdin_json",
+            "stdout_capture_rel",
+            "allowed_mounts_id"
+          ],
+          "properties": {
+            "kind": {
+              "const": "RUN_SEALED_WORKER_V1"
+            },
+            "worker_kind": {
+              "type": "string"
+            },
+            "argv": {
+              "type": "array",
+              "minItems": 1,
+              "items": {
+                "type": "string"
+              }
+            },
+            "stdin_json": {},
+            "stdout_capture_rel": {
+              "type": "string"
+            },
+            "allowed_mounts_id": {
+              "type": "string"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "src_rel",
+            "algo"
+          ],
+          "properties": {
+            "kind": {
+              "const": "HASH_ARTIFACT_V1"
+            },
+            "src_rel": {
+              "type": "string"
+            },
+            "algo": {
+              "const": "SHA256_V1"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "event"
+          ],
+          "properties": {
+            "kind": {
+              "const": "APPEND_LEDGER_EVENT_V1"
+            },
+            "event": {
+              "type": "object"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "root_rel",
+            "dst_rel"
+          ],
+          "properties": {
+            "kind": {
+              "const": "TREE_SNAPSHOT_V1"
+            },
+            "root_rel": {
+              "type": "string"
+            },
+            "dst_rel": {
+              "type": "string"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "invariant_kind"
+          ],
+          "properties": {
+            "kind": {
+              "const": "ASSERT_INVARIANT_V1"
+            },
+            "invariant_kind": {
+              "type": "string"
+            }
+          }
+        }
+      ]
+    }
+  }
+}

@@ -1,0 +1,65 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v1_5r/frontier_v1",
+  "title": "Frontier v1",
+  "type": "object",
+  "additionalProperties": false,
+  "patternProperties": {
+    "^x-": {}
+  },
+  "required": [
+    "schema",
+    "schema_version",
+    "frontier_id",
+    "families",
+    "M_FRONTIER",
+    "signature_version",
+    "compression_proof_hash"
+  ],
+  "properties": {
+    "schema": {
+      "const": "frontier_v1"
+    },
+    "schema_version": {
+      "type": "integer",
+      "const": 1
+    },
+    "frontier_id": {
+      "type": "string",
+      "pattern": "^sha256:[a-f0-9]{64}$"
+    },
+    "families": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "family_id",
+          "family_hash"
+        ],
+        "properties": {
+          "family_id": {
+            "type": "string",
+            "pattern": "^sha256:[a-f0-9]{64}$"
+          },
+          "family_hash": {
+            "type": "string",
+            "pattern": "^sha256:[a-f0-9]{64}$"
+          }
+        }
+      }
+    },
+    "M_FRONTIER": {
+      "type": "integer",
+      "const": 16
+    },
+    "signature_version": {
+      "type": "integer",
+      "const": 1
+    },
+    "compression_proof_hash": {
+      "type": "string",
+      "pattern": "^sha256:[a-f0-9]{64}$"
+    }
+  }
+}

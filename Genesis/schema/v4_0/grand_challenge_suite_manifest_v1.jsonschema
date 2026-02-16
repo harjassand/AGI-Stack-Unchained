@@ -1,0 +1,51 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v4_0/grand_challenge_suite_manifest_v1",
+  "title": "Grand Challenge suite manifest v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "spec_version",
+    "suite_id",
+    "suite_hash",
+    "task_count",
+    "sealed_storage",
+    "task_schema",
+    "task_prompt_visibility",
+    "answer_visibility"
+  ],
+  "properties": {
+    "schema": {"const": "grand_challenge_suite_manifest_v1"},
+    "spec_version": {"const": "v4_0"},
+    "suite_id": {"type": "string"},
+    "suite_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "task_count": {"type": "integer", "minimum": 0},
+    "sealed_storage": {"$ref": "#/$defs/sealed_storage"},
+    "task_schema": {"const": "sealed_task_v2"},
+    "task_prompt_visibility": {"const": "RE3_VISIBLE"},
+    "answer_visibility": {"const": "RE2_ONLY"}
+  },
+  "$defs": {
+    "sealed_storage": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["format", "suitepack_path", "suitepack_hash", "answer_commitment"],
+      "properties": {
+        "format": {"const": "SEALED_SUITEPACK_V1"},
+        "suitepack_path": {"type": "string"},
+        "suitepack_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+        "answer_commitment": {"$ref": "#/$defs/answer_commitment"}
+      }
+    },
+    "answer_commitment": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["commitment_alg", "salt_id"],
+      "properties": {
+        "commitment_alg": {"const": "SHA256_SALT_V1"},
+        "salt_id": {"type": "string"}
+      }
+    }
+  }
+}

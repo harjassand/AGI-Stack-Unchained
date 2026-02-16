@@ -1,0 +1,73 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v10_0/model_promotion_bundle_v1",
+  "title": "Model promotion bundle v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "bundle_id",
+    "icore_id",
+    "meta_hash",
+    "superego_policy_hash",
+    "training_receipt_hash",
+    "eval_receipt_hash",
+    "activation_target",
+    "two_phase"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "model_promotion_bundle_v1"
+    },
+    "bundle_id": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "icore_id": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "meta_hash": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "superego_policy_hash": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "training_receipt_hash": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "eval_receipt_hash": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "activation_target": {
+      "type": "string"
+    },
+    "two_phase": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "stage_hash",
+        "activate_hash",
+        "rollback_hash"
+      ],
+      "properties": {
+        "stage_hash": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "activate_hash": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "rollback_hash": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,18 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v14_0/sas_system_policy_v1",
+  "title": "SAS System policy v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema", "spec_version", "target_catalog_hash", "ref_impl_sha256", "codegen_version", "required_candidates", "perf_gate_speedup_x10", "perf_scaling_tiers"],
+  "properties": {
+    "schema": {"const": "sas_system_policy_v1"},
+    "spec_version": {"const": "v14_0"},
+    "target_catalog_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "ref_impl_sha256": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "codegen_version": {"type": "string"},
+    "required_candidates": {"type": "array", "items": {"type": "string"}},
+    "perf_gate_speedup_x10": {"type": "integer", "minimum": 1},
+    "perf_scaling_tiers": {"type": "array", "items": {"type": "string"}}
+  }
+}

@@ -1,0 +1,47 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v10_0/training_toolchain_manifest_v1",
+  "title": "Training toolchain manifest v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "toolchain_id",
+    "python_exe_hash",
+    "pip_freeze_hash",
+    "trainer_backend",
+    "trainer_code_hash",
+    "env_vars",
+    "offline_required"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "training_toolchain_manifest_v1"
+    },
+    "toolchain_id": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "python_exe_hash": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "pip_freeze_hash": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "trainer_backend": {
+      "type": "string"
+    },
+    "trainer_code_hash": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "env_vars": {
+      "type": "object"
+    },
+    "offline_required": {
+      "type": "boolean"
+    }
+  }
+}

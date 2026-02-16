@@ -1,0 +1,62 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v10_0/training_corpus_manifest_v1",
+  "title": "Training corpus manifest v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "corpus_id",
+    "shards",
+    "counts_by_type",
+    "source_run_receipts",
+    "split_policy"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "training_corpus_manifest_v1"
+    },
+    "corpus_id": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "shards": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "path",
+          "sha256",
+          "num_examples"
+        ],
+        "properties": {
+          "path": {
+            "type": "string"
+          },
+          "sha256": {
+            "type": "string",
+            "pattern": "^sha256:[0-9a-f]{64}$"
+          },
+          "num_examples": {
+            "type": "integer",
+            "minimum": 0
+          }
+        }
+      }
+    },
+    "counts_by_type": {
+      "type": "object"
+    },
+    "source_run_receipts": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "pattern": "^sha256:[0-9a-f]{64}$"
+      }
+    },
+    "split_policy": {
+      "type": "object"
+    }
+  }
+}

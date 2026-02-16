@@ -1,0 +1,5 @@
+[sealed]
+eval_harness_id = "tooluse-harness-v1"
+eval_harness_hash = "tooluse-harness-v1-hash"
+eval_suite_hash = "e5318a63e31376643119a058b2149851132ce370faebbf02ebd103d24a89e848"
+episodes = 32

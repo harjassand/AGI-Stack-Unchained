@@ -1,0 +1,98 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v2_2/csi_ledger_v1",
+  "title": "CSI ledger v1 (JSONL line)",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "event",
+    "run_id",
+    "seq",
+    "prev_entry_hash",
+    "entry_hash",
+    "payload"
+  ],
+  "properties": {
+    "schema": {"const": "csi_ledger_event_v1"},
+    "event": {
+      "type": "string",
+      "enum": [
+        "CSI_INIT_V1",
+        "CSI_PATCH_REJECT_V1",
+        "CSI_PATCH_ACCEPT_V1"
+      ]
+    },
+    "run_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "seq": {"type": "integer", "minimum": 0},
+    "prev_entry_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "entry_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "payload": {"type": "object"}
+  },
+  "allOf": [
+    {
+      "if": {"properties": {"event": {"const": "CSI_INIT_V1"}}},
+      "then": {"properties": {"payload": {"$ref": "#/$defs/init_payload"}}}
+    },
+    {
+      "if": {"properties": {"event": {"const": "CSI_PATCH_ACCEPT_V1"}}},
+      "then": {"properties": {"payload": {"$ref": "#/$defs/accept_payload"}}}
+    },
+    {
+      "if": {"properties": {"event": {"const": "CSI_PATCH_REJECT_V1"}}},
+      "then": {"properties": {"payload": {"$ref": "#/$defs/reject_payload"}}}
+    }
+  ],
+  "$defs": {
+    "rational_pair": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["num", "den"],
+      "properties": {
+        "num": {"type": "integer", "minimum": 0},
+        "den": {"type": "integer", "minimum": 1}
+      }
+    },
+    "init_payload": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "message": {"type": "string"}
+      }
+    },
+    "accept_payload": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "patch_id",
+        "base_tree_hash",
+        "after_tree_hash",
+        "bench_report_relpath",
+        "test_report_relpath",
+        "work_cost_base",
+        "work_cost_patch",
+        "rho_csi"
+      ],
+      "properties": {
+        "patch_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+        "base_tree_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+        "after_tree_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+        "bench_report_relpath": {"type": "string"},
+        "test_report_relpath": {"type": "string"},
+        "work_cost_base": {"type": "integer", "minimum": 0},
+        "work_cost_patch": {"type": "integer", "minimum": 0},
+        "rho_csi": {"$ref": "#/$defs/rational_pair"}
+      }
+    },
+    "reject_payload": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["reason", "diagnostics_relpath"],
+      "properties": {
+        "reason": {"type": "string"},
+        "patch_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+        "diagnostics_relpath": {"type": "string"}
+      }
+    }
+  }
+}

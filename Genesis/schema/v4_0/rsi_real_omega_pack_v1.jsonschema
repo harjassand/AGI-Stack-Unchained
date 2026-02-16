@@ -1,0 +1,250 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v4_0/rsi_real_omega_pack_v1",
+  "title": "RSI real omega pack v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "spec_version",
+    "pack_hash",
+    "root",
+    "swarm",
+    "omega"
+  ],
+  "properties": {
+    "schema": {"const": "rsi_real_omega_pack_v1"},
+    "spec_version": {"const": "v4_0"},
+    "pack_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "root": {"$ref": "#/$defs/root"},
+    "swarm": {"$ref": "#/$defs/swarm"},
+    "omega": {"$ref": "#/$defs/omega"}
+  },
+  "$defs": {
+    "root": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["required_icore_id", "required_meta_hash"],
+      "properties": {
+        "required_icore_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+        "required_meta_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"}
+      }
+    },
+    "swarm": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["protocol_version", "commit_policy", "authority", "meta"],
+      "properties": {
+        "protocol_version": {"const": "v3_3"},
+        "commit_policy": {"const": "ROUND_COMMIT_V4_OMEGA"},
+        "authority": {"$ref": "#/$defs/authority"},
+        "meta": {"$ref": "#/$defs/meta"}
+      }
+    },
+    "authority": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["min_nodes", "max_depth"],
+      "properties": {
+        "min_nodes": {"type": "integer", "minimum": 1},
+        "max_depth": {"type": "integer", "minimum": 0}
+      }
+    },
+    "meta": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["enabled", "consensus_policy", "exchange_root_path"],
+      "properties": {
+        "enabled": {"type": "boolean"},
+        "consensus_policy": {"const": "HOLO_CONSENSUS_V1"},
+        "exchange_root_path": {"type": "string"}
+      }
+    },
+    "omega": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "enabled",
+        "unbounded_epochs",
+        "tasks_per_epoch",
+        "task_sampling",
+        "checkpoint",
+        "suite",
+        "baseline",
+        "self_improvement",
+        "success_criteria",
+        "stop_conditions"
+      ],
+      "properties": {
+        "enabled": {"type": "boolean"},
+        "unbounded_epochs": {"type": "boolean"},
+        "tasks_per_epoch": {"type": "integer", "minimum": 1},
+        "task_sampling": {"$ref": "#/$defs/task_sampling"},
+        "checkpoint": {"$ref": "#/$defs/checkpoint"},
+        "suite": {"$ref": "#/$defs/suite"},
+        "baseline": {"$ref": "#/$defs/baseline"},
+        "self_improvement": {"$ref": "#/$defs/self_improvement"},
+        "success_criteria": {"$ref": "#/$defs/success_criteria"},
+        "stop_conditions": {
+          "type": "array",
+          "minItems": 1,
+          "items": {"$ref": "#/$defs/stop_condition"}
+        }
+      }
+    },
+    "task_sampling": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["policy", "seed", "allow_repeats"],
+      "properties": {
+        "policy": {"const": "SHUFFLE_CYCLE_V1"},
+        "seed": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+        "allow_repeats": {"type": "boolean"}
+      }
+    },
+    "checkpoint": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["every_epochs", "write_receipt"],
+      "properties": {
+        "every_epochs": {"type": "integer", "minimum": 1},
+        "write_receipt": {"type": "boolean"}
+      }
+    },
+    "suite": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["suite_manifest_path"],
+      "properties": {
+        "suite_manifest_path": {"type": "string"}
+      }
+    },
+    "baseline": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["baseline_id", "baseline_report_path", "baseline_report_hash"],
+      "properties": {
+        "baseline_id": {"type": "string"},
+        "baseline_report_path": {"type": "string"},
+        "baseline_report_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"}
+      }
+    },
+    "self_improvement": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "enabled",
+        "proposal_systems",
+        "promotion_policy",
+        "dev_gate",
+        "max_promotions_per_checkpoint",
+        "max_patch_bytes",
+        "max_patch_files_touched"
+      ],
+      "properties": {
+        "enabled": {"type": "boolean"},
+        "proposal_systems": {"$ref": "#/$defs/proposal_systems"},
+        "promotion_policy": {"const": "PROMOTE_ONLY_IF_DEV_IMPROVES_V1"},
+        "dev_gate": {"$ref": "#/$defs/dev_gate"},
+        "max_promotions_per_checkpoint": {"type": "integer", "minimum": 0},
+        "max_patch_bytes": {"type": "integer", "minimum": 0},
+        "max_patch_files_touched": {"type": "integer", "minimum": 0}
+      }
+    },
+    "proposal_systems": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "autonomy_v2",
+        "recursive_ontology_v2_1",
+        "csi_v2_2",
+        "hardening_v2_3"
+      ],
+      "properties": {
+        "autonomy_v2": {"type": "boolean"},
+        "recursive_ontology_v2_1": {"type": "boolean"},
+        "csi_v2_2": {"type": "boolean"},
+        "hardening_v2_3": {"type": "boolean"}
+      }
+    },
+    "dev_gate": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["sealed_config_path", "min_delta_score_num", "min_delta_score_den"],
+      "properties": {
+        "sealed_config_path": {"type": "string"},
+        "min_delta_score_num": {"type": "integer", "minimum": 0},
+        "min_delta_score_den": {"type": "integer", "minimum": 1}
+      }
+    },
+    "success_criteria": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "min_new_solves_over_baseline",
+        "rolling_window",
+        "min_passrate_gain_num",
+        "min_passrate_gain_den",
+        "acceleration"
+      ],
+      "properties": {
+        "min_new_solves_over_baseline": {"type": "integer", "minimum": 0},
+        "rolling_window": {"$ref": "#/$defs/rolling_window"},
+        "min_passrate_gain_num": {"type": "integer", "minimum": 0},
+        "min_passrate_gain_den": {"type": "integer", "minimum": 1},
+        "acceleration": {"$ref": "#/$defs/acceleration"}
+      }
+    },
+    "rolling_window": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["window_tasks", "min_windows"],
+      "properties": {
+        "window_tasks": {"type": "integer", "minimum": 1},
+        "min_windows": {"type": "integer", "minimum": 1}
+      }
+    },
+    "acceleration": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["metric", "min_accel_ratio_num", "min_accel_ratio_den", "min_consecutive_windows"],
+      "properties": {
+        "metric": {"const": "ACCEL_INDEX_V1"},
+        "min_accel_ratio_num": {"type": "integer", "minimum": 0},
+        "min_accel_ratio_den": {"type": "integer", "minimum": 1},
+        "min_consecutive_windows": {"type": "integer", "minimum": 1}
+      }
+    },
+    "stop_condition": {
+      "type": "object",
+      "additionalProperties": false,
+      "oneOf": [
+        {
+          "required": ["kind"],
+          "properties": {"kind": {"const": "EXTERNAL_ONLY"}}
+        },
+        {
+          "required": ["kind", "max_checkpoints"],
+          "properties": {
+            "kind": {"const": "MAX_CHECKPOINTS"},
+            "max_checkpoints": {"type": "integer", "minimum": 1}
+          }
+        },
+        {
+          "required": ["kind", "max_tasks"],
+          "properties": {
+            "kind": {"const": "MAX_TASKS"},
+            "max_tasks": {"type": "integer", "minimum": 1}
+          }
+        },
+        {
+          "required": ["kind", "max_compute"],
+          "properties": {
+            "kind": {"const": "MAX_COMPUTE"},
+            "max_compute": {"type": "integer", "minimum": 1}
+          }
+        }
+      ]
+    }
+  }
+}

@@ -1,0 +1,61 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v10_0/sealed_model_eval_receipt_v1",
+  "title": "Sealed model eval receipt v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "eval_suite_id",
+    "bundle_id",
+    "weights_hash",
+    "result",
+    "metric_num",
+    "metric_den",
+    "stdout_hash",
+    "stderr_hash",
+    "time_ms",
+    "network_used"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "sealed_model_eval_receipt_v1"
+    },
+    "eval_suite_id": {
+      "type": "string"
+    },
+    "bundle_id": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "weights_hash": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "result": {
+      "type": "string"
+    },
+    "metric_num": {
+      "type": "integer"
+    },
+    "metric_den": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "stdout_hash": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "stderr_hash": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "time_ms": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "network_used": {
+      "type": "boolean"
+    }
+  }
+}

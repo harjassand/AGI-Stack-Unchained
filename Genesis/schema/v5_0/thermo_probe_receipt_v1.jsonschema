@@ -1,0 +1,45 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v5_0/thermo_probe_receipt_v1",
+  "title": "Thermo probe receipt v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "spec_version",
+    "receipt_hash",
+    "probe_kind",
+    "probe_status",
+    "powermetrics_raw_path",
+    "powermetrics_raw_hash",
+    "thermal_log_raw_path",
+    "thermal_log_raw_hash",
+    "sample_interval_ms",
+    "sample_count",
+    "mean_combined_power_mW",
+    "wall_time_s",
+    "energy_mJ",
+    "passes"
+  ],
+  "properties": {
+    "schema": {"const": "thermo_probe_receipt_v1"},
+    "spec_version": {"const": "v5_0"},
+    "receipt_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "probe_kind": {"type": "string", "enum": ["SOLVE_WINDOW", "MICROBENCH"]},
+    "probe_status": {
+      "type": "string",
+      "enum": ["VALID", "INVALID_PARSE", "ABORT_THERMAL_CRITICAL", "THERMAL_TOO_HOT", "WORKER_ERROR"]
+    },
+    "powermetrics_raw_path": {"type": "string"},
+    "powermetrics_raw_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "thermal_log_raw_path": {"type": "string"},
+    "thermal_log_raw_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "sample_interval_ms": {"type": "integer", "minimum": 1},
+    "sample_count": {"type": "integer", "minimum": 1},
+    "mean_combined_power_mW": {"type": "integer", "minimum": 0},
+    "wall_time_s": {"type": "integer", "minimum": 0},
+    "energy_mJ": {"type": "integer", "minimum": 0},
+    "passes": {"type": "integer", "minimum": 0}
+  }
+}
+

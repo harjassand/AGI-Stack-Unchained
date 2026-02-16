@@ -1,0 +1,73 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v1_5r/family_signature_v1",
+  "title": "Family signature v1",
+  "type": "object",
+  "additionalProperties": false,
+  "patternProperties": {
+    "^x-": {}
+  },
+  "required": [
+    "schema",
+    "schema_version",
+    "signature_version",
+    "fields"
+  ],
+  "properties": {
+    "schema": {
+      "const": "family_signature_v1"
+    },
+    "schema_version": {
+      "type": "integer",
+      "const": 1
+    },
+    "signature_version": {
+      "type": "integer",
+      "const": 1
+    },
+    "fields": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "obs_class",
+        "nuisance_class",
+        "action_remap_class",
+        "delay_class",
+        "noise_class",
+        "render_class"
+      ],
+      "properties": {
+        "obs_class": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 15
+        },
+        "nuisance_class": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 15
+        },
+        "action_remap_class": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 15
+        },
+        "delay_class": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 15
+        },
+        "noise_class": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 15
+        },
+        "render_class": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 15
+        }
+      }
+    }
+  }
+}

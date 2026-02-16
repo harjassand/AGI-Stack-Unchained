@@ -1,0 +1,25 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "branch_coverage_report_v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "total_cases", "distinct_branch_signatures", "non_trivial_rule_path_cases", "histogram"],
+  "properties": {
+    "schema_version": {"const": "branch_coverage_report_v1"},
+    "total_cases": {"type": "integer", "minimum": 0},
+    "distinct_branch_signatures": {"type": "integer", "minimum": 0},
+    "non_trivial_rule_path_cases": {"type": "integer", "minimum": 0},
+    "histogram": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["branch_signature", "count"],
+        "properties": {
+          "branch_signature": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+          "count": {"type": "integer", "minimum": 1}
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,31 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v18_0/qxrl_invsqrt_lut_manifest_v1",
+  "title": "qxrl_invsqrt_lut_manifest_v1",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "schema_id": {"const": "qxrl_invsqrt_lut_manifest_v1"},
+    "lut_manifest_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+
+    "dc1_id": {"type": "string", "const": "dc1:q32_v1"},
+    "opset_id": {"type": "string", "pattern": "^opset:eudrs_u_v1:sha256:[0-9a-f]{64}$"},
+
+    "lut_kind": {"type": "string", "const": "INVSQRT_Q32_NR_LUT_V1"},
+    "lut_bits_u32": {"type": "integer", "const": 10},
+    "invsqrt_iters_u32": {"type": "integer", "const": 2},
+
+    "lut_ref": {"$ref": "https://genesis.engine/specs/v18_0/eudrs_u_artifact_ref_v1"}
+  },
+  "required": [
+    "schema_id",
+    "lut_manifest_id",
+    "dc1_id",
+    "opset_id",
+    "lut_kind",
+    "lut_bits_u32",
+    "invsqrt_iters_u32",
+    "lut_ref"
+  ]
+}
+

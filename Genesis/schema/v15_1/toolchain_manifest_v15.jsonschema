@@ -1,0 +1,39 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "toolchain_manifest_v15",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "checker_name",
+    "checker_executable",
+    "invocation_template",
+    "checker_executable_hash",
+    "toolchain_id"
+  ],
+  "properties": {
+    "checker_name": {
+      "type": "string",
+      "minLength": 1
+    },
+    "checker_executable": {
+      "type": "string",
+      "minLength": 1
+    },
+    "invocation_template": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
+    },
+    "checker_executable_hash": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "toolchain_id": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    }
+  }
+}

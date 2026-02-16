@@ -1,0 +1,24 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v14_0/active_system_snapshot_v1",
+  "title": "Active system snapshot v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema", "spec_version", "updated_utc", "active_ontology_id", "active_macros_id", "active_swarm_checkpoint_id", "sas_system_components"],
+  "properties": {
+    "schema": {"const": "active_system_snapshot_v1"},
+    "spec_version": {"const": "v1"},
+    "updated_utc": {"type": "string"},
+    "active_ontology_id": {"type": "string"},
+    "active_macros_id": {"type": "string"},
+    "active_swarm_checkpoint_id": {"type": "string"},
+    "sas_system_components": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["SAS_SCIENCE_WORKMETER_V1"],
+      "properties": {
+        "SAS_SCIENCE_WORKMETER_V1": {"$ref": "sas_system_component_registry_v1.jsonschema#/$defs/component"}
+      }
+    }
+  }
+}

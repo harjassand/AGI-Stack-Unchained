@@ -1,0 +1,177 @@
+{
+  "schema_version": "1.0.1",
+  "capsule_version": "1.0.0",
+  "forward_compat": "x_prefix_only",
+  "canonicalization": "gcj-1",
+  "capsule_id": "3e4d7c2a-3cf5-4c85-8a6f-8d1b2e5d4f33",
+  "artifact_type": "CAUSAL_MODEL",
+  "parents": [
+    "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+  ],
+  "operators_used": [
+    "abduce"
+  ],
+  "build_hashes": {
+    "ir_hash": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+    "container_hash": "1111111111111111111111111111111111111111111111111111111111111111",
+    "dependency_hashes": []
+  },
+  "commitments": {
+    "capsule_hash": "03c84dccca6e8ab2d7294f2a535e2712a67e3f0798ed6fb28559860fe93edc41",
+    "checkpoint_merkle_root": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+  },
+  "ir_payload": {
+    "format": "GIR1-CAUSAL",
+    "version": "1.0",
+    "payload_base64": "AA=="
+  },
+  "entrypoints": [
+    {
+      "name": "estimate_effect",
+      "signature": {
+        "inputs": [
+          {
+            "name": "treatment",
+            "type": "Tensor<float32>[n]"
+          },
+          {
+            "name": "outcome",
+            "type": "Tensor<float32>[n]"
+          },
+          {
+            "name": "covariates",
+            "type": "Tensor<float32>[n,d]"
+          }
+        ],
+        "outputs": [
+          {
+            "name": "ate",
+            "type": "float32"
+          }
+        ]
+      }
+    }
+  ],
+  "effects": {
+    "allow": [
+      "read_only"
+    ],
+    "deny": [
+      "network",
+      "filesystem_write",
+      "process_spawn"
+    ]
+  },
+  "contract": {
+    "functional_spec": {
+      "spec_language": "DSL1",
+      "clauses": [
+        {
+          "id": "fs-1",
+          "clause_type": "functional",
+          "text": "Return ATE under stated identifiability conditions."
+        }
+      ]
+    },
+    "safety_spec": {
+      "invariants": [
+        {
+          "id": "s-1",
+          "clause_type": "safety",
+          "text": "No NaNs or infinities in ATE output."
+        }
+      ],
+      "forbidden_behaviors": []
+    },
+    "resource_spec": {
+      "max_wall_time_ms": 1000,
+      "max_memory_mb": 2048,
+      "max_sample_count": 0,
+      "max_gpu_seconds": 0
+    },
+    "statistical_spec": {
+      "metrics": [
+        {
+          "name": "coverage",
+          "direction": "maximize",
+          "target": 0.95
+        }
+      ],
+      "decision_rule": "cs_lcb",
+      "confidence_requirement": {
+        "delta": 0.01,
+        "sequence": "time_uniform"
+      }
+    },
+    "robustness_spec": {
+      "mode": "certified_slices",
+      "slice_family": {
+        "family": "decision_tree",
+        "capacity": {
+          "parameters": {
+            "depth": 2
+          }
+        }
+      },
+      "risk_metric": "coverage",
+      "risk_bound": 0.9
+    }
+  },
+  "assumptions": [
+    {
+      "assumption_id": "A-id",
+      "statement": "Ignorability given measured covariates and positivity.",
+      "scope": "causal graph and data",
+      "falsification_test": {
+        "method": "negative_control",
+        "power_target": 0.8,
+        "min_detectable_delta": 0.05,
+        "anytime_valid": false
+      },
+      "uncertainty_set": {
+        "class": "bounded_unmeasured_confounding",
+        "radius": 0.1
+      },
+      "failure_probability": 0.02
+    }
+  ],
+  "budget_bid": {
+    "grade": "DeploymentGrade",
+    "alpha_bid": "0.005",
+    "privacy_bid": {
+      "epsilon": "0.2",
+      "delta": "0.000001"
+    },
+    "compute_bid": {
+      "max_compute_units": 8000,
+      "max_wall_time_ms": 30000,
+      "max_adversary_strength": 1
+    }
+  },
+  "evidence": {
+    "certificates": [
+      {
+        "cert_type": "identifiability_witness",
+        "payload_hash": "2222222222222222222222222222222222222222222222222222222222222222",
+        "checker_id": "id-checker-1"
+      }
+    ],
+    "unit_tests": [],
+    "property_tests": [],
+    "checkpoints": []
+  },
+  "reproducibility": {
+    "determinism_mode": "seeded",
+    "seed_policy": "harness_seeded",
+    "runtime_env": {
+      "os": "linux",
+      "arch": "x86_64",
+      "kernel_isa": "KISA-1"
+    }
+  },
+  "provenance": {
+    "created_by": "genesis",
+    "timestamp": "2025-01-01T00:00:00Z",
+    "source_repo": "local"
+  }
+}

@@ -1,0 +1,87 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v1_6r/rsi_transfer_window_report_v1",
+  "title": "RSI transfer window report v1",
+  "type": "object",
+  "additionalProperties": false,
+  "patternProperties": {
+    "^x-": {}
+  },
+  "required": [
+    "schema",
+    "schema_version",
+    "epoch_id",
+    "base_portfolio_ignition",
+    "insertions_used",
+    "checks",
+    "transfer_ignition",
+    "reason_codes"
+  ],
+  "properties": {
+    "schema": {"const": "rsi_transfer_window_report_v1"},
+    "schema_version": {"type": "integer", "const": 1},
+    "epoch_id": {"type": "string"},
+    "base_portfolio_ignition": {"type": "boolean"},
+    "insertions_used": {
+      "type": "array",
+      "items": {"type": "string", "pattern": "^sha256:[a-f0-9]{64}$"}
+    },
+    "checks": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "portfolio_env_count",
+        "insertions_true_novelty",
+        "insertions_key_sensitive",
+        "witness_conditioned_insertion_present",
+        "witness_replay_ok",
+        "macro_transfer_present",
+        "mech_patch_promoted",
+        "mech_patch_eval_pass",
+        "barrier_accel_env_steps_pooled",
+        "barrier_accel_bytes_hashed_pooled",
+        "barrier_accel_env_steps_by_env",
+        "barrier_accel_bytes_hashed_by_env"
+      ],
+      "properties": {
+        "portfolio_env_count": {"$ref": "#/$defs/check"},
+        "insertions_true_novelty": {"$ref": "#/$defs/check"},
+        "insertions_key_sensitive": {"$ref": "#/$defs/check"},
+        "witness_conditioned_insertion_present": {"$ref": "#/$defs/check"},
+        "witness_replay_ok": {"$ref": "#/$defs/check"},
+        "macro_transfer_present": {"$ref": "#/$defs/check"},
+        "mech_patch_promoted": {"$ref": "#/$defs/check"},
+        "mech_patch_eval_pass": {"$ref": "#/$defs/check"},
+        "barrier_accel_env_steps_pooled": {"$ref": "#/$defs/check"},
+        "barrier_accel_bytes_hashed_pooled": {"$ref": "#/$defs/check"},
+        "barrier_accel_env_steps_by_env": {
+          "type": "object",
+          "additionalProperties": {"$ref": "#/$defs/check"}
+        },
+        "barrier_accel_bytes_hashed_by_env": {
+          "type": "object",
+          "additionalProperties": {"$ref": "#/$defs/check"}
+        }
+      }
+    },
+    "transfer_ignition": {"type": "boolean"},
+    "reason_codes": {
+      "type": "array",
+      "items": {"type": "string"}
+    }
+  },
+  "$defs": {
+    "check": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["ok", "reason_codes"],
+      "properties": {
+        "ok": {"type": "boolean"},
+        "reason_codes": {
+          "type": "array",
+          "items": {"type": "string"}
+        }
+      }
+    }
+  }
+}

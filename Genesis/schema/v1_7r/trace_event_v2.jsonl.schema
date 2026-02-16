@@ -1,0 +1,45 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v1_7r/trace_event_v2",
+  "title": "Trace event v2",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "schema_version",
+    "t_step",
+    "family_id",
+    "inst_hash",
+    "action",
+    "obs_hash",
+    "post_obs_hash",
+    "receipt_hash",
+    "macro_id",
+    "onto_ctx_hash",
+    "active_ontology_id",
+    "active_snapshot_id"
+  ],
+  "properties": {
+    "schema": {"const": "trace_event_v2"},
+    "schema_version": {"type": "integer", "const": 2},
+    "t_step": {"type": "integer"},
+    "family_id": {"type": "string", "pattern": "^sha256:[a-f0-9]{64}$"},
+    "inst_hash": {"type": "string", "pattern": "^sha256:[a-f0-9]{64}$"},
+    "action": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "args"],
+      "properties": {
+        "name": {"type": "string"},
+        "args": {"type": "object"}
+      }
+    },
+    "obs_hash": {"type": "string", "pattern": "^sha256:[a-f0-9]{64}$"},
+    "post_obs_hash": {"type": "string", "pattern": "^sha256:[a-f0-9]{64}$"},
+    "receipt_hash": {"type": "string", "pattern": "^sha256:[a-f0-9]{64}$"},
+    "macro_id": {"anyOf": [{"type": "string", "pattern": "^sha256:[a-f0-9]{64}$"}, {"type": "null"}]},
+    "onto_ctx_hash": {"type": "string", "pattern": "^sha256:[a-f0-9]{64}$"},
+    "active_ontology_id": {"anyOf": [{"type": "string", "pattern": "^sha256:[a-f0-9]{64}$"}, {"type": "null"}]},
+    "active_snapshot_id": {"anyOf": [{"type": "string", "pattern": "^sha256:[a-f0-9]{64}$"}, {"type": "null"}]}
+  }
+}

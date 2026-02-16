@@ -1,0 +1,67 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v2_1/rsi_recursive_ontology_receipt_v1",
+  "title": "RSI recursive ontology receipt v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "run_id",
+    "pack_hash",
+    "constitution_hash",
+    "K_required_concepts",
+    "accepted_concepts",
+    "verdict",
+    "reasons",
+    "ledger_head_hash"
+  ],
+  "properties": {
+    "schema": {"const": "rsi_recursive_ontology_receipt_v1"},
+    "run_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "pack_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "constitution_hash": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "K_required_concepts": {"type": "integer", "minimum": 1},
+    "accepted_concepts": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "concept_id",
+          "patch_id",
+          "source_attempt_relpath",
+          "target_attempt_relpath",
+          "rho_source",
+          "rho_target",
+          "uses_recursive_call"
+        ],
+        "properties": {
+          "concept_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+          "patch_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+          "source_attempt_relpath": {"type": "string"},
+          "target_attempt_relpath": {"type": "string"},
+          "rho_source": {"$ref": "#/$defs/rational_pair"},
+          "rho_target": {"$ref": "#/$defs/rational_pair"},
+          "uses_recursive_call": {"type": "boolean"}
+        }
+      }
+    },
+    "verdict": {"type": "string", "enum": ["VALID", "INVALID"]},
+    "reasons": {
+      "type": "array",
+      "items": {"type": "string"}
+    },
+    "ledger_head_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"}
+  },
+  "$defs": {
+    "rational_pair": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["num", "den"],
+      "properties": {
+        "num": {"type": "integer", "minimum": 0},
+        "den": {"type": "integer", "minimum": 1}
+      }
+    }
+  }
+}

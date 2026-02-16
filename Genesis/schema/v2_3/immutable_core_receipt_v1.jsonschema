@@ -1,0 +1,48 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v2_3/immutable_core_receipt_v1",
+  "title": "Immutable core receipt v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "spec_version",
+    "verdict",
+    "reason",
+    "repo_root_sha256",
+    "lock_path",
+    "lock_id",
+    "core_id_expected",
+    "core_id_observed",
+    "mismatches",
+    "receipt_head_hash"
+  ],
+  "properties": {
+    "schema": {"const": "immutable_core_receipt_v1"},
+    "spec_version": {"type": "string", "const": "v2_3"},
+    "verdict": {"type": "string", "enum": ["VALID", "INVALID"]},
+    "reason": {"type": "string"},
+    "repo_root_sha256": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "lock_path": {"type": "string"},
+    "lock_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "core_id_expected": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "core_id_observed": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "mismatches": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/mismatch"}
+    },
+    "receipt_head_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"}
+  },
+  "$defs": {
+    "mismatch": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["relpath", "expected_sha256", "observed_sha256"],
+      "properties": {
+        "relpath": {"type": "string"},
+        "expected_sha256": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+        "observed_sha256": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"}
+      }
+    }
+  }
+}

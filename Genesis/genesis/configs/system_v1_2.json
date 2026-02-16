@@ -1,0 +1,81 @@
+{
+  "bid_policy": {
+    "alpha_mult_high": "1",
+    "alpha_mult_low": "0.5",
+    "alpha_mult_repaired": "0.8",
+    "call_mult_final": "1",
+    "epsilon_mult_high": "1",
+    "epsilon_mult_low": "0.5",
+    "epsilon_mult_repaired": "0.8",
+    "metric_threshold": -1.0,
+    "min_compute_units": 10,
+    "mode": "fixed"
+  },
+  "cdel_url": "http://127.0.0.1:8000/evaluate",
+  "component_store_dir": "components_v1_2",
+  "default_bid": {
+    "alpha_bid": "0.001",
+    "compute_bid": {
+      "max_adversary_strength": 1,
+      "max_compute_units": 10,
+      "max_wall_time_ms": 5000
+    },
+    "grade": "DeploymentGrade",
+    "privacy_bid": {
+      "delta": "0",
+      "epsilon": "1"
+    }
+  },
+  "epoch_id": "epoch-1",
+  "failure_pattern_snapshot_every": 2,
+  "failure_pattern_top_k": 3,
+  "forager_max_tests": 3,
+  "iterations": 6,
+  "local_budget": {
+    "alpha_total": "0.003",
+    "compute_total_units": 30,
+    "delta_total": "0",
+    "epsilon_total": "3"
+  },
+  "max_cdel_calls_per_epoch": 4,
+  "max_compute_units_per_eval": 10,
+  "planning_branching": 2,
+  "planning_horizon": 2,
+  "policy_env_config": "configs/policy_envs.json",
+  "policy_env_id": "policy_env_tiny",
+  "promotions_max": 2,
+  "receipts_dir": "receipts_v1_2",
+  "release_pack_dir": "release_packs_v1_2",
+  "release_registry_path": "release_registry_v1_2.jsonl",
+  "repair_attempts": 2,
+  "run_log_path": "genesis_run_v1_2.jsonl",
+  "seed": 0,
+  "shadow_calibration_path": "shadow_calibration_v1_2.json",
+  "shadow_margin": 0.05,
+  "shadow_margin_max": 0.2,
+  "shadow_margin_step": 0.02,
+  "system_cost_direction": "minimize",
+  "system_cost_target": 4.0,
+  "system_max_memory_mb": 256,
+  "system_max_sample_count": 0,
+  "system_max_wall_time_ms": 1000,
+  "system_return_direction": "maximize",
+  "system_return_target": -3.0,
+  "system_risk_bound": -1.0,
+  "nontriviality": {
+    "system_min_diversity": "0.0",
+    "system_min_entropy": "0.0",
+    "system_baseline_margin": "0.0"
+  },
+  "protocol_caps": {
+    "max_promotions": 2,
+    "max_cdel_calls": 2,
+    "max_dp_queries": 4,
+    "max_stat_queries": 4,
+    "max_robust_queries": 4
+  },
+  "promotion_stride": 1,
+  "promotion_min_margin": 0.02,
+  "promotion_novelty_margin": 0.05,
+  "max_wall_time_ms_per_eval": 5000
+}

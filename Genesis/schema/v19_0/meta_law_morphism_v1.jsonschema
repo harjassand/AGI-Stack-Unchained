@@ -1,0 +1,40 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v19_0/meta_law_morphism_v1",
+  "title": "Meta-law morphism v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_name",
+    "schema_version",
+    "morphism_id",
+    "continuity_constitution_ref",
+    "target_morphism_ref",
+    "required_proofs"
+  ],
+  "$defs": {
+    "sha256": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "artifact_ref_v1": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["artifact_id", "artifact_relpath"],
+      "properties": {
+        "artifact_id": {"$ref": "#/$defs/sha256"},
+        "artifact_relpath": {"type": "string", "minLength": 1}
+      }
+    }
+  },
+  "properties": {
+    "schema_name": {"const": "meta_law_morphism_v1"},
+    "schema_version": {"const": "v19_0"},
+    "morphism_id": {"$ref": "#/$defs/sha256"},
+    "continuity_constitution_ref": {"$ref": "#/$defs/artifact_ref_v1"},
+    "target_morphism_ref": {"$ref": "#/$defs/artifact_ref_v1"},
+    "required_proofs": {
+      "type": "array",
+      "items": {"type": "string", "minLength": 1},
+      "minItems": 1,
+      "uniqueItems": true
+    }
+  }
+}

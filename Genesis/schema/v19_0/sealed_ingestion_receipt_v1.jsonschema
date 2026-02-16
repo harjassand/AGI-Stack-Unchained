@@ -1,0 +1,157 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v19_0/sealed_ingestion_receipt_v1",
+  "title": "Sealed ingestion receipt v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_name",
+    "schema_version",
+    "receipt_id",
+    "sip_profile_id",
+    "input_artifact_ids",
+    "canonicalization_profile_ids",
+    "world_manifest_ref",
+    "computed_world_root",
+    "gate_results",
+    "budgets",
+    "outcome",
+    "reason_code"
+  ],
+  "properties": {
+    "schema_name": {
+      "const": "sealed_ingestion_receipt_v1"
+    },
+    "schema_version": {
+      "const": "v19_0"
+    },
+    "receipt_id": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "sip_profile_id": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "input_artifact_ids": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "string",
+        "pattern": "^sha256:[0-9a-f]{64}$"
+      }
+    },
+    "canonicalization_profile_ids": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "string",
+        "pattern": "^sha256:[0-9a-f]{64}$"
+      }
+    },
+    "world_manifest_ref": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "computed_world_root": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "gate_results": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "leakage_gate",
+        "non_interference_gate"
+      ],
+      "properties": {
+        "leakage_gate": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "scanned_entry_ids",
+            "flags",
+            "outcome"
+          ],
+          "properties": {
+            "scanned_entry_ids": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "pattern": "^sha256:[0-9a-f]{64}$"
+              }
+            },
+            "flags": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "outcome": {
+              "type": "string",
+              "enum": [
+                "ACCEPT",
+                "REJECT",
+                "SAFE_HALT"
+              ]
+            }
+          }
+        },
+        "non_interference_gate": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "scanned_entry_ids",
+            "flags",
+            "outcome"
+          ],
+          "properties": {
+            "scanned_entry_ids": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "pattern": "^sha256:[0-9a-f]{64}$"
+              }
+            },
+            "flags": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "outcome": {
+              "type": "string",
+              "enum": [
+                "ACCEPT",
+                "REJECT",
+                "SAFE_HALT"
+              ]
+            }
+          }
+        }
+      }
+    },
+    "budgets": {
+      "$ref": "https://genesis.engine/specs/v19_0/budget_spec_v1"
+    },
+    "outcome": {
+      "type": "string",
+      "enum": [
+        "ACCEPT",
+        "REJECT",
+        "SAFE_HALT"
+      ]
+    },
+    "reason_code": {
+      "type": "string",
+      "enum": [
+        "GATES_PASS",
+        "LEAKAGE_DETECTED",
+        "NON_INTERFERENCE_FAIL",
+        "MISSING_INPUT",
+        "HASH_MISMATCH",
+        "BUDGET_EXHAUSTED"
+      ]
+    }
+  }
+}

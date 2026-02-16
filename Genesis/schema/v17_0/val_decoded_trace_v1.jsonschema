@@ -1,0 +1,25 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v17_0/val_decoded_trace_v1",
+  "title": "VAL decoded trace v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "instructions"],
+  "properties": {
+    "schema_version": { "const": "val_decoded_trace_v1" },
+    "instructions": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["pc_u32", "opcode_u32", "mnemonic", "operands_norm"],
+        "properties": {
+          "pc_u32": { "type": "integer", "minimum": 0 },
+          "opcode_u32": { "type": "integer", "minimum": 0 },
+          "mnemonic": { "type": "string", "minLength": 1 },
+          "operands_norm": { "type": "array", "items": { "type": "string" } }
+        }
+      }
+    }
+  }
+}

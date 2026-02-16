@@ -1,0 +1,144 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v18_0/qxrl_model_manifest_v1",
+  "title": "qxrl_model_manifest_v1",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "schema_id": {"const": "qxrl_model_manifest_v1"},
+    "model_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+
+    "opset_id": {"type": "string", "pattern": "^opset:eudrs_u_v1:sha256:[0-9a-f]{64}$"},
+    "dc1_id": {"type": "string", "const": "dc1:q32_v1"},
+
+    "tokenizer_kind": {"type": "string", "enum": ["BYTE_TOK_257_V1", "PRETOKENIZED_U32_V1"]},
+
+    "vocab_size_u32": {"type": "integer", "minimum": 1, "maximum": 4294967295},
+    "seq_len_u32": {"type": "integer", "minimum": 1, "maximum": 4294967295},
+
+    "encoder_kind": {"type": "string", "enum": ["QRE_V1", "TSAE_V1"]},
+
+    "d_model_u32": {"type": "integer", "minimum": 1, "maximum": 4294967295},
+    "d_embed_u32": {"type": "integer", "minimum": 1, "maximum": 4294967295},
+
+    "math": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "dot_kind": {"type": "string", "enum": ["DOT_Q32_SHIFT_END_V1", "DOT_Q32_SHIFT_EACH_DIM_V1"]},
+        "div_kind": {"type": "string", "const": "DIV_Q32_POS_RNE_V1"},
+        "invsqrt_kind": {"type": "string", "const": "INVSQRT_Q32_NR_LUT_V1"},
+        "invsqrt_lut_manifest_ref": {"$ref": "https://genesis.engine/specs/v18_0/eudrs_u_artifact_ref_v1"}
+      },
+      "required": ["dot_kind", "div_kind", "invsqrt_kind", "invsqrt_lut_manifest_ref"]
+    },
+
+    "qre": {
+      "anyOf": [
+        {"type": "null"},
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "d_hidden_u32": {"type": "integer", "minimum": 1, "maximum": 4294967295},
+            "inv_seq_len_q32": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {"q": {"type": "integer"}},
+              "required": ["q"]
+            }
+          },
+          "required": ["d_hidden_u32", "inv_seq_len_q32"]
+        }
+      ]
+    },
+
+    "tsae": {
+      "anyOf": [
+        {"type": "null"},
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "n_layers_u32": {"type": "integer", "minimum": 1, "maximum": 4294967295},
+            "n_heads_u32": {"type": "integer", "minimum": 1, "maximum": 4294967295},
+            "d_head_u32": {"type": "integer", "minimum": 1, "maximum": 4294967295},
+            "d_ff_u32": {"type": "integer", "minimum": 1, "maximum": 4294967295},
+            "topk_u32": {"type": "integer", "minimum": 1, "maximum": 4294967295},
+            "rms_epsilon_q32": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {"q": {"type": "integer", "minimum": 1}},
+              "required": ["q"]
+            },
+            "inv_seq_len_q32": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {"q": {"type": "integer"}},
+              "required": ["q"]
+            }
+          },
+          "required": [
+            "n_layers_u32",
+            "n_heads_u32",
+            "d_head_u32",
+            "d_ff_u32",
+            "topk_u32",
+            "rms_epsilon_q32",
+            "inv_seq_len_q32"
+          ]
+        }
+      ]
+    },
+
+    "tensor_specs": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "name": {"type": "string", "minLength": 1},
+          "shape_u32": {
+            "type": "array",
+            "minItems": 1,
+            "items": {"type": "integer", "minimum": 1, "maximum": 4294967295}
+          },
+          "dtype": {"type": "string", "const": "Q32_S64_V1"},
+          "trainable": {"type": "boolean"}
+        },
+        "required": ["name", "shape_u32", "dtype", "trainable"]
+      }
+    }
+  },
+  "required": [
+    "schema_id",
+    "model_id",
+    "opset_id",
+    "dc1_id",
+    "tokenizer_kind",
+    "vocab_size_u32",
+    "seq_len_u32",
+    "encoder_kind",
+    "d_model_u32",
+    "d_embed_u32",
+    "math",
+    "tensor_specs"
+  ],
+  "allOf": [
+    {
+      "if": {"properties": {"encoder_kind": {"const": "QRE_V1"}}},
+      "then": {
+        "required": ["qre"],
+        "properties": {"tsae": {"type": "null"}}
+      }
+    },
+    {
+      "if": {"properties": {"encoder_kind": {"const": "TSAE_V1"}}},
+      "then": {
+        "required": ["tsae"],
+        "properties": {"qre": {"type": "null"}}
+      }
+    }
+  ]
+}

@@ -1,0 +1,56 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v1_8r/translation_inputs_v1",
+  "title": "Translation inputs v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema", "schema_version", "cases"],
+  "properties": {
+    "schema": {"const": "translation_inputs_v1"},
+    "schema_version": {"type": "integer", "const": 1},
+    "cases": {
+      "type": "array",
+      "items": {
+        "oneOf": [
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["case_id", "kind", "ctx_mode", "repeat"],
+            "properties": {
+              "case_id": {"type": "string"},
+              "kind": {"type": "string", "const": "ctx_hash_repeat_v1"},
+              "ctx_mode": {"type": "string", "const": "null"},
+              "repeat": {"type": "integer", "minimum": 1, "maximum": 65536}
+            }
+          },
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "case_id",
+              "kind",
+              "ctx_mode",
+              "repeat",
+              "active_ontology_id",
+              "active_snapshot_id",
+              "values"
+            ],
+            "properties": {
+              "case_id": {"type": "string"},
+              "kind": {"type": "string", "const": "ctx_hash_repeat_v1"},
+              "ctx_mode": {"type": "string", "const": "explicit"},
+              "repeat": {"type": "integer", "minimum": 1, "maximum": 65536},
+              "active_ontology_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+              "active_snapshot_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+              "values": {
+                "type": "array",
+                "maxItems": 8,
+                "items": {"type": "integer", "minimum": -2147483648, "maximum": 2147483647}
+              }
+            }
+          }
+        ]
+      }
+    }
+  }
+}

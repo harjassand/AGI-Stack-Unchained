@@ -1,0 +1,15 @@
+Commands:
+  export CDEL_ROOT=<path-to-cdel>
+  export SPECPACK_DIR=<path-to-specpack>
+  export PORT=8123
+  ./genesis/run_end_to_end.sh
+
+Observed:
+  - genesis_run.jsonl created
+  - genesis_archive.jsonl created
+  - genesis_summary.json:
+      shadow_pass: 6
+      promoted_pass: 1
+      promoted_fail: 0
+  - PASS receipt verifies locally via genesis/capsules/receipt.py
+  - FAIL returns no receipt

@@ -1,0 +1,18 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v18_0/ge_behavior_sig_v1",
+  "title": "Genesis Engine behavior signature v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "beh_id", "phi"],
+  "properties": {
+    "schema_version": {"const": "ge_behavior_sig_v1"},
+    "beh_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "phi": {
+      "type": "array",
+      "minItems": 8,
+      "maxItems": 8,
+      "items": {"type": "integer"}
+    }
+  }
+}

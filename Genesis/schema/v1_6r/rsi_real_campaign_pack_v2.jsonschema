@@ -1,0 +1,120 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v1_6r/rsi_real_campaign_pack_v2",
+  "title": "RSI real campaign pack v2",
+  "type": "object",
+  "additionalProperties": false,
+  "patternProperties": {
+    "^x-": {}
+  },
+  "required": [
+    "schema",
+    "schema_version",
+    "N_epochs",
+    "insertion_epochs",
+    "macro_proposal_epochs",
+    "family_proposals_by_epoch",
+    "macro_proposals_by_epoch",
+    "expected_frontier_events",
+    "policy_synthesizer_epochs",
+    "enable_witness_emission",
+    "enable_witness_family_generalizer_v2",
+    "enable_mech_patch_searcher",
+    "transfer_expected",
+    "ontology_v2"
+  ],
+  "properties": {
+    "schema": {"const": "rsi_real_campaign_pack_v2"},
+    "schema_version": {"type": "integer", "const": 2},
+    "N_epochs": {"type": "integer", "minimum": 1},
+    "insertion_epochs": {
+      "type": "array",
+      "items": {"type": "integer", "minimum": 1}
+    },
+    "macro_proposal_epochs": {
+      "type": "array",
+      "items": {"type": "integer", "minimum": 1}
+    },
+    "policy_synthesizer_epochs": {
+      "type": "array",
+      "items": {"type": "integer", "minimum": 1}
+    },
+    "family_proposals_by_epoch": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "array",
+        "items": {"type": "string"}
+      }
+    },
+    "macro_proposals_by_epoch": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "array",
+        "items": {"type": "string"}
+      }
+    },
+    "mech_patch_proposals_by_epoch": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "array",
+        "items": {"type": "string"}
+      }
+    },
+    "expected_frontier_events": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["min_insertions"],
+        "properties": {
+          "min_insertions": {"type": "integer", "minimum": 1}
+        }
+      }
+    },
+    "enable_macro_miner": {"type": "boolean"},
+    "enable_policy_synthesizer": {"type": "boolean"},
+    "enable_family_generalizer": {"type": "boolean"},
+    "enable_meta_patch_searcher": {"type": "boolean"},
+    "enable_witness_emission": {"type": "boolean"},
+    "enable_witness_family_generalizer_v2": {"type": "boolean"},
+    "enable_mech_patch_searcher": {"type": "boolean"},
+    "macro_miner_top_k": {"type": "integer", "minimum": 0},
+    "macro_miner_trace_window": {"type": "integer", "minimum": 1},
+    "base_policy_action": {"type": "integer"},
+    "mech_patch_proposal_epochs": {
+      "type": "array",
+      "items": {"type": "integer", "minimum": 1}
+    },
+    "meta_patch_proposal_epochs": {
+      "type": "array",
+      "items": {"type": "integer", "minimum": 1}
+    },
+    "meta_benchmark_pack_path": {"type": "string"},
+    "mech_benchmark_pack_path": {"type": "string"},
+    "transfer_expected": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "must_emit_transfer_receipt": {"type": "boolean"}
+      }
+    },
+    "ontology_v2": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "enabled",
+        "eval_every_n_epochs",
+        "window_epochs",
+        "proposal_inbox",
+        "emit_reports"
+      ],
+      "properties": {
+        "enabled": {"type": "boolean"},
+        "eval_every_n_epochs": {"type": "integer", "minimum": 1},
+        "window_epochs": {"type": "integer", "minimum": 1},
+        "proposal_inbox": {"type": "string"},
+        "emit_reports": {"type": "boolean"}
+      }
+    }
+  }
+}

@@ -1,0 +1,58 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v18_0/universality_cert_v1",
+  "title": "universality_cert_v1",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "schema_id": {"const": "universality_cert_v1"},
+    "epoch_u64": {"type": "integer", "minimum": 0},
+    "dc1_id": {"const": "dc1:q32_v1"},
+    "opset_id": {"type": "string", "pattern": "^opset:eudrs_u_v1:sha256:[0-9a-f]{64}$"},
+    "urc_vm": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "isa_kind": {"const": "URC_ISA_V1"},
+        "isa_id_u32": {"type": "integer", "const": 1},
+        "page_shift_u32": {"type": "integer", "const": 12},
+        "pt_fanout_u32": {"type": "integer", "const": 256},
+        "pt_depth_u32": {"type": "integer", "const": 4},
+        "call_depth_cap_u32": {"type": "integer", "const": 16},
+        "golden_vectors": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "vector_name": {"type": "string", "pattern": "^URC_GOLDEN_[A-Za-z0-9][A-Za-z0-9._/-]{0,127}$"},
+              "capsule_before_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+              "capsule_after_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+              "expected_memroot_after32_hex": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+              "expected_h_urc_tail32_hex": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+              "max_steps_u64": {"type": "integer", "minimum": 1}
+            },
+            "required": [
+              "vector_name",
+              "capsule_before_id",
+              "capsule_after_id",
+              "expected_memroot_after32_hex",
+              "expected_h_urc_tail32_hex",
+              "max_steps_u64"
+            ]
+          }
+        }
+      },
+      "required": [
+        "isa_kind",
+        "isa_id_u32",
+        "page_shift_u32",
+        "pt_fanout_u32",
+        "pt_depth_u32",
+        "call_depth_cap_u32",
+        "golden_vectors"
+      ]
+    }
+  },
+  "required": ["schema_id", "epoch_u64", "dc1_id", "opset_id", "urc_vm"]
+}

@@ -1,0 +1,35 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v11_0/sas_arch_manifest_v1",
+  "title": "SAS architecture manifest v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "arch_id",
+    "arch_family",
+    "arch_seed",
+    "model_io",
+    "hyperparams",
+    "constraints",
+    "param_count",
+    "activation_mb",
+    "arch_graph_hash",
+    "init_weights_hash",
+    "builder_version"
+  ],
+  "properties": {
+    "schema_version": {"const": "sas_arch_manifest_v1"},
+    "arch_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "arch_family": {"type": "string"},
+    "arch_seed": {"type": "integer"},
+    "model_io": {"type": "object"},
+    "hyperparams": {"type": "object"},
+    "constraints": {"type": "object"},
+    "param_count": {"type": "integer"},
+    "activation_mb": {"type": "integer"},
+    "arch_graph_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "init_weights_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "builder_version": {"type": "string"}
+  }
+}

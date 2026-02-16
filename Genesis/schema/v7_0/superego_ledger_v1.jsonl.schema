@@ -1,0 +1,32 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v7_0/superego_ledger_v1.jsonl",
+  "title": "Superego ledger entry v1 (JSONL line)",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "seq",
+    "tick",
+    "event_type",
+    "event_payload",
+    "prev_entry_hash",
+    "entry_hash"
+  ],
+  "properties": {
+    "seq": {"type": "integer", "minimum": 1},
+    "tick": {"type": "integer", "minimum": 0},
+    "event_type": {
+      "type": "string",
+      "enum": [
+        "REQUEST",
+        "DECISION",
+        "CLEARANCE_EMITTED",
+        "CLEARANCE_REVOKED",
+        "FATAL"
+      ]
+    },
+    "event_payload": {"type": "object"},
+    "prev_entry_hash": {"type": "string"},
+    "entry_hash": {"type": "string"}
+  }
+}

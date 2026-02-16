@@ -1,0 +1,31 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v6_0/daemon_boot_receipt_v1",
+  "title": "Daemon boot receipt v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "kind",
+    "daemon_id",
+    "icore_id",
+    "meta_hash",
+    "tick",
+    "boot_count",
+    "ledger_head_hash",
+    "euid",
+    "created_utc"
+  ],
+  "properties": {
+    "schema_version": {"const": "daemon_boot_receipt_v1"},
+    "kind": {"const": "BOOT"},
+    "daemon_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "icore_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "meta_hash": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "tick": {"type": "integer", "minimum": 0},
+    "boot_count": {"type": "integer", "minimum": 0},
+    "ledger_head_hash": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "euid": {"type": "integer", "minimum": 0},
+    "created_utc": {"type": "string", "format": "date-time"}
+  }
+}

@@ -1,0 +1,21 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v1_5r/meta_patch_admit_receipt_v1",
+  "title": "Meta patch admit receipt v1",
+  "type": "object",
+  "additionalProperties": false,
+  "patternProperties": {
+    "^x-": {}
+  },
+  "required": ["schema", "schema_version", "epoch_id", "admitted_patch_ids", "report_hash"],
+  "properties": {
+    "schema": {"const": "meta_patch_admit_receipt_v1"},
+    "schema_version": {"type": "integer", "const": 1},
+    "epoch_id": {"type": "string"},
+    "admitted_patch_ids": {
+      "type": "array",
+      "items": {"type": "string", "pattern": "^sha256:[a-f0-9]{64}$"}
+    },
+    "report_hash": {"type": "string", "pattern": "^sha256:[a-f0-9]{64}$"}
+  }
+}

@@ -1,0 +1,21 @@
+from __future__ import annotations
+
+from pathlib import Path
+
+import pytest
+
+from cdel.v1_7r.canon import load_canon_json
+from cdel.v13_0.sas_science_generator_v1 import enumerate_candidate_irs
+from cdel.v13_0.sas_science_ir_v1 import SASScienceIRError, validate_ir
+
+from .utils import build_manifest
+
+
+def test_schema_rejects_cheat_nodes() -> None:
+    repo_root = Path(__file__).resolve().parents[4]
+    ir_policy = load_canon_json(repo_root / "campaigns" / "rsi_sas_science_v13_0" / "sas_science_ir_policy_v1.json")
+    manifest = build_manifest(bodies=["Body"])
+    ir = enumerate_candidate_irs(manifest)[0]
+    ir["cheat"] = {"enabled": True}
+    with pytest.raises(SASScienceIRError, match=r"INVALID:IR_EXTRA_FIELD"):
+        validate_ir(ir, manifest=manifest, ir_policy=ir_policy)

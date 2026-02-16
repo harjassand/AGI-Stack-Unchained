@@ -1,0 +1,129 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "ontology_patch_v1_1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "format",
+    "schema_version",
+    "base_ontology_hash",
+    "isa_version",
+    "ops",
+    "claimed_obligations",
+    "predicted_gains"
+  ],
+  "properties": {
+    "format": {"const": "ontology_patch_v1_1"},
+    "schema_version": {"const": 1},
+    "base_ontology_hash": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "isa_version": {"const": "caoe_absop_isa_v1_2"},
+    "ops": {"type": "array", "items": {"$ref": "#/$defs/op"}},
+    "claimed_obligations": {"$ref": "#/$defs/claimed_obligations"},
+    "predicted_gains": {"$ref": "#/$defs/predicted_gains"}
+  },
+  "$defs": {
+    "symbol": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "type", "domain"],
+      "properties": {
+        "name": {"type": "string", "minLength": 1},
+        "type": {"enum": ["bit", "int", "finite_enum"]},
+        "domain": {"type": "object"}
+      }
+    },
+    "op": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["op"],
+      "properties": {
+        "op": {
+          "enum": [
+            "add_symbol",
+            "remove_symbol",
+            "replace_phi",
+            "replace_lambda",
+            "set_supports_macro_do",
+            "set_supports_repeat_action_options",
+            "replace_psi",
+            "set_complexity_limits"
+          ]
+        },
+        "symbol": {"$ref": "#/$defs/symbol"},
+        "name": {"type": "string"},
+        "phi": {"type": "object"},
+        "lambda": {"type": "object"},
+        "value": {"type": "boolean"},
+        "psi": {"oneOf": [{"type": "null"}, {"type": "object"}]},
+        "limits": {"$ref": "#/$defs/complexity_limits"}
+      },
+      "allOf": [
+        {
+          "if": {"properties": {"op": {"const": "add_symbol"}}},
+          "then": {"required": ["symbol"]}
+        },
+        {
+          "if": {"properties": {"op": {"const": "remove_symbol"}}},
+          "then": {"required": ["name"]}
+        },
+        {
+          "if": {"properties": {"op": {"const": "replace_phi"}}},
+          "then": {"required": ["phi"]}
+        },
+        {
+          "if": {"properties": {"op": {"const": "replace_lambda"}}},
+          "then": {"required": ["lambda"]}
+        },
+        {
+          "if": {"properties": {"op": {"const": "set_supports_macro_do"}}},
+          "then": {"required": ["value"]}
+        },
+        {
+          "if": {"properties": {"op": {"const": "set_supports_repeat_action_options"}}},
+          "then": {"required": ["value"]}
+        },
+        {
+          "if": {"properties": {"op": {"const": "replace_psi"}}},
+          "then": {"required": ["psi"]}
+        },
+        {
+          "if": {"properties": {"op": {"const": "set_complexity_limits"}}},
+          "then": {"required": ["limits"]}
+        }
+      ]
+    },
+    "claimed_obligations": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["requires_c_do", "requires_c_mdl", "requires_c_inv", "requires_c_anti"],
+      "properties": {
+        "requires_c_do": {"type": "boolean"},
+        "requires_c_mdl": {"const": true},
+        "requires_c_inv": {"const": true},
+        "requires_c_anti": {"const": true}
+      }
+    },
+    "predicted_gains": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["delta_mdl_bits", "delta_worst_case_success", "delta_efficiency"],
+      "properties": {
+        "delta_mdl_bits": {"type": "integer"},
+        "delta_worst_case_success": {"type": "number"},
+        "delta_efficiency": {"type": "number"}
+      }
+    },
+    "complexity_limits": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["phi_max_ops", "lambda_max_ops", "psi_max_ops", "max_constants", "max_state_history"],
+      "properties": {
+        "phi_max_ops": {"type": "integer", "minimum": 0},
+        "lambda_max_ops": {"type": "integer", "minimum": 0},
+        "psi_max_ops": {"type": "integer", "minimum": 0},
+        "max_constants": {"type": "integer", "minimum": 0},
+        "max_state_history": {"type": "integer", "minimum": 0}
+      }
+    }
+  }
+}

@@ -1,0 +1,72 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v19_0/ok_overlap_signature_v1",
+  "title": "Pinned overlap-kernel signature v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_name",
+    "schema_version",
+    "overlap_signature_id",
+    "ican_profile_id",
+    "supported_kinds",
+    "ref_core_profile_id"
+  ],
+  "properties": {
+    "schema_name": {
+      "const": "ok_overlap_signature_v1"
+    },
+    "schema_version": {
+      "const": "v19_0"
+    },
+    "overlap_signature_id": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "ican_profile_id": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "supported_kinds": {
+      "type": "array",
+      "minItems": 5,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "kind",
+          "schema_name",
+          "schema_id",
+          "checker_id"
+        ],
+        "properties": {
+          "kind": {
+            "type": "string",
+            "enum": [
+              "OK_PORTABLE_RECEIPT_V1",
+              "OK_PORTABLE_ARTIFACT_REF_V1",
+              "OK_TRANSLATION_ASSERTION_V1",
+              "OK_COMMUTATIVITY_ASSERTION_V1",
+              "OK_REFUTATION_WITNESS_V1"
+            ]
+          },
+          "schema_name": {
+            "type": "string"
+          },
+          "schema_id": {
+            "type": "string",
+            "pattern": "^sha256:[0-9a-f]{64}$"
+          },
+          "checker_id": {
+            "type": "string",
+            "pattern": "^sha256:[0-9a-f]{64}$"
+          }
+        }
+      }
+    },
+    "ref_core_profile_id": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    }
+  }
+}

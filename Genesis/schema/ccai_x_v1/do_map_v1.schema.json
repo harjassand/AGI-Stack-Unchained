@@ -1,0 +1,82 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/ccai_x_v1/do_map_v1.schema.json",
+  "title": "CCAI-X v1 Do Map",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["format", "schema_version", "do_map_id", "entries"],
+  "properties": {
+    "format": {"const": "do_map_v1"},
+    "schema_version": {"const": "1"},
+    "do_map_id": {"$ref": "#/$defs/identifier"},
+    "entries": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/do_entry"}
+    },
+    "x_extensions": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {}
+    }
+  },
+  "$defs": {
+    "identifier": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9_./-]{0,127}$"
+    },
+    "hash": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "do_payload": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "var_id": {"$ref": "#/$defs/identifier"},
+        "value_int": {"type": "integer"}
+      }
+    },
+    "do_entry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "action_token",
+        "target_mechanism_id",
+        "do_kind",
+        "do_payload",
+        "expected_mech_hash_before",
+        "do_payload_hash"
+      ],
+      "properties": {
+        "action_token": {"$ref": "#/$defs/identifier"},
+        "target_mechanism_id": {"$ref": "#/$defs/identifier"},
+        "do_kind": {
+          "type": "string",
+          "enum": [
+            "clamp_var",
+            "swap_mechanism_params",
+            "cut_edge",
+            "set_regime"
+          ]
+        },
+        "do_payload": {"$ref": "#/$defs/do_payload"},
+        "expected_mech_hash_before": {"$ref": "#/$defs/hash"},
+        "do_payload_hash": {"$ref": "#/$defs/hash"}
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {"do_kind": {"const": "clamp_var"}}
+          },
+          "then": {
+            "properties": {
+              "do_payload": {
+                "required": ["var_id", "value_int"]
+              }
+            }
+          }
+        }
+      ]
+    }
+  }
+}

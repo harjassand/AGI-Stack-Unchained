@@ -1,0 +1,90 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v11_0/sas_math_promotion_bundle_v1",
+  "title": "SAS-MATH promotion bundle v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "bundle_id",
+    "created_utc",
+    "acceptance_decision",
+    "baseline_policy_id",
+    "baseline_fingerprint_hash",
+    "baseline_utility_q32",
+    "baseline_capacity_efficiency_q32",
+    "baseline_eval_report_sha256",
+    "candidate_policy_id",
+    "candidate_fingerprint_hash",
+    "candidate_utility_q32",
+    "candidate_capacity_efficiency_q32",
+    "candidate_eval_report_sha256_dev",
+    "candidate_eval_report_sha256_heldout",
+    "require_novelty",
+    "min_novelty_q32",
+    "novelty_score_q32",
+    "min_utility_delta_q32",
+    "min_efficiency_delta_q32",
+    "max_utility_regression_q32",
+    "improved_problem_ids",
+    "improvement_evidence"
+  ],
+  "properties": {
+    "schema_version": {"const": "sas_math_promotion_bundle_v1"},
+    "bundle_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "created_utc": {"type": "string"},
+    "acceptance_decision": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["pass", "reasons"],
+      "properties": {
+        "pass": {"type": "boolean"},
+        "reasons": {"type": "array", "items": {"type": "string"}}
+      }
+    },
+    "baseline_policy_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "baseline_fingerprint_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "baseline_utility_q32": {"$ref": "q32_v1.jsonschema"},
+    "baseline_capacity_efficiency_q32": {"$ref": "q32_v1.jsonschema"},
+    "baseline_eval_report_sha256": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "candidate_policy_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "candidate_fingerprint_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "candidate_utility_q32": {"$ref": "q32_v1.jsonschema"},
+    "candidate_capacity_efficiency_q32": {"$ref": "q32_v1.jsonschema"},
+    "candidate_eval_report_sha256_dev": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "candidate_eval_report_sha256_heldout": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "require_novelty": {"type": "boolean"},
+    "min_novelty_q32": {"$ref": "q32_v1.jsonschema"},
+    "novelty_score_q32": {"$ref": "q32_v1.jsonschema"},
+    "min_utility_delta_q32": {"$ref": "q32_v1.jsonschema"},
+    "min_efficiency_delta_q32": {"$ref": "q32_v1.jsonschema"},
+    "max_utility_regression_q32": {"$ref": "q32_v1.jsonschema"},
+    "improved_problem_ids": {
+      "type": "array",
+      "items": {"type": "string"},
+      "minItems": 1
+    },
+    "improvement_evidence": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "problem_id",
+          "baseline_attempt_receipt_sha256",
+          "candidate_attempt_receipt_sha256",
+          "candidate_sealed_receipt_sha256",
+          "candidate_proof_artifact_hash"
+        ],
+        "properties": {
+          "problem_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+          "baseline_attempt_receipt_sha256": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+          "candidate_attempt_receipt_sha256": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+          "candidate_sealed_receipt_sha256": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+          "candidate_proof_artifact_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"}
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,42 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v1_5r/macro_mining_report_v1",
+  "title": "Macro mining report v1",
+  "type": "object",
+  "additionalProperties": false,
+  "patternProperties": {
+    "^x-": {}
+  },
+  "required": [
+    "schema",
+    "schema_version",
+    "epoch_id",
+    "trace_hashes",
+    "candidate_count",
+    "top_k",
+    "constants"
+  ],
+  "properties": {
+    "schema": {"const": "macro_mining_report_v1"},
+    "schema_version": {"type": "integer", "const": 1},
+    "epoch_id": {"type": "string"},
+    "trace_hashes": {
+      "type": "array",
+      "items": {"type": "string", "pattern": "^sha256:[a-f0-9]{64}$"}
+    },
+    "candidate_count": {"type": "integer", "minimum": 0},
+    "top_k": {"type": "integer", "minimum": 0},
+    "constants": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["F_min", "N_min", "L_min", "L_max", "delta_min_time_bits"],
+      "properties": {
+        "F_min": {"type": "integer", "minimum": 0},
+        "N_min": {"type": "integer", "minimum": 0},
+        "L_min": {"type": "integer", "minimum": 0},
+        "L_max": {"type": "integer", "minimum": 0},
+        "delta_min_time_bits": {"type": "integer", "minimum": 0}
+      }
+    }
+  }
+}

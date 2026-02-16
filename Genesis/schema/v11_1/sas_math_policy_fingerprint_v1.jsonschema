@@ -1,0 +1,13 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v11_0/sas_math_policy_fingerprint_v1",
+  "title": "SAS-MATH policy fingerprint v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "policy_id", "fingerprint_hash"],
+  "properties": {
+    "schema_version": {"const": "sas_math_policy_fingerprint_v1"},
+    "policy_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "fingerprint_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"}
+  }
+}

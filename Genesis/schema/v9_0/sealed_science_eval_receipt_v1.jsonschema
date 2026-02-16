@@ -1,0 +1,39 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v9_0/sealed_science_eval_receipt_v1",
+  "title": "Sealed science eval receipt v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "task_id",
+    "attempt_id",
+    "toolchain_id",
+    "toolchain_manifest_hash",
+    "dataset_manifest_hash",
+    "suitepack_hash",
+    "metric_num",
+    "metric_den",
+    "stdout_hash",
+    "stderr_hash",
+    "network_used",
+    "time_ms",
+    "memory_mb"
+  ],
+  "properties": {
+    "schema_version": {"const": "sealed_science_eval_receipt_v1"},
+    "task_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "attempt_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "toolchain_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "toolchain_manifest_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "dataset_manifest_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "suitepack_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "metric_num": {"type": "integer"},
+    "metric_den": {"type": "integer", "minimum": 1},
+    "stdout_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "stderr_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "network_used": {"type": "boolean"},
+    "time_ms": {"type": "integer", "minimum": 0},
+    "memory_mb": {"type": "integer", "minimum": 0}
+  }
+}

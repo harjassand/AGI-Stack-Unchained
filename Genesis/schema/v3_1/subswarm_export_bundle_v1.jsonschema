@@ -1,0 +1,49 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v3_1/subswarm_export_bundle_v1",
+  "title": "Subswarm export bundle v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "spec_version",
+    "child_swarm_run_id",
+    "parent_swarm_run_id",
+    "parent_task_id",
+    "depth",
+    "child_swarm_ledger_head_ref_hash",
+    "child_barrier_ledger_head_ref_hash",
+    "export_policy",
+    "exports",
+    "export_bundle_hash"
+  ],
+  "properties": {
+    "schema": {"const": "subswarm_export_bundle_v1"},
+    "spec_version": {"const": "v3_1"},
+    "child_swarm_run_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "parent_swarm_run_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "parent_task_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "depth": {"type": "integer", "minimum": 1},
+    "child_swarm_ledger_head_ref_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "child_barrier_ledger_head_ref_hash": {"type": "string", "pattern": "^(sha256:[0-9a-f]{64}|GENESIS)$"},
+    "export_policy": {"type": "string"},
+    "exports": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/export_entry"}
+    },
+    "export_bundle_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"}
+  },
+  "$defs": {
+    "export_entry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "relpath", "sha256", "bytes"],
+      "properties": {
+        "kind": {"type": "string"},
+        "relpath": {"type": "string"},
+        "sha256": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+        "bytes": {"type": "integer", "minimum": 0}
+      }
+    }
+  }
+}

@@ -1,0 +1,39 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v2_1/autoconcept_manifest_v1",
+  "title": "Autoconcept manifest v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "run_id",
+    "attempt_id",
+    "insertion_index",
+    "candidate_rank",
+    "generated",
+    "manifest_head_hash"
+  ],
+  "properties": {
+    "schema": {"const": "autoconcept_manifest_v1"},
+    "run_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "attempt_id": {"type": "string", "pattern": "^attempt_[0-9]{4}$"},
+    "insertion_index": {"type": "integer", "minimum": 0},
+    "candidate_rank": {"type": "integer", "minimum": 0},
+    "generated": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["concept_patch_relpath", "concept_id", "patch_id"],
+        "properties": {
+          "concept_patch_relpath": {"type": "string"},
+          "concept_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+          "patch_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"}
+        }
+      }
+    },
+    "manifest_head_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"}
+  }
+}

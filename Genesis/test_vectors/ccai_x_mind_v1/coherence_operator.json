@@ -1,0 +1,1 @@
+{"damping_fp":500,"format":"coherence_operator_v1","max_iters":4,"merge_policy":["belief_model","belief_sensor"],"method":"ipf_v1","operator_id":"cohere_mind_v1","residual_bound_fp":10,"residual_definition":{"metric":"l1_fp","rounding":"round_half_even"},"schema_version":"1"}

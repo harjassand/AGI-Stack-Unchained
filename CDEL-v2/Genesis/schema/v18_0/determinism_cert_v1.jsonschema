@@ -1,0 +1,47 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v18_0/determinism_cert_v1",
+  "title": "determinism_cert_v1",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "schema_id": {"const": "determinism_cert_v1"},
+    "epoch_u64": {"type": "integer", "minimum": 0},
+    "dc1_id": {"type": "string", "const": "dc1:q32_v1"},
+    "opset_id": {"type": "string", "pattern": "^opset:eudrs_u_v1:sha256:[0-9a-f]{64}$"},
+    "pclp": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "pclp_bundle_ref": {"$ref": "https://genesis.engine/specs/v18_0/eudrs_u_artifact_ref_v1"},
+        "proof_mode": {"type": "string", "enum": ["PCLP_STARK_VM_V1"]},
+        "h_train_pclp_tail32_hex": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "h_eval_pclp_tail32_hex": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+      },
+      "required": ["pclp_bundle_ref", "proof_mode", "h_train_pclp_tail32_hex", "h_eval_pclp_tail32_hex"]
+    },
+    "qxrl": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "training_manifest_ref": {"$ref": "https://genesis.engine/specs/v18_0/eudrs_u_artifact_ref_v1"},
+        "h_train_tail32_hex": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "h_eval_tail32_hex": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "math": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "dot_kind": {"type": "string", "enum": ["DOT_Q32_SHIFT_END_V1", "DOT_Q32_SHIFT_EACH_DIM_V1"]},
+            "div_kind": {"type": "string", "const": "DIV_Q32_POS_RNE_V1"},
+            "invsqrt_kind": {"type": "string", "const": "INVSQRT_Q32_NR_LUT_V1"},
+            "invsqrt_lut_manifest_ref": {"$ref": "https://genesis.engine/specs/v18_0/eudrs_u_artifact_ref_v1"},
+            "invsqrt_iters_u32": {"type": "integer", "const": 2}
+          },
+          "required": ["dot_kind", "div_kind", "invsqrt_kind", "invsqrt_lut_manifest_ref", "invsqrt_iters_u32"]
+        }
+      },
+      "required": ["training_manifest_ref", "h_train_tail32_hex", "h_eval_tail32_hex", "math"]
+    }
+  },
+  "required": ["schema_id", "epoch_u64", "dc1_id", "opset_id", "qxrl"]
+}

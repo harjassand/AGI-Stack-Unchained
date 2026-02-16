@@ -1,0 +1,16 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v14_0/sas_science_workmeter_job_v1",
+  "title": "SAS Science workmeter job v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema", "spec_version", "dim", "norm_pow", "pair_terms", "hooke_terms"],
+  "properties": {
+    "schema": {"const": "sas_science_workmeter_job_v1"},
+    "spec_version": {"const": "v14_0"},
+    "dim": {"type": "integer", "minimum": 0},
+    "norm_pow": {"type": "integer", "minimum": 0},
+    "pair_terms": {"type": "integer", "minimum": 0},
+    "hooke_terms": {"type": "integer", "minimum": 0}
+  }
+}

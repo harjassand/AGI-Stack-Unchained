@@ -1,0 +1,596 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/level1/capsule.schema.json",
+  "title": "Genesis Artifact Capsule (Level-1)",
+  "description": "Normative Level-1 schema. All fields MUST conform to these constraints. Extension fields MUST be prefixed with x-.",
+  "type": "object",
+  "additionalProperties": false,
+  "patternProperties": {
+    "^x-": {}
+  },
+  "required": [
+    "schema_version",
+    "capsule_version",
+    "forward_compat",
+    "canonicalization",
+    "capsule_id",
+    "artifact_type",
+    "parents",
+    "operators_used",
+    "build_hashes",
+    "commitments",
+    "ir_payload",
+    "entrypoints",
+    "effects",
+    "contract",
+    "assumptions",
+    "budget_bid",
+    "evidence",
+    "reproducibility",
+    "provenance"
+  ],
+  "properties": {
+    "schema_version": {
+      "type": "string",
+      "pattern": "^1\\.0\\.1$",
+      "description": "MUST equal 1.0.1 for Level-1 capsules."
+    },
+    "capsule_version": {
+      "type": "string",
+      "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$",
+      "description": "Capsule semantic version. MUST be present and semver-formatted."
+    },
+    "forward_compat": {
+      "type": "string",
+      "enum": ["x_prefix_only"],
+      "description": "Forward-compat rule. Unknown fields are allowed only if prefixed with x-."
+    },
+    "canonicalization": {
+      "type": "string",
+      "enum": ["gcj-1"],
+      "description": "Canonical JSON scheme used for hashing (GCJ-1)."
+    },
+    "capsule_id": {
+      "type": "string",
+      "format": "uuid",
+      "description": "Stable capsule UUID."
+    },
+    "artifact_type": {
+      "type": "string",
+      "enum": ["ALGORITHM", "WORLD_MODEL", "CAUSAL_MODEL", "POLICY", "EXPERIMENT"],
+      "description": "Artifact kind. MUST be one of the enumerated values."
+    },
+    "parents": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/hash"},
+      "minItems": 0
+    },
+    "operators_used": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/operator"},
+      "minItems": 0
+    },
+    "build_hashes": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["ir_hash", "container_hash", "dependency_hashes"],
+      "properties": {
+        "ir_hash": {"$ref": "#/$defs/hash"},
+        "container_hash": {"$ref": "#/$defs/hash"},
+        "dependency_hashes": {
+          "type": "array",
+          "items": {"$ref": "#/$defs/hash"},
+          "minItems": 0
+        },
+        "toolchain_hash": {"$ref": "#/$defs/hash"}
+      }
+    },
+    "commitments": {"$ref": "#/$defs/commitments"},
+    "ir_payload": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["format", "version", "payload_base64"],
+      "properties": {
+        "format": {
+          "type": "string",
+          "enum": ["GIR1", "GIR1-ML", "GIR1-CAUSAL", "GIR1-POLICY"]
+        },
+        "version": {"type": "string"},
+        "payload_base64": {
+          "type": "string",
+          "contentEncoding": "base64"
+        }
+      }
+    },
+    "entrypoints": {
+      "type": "array",
+      "minItems": 1,
+      "items": {"$ref": "#/$defs/entrypoint"}
+    },
+    "effects": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["allow", "deny"],
+      "properties": {
+        "allow": {
+          "type": "array",
+          "items": {"$ref": "#/$defs/effect"},
+          "minItems": 0
+        },
+        "deny": {
+          "type": "array",
+          "items": {"$ref": "#/$defs/effect"},
+          "minItems": 0
+        }
+      }
+    },
+    "contract": {"$ref": "#/$defs/contract"},
+    "assumptions": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/assumption"},
+      "minItems": 0
+    },
+    "budget_bid": {"$ref": "#/$defs/budget_bid"},
+    "evidence": {"$ref": "#/$defs/evidence"},
+    "reproducibility": {"$ref": "#/$defs/reproducibility"},
+    "provenance": {"$ref": "#/$defs/provenance"}
+  },
+  "$defs": {
+    "hash": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    },
+    "decimal_string": {
+      "type": "string",
+      "pattern": "^-?(0|[1-9][0-9]*)(\\.[0-9]*[1-9])?$",
+      "description": "Canonical decimal string (no exponent, no trailing zeros)."
+    },
+    "commitments": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["capsule_hash", "checkpoint_merkle_root"],
+      "properties": {
+        "capsule_hash": {
+          "$ref": "#/$defs/hash",
+          "description": "Canonical capsule hash (GCJ-1). Computed over the capsule with this field set to 64 zero hex."
+        },
+        "checkpoint_merkle_root": {
+          "$ref": "#/$defs/hash",
+          "description": "Merkle root over checkpoint hashes for deterministic replay."
+        }
+      }
+    },
+    "operator": {
+      "anyOf": [
+        {
+          "type": "string",
+          "enum": [
+            "compose",
+            "mutate",
+            "rewrite",
+            "factorize",
+            "abduce",
+            "analogize",
+            "dualize"
+          ]
+        },
+        {
+          "type": "string",
+          "pattern": "^x-[a-z0-9][a-z0-9_\\-]*$"
+        }
+      ]
+    },
+    "entrypoint": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "signature"],
+      "properties": {
+        "name": {"type": "string"},
+        "signature": {"$ref": "#/$defs/signature"}
+      }
+    },
+    "signature": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["inputs", "outputs"],
+      "properties": {
+        "inputs": {
+          "type": "array",
+          "items": {"$ref": "#/$defs/type_decl"},
+          "minItems": 0
+        },
+        "outputs": {
+          "type": "array",
+          "items": {"$ref": "#/$defs/type_decl"},
+          "minItems": 1
+        }
+      }
+    },
+    "type_decl": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "type"],
+      "properties": {
+        "name": {"type": "string"},
+        "type": {"type": "string"}
+      }
+    },
+    "effect": {
+      "type": "string",
+      "enum": [
+        "pure",
+        "read_only",
+        "filesystem_read",
+        "filesystem_write",
+        "network",
+        "process_spawn",
+        "gpu",
+        "clock",
+        "nondeterminism"
+      ]
+    },
+    "contract": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "functional_spec",
+        "safety_spec",
+        "resource_spec",
+        "statistical_spec",
+        "robustness_spec"
+      ],
+      "properties": {
+        "functional_spec": {"$ref": "#/$defs/functional_spec"},
+        "safety_spec": {"$ref": "#/$defs/safety_spec"},
+        "resource_spec": {"$ref": "#/$defs/resource_spec"},
+        "statistical_spec": {"$ref": "#/$defs/statistical_spec"},
+        "robustness_spec": {"$ref": "#/$defs/robustness_spec"}
+      }
+    },
+    "functional_spec": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["spec_language", "clauses"],
+      "properties": {
+        "spec_language": {
+          "type": "string",
+          "enum": ["GCL1", "DSL1", "SMT-LIB2"]
+        },
+        "clauses": {
+          "type": "array",
+          "items": {"$ref": "#/$defs/functional_clause"},
+          "minItems": 1
+        }
+      }
+    },
+    "safety_spec": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["invariants", "forbidden_behaviors"],
+      "properties": {
+        "invariants": {
+          "type": "array",
+          "items": {"$ref": "#/$defs/safety_clause"},
+          "minItems": 0
+        },
+        "forbidden_behaviors": {
+          "type": "array",
+          "items": {"$ref": "#/$defs/safety_clause"},
+          "minItems": 0
+        }
+      }
+    },
+    "resource_spec": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["max_wall_time_ms", "max_memory_mb"],
+      "properties": {
+        "max_wall_time_ms": {"type": "integer", "minimum": 1},
+        "max_memory_mb": {"type": "integer", "minimum": 1},
+        "max_sample_count": {"type": "integer", "minimum": 0},
+        "max_gpu_seconds": {"type": "integer", "minimum": 0}
+      }
+    },
+    "statistical_spec": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["metrics", "decision_rule"],
+      "properties": {
+        "metrics": {
+          "type": "array",
+          "items": {"$ref": "#/$defs/metric"},
+          "minItems": 1
+        },
+        "decision_rule": {
+          "type": "string",
+          "enum": ["threshold", "e_value", "cs_lcb"]
+        },
+        "confidence_requirement": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["delta"],
+          "properties": {
+            "delta": {"type": "number", "minimum": 0, "maximum": 1},
+            "sequence": {"type": "string"}
+          }
+        }
+      }
+    },
+    "robustness_spec": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["mode"],
+      "properties": {
+        "mode": {"type": "string", "enum": ["certified_slices", "dro"]},
+        "slice_family": {"$ref": "#/$defs/slice_family"},
+        "dro_set": {"$ref": "#/$defs/dro_set"},
+        "risk_metric": {"type": "string"},
+        "risk_bound": {"type": "number"}
+      }
+    },
+    "slice_family": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["family", "capacity"],
+      "properties": {
+        "family": {
+          "type": "string",
+          "enum": [
+            "decision_tree",
+            "monotone_k_conjunction",
+            "linear_threshold",
+            "finite_template"
+          ]
+        },
+        "capacity": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["parameters"],
+          "properties": {
+            "parameters": {"type": "object"}
+          }
+        }
+      }
+    },
+    "dro_set": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["class", "radius"],
+      "properties": {
+        "class": {
+          "type": "string",
+          "enum": ["f_divergence", "wasserstein", "covariate_shift"]
+        },
+        "radius": {"type": "number", "minimum": 0}
+      }
+    },
+    "metric": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "direction", "target"],
+      "properties": {
+        "name": {"type": "string"},
+        "direction": {"type": "string", "enum": ["maximize", "minimize"]},
+        "target": {"type": "number"}
+      }
+    },
+    "spec_clause": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "clause_type", "text"],
+      "properties": {
+        "id": {"type": "string"},
+        "clause_type": {
+          "type": "string",
+          "enum": ["functional", "safety", "resource", "statistical", "robustness"],
+          "description": "Contract clause type."
+        },
+        "text": {"type": "string"},
+        "formal": {"type": "string"}
+      }
+    },
+    "functional_clause": {
+      "allOf": [
+        {"$ref": "#/$defs/spec_clause"},
+        {
+          "properties": {
+            "clause_type": {"const": "functional"}
+          }
+        }
+      ]
+    },
+    "safety_clause": {
+      "allOf": [
+        {"$ref": "#/$defs/spec_clause"},
+        {
+          "properties": {
+            "clause_type": {"const": "safety"}
+          }
+        }
+      ]
+    },
+    "assumption": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "assumption_id",
+        "statement",
+        "scope",
+        "falsification_test",
+        "uncertainty_set",
+        "failure_probability"
+      ],
+      "properties": {
+        "assumption_id": {"type": "string"},
+        "statement": {"type": "string"},
+        "scope": {"type": "string"},
+        "falsification_test": {"$ref": "#/$defs/falsification_test"},
+        "uncertainty_set": {"type": "object"},
+        "failure_probability": {
+          "anyOf": [
+            {"type": "number", "minimum": 0, "maximum": 1},
+            {"type": "string", "enum": ["untestable"]}
+          ]
+        }
+      }
+    },
+    "falsification_test": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["method", "power_target", "min_detectable_delta"],
+      "properties": {
+        "method": {"type": "string"},
+        "power_target": {"type": "number", "minimum": 0, "maximum": 1},
+        "min_detectable_delta": {"type": "number", "minimum": 0},
+        "anytime_valid": {"type": "boolean"}
+      }
+    },
+    "budget_bid": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["grade", "alpha_bid", "privacy_bid", "compute_bid"],
+      "properties": {
+        "grade": {
+          "type": "string",
+          "enum": ["ResearchGrade", "DeploymentGrade"],
+          "description": "Evaluation grade requested."
+        },
+        "alpha_bid": {
+          "$ref": "#/$defs/decimal_string",
+          "description": "Requested alpha spend or equivalent, as a canonical decimal string."
+        },
+        "privacy_bid": {"$ref": "#/$defs/privacy_bid"},
+        "compute_bid": {"$ref": "#/$defs/compute_bid"}
+      }
+    },
+    "privacy_bid": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["epsilon", "delta"],
+      "properties": {
+        "epsilon": {"$ref": "#/$defs/decimal_string"},
+        "delta": {"$ref": "#/$defs/decimal_string"}
+      }
+    },
+    "compute_bid": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["max_compute_units", "max_wall_time_ms"],
+      "properties": {
+        "max_compute_units": {"type": "integer", "minimum": 1},
+        "max_wall_time_ms": {"type": "integer", "minimum": 1},
+        "max_adversary_strength": {"type": "integer", "minimum": 0}
+      }
+    },
+    "evidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["certificates", "unit_tests", "property_tests", "checkpoints"],
+      "properties": {
+        "certificates": {
+          "type": "array",
+          "items": {"$ref": "#/$defs/certificate"},
+          "minItems": 0
+        },
+        "unit_tests": {
+          "type": "array",
+          "items": {"$ref": "#/$defs/test_ref"},
+          "minItems": 0
+        },
+        "property_tests": {
+          "type": "array",
+          "items": {"$ref": "#/$defs/test_ref"},
+          "minItems": 0
+        },
+        "checkpoints": {
+          "type": "array",
+          "items": {"$ref": "#/$defs/checkpoint_ref"},
+          "minItems": 0
+        }
+      }
+    },
+    "certificate": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["cert_type", "payload_hash"],
+      "properties": {
+        "cert_type": {"type": "string"},
+        "payload_hash": {"$ref": "#/$defs/hash"},
+        "checker_id": {"type": "string"}
+      }
+    },
+    "test_ref": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "hash"],
+      "properties": {
+        "name": {"type": "string"},
+        "hash": {"$ref": "#/$defs/hash"}
+      }
+    },
+    "checkpoint_ref": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["index", "hash"],
+      "properties": {
+        "index": {"type": "integer", "minimum": 0},
+        "hash": {"$ref": "#/$defs/hash"}
+      }
+    },
+    "reproducibility": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["determinism_mode", "seed_policy", "runtime_env"],
+      "properties": {
+        "determinism_mode": {
+          "type": "string",
+          "enum": ["deterministic", "seeded", "tolerant"]
+        },
+        "seed_policy": {
+          "type": "string",
+          "enum": ["harness_seeded", "artifact_seeded"]
+        },
+        "numeric_tolerance": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["abs_tol", "rel_tol"],
+          "properties": {
+            "abs_tol": {"type": "number", "minimum": 0},
+            "rel_tol": {"type": "number", "minimum": 0}
+          }
+        },
+        "runtime_env": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["os", "arch", "kernel_isa"],
+          "properties": {
+            "os": {"type": "string"},
+            "arch": {"type": "string"},
+            "kernel_isa": {"type": "string"}
+          }
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {"determinism_mode": {"const": "tolerant"}}
+          },
+          "then": {
+            "required": ["numeric_tolerance"]
+          }
+        }
+      ]
+    },
+    "provenance": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["created_by", "timestamp", "source_repo"],
+      "properties": {
+        "created_by": {"type": "string"},
+        "timestamp": {"type": "string"},
+        "source_repo": {"type": "string"},
+        "license": {"type": "string"}
+      }
+    }
+  }
+}

@@ -1,0 +1,13 @@
+GENESIS v0.5 end-to-end verification
+
+Commands:
+
+rm -f genesis_run.jsonl genesis_summary.json genesis_policy_summary.json
+rm -rf genesis/receipts genesis/.cdel_ledger_e2e_v0_5
+CDEL_ROOT=cdel ./genesis/run_end_to_end_v0_5.sh
+
+Results:
+- genesis_summary.json present
+- genesis_policy_summary.json: shadow_pass=4, promoted_pass=1, promoted_fail=0
+- PASS receipts stored under genesis/receipts/ and verified during promotion
+- FAIL promotions produced no receipts

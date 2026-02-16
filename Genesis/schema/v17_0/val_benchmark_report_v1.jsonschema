@@ -1,0 +1,43 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v17_0/val_benchmark_report_v1",
+  "title": "VAL benchmark report v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "timing_source",
+    "sample_count",
+    "samples_ns_baseline",
+    "samples_ns_candidate",
+    "val_cycles_baseline",
+    "val_cycles_candidate",
+    "median_ns_baseline",
+    "median_ns_candidate",
+    "ratio_valcycles_q32",
+    "ratio_wallclock_q32"
+  ],
+  "properties": {
+    "schema_version": { "const": "val_benchmark_report_v1" },
+    "timing_source": { "const": "MACH_ABSOLUTE_TIME_V1" },
+    "sample_count": { "const": 31 },
+    "samples_ns_baseline": {
+      "type": "array",
+      "items": { "type": "integer", "minimum": 1 },
+      "minItems": 31,
+      "maxItems": 31
+    },
+    "samples_ns_candidate": {
+      "type": "array",
+      "items": { "type": "integer", "minimum": 1 },
+      "minItems": 31,
+      "maxItems": 31
+    },
+    "val_cycles_baseline": { "type": "integer", "minimum": 0 },
+    "val_cycles_candidate": { "type": "integer", "minimum": 0 },
+    "median_ns_baseline": { "type": "integer", "minimum": 1 },
+    "median_ns_candidate": { "type": "integer", "minimum": 1 },
+    "ratio_valcycles_q32": { "type": "integer", "minimum": 0 },
+    "ratio_wallclock_q32": { "type": "integer", "minimum": 0 }
+  }
+}

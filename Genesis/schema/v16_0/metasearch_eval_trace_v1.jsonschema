@@ -1,0 +1,137 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v16_0/metasearch_eval_trace_v1",
+  "title": "Metasearch eval trace row v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "invocation_id",
+    "algo_label",
+    "seq_u64",
+    "eval_kind",
+    "theory_id",
+    "theory_kind",
+    "norm_pow_p",
+    "eval_report_hash",
+    "work_cost_total",
+    "input_rels"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "metasearch_eval_trace_v1"
+    },
+    "invocation_id": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "algo_label": {
+      "type": "string",
+      "enum": [
+        "baseline",
+        "candidate"
+      ]
+    },
+    "seq_u64": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "eval_kind": {
+      "type": "string",
+      "enum": [
+        "DEV",
+        "HELDOUT"
+      ]
+    },
+    "theory_id": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "theory_kind": {
+      "type": "string",
+      "enum": [
+        "BASELINE_CONST_VEL_V1",
+        "BASELINE_HOOKE_CENTRAL_V1",
+        "CANDIDATE_CENTRAL_POWERLAW_V1",
+        "CANDIDATE_NBODY_POWERLAW_V1"
+      ]
+    },
+    "norm_pow_p": {
+      "type": "integer",
+      "enum": [
+        1,
+        2,
+        3,
+        4
+      ]
+    },
+    "eval_report_hash": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "work_cost_total": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "input_rels": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "dataset_manifest_rel",
+        "dataset_csv_rel",
+        "dataset_receipt_rel",
+        "split_receipt_rel",
+        "theory_ir_rel",
+        "fit_receipt_rel",
+        "suitepack_rel",
+        "perf_policy_rel",
+        "ir_policy_rel",
+        "lease_rel"
+      ],
+      "properties": {
+        "dataset_manifest_rel": {
+          "type": "string",
+          "minLength": 1
+        },
+        "dataset_csv_rel": {
+          "type": "string",
+          "minLength": 1
+        },
+        "dataset_receipt_rel": {
+          "type": "string",
+          "minLength": 1
+        },
+        "split_receipt_rel": {
+          "type": "string",
+          "minLength": 1
+        },
+        "theory_ir_rel": {
+          "type": "string",
+          "minLength": 1
+        },
+        "fit_receipt_rel": {
+          "type": "string",
+          "minLength": 1
+        },
+        "suitepack_rel": {
+          "type": "string",
+          "minLength": 1
+        },
+        "perf_policy_rel": {
+          "type": "string",
+          "minLength": 1
+        },
+        "ir_policy_rel": {
+          "type": "string",
+          "minLength": 1
+        },
+        "lease_rel": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      }
+    }
+  }
+}

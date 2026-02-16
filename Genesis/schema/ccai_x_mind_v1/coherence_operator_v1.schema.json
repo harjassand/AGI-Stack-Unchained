@@ -1,0 +1,54 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/ccai_x_mind_v1/coherence_operator_v1.schema.json",
+  "title": "CCAI-X Mind v1 Coherence Operator",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "format",
+    "schema_version",
+    "operator_id",
+    "method",
+    "max_iters",
+    "residual_bound_fp",
+    "damping_fp",
+    "merge_policy",
+    "residual_definition"
+  ],
+  "properties": {
+    "format": {"const": "coherence_operator_v1"},
+    "schema_version": {"const": "1"},
+    "operator_id": {"$ref": "#/$defs/identifier"},
+    "method": {"type": "string", "enum": ["ipf_v1", "proj_consensus_v1"]},
+    "max_iters": {"type": "integer", "minimum": 1, "maximum": 10000},
+    "residual_bound_fp": {"type": "integer", "minimum": 0},
+    "damping_fp": {"type": "integer", "minimum": 0},
+    "merge_policy": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/identifier"},
+      "minItems": 1,
+      "uniqueItems": true
+    },
+    "residual_definition": {"$ref": "#/$defs/residual_definition"},
+    "x_extensions": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {}
+    }
+  },
+  "$defs": {
+    "identifier": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9_./-]{0,127}$"
+    },
+    "residual_definition": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["metric", "rounding"],
+      "properties": {
+        "metric": {"type": "string", "enum": ["l1_fp", "kl_fp"]},
+        "rounding": {"type": "string", "enum": ["round_half_even", "round_half_up", "floor"]}
+      }
+    }
+  }
+}

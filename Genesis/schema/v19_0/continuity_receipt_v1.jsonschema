@@ -1,0 +1,95 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v19_0/continuity_receipt_v1",
+  "title": "Continuity adjudication receipt v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_name",
+    "schema_version",
+    "receipt_id",
+    "sigma_old_id",
+    "sigma_new_id",
+    "regime_old_id",
+    "regime_new_id",
+    "overlap_profile_id",
+    "translator_bundle_id",
+    "totality_cert_id",
+    "budgets",
+    "items",
+    "final_outcome"
+  ],
+  "$defs": {
+    "sha256": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "budget_spec_v1": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema_name",
+        "schema_version",
+        "max_steps",
+        "max_bytes_read",
+        "max_bytes_write",
+        "max_items",
+        "seed",
+        "policy"
+      ],
+      "properties": {
+        "schema_name": {"const": "budget_spec_v1"},
+        "schema_version": {"const": "v19_0"},
+        "max_steps": {"type": "integer", "minimum": 1},
+        "max_bytes_read": {"type": "integer", "minimum": 0},
+        "max_bytes_write": {"type": "integer", "minimum": 0},
+        "max_items": {"type": "integer", "minimum": 1},
+        "seed": {"type": "integer", "minimum": 0},
+        "policy": {"type": "string", "enum": ["HARD_FAIL", "SAFE_HALT", "SAFE_SPLIT"]}
+      }
+    }
+  },
+  "properties": {
+    "schema_name": {"const": "continuity_receipt_v1"},
+    "schema_version": {"const": "v19_0"},
+    "receipt_id": {"$ref": "#/$defs/sha256"},
+    "sigma_old_id": {"$ref": "#/$defs/sha256"},
+    "sigma_new_id": {"$ref": "#/$defs/sha256"},
+    "regime_old_id": {"$ref": "#/$defs/sha256"},
+    "regime_new_id": {"$ref": "#/$defs/sha256"},
+    "overlap_profile_id": {"$ref": "#/$defs/sha256"},
+    "translator_bundle_id": {"$ref": "#/$defs/sha256"},
+    "totality_cert_id": {"$ref": "#/$defs/sha256"},
+    "budgets": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["continuity_budget", "translator_budget", "backrefute_budget"],
+      "properties": {
+        "continuity_budget": {"$ref": "#/$defs/budget_spec_v1"},
+        "translator_budget": {"$ref": "#/$defs/budget_spec_v1"},
+        "backrefute_budget": {"$ref": "#/$defs/budget_spec_v1"}
+      }
+    },
+    "items": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "old_artifact_id",
+          "translation_acceptance",
+          "backrefute_status",
+          "final_outcome"
+        ],
+        "properties": {
+          "old_artifact_id": {"$ref": "#/$defs/sha256"},
+          "translated_artifact_id": {"$ref": "#/$defs/sha256"},
+          "translation_acceptance": {"type": "string", "enum": ["ACCEPT", "REJECT", "SAFE_HALT"]},
+          "backrefute_status": {
+            "type": "string",
+            "enum": ["VALID", "INVALID", "NOT_PROVIDED", "BUDGET_EXHAUSTED"]
+          },
+          "final_outcome": {"type": "string", "enum": ["PRESERVED", "REFUTED", "UNRESOLVED"]}
+        }
+      }
+    },
+    "final_outcome": {"type": "string", "enum": ["ACCEPT", "REJECT", "SAFE_HALT", "SAFE_SPLIT"]}
+  }
+}

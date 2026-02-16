@@ -1,0 +1,7 @@
+{
+  "domain": "pyut-transfer-v1",
+  "suite_hash": "413a36ac96152f1da081871afa1d34f33a74c2e5ece684cf53845b179f2c236e",
+  "updated_at": "2026-01-24",
+  "source": "manual",
+  "notes": "Initial pyut transfer dev suite"
+}

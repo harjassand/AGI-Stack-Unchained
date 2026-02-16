@@ -1,0 +1,9 @@
+Commands:
+
+CDEL_ROOT=cdel genesis/run_end_to_end_v0_7.sh
+
+Outcome:
+- run_end_to_end_v0_7 completed successfully
+- at least one nontriviality failure recorded in genesis_run.jsonl
+- at least one SYSTEM promotion PASS with receipt verification
+- FAIL results produced no receipts

@@ -1,0 +1,57 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v1_9r/autonomy_manifest_v1",
+  "title": "Autonomy manifest v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "schema_version",
+    "autonomy_kind",
+    "algorithm",
+    "translation_inputs_hash",
+    "constants_hash",
+    "output_subdir",
+    "patches",
+    "x-meta"
+  ],
+  "properties": {
+    "schema": {"const": "autonomy_manifest_v1"},
+    "schema_version": {"type": "integer", "const": 1},
+    "autonomy_kind": {"type": "string", "const": "metabolism_autonomy_v1"},
+    "algorithm": {"type": "string", "const": "autopatch_enum_v1"},
+    "translation_inputs_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "constants_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "output_subdir": {"type": "string", "const": "autonomy/metabolism_v1/proposals"},
+    "patches": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["patch_id", "patch_def_hash", "patch_kind", "params"],
+        "properties": {
+          "patch_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+          "patch_def_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+          "patch_kind": {"type": "string", "const": "ctx_hash_cache_v1"},
+          "params": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["capacity"],
+            "properties": {
+              "capacity": {"type": "integer"}
+            }
+          }
+        }
+      }
+    },
+    "x-meta": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["KERNEL_HASH", "META_HASH"],
+      "properties": {
+        "KERNEL_HASH": {"type": "string"},
+        "META_HASH": {"type": "string"}
+      }
+    }
+  }
+}

@@ -1,0 +1,12 @@
+[sealed]
+eval_harness_id = "suite-harness-v1"
+eval_harness_hash = "suite-harness-hash"
+eval_suite_hash = "f50abb4b5271160e0bac5d25ebbced8efe0d0cc6b941c0526adbf08abd792d26"
+episodes = 256
+
+# Omega v4.0 sealed worker inputs.
+suitepack_path = "@ROOT/CDEL-v2/suitepacks/grand_challenge_heldout_v1.suitepack"
+suitepack_hash = "sha256:7ab6c683aaec9acb3738b1270ed17ad9b71d1b53b01346ca1bd1956d41226c38"
+
+[salts]
+sealed_salt_grand_challenge_v1 = "SALT::grand_challenge_heldout_v1"

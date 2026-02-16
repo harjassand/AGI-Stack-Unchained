@@ -1,0 +1,65 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v2_3/rsi_demon_receipt_v9",
+  "title": "RSI demon receipt v9",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "verdict",
+    "reasons",
+    "patch_id",
+    "concept_id",
+    "base_tree_hash",
+    "after_tree_hash",
+    "work_cost_base",
+    "work_cost_patch",
+    "rho_csi"
+  ],
+  "properties": {
+    "schema": {"const": "rsi_demon_receipt_v9"},
+    "verdict": {"type": "string", "enum": ["VALID", "INVALID"]},
+    "reasons": {
+      "type": "array",
+      "items": {"type": "string"}
+    },
+    "patch_id": {
+      "anyOf": [
+        {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+        {"type": "string", "const": ""}
+      ]
+    },
+    "concept_id": {
+      "anyOf": [
+        {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+        {"type": "string", "const": ""}
+      ]
+    },
+    "base_tree_hash": {
+      "anyOf": [
+        {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+        {"type": "string", "const": ""}
+      ]
+    },
+    "after_tree_hash": {
+      "anyOf": [
+        {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+        {"type": "string", "const": ""}
+      ]
+    },
+    "work_cost_base": {"type": "integer", "minimum": 0},
+    "work_cost_patch": {"type": "integer", "minimum": 0},
+    "rho_csi": {"$ref": "#/$defs/rational_pair"}
+  },
+  "$defs": {
+    "rational_pair": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["num", "den"],
+      "properties": {
+        "num": {"type": "integer", "minimum": 0},
+        "den": {"type": "integer", "minimum": 1}
+      }
+    }
+  }
+}

@@ -1,0 +1,62 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v13_0/sas_science_theory_ir_v1",
+  "title": "SAS-Science theory IR v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "ir_version",
+    "theory_kind",
+    "target_bodies",
+    "source_bodies",
+    "force_law",
+    "parameters",
+    "complexity",
+    "theory_id"
+  ],
+  "properties": {
+    "ir_version": {"const": "sas_science_theory_ir_v1"},
+    "theory_kind": {
+      "type": "string",
+      "enum": [
+        "BASELINE_CONST_VEL_V1",
+        "BASELINE_HOOKE_CENTRAL_V1",
+        "CANDIDATE_CENTRAL_POWERLAW_V1",
+        "CANDIDATE_NBODY_POWERLAW_V1"
+      ]
+    },
+    "target_bodies": {"type": "array", "items": {"type": "string"}},
+    "source_bodies": {"type": "array", "items": {"type": "string"}},
+    "force_law": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["vector_form", "norm_pow_p", "coeff_sharing"],
+      "properties": {
+        "vector_form": {"const": "DISPLACEMENT_OVER_NORM_POW_V1"},
+        "norm_pow_p": {"type": "integer", "enum": [1, 2, 3, 4]},
+        "coeff_sharing": {"type": "string", "enum": ["SOURCE_MASS_ONLY_V1"]}
+      }
+    },
+    "parameters": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "mu_sources_q32": {"type": "array", "items": {"$ref": "q32_v1.jsonschema"}},
+        "k_param_q32": {"$ref": "q32_v1.jsonschema"},
+        "G_param_q32": {"$ref": "q32_v1.jsonschema"},
+        "mass_params_q32": {"type": "array", "items": {"$ref": "q32_v1.jsonschema"}}
+      }
+    },
+    "complexity": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["node_count", "term_count", "param_count"],
+      "properties": {
+        "node_count": {"type": "integer", "minimum": 0},
+        "term_count": {"type": "integer", "minimum": 0},
+        "param_count": {"type": "integer", "minimum": 0}
+      }
+    },
+    "theory_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"}
+  }
+}

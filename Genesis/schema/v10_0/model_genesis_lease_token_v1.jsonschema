@@ -1,0 +1,49 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v10_0/model_genesis_lease_token_v1",
+  "title": "Model genesis lease token v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "lease_id",
+    "issued_by",
+    "valid_from_tick",
+    "valid_until_tick",
+    "allowed_ops",
+    "max_runs"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "model_genesis_lease_token_v1"
+    },
+    "lease_id": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "issued_by": {
+      "type": "string"
+    },
+    "valid_from_tick": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "valid_until_tick": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "allowed_ops": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "max_runs": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "signature": {
+      "type": "string"
+    }
+  }
+}

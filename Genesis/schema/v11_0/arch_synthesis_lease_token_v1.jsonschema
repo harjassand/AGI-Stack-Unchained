@@ -1,0 +1,25 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v11_0/arch_synthesis_lease_token_v1",
+  "title": "Architecture synthesis lease token v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "lease_id",
+    "issued_by",
+    "valid_from_tick",
+    "valid_until_tick",
+    "allowed_ops",
+    "max_runs"
+  ],
+  "properties": {
+    "schema_version": {"const": "arch_synthesis_lease_token_v1"},
+    "lease_id": {"type": "string"},
+    "issued_by": {"type": "string"},
+    "valid_from_tick": {"type": "integer"},
+    "valid_until_tick": {"type": "integer"},
+    "allowed_ops": {"type": "array", "items": {"type": "string"}},
+    "max_runs": {"type": "integer"}
+  }
+}

@@ -1,0 +1,65 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v3_0/barrier_entry_v2",
+  "title": "Barrier ledger entry v2",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "spec_version",
+    "seq",
+    "prev_entry_hash",
+    "swarm_event_hash",
+    "agent_id",
+    "task_id",
+    "result_id",
+    "barrier_metric",
+    "work_cost",
+    "evidence",
+    "entry_hash"
+  ],
+  "properties": {
+    "schema": {"const": "barrier_entry_v2"},
+    "spec_version": {"const": "v3_0"},
+    "seq": {"type": "integer", "minimum": 1},
+    "prev_entry_hash": {"type": "string", "pattern": "^(sha256:[0-9a-f]{64}|GENESIS)$"},
+    "swarm_event_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "agent_id": {"type": "string", "pattern": "^agent_[0-9]{4}$"},
+    "task_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "result_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "barrier_metric": {"$ref": "#/$defs/barrier_metric"},
+    "work_cost": {"$ref": "#/$defs/work_cost"},
+    "evidence": {"$ref": "#/$defs/evidence"},
+    "entry_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"}
+  },
+  "$defs": {
+    "barrier_metric": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "prev", "next"],
+      "properties": {
+        "name": {"type": "string"},
+        "prev": {"type": "integer"},
+        "next": {"type": "integer"}
+      }
+    },
+    "work_cost": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["base", "delta"],
+      "properties": {
+        "base": {"type": "integer"},
+        "delta": {"type": "integer"}
+      }
+    },
+    "evidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["recovery_bundle_id", "receipt_relpath"],
+      "properties": {
+        "recovery_bundle_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+        "receipt_relpath": {"type": "string"}
+      }
+    }
+  }
+}

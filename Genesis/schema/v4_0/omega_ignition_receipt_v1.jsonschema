@@ -1,0 +1,55 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v4_0/omega_ignition_receipt_v1",
+  "title": "Omega ignition receipt v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "spec_version",
+    "receipt_hash",
+    "root_swarm_run_id",
+    "icore_id",
+    "trigger_checkpoint_receipt_hash",
+    "trigger_checkpoint_index",
+    "baseline_id",
+    "baseline_report_hash",
+    "proof"
+  ],
+  "properties": {
+    "schema": {"const": "omega_ignition_receipt_v1"},
+    "spec_version": {"const": "v4_0"},
+    "receipt_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "root_swarm_run_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "icore_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "trigger_checkpoint_receipt_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "trigger_checkpoint_index": {"type": "integer", "minimum": 0},
+    "baseline_id": {"type": "string"},
+    "baseline_report_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "proof": {"$ref": "#/$defs/proof"}
+  },
+  "$defs": {
+    "proof": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["new_solves_over_baseline", "passrate_gain_num", "passrate_gain_den", "acceleration"],
+      "properties": {
+        "new_solves_over_baseline": {"type": "integer", "minimum": 0},
+        "passrate_gain_num": {"type": "integer", "minimum": 0},
+        "passrate_gain_den": {"type": "integer", "minimum": 1},
+        "acceleration": {"$ref": "#/$defs/acceleration"}
+      }
+    },
+    "acceleration": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["metric", "accel_ratio_num", "accel_ratio_den", "consecutive_windows"],
+      "properties": {
+        "metric": {"const": "ACCEL_INDEX_V1"},
+        "accel_ratio_num": {"type": "integer", "minimum": 0},
+        "accel_ratio_den": {"type": "integer", "minimum": 1},
+        "consecutive_windows": {"type": "integer", "minimum": 0}
+      }
+    }
+  }
+}

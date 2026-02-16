@@ -1,0 +1,4 @@
+Some header text
+Combined Power (CPU + GPU + ANE): 1000 mW
+Some footer text
+

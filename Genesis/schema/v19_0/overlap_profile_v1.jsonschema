@@ -1,0 +1,66 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v19_0/overlap_profile_v1",
+  "title": "Overlap profile v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_name",
+    "schema_version",
+    "can_version",
+    "overlap_profile_id",
+    "overlap_kind",
+    "declared_overlap_language",
+    "old_regime_ref",
+    "new_regime_ref",
+    "overlap_semantics_profile_ref"
+  ],
+  "$defs": {
+    "sha256": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "artifact_ref_v1": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["artifact_id", "artifact_relpath"],
+      "properties": {
+        "artifact_id": {"$ref": "#/$defs/sha256"},
+        "artifact_relpath": {"type": "string", "minLength": 1}
+      }
+    },
+    "regime_ref_v1": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["C", "K", "E", "W", "T"],
+      "properties": {
+        "C": {"$ref": "#/$defs/artifact_ref_v1"},
+        "K": {"$ref": "#/$defs/artifact_ref_v1"},
+        "E": {"$ref": "#/$defs/artifact_ref_v1"},
+        "W": {"$ref": "#/$defs/artifact_ref_v1"},
+        "T": {"$ref": "#/$defs/artifact_ref_v1"}
+      }
+    }
+  },
+  "properties": {
+    "schema_name": {"const": "overlap_profile_v1"},
+    "schema_version": {"const": "v19_0"},
+    "can_version": {"type": "string", "minLength": 1},
+    "overlap_profile_id": {"$ref": "#/$defs/sha256"},
+    "overlap_kind": {
+      "type": "string",
+      "enum": ["ENUMERATED_ACCEPT_SET", "OK_SIGNATURE"]
+    },
+    "declared_overlap_language": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["accepted_artifact_refs"],
+      "properties": {
+        "accepted_artifact_refs": {
+          "type": "array",
+          "items": {"$ref": "#/$defs/artifact_ref_v1"}
+        }
+      }
+    },
+    "old_regime_ref": {"$ref": "#/$defs/regime_ref_v1"},
+    "new_regime_ref": {"$ref": "#/$defs/regime_ref_v1"},
+    "overlap_semantics_profile_ref": {"$ref": "#/$defs/artifact_ref_v1"}
+  }
+}

@@ -1,0 +1,39 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v18_0/actionseq_v1",
+  "title": "CCAP action sequence v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "seq_id",
+    "steps"
+  ],
+  "properties": {
+    "schema_version": {"const": "actionseq_v1"},
+    "seq_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "steps": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "op_id",
+          "site"
+        ],
+        "properties": {
+          "op_id": {"type": "string", "minLength": 1},
+          "site": {"type": "string", "minLength": 1},
+          "args": {
+            "type": "object",
+            "default": {},
+            "additionalProperties": true
+          },
+          "expected_type": {"type": "string"},
+          "determinism_tag": {"type": "string"}
+        }
+      }
+    }
+  }
+}

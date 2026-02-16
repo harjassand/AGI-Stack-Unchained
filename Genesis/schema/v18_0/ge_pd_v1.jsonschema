@@ -1,0 +1,27 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v18_0/ge_pd_v1",
+  "title": "Genesis Engine proposal descriptor v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "pd_id",
+    "kind",
+    "base_tree_id",
+    "ek_id",
+    "op_pool_id",
+    "touched_paths_hash",
+    "size_bucket_u8"
+  ],
+  "properties": {
+    "schema_version": {"const": "ge_pd_v1"},
+    "pd_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "kind": {"const": "PATCH"},
+    "base_tree_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "ek_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "op_pool_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "touched_paths_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "size_bucket_u8": {"type": "integer", "minimum": 0, "maximum": 255}
+  }
+}

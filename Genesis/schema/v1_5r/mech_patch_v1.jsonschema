@@ -1,0 +1,47 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v1_5r/mech_patch_v1",
+  "title": "Mechanism patch v1",
+  "type": "object",
+  "additionalProperties": false,
+  "patternProperties": {
+    "^x-": {}
+  },
+  "required": [
+    "schema",
+    "schema_version",
+    "patch_id",
+    "base_state_hash",
+    "bounds",
+    "x-provenance"
+  ],
+  "properties": {
+    "schema": {"const": "mech_patch_v1"},
+    "schema_version": {"type": "integer", "const": 1},
+    "patch_id": {"type": "string", "pattern": "^sha256:[a-f0-9]{64}$"},
+    "base_state_hash": {"type": "string", "pattern": "^sha256:[a-f0-9]{64}$"},
+    "policy_program": {"type": "object"},
+    "policy_ref": {"type": "string", "pattern": "^sha256:[a-f0-9]{64}$"},
+    "bounds": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "max_env_steps_per_instance",
+        "max_instance_bytes",
+        "max_instantiation_gas",
+        "max_shrink_gas"
+      ],
+      "properties": {
+        "max_env_steps_per_instance": {"type": "integer", "minimum": 0},
+        "max_instance_bytes": {"type": "integer", "minimum": 0},
+        "max_instantiation_gas": {"type": "integer", "minimum": 0},
+        "max_shrink_gas": {"type": "integer", "minimum": 0}
+      }
+    },
+    "x-provenance": {"type": "string"}
+  },
+  "anyOf": [
+    {"required": ["policy_program"]},
+    {"required": ["policy_ref"]}
+  ]
+}

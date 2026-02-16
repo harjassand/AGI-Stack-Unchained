@@ -1,0 +1,87 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v1_5r/epoch_commit_v1",
+  "title": "Epoch commit v1",
+  "type": "object",
+  "additionalProperties": false,
+  "patternProperties": {
+    "^x-": {}
+  },
+  "required": [
+    "schema",
+    "schema_version",
+    "epoch_id",
+    "commitment",
+    "frontier_hash",
+    "base_state_hashes",
+    "created_unix_ms"
+  ],
+  "properties": {
+    "schema": {
+      "const": "epoch_commit_v1"
+    },
+    "schema_version": {
+      "type": "integer",
+      "const": 1
+    },
+    "epoch_id": {
+      "type": "string",
+      "pattern": "^[a-z0-9_]+$"
+    },
+    "commitment": {
+      "type": "string",
+      "pattern": "^sha256:[a-f0-9]{64}$"
+    },
+    "frontier_hash": {
+      "type": "string",
+      "pattern": "^sha256:[a-f0-9]{64}$"
+    },
+    "base_state_hashes": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "base_ontology_hash",
+        "base_mech_hash",
+        "frontier_hash",
+        "macro_active_set_hash",
+        "macro_ledger_hash",
+        "pressure_schedule_hash",
+        "meta_patch_set_hash"
+      ],
+      "properties": {
+        "base_ontology_hash": {
+          "type": "string",
+          "pattern": "^sha256:[a-f0-9]{64}$"
+        },
+        "base_mech_hash": {
+          "type": "string",
+          "pattern": "^sha256:[a-f0-9]{64}$"
+        },
+        "frontier_hash": {
+          "type": "string",
+          "pattern": "^sha256:[a-f0-9]{64}$"
+        },
+        "macro_active_set_hash": {
+          "type": "string",
+          "pattern": "^sha256:[a-f0-9]{64}$"
+        },
+        "macro_ledger_hash": {
+          "type": "string",
+          "pattern": "^sha256:[a-f0-9]{64}$"
+        },
+        "pressure_schedule_hash": {
+          "type": "string",
+          "pattern": "^sha256:[a-f0-9]{64}$"
+        },
+        "meta_patch_set_hash": {
+          "type": "string",
+          "pattern": "^sha256:[a-f0-9]{64}$"
+        }
+      }
+    },
+    "created_unix_ms": {
+      "type": "integer",
+      "minimum": 0
+    }
+  }
+}

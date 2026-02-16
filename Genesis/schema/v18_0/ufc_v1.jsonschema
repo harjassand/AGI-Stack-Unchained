@@ -1,0 +1,11 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v18_0/ufc_v1",
+  "title": "ufc_v1",
+  "type": "object",
+  "additionalProperties": true,
+  "properties": {
+    "schema_id": {"const": "ufc_v1"}
+  },
+  "required": ["schema_id"]
+}

@@ -1,0 +1,35 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v2_2/csi_bench_suite_v1",
+  "title": "CSI benchmark suite v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "suite_id",
+    "bench_api_entrypoint",
+    "inputs_relpath",
+    "cases"
+  ],
+  "properties": {
+    "schema": {"const": "csi_bench_suite_v1"},
+    "suite_id": {"type": "string", "const": "csi_bench_suite_v1"},
+    "bench_api_entrypoint": {"type": "string"},
+    "inputs_relpath": {"type": "string"},
+    "cases": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/case"}
+    }
+  },
+  "$defs": {
+    "case": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["case_id", "repeat"],
+      "properties": {
+        "case_id": {"type": "string"},
+        "repeat": {"type": "integer", "minimum": 1}
+      }
+    }
+  }
+}

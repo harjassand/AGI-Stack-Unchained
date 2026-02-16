@@ -1,0 +1,120 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "flagship_code_rsi_v1 run config",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "run_id",
+    "seed",
+    "target_repo_id",
+    "target_repo_path",
+    "baseline_commit",
+    "candidate",
+    "curriculum",
+    "proposal",
+    "devscreen",
+    "sealed_dev",
+    "sealed_heldout",
+    "output"
+  ],
+  "properties": {
+    "schema_version": {"type": "string"},
+    "run_id": {"type": "string"},
+    "seed": {"type": "integer"},
+    "wall_timeout_s": {"type": "integer"},
+    "run_wall_timeout_s": {"type": "integer"},
+    "epoch_wall_timeout_s": {"type": "integer"},
+    "target_repo_id": {"type": "string"},
+    "target_repo_path": {"type": "string"},
+    "baseline_commit": {"type": "string"},
+    "candidate": {
+      "type": "object",
+      "required": ["format", "patch_format", "max_patch_bytes"],
+      "properties": {
+        "format": {"type": "string"},
+        "patch_format": {"type": "string"},
+        "max_patch_bytes": {"type": "integer"}
+      }
+    },
+    "curriculum": {
+      "type": "object",
+      "properties": {
+        "ladder": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["name", "sealed_dev_plan", "devscreen_suite"],
+            "properties": {
+              "name": {"type": "string"},
+              "sealed_dev_plan": {"type": "string"},
+              "devscreen_suite": {"type": "string"}
+            }
+          }
+        },
+        "advance_rule": {
+          "type": "object",
+          "required": ["type", "threshold", "min_epochs"],
+          "properties": {
+            "type": {"type": "string"},
+            "threshold": {"type": ["number", "string", "integer"]},
+            "min_epochs": {"type": "integer"}
+          }
+        },
+        "min_submissions_before_advancing": {"type": "integer"},
+        "deescalate_after_epochs": {"type": "integer"},
+        "rolling_window": {"type": "integer"}
+      }
+    },
+    "proposal": {
+      "type": "object",
+      "required": ["candidates_per_epoch", "topk_to_sealed_dev", "explore_fraction"],
+      "properties": {
+        "candidates_per_epoch": {"type": "integer"},
+        "topk_to_sealed_dev": {"type": "integer"},
+        "explore_fraction": {"type": ["number", "string", "integer"]},
+        "max_attempts_per_slot": {"type": "integer"},
+        "max_total_attempts": {"type": "integer"},
+        "min_eligible_per_epoch": {"type": "integer"},
+        "template_allowlist": {"type": "array", "items": {"type": "string"}}
+      }
+    },
+    "devscreen": {
+      "type": "object",
+      "required": ["enabled", "suite_id", "timeout_s"],
+      "properties": {
+        "enabled": {"type": "boolean"},
+        "suite_id": {"type": "string"},
+        "timeout_s": {"type": "integer"},
+        "max_evals_per_epoch": {"type": "integer"}
+      }
+    },
+    "sealed_dev": {
+      "type": "object",
+      "required": ["enabled", "cdel_endpoint", "eval_plan_id", "timeout_s"],
+      "properties": {
+        "enabled": {"type": "boolean"},
+        "cdel_endpoint": {"type": "string"},
+        "cdel_root": {"type": "string"},
+        "eval_plan_id": {"type": "string"},
+        "timeout_s": {"type": "integer"}
+      }
+    },
+    "sealed_heldout": {
+      "type": "object",
+      "required": ["enabled", "eval_plan_id", "timeout_s"],
+      "properties": {
+        "enabled": {"type": "boolean"},
+        "eval_plan_id": {"type": "string"},
+        "timeout_s": {"type": "integer"}
+      }
+    },
+    "output": {
+      "type": "object",
+      "required": ["runs_root", "write_canonical_json"],
+      "properties": {
+        "runs_root": {"type": "string"},
+        "write_canonical_json": {"type": "boolean"}
+      }
+    }
+  }
+}

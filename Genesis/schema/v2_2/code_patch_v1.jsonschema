@@ -1,0 +1,84 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v2_2/code_patch_v1",
+  "title": "CSI code patch v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "patch_id",
+    "base_tree_hash",
+    "after_tree_hash",
+    "touched_files",
+    "concept_binding"
+  ],
+  "properties": {
+    "schema": {"const": "code_patch_v1"},
+    "patch_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "base_tree_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "after_tree_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "touched_files": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/touched_file"}
+    },
+    "concept_binding": {"$ref": "#/$defs/concept_binding"}
+  },
+  "$defs": {
+    "touched_file": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "relpath",
+        "before_sha256",
+        "after_sha256",
+        "unified_diff"
+      ],
+      "properties": {
+        "relpath": {"type": "string"},
+        "before_sha256": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+        "after_sha256": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+        "unified_diff": {"type": "string", "minLength": 1}
+      }
+    },
+    "concept_eval_features": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "u_ctx",
+        "sha256_calls_total",
+        "sha256_bytes_total",
+        "canon_calls_total",
+        "canon_bytes_total",
+        "onto_ctx_hash_compute_calls_total",
+        "work_cost_base"
+      ],
+      "properties": {
+        "u_ctx": {"type": "integer", "minimum": 0},
+        "sha256_calls_total": {"type": "integer", "minimum": 0},
+        "sha256_bytes_total": {"type": "integer", "minimum": 0},
+        "canon_calls_total": {"type": "integer", "minimum": 0},
+        "canon_bytes_total": {"type": "integer", "minimum": 0},
+        "onto_ctx_hash_compute_calls_total": {"type": "integer", "minimum": 0},
+        "work_cost_base": {"type": "integer", "minimum": 0}
+      }
+    },
+    "concept_binding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "mode",
+        "selected_concept_id",
+        "selected_concept_patch_id",
+        "concept_eval_features",
+        "concept_eval_output_int"
+      ],
+      "properties": {
+        "mode": {"type": "string", "enum": ["recursive_ontology_v2_1"]},
+        "selected_concept_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+        "selected_concept_patch_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+        "concept_eval_features": {"$ref": "#/$defs/concept_eval_features"},
+        "concept_eval_output_int": {"type": "integer", "minimum": 0}
+      }
+    }
+  }
+}

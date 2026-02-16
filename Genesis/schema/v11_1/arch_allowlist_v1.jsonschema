@@ -1,0 +1,47 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v11_0/arch_allowlist_v1",
+  "title": "Architecture allowlist v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "allowed_families",
+    "family_constraints",
+    "max_total_params",
+    "max_candidates_per_run",
+    "max_train_steps_per_candidate",
+    "max_wall_clock_sec_per_candidate",
+    "max_heldout_evals_per_run",
+    "cpu_only",
+    "deterministic_algorithms",
+    "dropout_zero",
+    "network_forbidden"
+  ],
+  "properties": {
+    "schema_version": {"const": "arch_allowlist_v1"},
+    "allowed_families": {"type": "array", "items": {"type": "string"}},
+    "family_constraints": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["max_depth", "max_width", "max_params"],
+        "properties": {
+          "max_depth": {"type": "integer"},
+          "max_width": {"type": "integer"},
+          "max_params": {"type": "integer"}
+        }
+      }
+    },
+    "max_total_params": {"type": "integer"},
+    "max_candidates_per_run": {"type": "integer"},
+    "max_train_steps_per_candidate": {"type": "integer"},
+    "max_wall_clock_sec_per_candidate": {"type": "integer"},
+    "max_heldout_evals_per_run": {"type": "integer"},
+    "cpu_only": {"type": "boolean"},
+    "deterministic_algorithms": {"type": "boolean"},
+    "dropout_zero": {"type": "boolean"},
+    "network_forbidden": {"type": "boolean"}
+  }
+}

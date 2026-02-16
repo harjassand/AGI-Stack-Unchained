@@ -1,0 +1,36 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v18_0/omega_objectives_v1",
+  "title": "Omega objectives v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "objective_set_id", "metrics"],
+  "properties": {
+    "schema_version": {"const": "omega_objectives_v1"},
+    "objective_set_id": {"type": "string"},
+    "metrics": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["metric_id", "direction", "target_q32", "weight_q32"],
+        "properties": {
+          "metric_id": {"type": "string"},
+          "direction": {"type": "string", "enum": ["MINIMIZE", "MAXIMIZE"]},
+          "target_q32": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["q"],
+            "properties": {"q": {"type": "integer"}}
+          },
+          "weight_q32": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["q"],
+            "properties": {"q": {"type": "integer"}}
+          }
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,67 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v18_0/omega_runaway_state_v1",
+  "title": "Omega runaway state v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "state_id",
+    "tick_u64",
+    "objective_set_hash",
+    "metric_states",
+    "campaign_intensity_levels",
+    "version_minor_u64"
+  ],
+  "properties": {
+    "schema_version": {"const": "omega_runaway_state_v1"},
+    "state_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "tick_u64": {"type": "integer", "minimum": 0},
+    "objective_set_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "metric_states": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "current_target_q32",
+          "best_value_q32",
+          "last_value_q32",
+          "last_improve_tick_u64",
+          "stall_ticks_u64",
+          "escalation_level_u64",
+          "tighten_round_u64"
+        ],
+        "properties": {
+          "current_target_q32": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["q"],
+            "properties": {"q": {"type": "integer"}}
+          },
+          "best_value_q32": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["q"],
+            "properties": {"q": {"type": "integer"}}
+          },
+          "last_value_q32": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["q"],
+            "properties": {"q": {"type": "integer"}}
+          },
+          "last_improve_tick_u64": {"type": "integer", "minimum": 0},
+          "stall_ticks_u64": {"type": "integer", "minimum": 0},
+          "escalation_level_u64": {"type": "integer", "minimum": 0},
+          "tighten_round_u64": {"type": "integer", "minimum": 0}
+        }
+      }
+    },
+    "campaign_intensity_levels": {
+      "type": "object",
+      "additionalProperties": {"type": "integer", "minimum": 0}
+    },
+    "version_minor_u64": {"type": "integer", "minimum": 0}
+  }
+}

@@ -1,0 +1,45 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v15_0/immutable_tree_snapshot_v1",
+  "title": "Immutable tree snapshot v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "root_rel",
+    "files",
+    "root_hash_sha256"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "immutable_tree_snapshot_v1"
+    },
+    "root_rel": {
+      "type": "string"
+    },
+    "files": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "path_rel",
+          "sha256"
+        ],
+        "properties": {
+          "path_rel": {
+            "type": "string"
+          },
+          "sha256": {
+            "type": "string",
+            "pattern": "^sha256:[0-9a-f]{64}$"
+          }
+        }
+      }
+    },
+    "root_hash_sha256": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    }
+  }
+}

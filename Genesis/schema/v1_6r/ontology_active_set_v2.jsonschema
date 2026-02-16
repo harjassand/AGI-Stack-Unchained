@@ -1,0 +1,26 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v1_6r/ontology_active_set_v2",
+  "title": "Ontology active set v2",
+  "type": "object",
+  "additionalProperties": false,
+  "patternProperties": {
+    "^x-": {}
+  },
+  "required": [
+    "schema",
+    "schema_version",
+    "active_ontology_id",
+    "active_snapshot_hash",
+    "activation_epoch",
+    "x-meta"
+  ],
+  "properties": {
+    "schema": {"const": "ontology_active_set_v2"},
+    "schema_version": {"type": "integer", "const": 2},
+    "active_ontology_id": {"anyOf": [{"type": "string", "pattern": "^sha256:[a-f0-9]{64}$"}, {"type": "null"}]},
+    "active_snapshot_hash": {"anyOf": [{"type": "string", "pattern": "^sha256:[a-f0-9]{64}$"}, {"type": "null"}]},
+    "activation_epoch": {"anyOf": [{"type": "integer"}, {"type": "null"}]},
+    "x-meta": {"type": "object"}
+  }
+}

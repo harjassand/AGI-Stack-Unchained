@@ -1,0 +1,50 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v18_0/vision_item_descriptor_v1",
+  "title": "vision_item_descriptor_v1",
+  "type": "object",
+  "additionalProperties": false,
+  "$defs": {
+    "bbox_u32": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "x0_u32": {"type": "integer", "minimum": 0, "maximum": 4294967295},
+        "y0_u32": {"type": "integer", "minimum": 0, "maximum": 4294967295},
+        "x1_u32": {"type": "integer", "minimum": 0, "maximum": 4294967295},
+        "y1_u32": {"type": "integer", "minimum": 0, "maximum": 4294967295}
+      },
+      "required": ["x0_u32", "y0_u32", "x1_u32", "y1_u32"]
+    }
+  },
+  "properties": {
+    "schema_id": {"const": "vision_item_descriptor_v1"},
+    "item_kind": {"type": "string", "enum": ["OBJECT_CROP_V1"]},
+    "session_manifest_ref": {"$ref": "https://genesis.engine/specs/v18_0/eudrs_u_artifact_ref_v1"},
+    "frame_manifest_ref": {"$ref": "https://genesis.engine/specs/v18_0/eudrs_u_artifact_ref_v1"},
+    "frame_index_u32": {"type": "integer", "minimum": 0, "maximum": 4294967295},
+    "perception_run_ref": {"$ref": "https://genesis.engine/specs/v18_0/eudrs_u_artifact_ref_v1"},
+    "frame_report_ref": {"$ref": "https://genesis.engine/specs/v18_0/eudrs_u_artifact_ref_v1"},
+    "qxwmr_state_ref": {"$ref": "https://genesis.engine/specs/v18_0/eudrs_u_artifact_ref_v1"},
+    "track_id_u32": {"type": "integer", "minimum": 1, "maximum": 4294967295},
+    "obj_local_id_u32": {"type": "integer", "minimum": 1, "maximum": 4294967295},
+    "bbox": {"$ref": "https://genesis.engine/specs/v18_0/vision_item_descriptor_v1#/$defs/bbox_u32"},
+    "mask_ref": {"$ref": "https://genesis.engine/specs/v18_0/eudrs_u_artifact_ref_v1"},
+    "embedding_config_ref": {"$ref": "https://genesis.engine/specs/v18_0/eudrs_u_artifact_ref_v1"}
+  },
+  "required": [
+    "schema_id",
+    "item_kind",
+    "session_manifest_ref",
+    "frame_manifest_ref",
+    "frame_index_u32",
+    "perception_run_ref",
+    "frame_report_ref",
+    "qxwmr_state_ref",
+    "track_id_u32",
+    "obj_local_id_u32",
+    "bbox",
+    "mask_ref",
+    "embedding_config_ref"
+  ]
+}

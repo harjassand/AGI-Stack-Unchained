@@ -1,0 +1,31 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v5_0/thermo_ignition_receipt_v1",
+  "title": "Thermo ignition receipt v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "spec_version",
+    "receipt_hash",
+    "trigger_checkpoint_receipt_hash",
+    "proof"
+  ],
+  "properties": {
+    "schema": {"const": "thermo_ignition_receipt_v1"},
+    "spec_version": {"const": "v5_0"},
+    "receipt_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "trigger_checkpoint_receipt_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "proof": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["density_ratio_num", "density_ratio_den", "consecutive_windows"],
+      "properties": {
+        "density_ratio_num": {"type": "integer", "minimum": 0},
+        "density_ratio_den": {"type": "integer", "minimum": 1},
+        "consecutive_windows": {"type": "integer", "minimum": 0}
+      }
+    }
+  }
+}
+

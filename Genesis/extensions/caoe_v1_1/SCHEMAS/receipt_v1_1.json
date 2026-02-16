@@ -1,0 +1,24 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "receipt_v1_1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "receipt_format",
+    "candidate_id",
+    "decision",
+    "evidence_sha256",
+    "signature_ed25519",
+    "key_id",
+    "public_key"
+  ],
+  "properties": {
+    "receipt_format": {"const": "cdel_receipt_v1_1"},
+    "candidate_id": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "decision": {"enum": ["PASS", "FAIL"]},
+    "evidence_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "signature_ed25519": {"type": "string"},
+    "key_id": {"type": "string"},
+    "public_key": {"type": "string"}
+  }
+}

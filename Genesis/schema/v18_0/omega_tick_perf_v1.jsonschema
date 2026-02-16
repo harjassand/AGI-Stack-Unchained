@@ -1,0 +1,60 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v18_0/omega_tick_perf_v1",
+  "title": "Omega tick perf v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "perf_id",
+    "tick_u64",
+    "action_kind",
+    "total_ns",
+    "stage_ns",
+    "stps_total_q32",
+    "stps_non_noop_q32",
+    "stps_promotion_q32",
+    "stps_activation_q32"
+  ],
+  "properties": {
+    "schema_version": {"const": "omega_tick_perf_v1"},
+    "perf_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "tick_u64": {"type": "integer", "minimum": 0},
+    "action_kind": {"type": "string", "enum": ["RUN_CAMPAIGN", "RUN_GOAL_TASK", "NOOP", "SAFE_HALT"]},
+    "total_ns": {"type": "integer", "minimum": 0},
+    "stps_total_q32": {"type": "integer", "minimum": 0},
+    "stps_non_noop_q32": {"type": "integer", "minimum": 0},
+    "stps_promotion_q32": {"type": "integer", "minimum": 0},
+    "stps_activation_q32": {"type": "integer", "minimum": 0},
+    "stage_ns": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "freeze_pack_config",
+        "observe",
+        "diagnose",
+        "decide",
+        "dispatch_campaign",
+        "run_subverifier",
+        "run_promotion",
+        "run_activation",
+        "ledger_writes",
+        "trace_write",
+        "snapshot_write"
+      ],
+      "properties": {
+        "freeze_pack_config": {"type": "integer", "minimum": 0},
+        "observe": {"type": "integer", "minimum": 0},
+        "diagnose": {"type": "integer", "minimum": 0},
+        "decide": {"type": "integer", "minimum": 0},
+        "dispatch_campaign": {"type": "integer", "minimum": 0},
+        "run_subverifier": {"type": "integer", "minimum": 0},
+        "run_promotion": {"type": "integer", "minimum": 0},
+        "run_activation": {"type": "integer", "minimum": 0},
+        "ledger_writes": {"type": "integer", "minimum": 0},
+        "trace_write": {"type": "integer", "minimum": 0},
+        "snapshot_write": {"type": "integer", "minimum": 0}
+      }
+    }
+  }
+}

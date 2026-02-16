@@ -1,0 +1,23 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v1_6r/instance_pack_v1",
+  "title": "Instance pack v1",
+  "type": "object",
+  "additionalProperties": false,
+  "patternProperties": {
+    "^x-": {}
+  },
+  "required": [
+    "schema",
+    "schema_version",
+    "instances"
+  ],
+  "properties": {
+    "schema": {"const": "instance_pack_v1"},
+    "schema_version": {"type": "integer", "const": 1},
+    "instances": {
+      "type": "array",
+      "items": {"type": "object"}
+    }
+  }
+}

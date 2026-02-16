@@ -1,0 +1,36 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v18_0/omega_ledger_event_v1",
+  "title": "Omega ledger event v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "event_id", "tick_u64", "event_type", "artifact_hash", "prev_event_id"],
+  "properties": {
+    "schema_version": {"const": "omega_ledger_event_v1"},
+    "event_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "tick_u64": {"type": "integer", "minimum": 0},
+    "event_type": {
+      "type": "string",
+      "enum": [
+        "STATE",
+        "OBSERVATION",
+        "ISSUE",
+        "DECISION",
+        "DISPATCH",
+        "SUBVERIFIER",
+        "PROMOTION",
+        "ACTIVATION",
+        "ROLLBACK",
+        "SNAPSHOT",
+        "SAFE_HALT"
+      ]
+    },
+    "artifact_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "prev_event_id": {
+      "anyOf": [
+        {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+        {"type": "null"}
+      ]
+    }
+  }
+}

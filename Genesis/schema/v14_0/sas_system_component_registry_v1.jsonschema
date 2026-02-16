@@ -1,0 +1,44 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v14_0/sas_system_component_registry_v1",
+  "title": "SAS System component registry v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema", "spec_version", "components"],
+  "properties": {
+    "schema": {"const": "sas_system_component_registry_v1"},
+    "spec_version": {"const": "v14_0"},
+    "components": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["SAS_SCIENCE_WORKMETER_V1"],
+      "properties": {
+        "SAS_SCIENCE_WORKMETER_V1": {"$ref": "#/$defs/component"}
+      }
+    }
+  },
+  "$defs": {
+    "component": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["active_backend", "rust_ext"],
+      "properties": {
+        "active_backend": {"type": "string", "enum": ["PY_REF_V1", "RUST_EXT_V1"]},
+        "rust_ext": {
+          "anyOf": [
+            {"type": "null"},
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["module", "artifact_sha256"],
+              "properties": {
+                "module": {"type": "string"},
+                "artifact_sha256": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"}
+              }
+            }
+          ]
+        }
+      }
+    }
+  }
+}

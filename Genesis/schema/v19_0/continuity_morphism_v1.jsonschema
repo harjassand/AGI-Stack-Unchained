@@ -1,0 +1,217 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v19_0/continuity_morphism_v1",
+  "title": "Continuity morphism v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_name",
+    "schema_version",
+    "morphism_id",
+    "morphism_type",
+    "continuity_class",
+    "overlap_profile_ref",
+    "translator_bundle_ref",
+    "optional_projection_ref",
+    "backrefute_policy",
+    "required_proofs",
+    "budgets",
+    "declared_old_regime_ref",
+    "declared_new_regime_ref"
+  ],
+  "$defs": {
+    "sha256": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "artifact_ref_v1": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["artifact_id", "artifact_relpath"],
+      "properties": {
+        "artifact_id": {"$ref": "#/$defs/sha256"},
+        "artifact_relpath": {"type": "string", "minLength": 1}
+      }
+    },
+    "regime_ref_v1": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["C", "K", "E", "W", "T"],
+      "properties": {
+        "C": {"$ref": "#/$defs/artifact_ref_v1"},
+        "K": {"$ref": "#/$defs/artifact_ref_v1"},
+        "E": {"$ref": "#/$defs/artifact_ref_v1"},
+        "W": {"$ref": "#/$defs/artifact_ref_v1"},
+        "T": {"$ref": "#/$defs/artifact_ref_v1"}
+      }
+    },
+    "budget_spec_v1": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema_name",
+        "schema_version",
+        "max_steps",
+        "max_bytes_read",
+        "max_bytes_write",
+        "max_items",
+        "seed",
+        "policy"
+      ],
+      "properties": {
+        "schema_name": {"const": "budget_spec_v1"},
+        "schema_version": {"const": "v19_0"},
+        "max_steps": {"type": "integer", "minimum": 1},
+        "max_bytes_read": {"type": "integer", "minimum": 0},
+        "max_bytes_write": {"type": "integer", "minimum": 0},
+        "max_items": {"type": "integer", "minimum": 1},
+        "seed": {"type": "integer", "minimum": 0},
+        "policy": {"type": "string", "enum": ["HARD_FAIL", "SAFE_HALT", "SAFE_SPLIT"]}
+      }
+    }
+  },
+  "properties": {
+    "schema_name": {"const": "continuity_morphism_v1"},
+    "schema_version": {"const": "v19_0"},
+    "morphism_id": {"$ref": "#/$defs/sha256"},
+    "morphism_type": {
+      "type": "string",
+      "enum": ["M_SIGMA", "M_PI", "M_D", "M_H", "M_A", "M_K", "M_E", "M_M", "M_C", "M_W", "M_T"]
+    },
+    "continuity_class": {
+      "type": "string",
+      "enum": ["EQUIV", "REFINE", "EXTEND", "RESTRICT"]
+    },
+    "overlap_profile_ref": {"$ref": "#/$defs/artifact_ref_v1"},
+    "translator_bundle_ref": {"$ref": "#/$defs/artifact_ref_v1"},
+    "optional_projection_ref": {
+      "anyOf": [
+        {"type": "null"},
+        {"$ref": "#/$defs/artifact_ref_v1"}
+      ]
+    },
+    "backrefute_policy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "required",
+        "allowed_outcomes",
+        "budget",
+        "policy_on_missing_backrefute"
+      ],
+      "properties": {
+        "required": {"type": "boolean"},
+        "allowed_outcomes": {
+          "type": "array",
+          "items": {"type": "string", "enum": ["VALID", "INVALID", "BUDGET_EXHAUSTED"]},
+          "minItems": 1,
+          "uniqueItems": true
+        },
+        "budget": {"$ref": "#/$defs/budget_spec_v1"},
+        "policy_on_missing_backrefute": {"type": "string", "enum": ["SAFE_HALT", "REJECT"]}
+      }
+    },
+    "required_proofs": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": {
+        "type": "string",
+        "enum": [
+          "TRANSLATOR_TOTALITY",
+          "CONTINUITY_CHECK",
+          "BACKREFUTE_LANE",
+          "NO_NEW_ACCEPT_PATH",
+          "REPLAY_DETERMINISM",
+          "J_DOMINANCE_RENT_PAID",
+          "KERNEL_BOOTSTRAP_RECEIPT",
+          "KERNEL_POLARITY",
+          "ENV_REDUCTION_WITNESS",
+          "META_LAW_COMPLIANCE",
+          "CONSTITUTION_KERNEL_COMPLIANCE"
+        ]
+      }
+    },
+    "budgets": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "continuity_budget",
+        "translator_budget",
+        "receipt_translation_budget",
+        "totality_budget"
+      ],
+      "properties": {
+        "continuity_budget": {"$ref": "#/$defs/budget_spec_v1"},
+        "translator_budget": {"$ref": "#/$defs/budget_spec_v1"},
+        "receipt_translation_budget": {"$ref": "#/$defs/budget_spec_v1"},
+        "totality_budget": {"$ref": "#/$defs/budget_spec_v1"}
+      }
+    },
+    "declared_old_regime_ref": {"$ref": "#/$defs/regime_ref_v1"},
+    "declared_new_regime_ref": {"$ref": "#/$defs/regime_ref_v1"},
+    "translator_totality_cert_ref": {
+      "anyOf": [
+        {"type": "null"},
+        {"$ref": "#/$defs/artifact_ref_v1"}
+      ]
+    },
+    "continuity_receipt_ref": {
+      "anyOf": [
+        {"type": "null"},
+        {"$ref": "#/$defs/artifact_ref_v1"}
+      ]
+    },
+    "backrefute_cert_refs": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/artifact_ref_v1"}
+    },
+    "explicit_overlap_exceptions": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/sha256"},
+      "uniqueItems": true
+    },
+    "representation_mode": {
+      "type": "string",
+      "enum": ["INJECTIVE", "LOSS_BOUNDED"]
+    },
+    "loss_bound_witness_ref": {
+      "anyOf": [
+        {"type": "null"},
+        {"$ref": "#/$defs/artifact_ref_v1"}
+      ]
+    },
+    "decoder_artifact_refs": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/artifact_ref_v1"}
+    },
+    "multiplexing_proof_ref": {
+      "anyOf": [
+        {"type": "null"},
+        {"$ref": "#/$defs/artifact_ref_v1"}
+      ]
+    },
+    "collision_suite_ref": {
+      "anyOf": [
+        {"type": "null"},
+        {"$ref": "#/$defs/artifact_ref_v1"}
+      ]
+    },
+    "udc_schedule_ref": {
+      "anyOf": [
+        {"type": "null"},
+        {"$ref": "#/$defs/artifact_ref_v1"}
+      ]
+    },
+    "epsilon_udc_u64": {"type": "integer", "minimum": 0},
+    "constructor_conservativity_cert_ref": {
+      "anyOf": [
+        {"type": "null"},
+        {"$ref": "#/$defs/artifact_ref_v1"}
+      ]
+    },
+    "meta_yield_cert_ref": {
+      "anyOf": [
+        {"type": "null"},
+        {"$ref": "#/$defs/artifact_ref_v1"}
+      ]
+    }
+  }
+}

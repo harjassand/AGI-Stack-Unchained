@@ -1,0 +1,75 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v1_6r/ontology_eval_report_v2",
+  "title": "Ontology eval report v2",
+  "type": "object",
+  "additionalProperties": false,
+  "patternProperties": {
+    "^x-": {}
+  },
+  "required": [
+    "schema",
+    "schema_version",
+    "epoch_id",
+    "base_ontology_id",
+    "new_ontology_id",
+    "corpus",
+    "dl",
+    "decision",
+    "x-meta"
+  ],
+  "properties": {
+    "schema": {"const": "ontology_eval_report_v2"},
+    "schema_version": {"type": "integer", "const": 2},
+    "epoch_id": {"type": "string"},
+    "base_ontology_id": {
+      "anyOf": [
+        {"type": "string", "pattern": "^sha256:[a-f0-9]{64}$"},
+        {"type": "null"}
+      ]
+    },
+    "new_ontology_id": {"type": "string", "pattern": "^sha256:[a-f0-9]{64}$"},
+    "corpus": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["window_epochs", "trace_hashes", "corpus_hash"],
+      "properties": {
+        "window_epochs": {"type": "array", "items": {"type": "integer"}},
+        "trace_hashes": {"type": "array", "items": {"type": "string", "pattern": "^sha256:[a-f0-9]{64}$"}},
+        "corpus_hash": {"type": "string", "pattern": "^sha256:[a-f0-9]{64}$"}
+      }
+    },
+    "dl": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "dl_bits_base",
+        "dl_bits_new",
+        "dl_gain_bits",
+        "rent_bits_new",
+        "model_bits_new",
+        "data_bits_new",
+        "support_families_improved"
+      ],
+      "properties": {
+        "dl_bits_base": {"type": "integer"},
+        "dl_bits_new": {"type": "integer"},
+        "dl_gain_bits": {"type": "integer"},
+        "rent_bits_new": {"type": "integer"},
+        "model_bits_new": {"type": "integer"},
+        "data_bits_new": {"type": "integer"},
+        "support_families_improved": {"type": "integer"}
+      }
+    },
+    "decision": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["passes", "reason"],
+      "properties": {
+        "passes": {"type": "boolean"},
+        "reason": {"type": "string"}
+      }
+    },
+    "x-meta": {"type": "object"}
+  }
+}

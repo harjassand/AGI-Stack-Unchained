@@ -1,0 +1,46 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v18_0/eudrs_u_system_manifest_v1",
+  "title": "EUDRS-U System Manifest v1",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "schema_id": {"const": "eudrs_u_system_manifest_v1"},
+    "epoch_u64": {"type": "integer", "minimum": 0},
+    "dc1_id": {"type": "string", "const": "dc1:q32_v1"},
+    "opset_id": {"type": "string", "pattern": "^opset:eudrs_u_v1:sha256:[0-9a-f]{64}$"},
+
+    "qxwmr": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "world_model_manifest_ref": {"$ref": "https://genesis.engine/specs/v18_0/eudrs_u_artifact_ref_v1"},
+        "eval_manifest_ref": {"$ref": "https://genesis.engine/specs/v18_0/eudrs_u_artifact_ref_v1"}
+      },
+      "required": ["world_model_manifest_ref", "eval_manifest_ref"]
+    },
+
+    "qxrl": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "model_manifest_ref": {"$ref": "https://genesis.engine/specs/v18_0/eudrs_u_artifact_ref_v1"},
+        "eval_manifest_ref": {"$ref": "https://genesis.engine/specs/v18_0/eudrs_u_artifact_ref_v1"},
+        "dataset_manifest_ref": {"$ref": "https://genesis.engine/specs/v18_0/eudrs_u_artifact_ref_v1"}
+      },
+      "required": ["model_manifest_ref", "eval_manifest_ref", "dataset_manifest_ref"]
+    },
+
+    "ml_index": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "index_manifest_ref": {"$ref": "https://genesis.engine/specs/v18_0/eudrs_u_artifact_ref_v1"},
+        "bucket_listing_manifest_ref": {"$ref": "https://genesis.engine/specs/v18_0/eudrs_u_artifact_ref_v1"}
+      },
+      "required": ["index_manifest_ref", "bucket_listing_manifest_ref"]
+    }
+  },
+  "required": ["schema_id", "epoch_u64", "dc1_id", "opset_id", "qxwmr", "qxrl", "ml_index"]
+}
+

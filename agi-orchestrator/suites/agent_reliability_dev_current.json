@@ -1,0 +1,7 @@
+{
+  "domain": "agent-reliability-v1",
+  "suite_hash": "e9ad2bf186b7399e4ef208f6e5eac96a175f705f974ef827bd2be7035a7bf374",
+  "updated_at": "2026-01-24",
+  "source": "manual",
+  "notes": "Initial agent reliability dev suite"
+}

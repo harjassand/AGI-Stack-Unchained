@@ -1,0 +1,16 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v11_0/sas_synthesis_ledger_v1",
+  "title": "SAS synthesis ledger entry v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["seq", "tick", "event_type", "event_payload", "prev_entry_hash", "entry_hash"],
+  "properties": {
+    "seq": {"type": "integer"},
+    "tick": {"type": "integer"},
+    "event_type": {"type": "string"},
+    "event_payload": {"type": "object"},
+    "prev_entry_hash": {"type": "string"},
+    "entry_hash": {"type": "string"}
+  }
+}

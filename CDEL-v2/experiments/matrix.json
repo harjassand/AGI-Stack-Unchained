@@ -1,0 +1,366 @@
+{
+  "runs": [
+    {
+      "run_id": "base_bounded",
+      "tasks_file": "tasks/stream_1000_bounded.jsonl",
+      "generator_mode": "enum",
+      "certificate_mode": "bounded",
+      "load_mode": "indexed",
+      "budget": 1000000,
+      "cost_weights": {
+        "alpha": 1,
+        "beta": 1,
+        "gamma": 1
+      },
+      "spec_domain": {
+        "int_min": -2,
+        "int_max": 2,
+        "list_max_len": 3
+      },
+      "eval_step_limit": 100000,
+      "closure_cache": false,
+      "seed": 0
+    },
+    {
+      "run_id": "base_bounded_cache_on",
+      "tasks_file": "tasks/stream_1000_bounded.jsonl",
+      "generator_mode": "enum",
+      "certificate_mode": "bounded",
+      "load_mode": "indexed",
+      "budget": 1000000,
+      "cost_weights": {
+        "alpha": 1,
+        "beta": 1,
+        "gamma": 1
+      },
+      "spec_domain": {
+        "int_min": -2,
+        "int_max": 2,
+        "list_max_len": 3
+      },
+      "eval_step_limit": 100000,
+      "closure_cache": true,
+      "seed": 0
+    },
+    {
+      "run_id": "reuse_bounded",
+      "tasks_file": "tasks/stream_1000_bounded.jsonl",
+      "generator_mode": "enum_reuse",
+      "certificate_mode": "bounded",
+      "load_mode": "indexed",
+      "budget": 1000000,
+      "cost_weights": {
+        "alpha": 1,
+        "beta": 1,
+        "gamma": 1
+      },
+      "spec_domain": {
+        "int_min": -2,
+        "int_max": 2,
+        "list_max_len": 3
+      },
+      "eval_step_limit": 100000,
+      "closure_cache": false,
+      "seed": 0
+    },
+    {
+      "run_id": "fragmentation_base",
+      "tasks_file": "tasks/stream_fragmentation_200.jsonl",
+      "generator_mode": "enum",
+      "certificate_mode": "bounded",
+      "load_mode": "indexed",
+      "budget": 200000,
+      "cost_weights": {
+        "alpha": 1,
+        "beta": 1,
+        "gamma": 1
+      },
+      "spec_domain": {
+        "int_min": -2,
+        "int_max": 2,
+        "list_max_len": 0
+      },
+      "eval_step_limit": 100000,
+      "closure_cache": false,
+      "seed": 0
+    },
+    {
+      "run_id": "fragmentation_reuse",
+      "tasks_file": "tasks/stream_fragmentation_200.jsonl",
+      "generator_mode": "enum_reuse",
+      "certificate_mode": "bounded",
+      "load_mode": "indexed",
+      "budget": 200000,
+      "cost_weights": {
+        "alpha": 1,
+        "beta": 1,
+        "gamma": 1
+      },
+      "spec_domain": {
+        "int_min": -2,
+        "int_max": 2,
+        "list_max_len": 0
+      },
+      "eval_step_limit": 100000,
+      "closure_cache": false,
+      "seed": 0
+    },
+    {
+      "run_id": "fragmentation_reuse_v2",
+      "tasks_file": "tasks/stream_fragmentation_200.jsonl",
+      "generator_mode": "enum_reuse",
+      "certificate_mode": "bounded",
+      "load_mode": "indexed",
+      "budget": 200000,
+      "cost_weights": {
+        "alpha": 3,
+        "beta": 1,
+        "gamma": 0
+      },
+      "spec_domain": {
+        "int_min": -2,
+        "int_max": 2,
+        "list_max_len": 0
+      },
+      "eval_step_limit": 100000,
+      "closure_cache": false,
+      "seed": 0
+    },
+    {
+      "run_id": "capacity_exhaustion",
+      "tasks_file": "tasks/stream_1000_bounded.jsonl",
+      "generator_mode": "enum",
+      "certificate_mode": "bounded",
+      "load_mode": "indexed",
+      "budget": 500,
+      "cost_weights": {
+        "alpha": 1,
+        "beta": 1,
+        "gamma": 1
+      },
+      "spec_domain": {
+        "int_min": -2,
+        "int_max": 2,
+        "list_max_len": 3
+      },
+      "eval_step_limit": 100000,
+      "closure_cache": false,
+      "seed": 0
+    },
+    {
+      "run_id": "capacity_exhaustion_v2",
+      "tasks_file": "tasks/stream_capacity_filler.jsonl",
+      "generator_mode": "capacity-filler",
+      "certificate_mode": "bounded",
+      "load_mode": "indexed",
+      "budget": 1500,
+      "cost_weights": {
+        "alpha": 1,
+        "beta": 1,
+        "gamma": 1
+      },
+      "spec_domain": {
+        "int_min": -2,
+        "int_max": 2,
+        "list_max_len": 0
+      },
+      "eval_step_limit": 100000,
+      "closure_cache": false,
+      "seed": 0
+    },
+    {
+      "run_id": "distractor_before",
+      "tasks_file": "tasks/stream_1000_with_10k_before.jsonl",
+      "generator_mode": "enum",
+      "certificate_mode": "bounded",
+      "load_mode": "indexed",
+      "budget": 2000000,
+      "cost_weights": {
+        "alpha": 1,
+        "beta": 1,
+        "gamma": 1
+      },
+      "spec_domain": {
+        "int_min": -2,
+        "int_max": 2,
+        "list_max_len": 3
+      },
+      "eval_step_limit": 100000,
+      "closure_cache": false,
+      "seed": 0
+    },
+    {
+      "run_id": "distractor_before_v2",
+      "tasks_file": "tasks/stream_1000_with_10k_before.jsonl",
+      "generator_mode": "enum",
+      "certificate_mode": "bounded",
+      "load_mode": "indexed",
+      "budget": 2000000,
+      "cost_weights": {
+        "alpha": 1,
+        "beta": 1,
+        "gamma": 1
+      },
+      "spec_domain": {
+        "int_min": -2,
+        "int_max": 2,
+        "list_max_len": 3
+      },
+      "eval_step_limit": 100000,
+      "closure_cache": false,
+      "seed": 0
+    },
+    {
+      "run_id": "distractor_before_scan",
+      "tasks_file": "tasks/stream_1000_with_10k_before.jsonl",
+      "generator_mode": "enum",
+      "certificate_mode": "bounded",
+      "load_mode": "scan",
+      "budget": 2000000,
+      "cost_weights": {
+        "alpha": 1,
+        "beta": 1,
+        "gamma": 1
+      },
+      "spec_domain": {
+        "int_min": -2,
+        "int_max": 2,
+        "list_max_len": 3
+      },
+      "eval_step_limit": 100000,
+      "closure_cache": false,
+      "seed": 0
+    },
+    {
+      "run_id": "distractor_interleave10",
+      "tasks_file": "tasks/stream_1000_with_10k_interleave10.jsonl",
+      "generator_mode": "enum",
+      "certificate_mode": "bounded",
+      "load_mode": "indexed",
+      "budget": 2000000,
+      "cost_weights": {
+        "alpha": 1,
+        "beta": 1,
+        "gamma": 1
+      },
+      "spec_domain": {
+        "int_min": -2,
+        "int_max": 2,
+        "list_max_len": 3
+      },
+      "eval_step_limit": 100000,
+      "closure_cache": false,
+      "seed": 0
+    },
+    {
+      "run_id": "proof_heavy",
+      "tasks_file": "tasks/stream_1000_proofheavy.jsonl",
+      "generator_mode": "enum",
+      "certificate_mode": "proof",
+      "load_mode": "indexed",
+      "budget": 1000000,
+      "cost_weights": {
+        "alpha": 1,
+        "beta": 1,
+        "gamma": 1
+      },
+      "spec_domain": {
+        "int_min": -2,
+        "int_max": 2,
+        "list_max_len": 3
+      },
+      "eval_step_limit": 100000,
+      "closure_cache": false,
+      "seed": 0,
+      "proof_synth": true
+    },
+    {
+      "run_id": "proof_beta_low",
+      "tasks_file": "tasks/stream_1000_proofheavy.jsonl",
+      "generator_mode": "enum",
+      "certificate_mode": "proof",
+      "load_mode": "indexed",
+      "budget": 1000000,
+      "cost_weights": {
+        "alpha": 1,
+        "beta": 1,
+        "gamma": 1
+      },
+      "spec_domain": {
+        "int_min": -2,
+        "int_max": 2,
+        "list_max_len": 3
+      },
+      "eval_step_limit": 100000,
+      "closure_cache": false,
+      "seed": 0,
+      "proof_synth": true
+    },
+    {
+      "run_id": "proof_beta_mid",
+      "tasks_file": "tasks/stream_1000_proofheavy.jsonl",
+      "generator_mode": "enum",
+      "certificate_mode": "proof",
+      "load_mode": "indexed",
+      "budget": 1000000,
+      "cost_weights": {
+        "alpha": 1,
+        "beta": 5,
+        "gamma": 1
+      },
+      "spec_domain": {
+        "int_min": -2,
+        "int_max": 2,
+        "list_max_len": 3
+      },
+      "eval_step_limit": 100000,
+      "closure_cache": false,
+      "seed": 0,
+      "proof_synth": true
+    },
+    {
+      "run_id": "proof_beta_high",
+      "tasks_file": "tasks/stream_1000_proofheavy.jsonl",
+      "generator_mode": "enum",
+      "certificate_mode": "proof",
+      "load_mode": "indexed",
+      "budget": 1000000,
+      "cost_weights": {
+        "alpha": 1,
+        "beta": 20,
+        "gamma": 1
+      },
+      "spec_domain": {
+        "int_min": -2,
+        "int_max": 2,
+        "list_max_len": 3
+      },
+      "eval_step_limit": 100000,
+      "closure_cache": false,
+      "seed": 0,
+      "proof_synth": true
+    },
+    {
+      "run_id": "mixed_reuse",
+      "tasks_file": "tasks/stream_1000_mixed.jsonl",
+      "generator_mode": "enum_reuse",
+      "certificate_mode": "mixed",
+      "load_mode": "indexed",
+      "budget": 1000000,
+      "cost_weights": {
+        "alpha": 1,
+        "beta": 1,
+        "gamma": 1
+      },
+      "spec_domain": {
+        "int_min": -2,
+        "int_max": 2,
+        "list_max_len": 3
+      },
+      "eval_step_limit": 100000,
+      "closure_cache": false,
+      "seed": 0,
+      "proof_synth": true
+    }
+  ]
+}

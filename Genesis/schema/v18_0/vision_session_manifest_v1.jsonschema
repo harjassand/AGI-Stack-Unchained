@@ -1,0 +1,26 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v18_0/vision_session_manifest_v1",
+  "title": "vision_session_manifest_v1",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "schema_id": {"const": "vision_session_manifest_v1"},
+    "session_name": {"type": "string", "minLength": 1},
+    "frame_count_u32": {"type": "integer", "minimum": 0, "maximum": 4294967295},
+    "frames": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "frame_index_u32": {"type": "integer", "minimum": 0, "maximum": 4294967295},
+          "frame_manifest_ref": {"$ref": "https://genesis.engine/specs/v18_0/eudrs_u_artifact_ref_v1"}
+        },
+        "required": ["frame_index_u32", "frame_manifest_ref"]
+      }
+    }
+  },
+  "required": ["schema_id", "session_name", "frame_count_u32", "frames"]
+}
+

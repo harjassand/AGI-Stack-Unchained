@@ -1,0 +1,24 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v17_0/val_lift_ir_v1",
+  "title": "VAL lifted IR v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "ops"],
+  "properties": {
+    "schema_version": { "const": "val_lift_ir_v1" },
+    "ops": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["op", "pc_u32", "args"],
+        "properties": {
+          "op": { "type": "string", "minLength": 1 },
+          "pc_u32": { "type": "integer", "minimum": 0 },
+          "args": { "type": "array", "items": { "type": "string" } }
+        }
+      }
+    }
+  }
+}

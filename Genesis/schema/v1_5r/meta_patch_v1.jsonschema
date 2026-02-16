@@ -1,0 +1,53 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v1_5r/meta_patch_v1",
+  "title": "Meta patch v1",
+  "type": "object",
+  "additionalProperties": false,
+  "patternProperties": {
+    "^x-": {}
+  },
+  "required": [
+    "schema",
+    "schema_version",
+    "patch_id",
+    "allowlist_category",
+    "changed_components",
+    "forbidden_assertions"
+  ],
+  "properties": {
+    "schema": {
+      "const": "meta_patch_v1"
+    },
+    "schema_version": {
+      "type": "integer",
+      "const": 1
+    },
+    "patch_id": {
+      "type": "string",
+      "pattern": "^sha256:[a-f0-9]{64}$"
+    },
+    "allowlist_category": {
+      "type": "string",
+      "enum": [
+        "PURE_CACHE",
+        "MEMOIZE_HASHED_IO",
+        "DETERMINISTIC_SCHEDULING",
+        "PARALLELIZE_REDUCE",
+        "VM_ACCELERATION"
+      ]
+    },
+    "changed_components": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "forbidden_assertions": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    }
+  }
+}

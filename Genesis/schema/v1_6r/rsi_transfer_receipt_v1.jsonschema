@@ -1,0 +1,122 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v1_6r/rsi_transfer_receipt_v1",
+  "title": "RSI transfer receipt v1",
+  "type": "object",
+  "additionalProperties": false,
+  "patternProperties": {
+    "^x-": {}
+  },
+  "required": [
+    "schema",
+    "schema_version",
+    "epoch_id",
+    "META_HASH",
+    "KERNEL_HASH",
+    "constants_hash",
+    "toolchain_root",
+    "rsi_portfolio_receipt_hash",
+    "insertions_used",
+    "family_semantics_report_hashes",
+    "witness_hashes_used",
+    "macro_cross_env_support_report_hashes",
+    "mech_patch_eval_cert_hashes",
+    "checks",
+    "evidence"
+  ],
+  "properties": {
+    "schema": {"const": "rsi_transfer_receipt_v1"},
+    "schema_version": {"type": "integer", "const": 1},
+    "epoch_id": {"type": "string"},
+    "META_HASH": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+    "KERNEL_HASH": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+    "constants_hash": {"type": "string", "pattern": "^sha256:[a-f0-9]{64}$"},
+    "toolchain_root": {"type": "string", "pattern": "^sha256:[a-f0-9]{64}$"},
+    "rsi_portfolio_receipt_hash": {"type": "string", "pattern": "^sha256:[a-f0-9]{64}$"},
+    "insertions_used": {
+      "type": "array",
+      "items": {"type": "string", "pattern": "^sha256:[a-f0-9]{64}$"}
+    },
+    "family_semantics_report_hashes": {
+      "type": "array",
+      "items": {"type": "string", "pattern": "^sha256:[a-f0-9]{64}$"}
+    },
+    "witness_hashes_used": {
+      "type": "array",
+      "items": {"type": "string", "pattern": "^sha256:[a-f0-9]{64}$"}
+    },
+    "macro_cross_env_support_report_hashes": {
+      "type": "array",
+      "items": {"type": "string", "pattern": "^sha256:[a-f0-9]{64}$"}
+    },
+    "mech_patch_eval_cert_hashes": {
+      "type": "array",
+      "items": {"type": "string", "pattern": "^sha256:[a-f0-9]{64}$"}
+    },
+    "checks": {"$ref": "#/$defs/checks"},
+    "evidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["rsi_transfer_window_report_hash", "barrier_ledger_entry_hashes"],
+      "properties": {
+        "rsi_transfer_window_report_hash": {"type": "string", "pattern": "^sha256:[a-f0-9]{64}$"},
+        "barrier_ledger_entry_hashes": {
+          "type": "array",
+          "items": {"type": "string", "pattern": "^sha256:[a-f0-9]{64}$"}
+        }
+      }
+    }
+  },
+  "$defs": {
+    "check": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["ok", "reason_codes"],
+      "properties": {
+        "ok": {"type": "boolean"},
+        "reason_codes": {
+          "type": "array",
+          "items": {"type": "string"}
+        }
+      }
+    },
+    "checks": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "portfolio_env_count",
+        "insertions_true_novelty",
+        "insertions_key_sensitive",
+        "witness_conditioned_insertion_present",
+        "witness_replay_ok",
+        "macro_transfer_present",
+        "mech_patch_promoted",
+        "mech_patch_eval_pass",
+        "barrier_accel_env_steps_pooled",
+        "barrier_accel_bytes_hashed_pooled",
+        "barrier_accel_env_steps_by_env",
+        "barrier_accel_bytes_hashed_by_env"
+      ],
+      "properties": {
+        "portfolio_env_count": {"$ref": "#/$defs/check"},
+        "insertions_true_novelty": {"$ref": "#/$defs/check"},
+        "insertions_key_sensitive": {"$ref": "#/$defs/check"},
+        "witness_conditioned_insertion_present": {"$ref": "#/$defs/check"},
+        "witness_replay_ok": {"$ref": "#/$defs/check"},
+        "macro_transfer_present": {"$ref": "#/$defs/check"},
+        "mech_patch_promoted": {"$ref": "#/$defs/check"},
+        "mech_patch_eval_pass": {"$ref": "#/$defs/check"},
+        "barrier_accel_env_steps_pooled": {"$ref": "#/$defs/check"},
+        "barrier_accel_bytes_hashed_pooled": {"$ref": "#/$defs/check"},
+        "barrier_accel_env_steps_by_env": {
+          "type": "object",
+          "additionalProperties": {"$ref": "#/$defs/check"}
+        },
+        "barrier_accel_bytes_hashed_by_env": {
+          "type": "object",
+          "additionalProperties": {"$ref": "#/$defs/check"}
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,50 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v18_0/urc_capsule_def_v1",
+  "title": "urc_capsule_def_v1",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "schema_id": {"const": "urc_capsule_def_v1"},
+    "capsule_def_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+
+    "dc1_id": {"const": "dc1:q32_v1"},
+    "opset_id": {"type": "string", "pattern": "^opset:eudrs_u_v1:sha256:[0-9a-f]{64}$"},
+    "handle": {"type": "string", "pattern": "^capsule/[a-z0-9][a-z0-9._/-]{0,127}$"},
+
+    "isa_kind": {"const": "URC_ISA_V1"},
+
+    "page_shift_u32": {"type": "integer", "const": 12},
+    "pt_fanout_u32": {"type": "integer", "const": 256},
+    "pt_depth_u32": {"type": "integer", "const": 4},
+
+    "call_depth_cap_u32": {"type": "integer", "const": 16},
+
+    "budgets": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "instr_step_cap_u64": {"type": "integer", "minimum": 1},
+        "mem_write_ops_cap_u64": {"type": "integer", "minimum": 0},
+        "mem_write_pages_cap_u32": {"type": "integer", "minimum": 0}
+      },
+      "required": ["instr_step_cap_u64", "mem_write_ops_cap_u64", "mem_write_pages_cap_u32"]
+    },
+
+    "capsule_bin_ref": {"$ref": "https://genesis.engine/specs/v18_0/eudrs_u_artifact_ref_v1"}
+  },
+  "required": [
+    "schema_id",
+    "capsule_def_id",
+    "dc1_id",
+    "opset_id",
+    "handle",
+    "isa_kind",
+    "page_shift_u32",
+    "pt_fanout_u32",
+    "pt_depth_u32",
+    "call_depth_cap_u32",
+    "budgets",
+    "capsule_bin_ref"
+  ]
+}

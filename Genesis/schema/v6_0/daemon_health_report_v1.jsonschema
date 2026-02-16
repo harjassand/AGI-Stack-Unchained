@@ -1,0 +1,36 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v6_0/daemon_health_report_v1",
+  "title": "Daemon health report v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "daemon_id",
+    "icore_id",
+    "meta_hash",
+    "tick",
+    "boot_count",
+    "ledger_head_hash",
+    "status",
+    "paused_reason",
+    "created_utc"
+  ],
+  "properties": {
+    "schema_version": {"const": "daemon_health_report_v1"},
+    "daemon_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "icore_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "meta_hash": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "tick": {"type": "integer", "minimum": 0},
+    "boot_count": {"type": "integer", "minimum": 0},
+    "ledger_head_hash": {"type": "string", "pattern": "^(GENESIS|[0-9a-f]{64})$"},
+    "status": {"type": "string", "enum": ["RUNNING", "PAUSED", "STOPPED", "ERROR"]},
+    "paused_reason": {
+      "anyOf": [
+        {"type": "string", "enum": ["OPERATOR_PAUSE", "META_DRIFT_DETECTED", "DISK_LOW", "BUDGET_EXCEEDED", "UNKNOWN"]},
+        {"type": "null"}
+      ]
+    },
+    "created_utc": {"type": "string", "format": "date-time"}
+  }
+}

@@ -1,0 +1,65 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v4_0/sealed_task_v2",
+  "title": "Sealed task v2",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "task_id",
+    "domain",
+    "difficulty_bucket",
+    "prompt",
+    "answer_commitment",
+    "eval"
+  ],
+  "properties": {
+    "task_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "domain": {
+      "type": "string",
+      "enum": ["formal_math", "io_algorithms", "python_ut", "env", "mixed"]
+    },
+    "difficulty_bucket": {"type": "integer", "minimum": 0},
+    "prompt": {"$ref": "#/$defs/prompt"},
+    "answer_commitment": {"$ref": "#/$defs/answer_commitment"},
+    "eval": {"$ref": "#/$defs/eval"}
+  },
+  "$defs": {
+    "prompt": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["format", "text"],
+      "properties": {
+        "format": {"const": "text"},
+        "text": {"type": "string"}
+      }
+    },
+    "answer_commitment": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["alg", "salt_id", "answer_hash"],
+      "properties": {
+        "alg": {"const": "SHA256_SALT_V1"},
+        "salt_id": {"type": "string"},
+        "answer_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"}
+      }
+    },
+    "eval": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "budget"],
+      "properties": {
+        "type": {"type": "string", "enum": ["exact_match", "proof_check", "unit_test", "env_rollout"]},
+        "budget": {"$ref": "#/$defs/budget"}
+      }
+    },
+    "budget": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["max_compute_units", "max_wall_seconds"],
+      "properties": {
+        "max_compute_units": {"type": "integer", "minimum": 1},
+        "max_wall_seconds": {"type": "integer", "minimum": 1}
+      }
+    }
+  }
+}

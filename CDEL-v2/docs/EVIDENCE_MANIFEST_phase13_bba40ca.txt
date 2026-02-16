@@ -1,0 +1,24 @@
+tag: v0.7-consolidation-and-growth
+commit: bba40ca5c7058a2e79aad0e4f9192d6b7069e552
+consolidation_config_hash: 8087c7aa84c1fd973dab21df92c790b256ec734e7854683eb8c4ac2872e69f26
+stress_config_hash: fa75ba705bdb68c2d9989923bc5b1f767f132a8bf3276133fcf00389f4dc89c1
+eval_harness_hash: harness-hash
+eval_suite_hash: suite-hash
+
+consolidation_arith_add_k_0_json_sha256: c606d205a0a9188af96682cf4dd2108808e3af7fc06fc827e7d7d9688ea94dc6
+consolidation_arith_add_k_0_md_sha256: 7c4e80999c0e79512cac4b80353cb7b55ea5697a6475677b17d0530853316fa4
+consolidation_pred_lt_k_1_json_sha256: 5b8a07167e031c05e6d706d3a8ab6ae81cd1fa354a160f6784e2a217590a6ccd
+consolidation_pred_lt_k_1_md_sha256: f866a95f6ab6d0063cd621471ab7da04fde1cb4f60774bf197ee6263e90351df
+consolidation_reuse_compose_add_k_2_json_sha256: e3acf857ff4ce963de371632aa731fafff9cd8a8e9662bbf73f2bbccb743c89e
+consolidation_reuse_compose_add_k_2_md_sha256: b106c1f1d1785d9ab90738abd130233adb29f9cc63b222b48a0dc46c981ff7ab
+stress_results_json_sha256: fd8e6db7481dfed33d2b938b256cadaabdeb71408352b8eb142c6d4531af0f4f
+stress_summary_md_sha256: a48a9528c0408d54dcbb7e4a3ec62bb937d91b9d1d0f780a9b238fe828c224c0
+
+workdir: /tmp/cdel_phase13_consolidate_PRu204
+command_solve_fragmentation: cdel --root /tmp/cdel_phase13_consolidate_PRu204 solve --task arith.add_k.0 --episodes 32 --max-candidates 2 --seed-key phase13-seed (run 3x)
+command_solve_easy: cdel --root /tmp/cdel_phase13_consolidate_PRu204 solve --task pred.lt_k.1 --episodes 32 --max-candidates 2 --seed-key phase13-seed
+command_solve_reuse: cdel --root /tmp/cdel_phase13_consolidate_PRu204 solve --task reuse.compose_add_k.2 --episodes 32 --max-candidates 2 --seed-key phase13-seed
+command_consolidate_arith_add_k_0: cdel --root /tmp/cdel_phase13_consolidate_PRu204 consolidate --concept arith.add_k.0 --outdir /tmp/cdel_phase13_consolidate_PRu204/out/consolidate/arith_add_k_0
+command_consolidate_pred_lt_k_1: cdel --root /tmp/cdel_phase13_consolidate_PRu204 consolidate --concept pred.lt_k.1 --outdir /tmp/cdel_phase13_consolidate_PRu204/out/consolidate/pred_lt_k_1
+command_consolidate_reuse_compose_add_k_2: cdel --root /tmp/cdel_phase13_consolidate_PRu204 consolidate --concept reuse.compose_add_k.2 --outdir /tmp/cdel_phase13_consolidate_PRu204/out/consolidate/reuse_compose_add_k_2
+command_solve_stress: cdel run-solve-stress --out /tmp/cdel_phase13_consolidate_PRu204/out/stress --tasks 100 --max-candidates 2 --episodes 16 --seed-key phase13-seed --budget 1000000 --strategy template_guided --reuse-every 5

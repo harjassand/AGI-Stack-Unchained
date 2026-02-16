@@ -1,0 +1,69 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v3_3/meta_policy_v1",
+  "title": "Meta policy v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "spec_version",
+    "root_swarm_run_id",
+    "icore_id",
+    "meta_epoch_index",
+    "prev_meta_policy_hash",
+    "policy",
+    "policy_hash"
+  ],
+  "properties": {
+    "schema": {"const": "meta_policy_v1"},
+    "spec_version": {"const": "v3_3"},
+    "root_swarm_run_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "icore_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "meta_epoch_index": {"type": "integer", "minimum": 0},
+    "prev_meta_policy_hash": {"type": "string", "pattern": "^(sha256:[0-9a-f]{64}|GENESIS)$"},
+    "policy": {"$ref": "#/$defs/policy"},
+    "policy_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"}
+  },
+  "$defs": {
+    "policy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["bridge", "task"],
+      "properties": {
+        "bridge": {"$ref": "#/$defs/bridge"},
+        "task": {"$ref": "#/$defs/task"}
+      }
+    },
+    "bridge": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["subscriptions_add"],
+      "properties": {
+        "subscriptions_add": {
+          "type": "array",
+          "items": {"type": "string", "pattern": "^[A-Za-z0-9_.:/-]{1,64}$"}
+        }
+      }
+    },
+    "task": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["priority"],
+      "properties": {
+        "priority": {
+          "type": "array",
+          "items": {"$ref": "#/$defs/priority_item"}
+        }
+      }
+    },
+    "priority_item": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["topic", "priority"],
+      "properties": {
+        "topic": {"type": "string", "pattern": "^[A-Za-z0-9_.:/-]{1,64}$"},
+        "priority": {"type": "integer"}
+      }
+    }
+  }
+}

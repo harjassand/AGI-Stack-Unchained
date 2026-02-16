@@ -1,0 +1,184 @@
+{
+  "replicates": {
+    "policy": "all_must_pass",
+    "allow_failures": 0
+  },
+  "C1_non_interference": {
+    "required": true,
+    "audit_full_runs": ["base_bounded", "capacity_exhaustion"]
+  },
+  "C2_append_only": {
+    "required": true,
+    "audit_fast_runs": [
+      "base_bounded",
+      "reuse_bounded",
+      "capacity_exhaustion",
+      "distractor_before",
+      "distractor_interleave10",
+      "proof_heavy",
+      "mixed_reuse"
+    ]
+  },
+  "C3_addressability": {
+    "required": true,
+    "runs": ["distractor_before", "distractor_interleave10"],
+    "max_median_closure_ratio": 0.1,
+    "max_closure_slope": 0.1
+  },
+  "C3_scan_baseline": {
+    "required": false,
+    "indexed_run": "distractor_before",
+    "scan_run": "distractor_before_scan",
+    "min_scan_to_indexed_ratio": 5.0
+  },
+  "C4_capacity": {
+    "required": true,
+    "run": "capacity_exhaustion_v2",
+    "min_capacity_reject_ratio": 0.8
+  },
+  "C5_certificate_knob": {
+    "required": true,
+    "bounded_run": "base_bounded",
+    "proof_run": "proof_heavy",
+    "min_proof_total_nodes": 1,
+    "min_proof_reject_ratio": 0.01
+  },
+  "C6_reuse_control": {
+    "required": true,
+    "baseline_run": "fragmentation_base",
+    "reuse_run": "fragmentation_reuse_v2",
+    "min_reuse_ratio_delta": 0.01
+  },
+  "C7_cache_equivalence": {
+    "required": false,
+    "baseline_run": "base_bounded",
+    "cache_run": "base_bounded_cache_on"
+  },
+  "C8_hygiene": {
+    "required": false,
+    "baseline_run": "fragmentation_base",
+    "reuse_run": "fragmentation_reuse_v2",
+    "min_unused_fraction_delta": 0.0
+  },
+  "suites": {
+    "addressability": {
+      "C1_non_interference": {"required": false},
+      "C2_append_only": {"required": false},
+      "C3_addressability": {
+        "required": true,
+        "runs": ["before_indexed", "interleave_indexed"],
+        "max_median_closure_ratio": 0.1,
+        "max_closure_slope": 0.1
+      },
+      "C3_scan_baseline": {
+        "required": true,
+        "indexed_run": "before_indexed",
+        "scan_run": "before_scan",
+        "min_scan_to_indexed_ratio": 5.0
+      },
+      "C4_capacity": {"required": false},
+      "C5_certificate_knob": {"required": false},
+      "C6_reuse_control": {"required": false},
+      "C7_cache_equivalence": {"required": false}
+    },
+    "capacity": {
+      "C1_non_interference": {
+        "required": true,
+        "audit_full_runs": ["bounded_low_budget"]
+      },
+      "C2_append_only": {
+        "required": true,
+        "audit_fast_runs": ["bounded_low_budget", "proof_low_beta", "proof_high_beta"]
+      },
+      "C3_addressability": {"required": false},
+      "C3_scan_baseline": {"required": false},
+      "C4_capacity": {
+        "required": true,
+        "run": "bounded_low_budget",
+        "min_capacity_reject_ratio": 0.8
+      },
+      "C5_certificate_knob": {"required": false},
+      "C6_reuse_control": {"required": false},
+      "C7_cache_equivalence": {"required": false}
+    },
+    "certificates": {
+      "C1_non_interference": {"required": false},
+      "C2_append_only": {"required": false},
+      "C3_addressability": {"required": false},
+      "C3_scan_baseline": {"required": false},
+      "C4_capacity": {"required": false},
+      "C5_certificate_knob": {
+        "required": false,
+        "bounded_run": "proof_synth_off",
+        "proof_run": "proof_synth_on",
+        "min_proof_total_nodes": 1,
+        "min_proof_reject_ratio": 0.0
+      },
+      "C6_reuse_control": {"required": false},
+      "C7_cache_equivalence": {"required": false},
+      "C8_hygiene": {"required": false}
+    },
+    "quick": {
+      "C1_non_interference": {"required": false},
+      "C2_append_only": {"required": false},
+      "C3_addressability": {
+        "required": true,
+        "runs": ["quick_before_indexed"],
+        "max_median_closure_ratio": 0.1,
+        "max_closure_slope": 0.1
+      },
+      "C3_scan_baseline": {
+        "required": true,
+        "indexed_run": "quick_before_indexed",
+        "scan_run": "quick_before_scan",
+        "min_scan_to_indexed_ratio": 5.0
+      },
+      "C4_capacity": {
+        "required": true,
+        "run": "quick_capacity",
+        "min_capacity_reject_ratio": 0.7
+      },
+      "C5_certificate_knob": {
+        "required": true,
+        "bounded_run": "quick_proof_off",
+        "proof_run": "quick_proof_on",
+        "min_proof_total_nodes": 1,
+        "min_proof_reject_ratio": 0.0
+      },
+      "C6_reuse_control": {"required": false},
+      "C7_cache_equivalence": {"required": false},
+      "C8_hygiene": {"required": false}
+    },
+    "mid": {
+      "C1_non_interference": {"required": false},
+      "C2_append_only": {"required": false},
+      "C3_addressability": {
+        "required": true,
+        "runs": ["mid_before_indexed", "mid_interleave_indexed"],
+        "max_median_closure_ratio": 0.1,
+        "max_closure_slope": 0.1
+      },
+      "C3_scan_baseline": {
+        "required": true,
+        "indexed_run": "mid_before_indexed",
+        "scan_run": "mid_scan_baseline",
+        "min_scan_to_indexed_ratio": 5.0
+      },
+      "C4_capacity": {
+        "required": true,
+        "run": "mid_capacity",
+        "min_capacity_reject_ratio": 0.7
+      },
+      "C5_certificate_knob": {
+        "required": true,
+        "bounded_run": "mid_proof_off",
+        "proof_run": "mid_proof_on",
+        "min_proof_total_nodes": 1,
+        "min_proof_reject_ratio": 0.0
+      },
+      "C6_reuse_control": {"required": false},
+      "C7_cache_equivalence": {"required": false},
+      "C8_hygiene": {"required": false}
+    }
+  }
+}

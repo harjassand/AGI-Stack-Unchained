@@ -1,0 +1,7 @@
+Commands:
+CDEL_ROOT=cdel python3 genesis/run_end_to_end_v1_3.py --causal-config genesis/configs/causal_v1_3.json
+
+Outcome:
+- Two consecutive runs produced identical genesis_run_v1_3.jsonl hashes.
+- At least one CAUSAL_MODEL promotion PASS with receipt verification succeeded.
+- FAIL responses returned no receipt (binary-only boundary preserved).

@@ -1,0 +1,91 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v1_5r/rsi_portfolio_receipt_v1",
+  "title": "RSI portfolio receipt v1",
+  "type": "object",
+  "additionalProperties": false,
+  "patternProperties": {
+    "^x-": {}
+  },
+  "required": [
+    "schema",
+    "schema_version",
+    "epoch_id",
+    "META_HASH",
+    "KERNEL_HASH",
+    "constants_hash",
+    "toolchain_root",
+    "rsi_integrity_receipt_hash",
+    "insertions_used",
+    "family_semantics_report_hashes",
+    "translation_cert_hashes",
+    "checks",
+    "evidence"
+  ],
+  "properties": {
+    "schema": {"const": "rsi_portfolio_receipt_v1"},
+    "schema_version": {"type": "integer", "const": 1},
+    "epoch_id": {"type": "string"},
+    "META_HASH": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+    "KERNEL_HASH": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+    "constants_hash": {"type": "string", "pattern": "^sha256:[a-f0-9]{64}$"},
+    "toolchain_root": {"type": "string", "pattern": "^sha256:[a-f0-9]{64}$"},
+    "rsi_integrity_receipt_hash": {"type": "string", "pattern": "^sha256:[a-f0-9]{64}$"},
+    "insertions_used": {
+      "type": "array",
+      "items": {"type": "string", "pattern": "^sha256:[a-f0-9]{64}$"}
+    },
+    "family_semantics_report_hashes": {
+      "type": "array",
+      "items": {"type": "string", "pattern": "^sha256:[a-f0-9]{64}$"}
+    },
+    "translation_cert_hashes": {
+      "type": "array",
+      "items": {"type": "string", "pattern": "^sha256:[a-f0-9]{64}$"}
+    },
+    "checks": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "portfolio_envs_present",
+        "insertions_semantic_novelty",
+        "insertions_key_sensitive",
+        "meta_patch_promoted_translation_valid",
+        "barrier_accel_env_steps",
+        "barrier_accel_bytes_hashed"
+      ],
+      "properties": {
+        "portfolio_envs_present": {"$ref": "#/$defs/check"},
+        "insertions_semantic_novelty": {"$ref": "#/$defs/check"},
+        "insertions_key_sensitive": {"$ref": "#/$defs/check"},
+        "meta_patch_promoted_translation_valid": {"$ref": "#/$defs/check"},
+        "barrier_accel_env_steps": {"$ref": "#/$defs/check"},
+        "barrier_accel_bytes_hashed": {"$ref": "#/$defs/check"}
+      }
+    },
+    "evidence": {"$ref": "#/$defs/evidence"}
+  },
+  "$defs": {
+    "check": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["ok", "reason_codes"],
+      "properties": {
+        "ok": {"type": "boolean"},
+        "reason_codes": {"type": "array", "items": {"type": "string"}}
+      }
+    },
+    "evidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["rsi_portfolio_window_report_hash", "barrier_ledger_entry_hashes"],
+      "properties": {
+        "rsi_portfolio_window_report_hash": {"type": "string", "pattern": "^sha256:[a-f0-9]{64}$"},
+        "barrier_ledger_entry_hashes": {
+          "type": "array",
+          "items": {"type": "string", "pattern": "^sha256:[a-f0-9]{64}$"}
+        }
+      }
+    }
+  }
+}

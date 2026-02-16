@@ -1,0 +1,6 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v3_2/swarm_ledger_v4",
+  "title": "Swarm ledger v4 (JSONL line)",
+  "$ref": "swarm_event_v4.jsonschema"
+}

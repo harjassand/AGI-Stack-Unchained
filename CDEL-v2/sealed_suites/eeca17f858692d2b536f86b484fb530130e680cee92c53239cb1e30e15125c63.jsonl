@@ -1,0 +1,5 @@
+{"task_id":"fm_easy_1","task_family":"formal_math_v1","prompt":"Prove that True is true.","lean_prelude":"import Std","goal":"theorem fm_easy_1 : True","solution_format":"lean_proof_only","max_steps":4}
+{"task_id":"fm_easy_2","task_family":"formal_math_v1","prompt":"Reflexivity on Nat.","lean_prelude":"import Std","goal":"theorem fm_easy_2 (a : Nat) : a = a","solution_format":"lean_proof_only","max_steps":4}
+{"task_id":"fm_easy_3","task_family":"formal_math_v1","prompt":"Zero is right identity for addition.","lean_prelude":"import Std","goal":"theorem fm_easy_3 (a : Nat) : a + 0 = a","solution_format":"lean_proof_only","max_steps":4}
+{"task_id":"fm_easy_4","task_family":"formal_math_v1","prompt":"If p is true then p.","lean_prelude":"import Std","goal":"theorem fm_easy_4 (p : Prop) (h : p) : p","solution_format":"lean_proof_only","max_steps":4}
+{"task_id":"fm_easy_5","task_family":"formal_math_v1","prompt":"Implication identity.","lean_prelude":"import Std","goal":"theorem fm_easy_5 (p : Prop) : p -> p","solution_format":"lean_proof_only","max_steps":4}

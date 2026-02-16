@@ -1,0 +1,38 @@
+{
+  "WORLD_MODEL": {
+    "wm_accuracy": {
+      "value": "0.5",
+      "min_margin": "0.05"
+    },
+    "wm_mse": {
+      "value": "0.25",
+      "min_margin": "0.05"
+    }
+  },
+  "POLICY": {
+    "policy_return": {
+      "value": "0.5",
+      "min_margin": "0.1"
+    },
+    "policy_cost": {
+      "value": "1.0",
+      "min_margin": "0.1"
+    }
+  },
+  "SYSTEM": {
+    "policy_return": {
+      "value": "0.5",
+      "min_margin": "0.1"
+    },
+    "policy_cost": {
+      "value": "1.0",
+      "min_margin": "0.1"
+    }
+  },
+  "CAUSAL_MODEL": {
+    "ate_abs_error": {
+      "value": "0.6",
+      "min_margin": "0.05"
+    }
+  }
+}

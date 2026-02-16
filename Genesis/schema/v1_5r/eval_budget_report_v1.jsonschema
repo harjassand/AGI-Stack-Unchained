@@ -1,0 +1,95 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v1_5r/eval_budget_report_v1.jsonschema",
+  "title": "Eval budget report v1",
+  "type": "object",
+  "additionalProperties": false,
+  "patternProperties": {
+    "^x-": {}
+  },
+  "required": [
+    "schema",
+    "schema_version",
+    "epoch_id",
+    "anchor_pack_hash",
+    "pressure_pack_hash",
+    "counts",
+    "budgets",
+    "realized",
+    "evidence"
+  ],
+  "properties": {
+    "schema": {
+      "const": "eval_budget_report_v1"
+    },
+    "schema_version": {
+      "type": "integer",
+      "const": 1
+    },
+    "epoch_id": {
+      "type": "string"
+    },
+    "anchor_pack_hash": {
+      "type": "string",
+      "pattern": "^sha256:[a-f0-9]{64}$"
+    },
+    "pressure_pack_hash": {
+      "type": "string",
+      "pattern": "^sha256:[a-f0-9]{64}$"
+    },
+    "counts": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "n_anchor_instances",
+        "n_pressure_instances",
+        "n_gate_instances"
+      ],
+      "properties": {
+        "n_anchor_instances": {"type": "integer", "minimum": 0},
+        "n_pressure_instances": {"type": "integer", "minimum": 0},
+        "n_gate_instances": {"type": "integer", "minimum": 0}
+      }
+    },
+    "budgets": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "budget_env_steps_anchor",
+        "budget_env_steps_pressure",
+        "budget_env_steps_gate",
+        "budget_env_steps_total"
+      ],
+      "properties": {
+        "budget_env_steps_anchor": {"type": "integer", "minimum": 0},
+        "budget_env_steps_pressure": {"type": "integer", "minimum": 0},
+        "budget_env_steps_gate": {"type": "integer", "minimum": 0},
+        "budget_env_steps_total": {"type": "integer", "minimum": 0}
+      }
+    },
+    "realized": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["env_steps_total"],
+      "properties": {
+        "env_steps_total": {"type": "integer", "minimum": 0}
+      }
+    },
+    "evidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "work_meter_hash",
+        "worstcase_report_hash",
+        "selection_hash",
+        "state_ledger_head_hash"
+      ],
+      "properties": {
+        "work_meter_hash": {"type": "string", "pattern": "^sha256:[a-f0-9]{64}$"},
+        "worstcase_report_hash": {"type": "string", "pattern": "^sha256:[a-f0-9]{64}$"},
+        "selection_hash": {"type": "string", "pattern": "^sha256:[a-f0-9]{64}$"},
+        "state_ledger_head_hash": {"type": "string", "pattern": "^sha256:[a-f0-9]{64}$"}
+      }
+    }
+  }
+}

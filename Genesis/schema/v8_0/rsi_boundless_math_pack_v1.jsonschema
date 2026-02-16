@@ -1,0 +1,60 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v8_0/rsi_boundless_math_pack_v1",
+  "title": "RSI boundless math pack v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "icore_id",
+    "meta_hash",
+    "superego_policy_hash",
+    "toolchain_manifest_hash",
+    "problem_set_id",
+    "problems_dir",
+    "selection_policy",
+    "limits",
+    "acceptance"
+  ],
+  "properties": {
+    "schema_version": {"const": "rsi_boundless_math_pack_v1"},
+    "icore_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "meta_hash": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "superego_policy_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "toolchain_manifest_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "problem_set_id": {"type": "string"},
+    "problems_dir": {"type": "string", "pattern": "^/"},
+    "selection_policy": {"type": "string"},
+    "limits": {"$ref": "#/$defs/limits"},
+    "acceptance": {"$ref": "#/$defs/acceptance"}
+  },
+  "$defs": {
+    "limits": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "attempts_per_tick_max",
+        "proof_check_per_tick_max",
+        "daily_attempt_budget",
+        "per_attempt_time_limit_ms",
+        "per_attempt_memory_limit_mb"
+      ],
+      "properties": {
+        "attempts_per_tick_max": {"type": "integer", "minimum": 1},
+        "proof_check_per_tick_max": {"type": "integer", "minimum": 1},
+        "daily_attempt_budget": {"type": "integer", "minimum": 1},
+        "per_attempt_time_limit_ms": {"type": "integer", "minimum": 1},
+        "per_attempt_memory_limit_mb": {"type": "integer", "minimum": 1}
+      }
+    },
+    "acceptance": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["accept_only_on_pass", "require_sealed_receipt"],
+      "properties": {
+        "accept_only_on_pass": {"type": "boolean"},
+        "require_sealed_receipt": {"type": "boolean"}
+      }
+    }
+  }
+}

@@ -1,0 +1,79 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v18_0/vision_qxrl_dataset_config_v1",
+  "title": "vision_qxrl_dataset_config_v1",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "schema_id": {"const": "vision_qxrl_dataset_config_v1"},
+    "dc1_id": {"const": "dc1:q32_v1"},
+    "opset_id": {"type": "string", "pattern": "^opset:eudrs_u_v1:sha256:[0-9a-f]{64}$"},
+    "item_listing_ref": {"$ref": "https://genesis.engine/specs/v18_0/eudrs_u_artifact_ref_v1"},
+    "pair_policy": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "pair_kind": {"type": "string", "enum": ["TRACK_NEXT_V1", "TRACK_DELTA_V1", "SELF_AUGMENT_V1"]},
+        "delta_frames_u32": {"type": "integer", "minimum": 1, "maximum": 4294967295},
+        "tie_rule_id": {"const": "session_track_frame_asc_v1"}
+      },
+      "required": ["pair_kind", "tie_rule_id"],
+      "allOf": [
+        {
+          "if": {"properties": {"pair_kind": {"const": "TRACK_DELTA_V1"}}, "required": ["pair_kind"]},
+          "then": {"required": ["delta_frames_u32"]}
+        }
+      ]
+    },
+    "token_policy": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "tokenizer_kind": {"const": "BYTE_TOK_257_V1"},
+        "seq_len_u32": {"type": "integer", "minimum": 1, "maximum": 4294967295},
+        "crop_from_descriptor_b": {"const": true},
+        "crop_width_u32": {"type": "integer", "minimum": 1, "maximum": 4294967295},
+        "crop_height_u32": {"type": "integer", "minimum": 1, "maximum": 4294967295},
+        "header_kind": {"type": "string", "enum": ["NONE_V1", "BBOX16LE_V1", "BBOX16LE+IDS_V1"]},
+        "padding_byte_u8": {"type": "integer", "minimum": 0, "maximum": 255}
+      },
+      "required": [
+        "tokenizer_kind",
+        "seq_len_u32",
+        "crop_from_descriptor_b",
+        "crop_width_u32",
+        "crop_height_u32",
+        "header_kind",
+        "padding_byte_u8"
+      ]
+    },
+    "segment_policy": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "records_per_segment_u32": {"type": "integer", "minimum": 1, "maximum": 4294967295},
+        "max_segments_u32": {"type": "integer", "minimum": 1, "maximum": 4294967295}
+      },
+      "required": ["records_per_segment_u32", "max_segments_u32"]
+    },
+    "caps": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "max_items_u64": {"type": "integer", "minimum": 0},
+        "max_total_bytes_u64": {"type": "integer", "minimum": 0}
+      },
+      "required": ["max_items_u64", "max_total_bytes_u64"]
+    }
+  },
+  "required": [
+    "schema_id",
+    "dc1_id",
+    "opset_id",
+    "item_listing_ref",
+    "pair_policy",
+    "token_policy",
+    "segment_policy",
+    "caps"
+  ]
+}

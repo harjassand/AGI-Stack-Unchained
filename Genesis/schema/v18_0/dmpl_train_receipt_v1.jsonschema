@@ -1,0 +1,65 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v18_0/dmpl_train_receipt_v1",
+  "title": "DMPL Train Receipt v1",
+  "type": "object",
+  "additionalProperties": false,
+  "$defs": {
+    "sha256_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "status_obj": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "ok_b": {"type": "boolean"},
+        "reason_code": {"type": "string"}
+      },
+      "required": ["ok_b", "reason_code"],
+      "allOf": [
+        {
+          "if": {"properties": {"ok_b": {"const": true}}},
+          "then": {"properties": {"reason_code": {"const": "DMPL_OK"}}}
+        },
+        {
+          "if": {"properties": {"ok_b": {"const": false}}},
+          "then": {"properties": {"reason_code": {"pattern": "^DMPL_E_[A-Z0-9_]+$"}}}
+        }
+      ]
+    }
+  },
+  "properties": {
+    "schema_id": {"const": "dmpl_train_receipt_v1"},
+    "dc1_id": {"type": "string", "const": "dc1:q32_v1"},
+    "opset_id": {"type": "string", "pattern": "^opset:eudrs_u_v1:sha256:[0-9a-f]{64}$"},
+
+    "train_run_id": {"$ref": "#/$defs/sha256_id"},
+    "train_trace_id": {"$ref": "#/$defs/sha256_id"},
+
+    "baseline_droot_id": {"$ref": "#/$defs/sha256_id"},
+    "candidate_droot_id": {"$ref": "#/$defs/sha256_id"},
+    "candidate_config_id": {"$ref": "#/$defs/sha256_id"},
+
+    "candidate_fparams_bundle_id": {"$ref": "#/$defs/sha256_id"},
+    "candidate_vparams_bundle_id": {"$ref": "#/$defs/sha256_id"},
+
+    "candidate_froot": {"$ref": "#/$defs/sha256_id"},
+    "candidate_vroot": {"$ref": "#/$defs/sha256_id"},
+
+    "status": {"$ref": "#/$defs/status_obj"}
+  },
+  "required": [
+    "schema_id",
+    "dc1_id",
+    "opset_id",
+    "train_run_id",
+    "train_trace_id",
+    "baseline_droot_id",
+    "candidate_droot_id",
+    "candidate_config_id",
+    "candidate_fparams_bundle_id",
+    "candidate_vparams_bundle_id",
+    "candidate_froot",
+    "candidate_vroot",
+    "status"
+  ]
+}
+

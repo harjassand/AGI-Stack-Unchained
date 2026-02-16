@@ -1,0 +1,47 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v19_0/axis_specific_proof_pclp_v1",
+  "title": "axis_specific_proof_pclp_v1",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "schema_name": {"const": "axis_specific_proof_pclp_v1"},
+    "schema_version": {"const": "v19_0"},
+    "proof_system_id": {"type": "string"},
+    "vpvm_id": {"type": "string"},
+    "pinned_vpvm_config_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "pinned_poseidon_params_artifact_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "verifier_fingerprint": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "regression": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "test_cases": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "case_id": {"type": "string"},
+              "expected_public_inputs_hash32_hex": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+              "expected_proof_artifact_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"}
+            },
+            "required": ["case_id", "expected_public_inputs_hash32_hex", "expected_proof_artifact_id"]
+          }
+        }
+      },
+      "required": ["test_cases"]
+    }
+  },
+  "required": [
+    "schema_name",
+    "schema_version",
+    "proof_system_id",
+    "vpvm_id",
+    "pinned_vpvm_config_id",
+    "pinned_poseidon_params_artifact_id",
+    "verifier_fingerprint",
+    "regression"
+  ]
+}
+

@@ -1,0 +1,41 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v1_6r/ontology_def_v2",
+  "title": "Ontology definition v2",
+  "type": "object",
+  "additionalProperties": false,
+  "patternProperties": {
+    "^x-": {}
+  },
+  "required": [
+    "schema",
+    "schema_version",
+    "dsl_version",
+    "ontology_id",
+    "concepts",
+    "stateful",
+    "x-meta"
+  ],
+  "properties": {
+    "schema": {"const": "ontology_def_v2"},
+    "schema_version": {"type": "integer", "const": 2},
+    "dsl_version": {"type": "integer", "const": 2},
+    "ontology_id": {"type": "string", "pattern": "^sha256:[a-f0-9]{64}$"},
+    "concepts": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["concept_name", "concept_id", "output_type", "expr"],
+        "properties": {
+          "concept_name": {"type": "string"},
+          "concept_id": {"type": "string", "pattern": "^sha256:[a-f0-9]{64}$"},
+          "output_type": {"enum": ["bool", "i32"]},
+          "expr": {"type": "object"}
+        }
+      }
+    },
+    "stateful": {"type": "boolean"},
+    "x-meta": {"type": "object"}
+  }
+}

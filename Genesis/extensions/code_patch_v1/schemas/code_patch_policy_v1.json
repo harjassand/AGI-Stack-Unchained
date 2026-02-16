@@ -1,0 +1,35 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Code Patch Policy v1",
+  "type": "object",
+  "required": [
+    "allowed_path_globs",
+    "forbidden_path_globs",
+    "max_files_changed",
+    "max_lines_changed",
+    "max_patch_bytes",
+    "allowed_eval_plan_ids"
+  ],
+  "properties": {
+    "allowed_path_globs": {
+      "type": "array",
+      "items": {"type": "string"},
+      "description": "Sorted list of allowed path globs."
+    },
+    "forbidden_path_globs": {
+      "type": "array",
+      "items": {"type": "string"},
+      "description": "Sorted list of forbidden path globs."
+    },
+    "max_files_changed": {"type": "integer", "minimum": 1},
+    "max_lines_changed": {"type": "integer", "minimum": 1},
+    "max_patch_bytes": {"type": "integer", "minimum": 1},
+    "allowed_eval_plan_ids": {
+      "type": "array",
+      "items": {"type": "string"},
+      "description": "Sorted list of allowed eval plan identifiers."
+    },
+    "forbid_binary": {"type": "boolean"}
+  },
+  "additionalProperties": false
+}

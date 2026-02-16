@@ -1,0 +1,82 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v18_0/omega_skill_report_v1",
+  "title": "Omega skill report v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "skill_id",
+    "tick_u64",
+    "inputs_hash",
+    "metrics",
+    "flags",
+    "recommendations"
+  ],
+  "properties": {
+    "schema_version": {"const": "omega_skill_report_v1"},
+    "skill_id": {
+      "type": "string",
+      "enum": [
+        "TRANSFER_V1_6R",
+        "ONTOLOGY_V2_V1_6R",
+        "CANON_AUDIT_V1_7R",
+        "ALIGNMENT_V7",
+        "DEMON_METABOLISM_V1_8R",
+        "AUTONOMY_V1_9R",
+        "EFF_FLYWHEEL_V2_0",
+        "REC_ONT_V2_1",
+        "SWARM_V3",
+        "THERMO_V5",
+        "PERSIST_V6",
+        "BOUNDLESS_MATH_V8",
+        "BOUNDLESS_SCI_V9",
+        "MODEL_GENESIS_V10",
+        "ARCH_SYNTH_V11"
+      ]
+    },
+    "tick_u64": {"type": "integer", "minimum": 0},
+    "inputs_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "metrics": {
+      "type": "object",
+      "additionalProperties": {
+        "anyOf": [
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["q"],
+            "properties": {
+              "q": {"type": "integer"}
+            }
+          },
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["num_u64", "den_u64"],
+            "properties": {
+              "num_u64": {"type": "integer", "minimum": 0},
+              "den_u64": {"type": "integer", "minimum": 1}
+            }
+          },
+          {"type": "integer", "minimum": 0}
+        ]
+      }
+    },
+    "flags": {
+      "type": "array",
+      "items": {"type": "string"}
+    },
+    "recommendations": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["kind", "detail"],
+        "properties": {
+          "kind": {"type": "string"},
+          "detail": {"type": "string"}
+        }
+      }
+    }
+  }
+}

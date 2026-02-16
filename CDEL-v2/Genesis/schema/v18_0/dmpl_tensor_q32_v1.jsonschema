@@ -1,0 +1,17 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v18_0/dmpl_tensor_q32_v1",
+  "title": "DMPL Tensor (Q32) v1",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "schema_id": {"const": "dmpl_tensor_q32_v1"},
+    "dc1_id": {"type": "string", "const": "dc1:q32_v1"},
+    "opset_id": {"type": "string", "pattern": "^opset:eudrs_u_v1:sha256:[0-9a-f]{64}$"},
+
+    "shape_u32": {"type": "array", "items": {"type": "integer", "minimum": 0, "maximum": 4294967295}},
+    "tensor_bin_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"}
+  },
+  "required": ["schema_id", "dc1_id", "opset_id", "shape_u32", "tensor_bin_id"]
+}
+

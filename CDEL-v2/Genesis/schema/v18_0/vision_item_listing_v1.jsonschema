@@ -1,0 +1,24 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v18_0/vision_item_listing_v1",
+  "title": "vision_item_listing_v1",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "schema_id": {"const": "vision_item_listing_v1"},
+    "embedding_config_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "items": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "item_ref": {"$ref": "https://genesis.engine/specs/v18_0/eudrs_u_artifact_ref_v1"}
+        },
+        "required": ["item_ref"]
+      }
+    }
+  },
+  "required": ["schema_id", "embedding_config_id", "items"]
+}
+

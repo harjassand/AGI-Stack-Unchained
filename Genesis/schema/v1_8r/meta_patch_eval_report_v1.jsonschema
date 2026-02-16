@@ -1,0 +1,105 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v1_8r/meta_patch_eval_report_v1",
+  "title": "Meta patch eval report v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "schema_version",
+    "epoch_id",
+    "patch_id",
+    "patch_def_hash",
+    "translation_inputs_hash",
+    "translation_results",
+    "workvec_base",
+    "workvec_patch",
+    "decision",
+    "x-meta"
+  ],
+  "properties": {
+    "schema": {"const": "meta_patch_eval_report_v1"},
+    "schema_version": {"type": "integer", "const": 1},
+    "epoch_id": {"type": "string"},
+    "patch_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "patch_def_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "translation_inputs_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "translation_results": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["case_id", "base_output_hash", "patch_output_hash", "equal"],
+        "properties": {
+          "case_id": {"type": "string"},
+          "base_output_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+          "patch_output_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+          "equal": {"type": "boolean"}
+        }
+      }
+    },
+    "workvec_base": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema",
+        "schema_version",
+        "sha256_calls_total",
+        "canon_calls_total",
+        "sha256_bytes_total",
+        "canon_bytes_total",
+        "onto_ctx_hash_compute_calls_total"
+      ],
+      "properties": {
+        "schema": {"const": "workvec_v1"},
+        "schema_version": {"type": "integer", "const": 1},
+        "sha256_calls_total": {"type": "integer", "minimum": 0},
+        "canon_calls_total": {"type": "integer", "minimum": 0},
+        "sha256_bytes_total": {"type": "integer", "minimum": 0},
+        "canon_bytes_total": {"type": "integer", "minimum": 0},
+        "onto_ctx_hash_compute_calls_total": {"type": "integer", "minimum": 0}
+      }
+    },
+    "workvec_patch": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema",
+        "schema_version",
+        "sha256_calls_total",
+        "canon_calls_total",
+        "sha256_bytes_total",
+        "canon_bytes_total",
+        "onto_ctx_hash_compute_calls_total"
+      ],
+      "properties": {
+        "schema": {"const": "workvec_v1"},
+        "schema_version": {"type": "integer", "const": 1},
+        "sha256_calls_total": {"type": "integer", "minimum": 0},
+        "canon_calls_total": {"type": "integer", "minimum": 0},
+        "sha256_bytes_total": {"type": "integer", "minimum": 0},
+        "canon_bytes_total": {"type": "integer", "minimum": 0},
+        "onto_ctx_hash_compute_calls_total": {"type": "integer", "minimum": 0}
+      }
+    },
+    "decision": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["passes", "reason"],
+      "properties": {
+        "passes": {"type": "boolean"},
+        "reason": {"type": "string"}
+      }
+    },
+    "x-meta": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["KERNEL_HASH", "META_HASH", "constants_hash"],
+      "properties": {
+        "KERNEL_HASH": {"type": "string"},
+        "META_HASH": {"type": "string"},
+        "constants_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"}
+      }
+    }
+  }
+}

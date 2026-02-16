@@ -1,0 +1,46 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v18_0/omega_activation_receipt_v1",
+  "title": "Omega activation receipt v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "receipt_id",
+    "tick_u64",
+    "before_active_manifest_hash",
+    "after_active_manifest_hash",
+    "healthcheck_suite_hash",
+    "healthcheck_result",
+    "activation_method",
+    "activation_success",
+    "pass",
+    "reasons"
+  ],
+  "properties": {
+    "schema_version": {"const": "omega_activation_receipt_v1"},
+    "receipt_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "tick_u64": {"type": "integer", "minimum": 0},
+    "before_active_manifest_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "after_active_manifest_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "healthcheck_suite_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "healthcheck_result": {"type": "string", "enum": ["PASS", "FAIL"]},
+    "activation_method": {"const": "ATOMIC_POINTER_SWAP"},
+    "activation_success": {"type": "boolean"},
+    "pass": {"type": "boolean"},
+    "reasons": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "enum": [
+          "HEALTHCHECK_PASS",
+          "HEALTHCHECK_FAIL",
+          "POINTER_SWAP_FAILED",
+          "META_CORE_DENIED",
+          "BINDING_MISSING_OR_MISMATCH",
+          "ROLLBACK_REQUIRED"
+        ]
+      }
+    }
+  }
+}

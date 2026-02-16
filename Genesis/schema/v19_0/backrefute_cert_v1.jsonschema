@@ -1,0 +1,79 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v19_0/backrefute_cert_v1",
+  "title": "Backward refutation cert v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_name",
+    "schema_version",
+    "cert_id",
+    "old_regime_ref",
+    "target_old_artifact_ref",
+    "refutation_witness_ref",
+    "old_semantics_checker_ref",
+    "budget",
+    "result",
+    "reason_code"
+  ],
+  "$defs": {
+    "sha256": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "artifact_ref_v1": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["artifact_id", "artifact_relpath"],
+      "properties": {
+        "artifact_id": {"$ref": "#/$defs/sha256"},
+        "artifact_relpath": {"type": "string", "minLength": 1}
+      }
+    },
+    "regime_ref_v1": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["C", "K", "E", "W", "T"],
+      "properties": {
+        "C": {"$ref": "#/$defs/artifact_ref_v1"},
+        "K": {"$ref": "#/$defs/artifact_ref_v1"},
+        "E": {"$ref": "#/$defs/artifact_ref_v1"},
+        "W": {"$ref": "#/$defs/artifact_ref_v1"},
+        "T": {"$ref": "#/$defs/artifact_ref_v1"}
+      }
+    },
+    "budget_spec_v1": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema_name",
+        "schema_version",
+        "max_steps",
+        "max_bytes_read",
+        "max_bytes_write",
+        "max_items",
+        "seed",
+        "policy"
+      ],
+      "properties": {
+        "schema_name": {"const": "budget_spec_v1"},
+        "schema_version": {"const": "v19_0"},
+        "max_steps": {"type": "integer", "minimum": 1},
+        "max_bytes_read": {"type": "integer", "minimum": 0},
+        "max_bytes_write": {"type": "integer", "minimum": 0},
+        "max_items": {"type": "integer", "minimum": 1},
+        "seed": {"type": "integer", "minimum": 0},
+        "policy": {"type": "string", "enum": ["HARD_FAIL", "SAFE_HALT", "SAFE_SPLIT"]}
+      }
+    }
+  },
+  "properties": {
+    "schema_name": {"const": "backrefute_cert_v1"},
+    "schema_version": {"const": "v19_0"},
+    "cert_id": {"$ref": "#/$defs/sha256"},
+    "old_regime_ref": {"$ref": "#/$defs/regime_ref_v1"},
+    "target_old_artifact_ref": {"$ref": "#/$defs/artifact_ref_v1"},
+    "refutation_witness_ref": {"$ref": "#/$defs/artifact_ref_v1"},
+    "old_semantics_checker_ref": {"$ref": "#/$defs/artifact_ref_v1"},
+    "budget": {"$ref": "#/$defs/budget_spec_v1"},
+    "result": {"type": "string", "enum": ["VALID", "INVALID", "BUDGET_EXHAUSTED"]},
+    "reason_code": {"type": "string", "minLength": 1}
+  }
+}

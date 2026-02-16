@@ -1,0 +1,94 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v18_0/dmpl_cac_pack_v1",
+  "title": "DMPL CAC Pack v1",
+  "type": "object",
+  "additionalProperties": false,
+  "$defs": {
+    "sha256_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "q32_i64": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {"q": {"type": "integer", "minimum": -9223372036854775808, "maximum": 9223372036854775807}},
+      "required": ["q"]
+    },
+    "status_obj": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "ok_b": {"type": "boolean"},
+        "reason_code": {"type": "string"}
+      },
+      "required": ["ok_b", "reason_code"],
+      "allOf": [
+        {
+          "if": {"properties": {"ok_b": {"const": true}}},
+          "then": {"properties": {"reason_code": {"const": "DMPL_OK"}}}
+        },
+        {
+          "if": {"properties": {"ok_b": {"const": false}}},
+          "then": {"properties": {"reason_code": {"pattern": "^DMPL_E_[A-Z0-9_]+$"}}}
+        }
+      ]
+    },
+    "plan_evidence_ids": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "plan_query_id": {"$ref": "#/$defs/sha256_id"},
+        "rollout_trace_id": {"$ref": "#/$defs/sha256_id"},
+        "action_receipt_id": {"$ref": "#/$defs/sha256_id"}
+      },
+      "required": ["plan_query_id", "rollout_trace_id", "action_receipt_id"]
+    }
+  },
+  "properties": {
+    "schema_id": {"const": "dmpl_cac_pack_v1"},
+    "dc1_id": {"type": "string", "const": "dc1:q32_v1"},
+    "opset_id": {"type": "string", "pattern": "^opset:eudrs_u_v1:sha256:[0-9a-f]{64}$"},
+
+    "baseline_droot_id": {"$ref": "#/$defs/sha256_id"},
+    "candidate_droot_id": {"$ref": "#/$defs/sha256_id"},
+    "eval_suite_id": {"$ref": "#/$defs/sha256_id"},
+
+    "per_scenario": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "scenario_id": {"type": "string", "minLength": 1},
+          "J_base_q32": {"$ref": "#/$defs/q32_i64"},
+          "J_cand_q32": {"$ref": "#/$defs/q32_i64"},
+          "delta_q32": {"$ref": "#/$defs/q32_i64"},
+          "baseline_plan_evidence": {"$ref": "#/$defs/plan_evidence_ids"},
+          "candidate_plan_evidence": {"$ref": "#/$defs/plan_evidence_ids"}
+        },
+        "required": [
+          "scenario_id",
+          "J_base_q32",
+          "J_cand_q32",
+          "delta_q32",
+          "baseline_plan_evidence",
+          "candidate_plan_evidence"
+        ]
+      }
+    },
+
+    "cac_lb_q32": {"$ref": "#/$defs/q32_i64"},
+    "status": {"$ref": "#/$defs/status_obj"}
+  },
+  "required": [
+    "schema_id",
+    "dc1_id",
+    "opset_id",
+    "baseline_droot_id",
+    "candidate_droot_id",
+    "eval_suite_id",
+    "per_scenario",
+    "cac_lb_q32",
+    "status"
+  ]
+}
+

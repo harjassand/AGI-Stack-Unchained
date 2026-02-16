@@ -1,0 +1,65 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v1_5r/rsi_integrity_window_report_v1",
+  "title": "RSI integrity window report v1",
+  "type": "object",
+  "additionalProperties": false,
+  "patternProperties": {
+    "^x-": {}
+  },
+  "required": [
+    "schema",
+    "schema_version",
+    "epoch_id",
+    "base_rsi_ignition",
+    "insertions_used",
+    "checks",
+    "integrity_ignition",
+    "reason_codes"
+  ],
+  "properties": {
+    "schema": {"const": "rsi_integrity_window_report_v1"},
+    "schema_version": {"type": "integer", "const": 1},
+    "epoch_id": {"type": "string"},
+    "base_rsi_ignition": {"type": "boolean"},
+    "insertions_used": {
+      "type": "array",
+      "items": {"type": "string", "pattern": "^sha256:[a-f0-9]{64}$"}
+    },
+    "checks": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "budget_stable",
+        "nontrivial_recovery",
+        "barrier_accel_bytes_hashed",
+        "rho_provenance_mined"
+      ],
+      "properties": {
+        "budget_stable": {"$ref": "#/$defs/check"},
+        "nontrivial_recovery": {"$ref": "#/$defs/check"},
+        "barrier_accel_bytes_hashed": {"$ref": "#/$defs/check"},
+        "rho_provenance_mined": {"$ref": "#/$defs/check"}
+      }
+    },
+    "integrity_ignition": {"type": "boolean"},
+    "reason_codes": {
+      "type": "array",
+      "items": {"type": "string"}
+    }
+  },
+  "$defs": {
+    "check": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["ok", "reason_codes"],
+      "properties": {
+        "ok": {"type": "boolean"},
+        "reason_codes": {
+          "type": "array",
+          "items": {"type": "string"}
+        }
+      }
+    }
+  }
+}

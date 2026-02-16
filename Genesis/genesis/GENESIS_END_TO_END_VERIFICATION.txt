@@ -1,0 +1,17 @@
+Genesis end-to-end verification (binary-only CDEL)
+
+Commands:
+  export CDEL_ROOT=<path-to-cdel>
+  export SPECPACK_DIR=<path-to-specpack>
+  ./genesis/run_end_to_end.sh
+
+Outputs:
+  genesis_run.jsonl
+  genesis_summary.json
+  genesis/receipts/
+
+Expected outcomes:
+  - FAIL never includes a receipt
+  - PASS receipts verify locally
+  - Second promotion attempt fails when compute budget is exhausted
+  - Summary example: shadow_pass=2, promoted_pass=1, promoted_fail=1

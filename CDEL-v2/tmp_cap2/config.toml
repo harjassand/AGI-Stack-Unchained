@@ -1,0 +1,15 @@
+[ledger]
+budget = 1000000
+
+[evaluator]
+step_limit = 100000
+
+[spec]
+int_min = -3
+int_max = 3
+list_max_len = 4
+
+[cost]
+alpha = 1
+beta = 1
+gamma = 1

@@ -1,0 +1,10 @@
+commit: 9282820f63e56de884bd9c1c9d27a9f0a92a5eee
+config_hash: 71875e4dc1e0059bc37dbfeb886c389362e424afd6750e6beb0d0fb06e6dd74a
+eval_harness_hash: harness-hash
+eval_suite_hash: suite-hash
+evidence_results.json_sha256: e90bc8d569fde2982d906e09ff95b7dde2c5a8ce437ff2a095029a0583af498f
+evidence_summary.md_sha256: 7e5e16a415d465c51fe8b0e33a1b04ef51d76568ddd93024d8e3f7c31fb6d0d4
+scaling_results.json_sha256: af2ceaa23f6430f079c12e26e2b4484356b3efabc33ede5304b63b42b9abdfc1
+scaling_summary.md_sha256: e09eabebf8aa81f780344e61675ddd5cf06a0a0cbcc5e24bf16a31fa8b91544a
+command_evidence_suite: cdel run-evidence-suite --out /tmp/cdel_trackA_evidence_9282820 --tasks-per-family 10 --episodes 64 --eval-episodes 64 --budget 1000000
+command_scaling_experiment: cdel run-scaling-experiment --out /tmp/cdel_trackA_scaling_9282820 --modules 1000 --step 200 --budget 1000000

@@ -1,0 +1,96 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v18_0/dmpl_ufc_flow_v1",
+  "title": "DMPL UFC Flow v1",
+  "type": "object",
+  "additionalProperties": false,
+  "$defs": {
+    "sha256_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "q32_i64": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {"q": {"type": "integer", "minimum": -9223372036854775808, "maximum": 9223372036854775807}},
+      "required": ["q"]
+    },
+    "u32": {"type": "integer", "minimum": 0, "maximum": 4294967295},
+    "gate_item": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "concept_shard_id": {"$ref": "#/$defs/sha256_id"},
+        "w_q32": {"$ref": "#/$defs/q32_i64"}
+      },
+      "required": ["concept_shard_id", "w_q32"]
+    }
+  },
+  "properties": {
+    "schema_id": {"const": "dmpl_ufc_flow_v1"},
+    "dc1_id": {"type": "string", "const": "dc1:q32_v1"},
+    "opset_id": {"type": "string", "pattern": "^opset:eudrs_u_v1:sha256:[0-9a-f]{64}$"},
+
+    "candidate_droot_id": {"$ref": "#/$defs/sha256_id"},
+    "eval_suite_id": {"$ref": "#/$defs/sha256_id"},
+
+    "per_scenario": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "scenario_id": {"type": "string", "minLength": 1},
+          "chosen_action_receipt_id": {"$ref": "#/$defs/sha256_id"},
+          "chosen_rollout_trace_id": {"$ref": "#/$defs/sha256_id"},
+          "path": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "depth_u32": {"$ref": "#/$defs/u32"},
+                "r_hat_q32": {"$ref": "#/$defs/q32_i64"},
+                "gamma_pow_q32": {"$ref": "#/$defs/q32_i64"},
+                "discounted_r_q32": {"$ref": "#/$defs/q32_i64"},
+                "gate_active": {"type": "array", "items": {"$ref": "#/$defs/gate_item"}}
+              },
+              "required": ["depth_u32", "r_hat_q32", "gamma_pow_q32", "discounted_r_q32", "gate_active"]
+            }
+          },
+          "terminal": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "depth_u32": {"$ref": "#/$defs/u32"},
+              "v_term_q32": {"$ref": "#/$defs/q32_i64"},
+              "gamma_pow_q32": {"$ref": "#/$defs/q32_i64"},
+              "discounted_v_q32": {"$ref": "#/$defs/q32_i64"}
+            },
+            "required": ["depth_u32", "v_term_q32", "gamma_pow_q32", "discounted_v_q32"]
+          },
+          "sum_discounted_q32": {"$ref": "#/$defs/q32_i64"},
+          "bound_score_q32": {"$ref": "#/$defs/q32_i64"},
+          "sum_check_b": {"type": "boolean"}
+        },
+        "required": [
+          "scenario_id",
+          "chosen_action_receipt_id",
+          "chosen_rollout_trace_id",
+          "path",
+          "terminal",
+          "sum_discounted_q32",
+          "bound_score_q32",
+          "sum_check_b"
+        ]
+      }
+    }
+  },
+  "required": [
+    "schema_id",
+    "dc1_id",
+    "opset_id",
+    "candidate_droot_id",
+    "eval_suite_id",
+    "per_scenario"
+  ]
+}
+

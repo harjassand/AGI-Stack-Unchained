@@ -1,0 +1,12 @@
+[sealed]
+eval_harness_id = "env-harness-v1"
+eval_harness_hash = "env-harness-v1-hash"
+eval_suite_hash = "759be881f1f7f0758bbff3c65920d2e387e8aca57fa36981fe2fde6aa380a5f9"
+episodes = 8
+
+# Omega v4.0 sealed worker inputs (dev gate).
+suitepack_path = "@ROOT/CDEL-v2/suitepacks/omega_dev_v1.suitepack"
+suitepack_hash = "sha256:bd99769a96886a684dbeee76d312538b1a4ecd916889075c3c59227ba52c0178"
+
+[salts]
+sealed_salt_omega_dev_v1 = "SALT::omega_dev_v1"

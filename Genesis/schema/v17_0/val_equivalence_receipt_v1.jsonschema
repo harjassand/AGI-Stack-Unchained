@@ -1,0 +1,19 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v17_0/val_equivalence_receipt_v1",
+  "title": "VAL equivalence receipt v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "patch_id", "vector_suite_hash", "n_tests_total", "first_mismatch", "pass"],
+  "properties": {
+    "schema_version": { "const": "val_equivalence_receipt_v1" },
+    "patch_id": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" },
+    "vector_suite_hash": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" },
+    "n_tests_total": { "type": "integer", "minimum": 0 },
+    "first_mismatch": {
+      "type": ["object", "null"],
+      "additionalProperties": true
+    },
+    "pass": { "type": "boolean" }
+  }
+}

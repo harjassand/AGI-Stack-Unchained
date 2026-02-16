@@ -1,0 +1,12 @@
+{"episode": 0, "fn_name": "abs_int", "signature": "def abs_int(x: int) -> int:", "task_id": "abs_int_transfer_v1", "tests": [{"args": [-100], "expected": 100}]}
+{"episode": 1, "fn_name": "abs_int", "signature": "def abs_int(x: int) -> int:", "task_id": "abs_int_transfer_v1", "tests": [{"args": [57], "expected": 57}]}
+{"episode": 2, "fn_name": "is_even", "signature": "def is_even(n: int) -> bool:", "task_id": "is_even_transfer_v1", "tests": [{"args": [100], "expected": true}]}
+{"episode": 3, "fn_name": "is_even", "signature": "def is_even(n: int) -> bool:", "task_id": "is_even_transfer_v1", "tests": [{"args": [101], "expected": false}]}
+{"episode": 4, "fn_name": "max2", "signature": "def max2(a: int, b: int) -> int:", "task_id": "max2_transfer_v1", "tests": [{"args": [-5, -9], "expected": -5}]}
+{"episode": 5, "fn_name": "max2", "signature": "def max2(a: int, b: int) -> int:", "task_id": "max2_transfer_v1", "tests": [{"args": [12, 3], "expected": 12}]}
+{"episode": 6, "fn_name": "reverse_str", "signature": "def reverse_str(s: str) -> str:", "task_id": "reverse_str_transfer_v1", "tests": [{"args": ["transfer"], "expected": "refsnart"}]}
+{"episode": 7, "fn_name": "reverse_str", "signature": "def reverse_str(s: str) -> str:", "task_id": "reverse_str_transfer_v1", "tests": [{"args": ["tool"], "expected": "loot"}]}
+{"episode": 8, "fn_name": "sum_list", "signature": "def sum_list(xs: list[int]) -> int:", "task_id": "sum_list_transfer_v1", "tests": [{"args": [[5, 5, 5]], "expected": 15}]}
+{"episode": 9, "fn_name": "sum_list", "signature": "def sum_list(xs: list[int]) -> int:", "task_id": "sum_list_transfer_v1", "tests": [{"args": [[10, -10, 3]], "expected": 3}]}
+{"episode": 10, "fn_name": "parse_int_or_zero", "signature": "def parse_int_or_zero(s: str) -> int:", "task_id": "parse_int_or_zero_transfer_v1", "tests": [{"args": ["42"], "expected": 42}]}
+{"episode": 11, "fn_name": "parse_int_or_zero", "signature": "def parse_int_or_zero(s: str) -> int:", "task_id": "parse_int_or_zero_transfer_v1", "tests": [{"args": ["-9"], "expected": -9}]}

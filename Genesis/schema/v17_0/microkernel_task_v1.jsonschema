@@ -1,0 +1,25 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v17_0/microkernel_task_v1",
+  "title": "Microkernel task v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "microkernel_id",
+    "patch_manifest_rel",
+    "brain_fixture_rel",
+    "source_symbol",
+    "source_path_rel",
+    "val_eligible_marker"
+  ],
+  "properties": {
+    "schema_version": { "const": "microkernel_task_v1" },
+    "microkernel_id": { "const": "SHA256_COMPRESS_M4_V1" },
+    "patch_manifest_rel": { "type": "string", "const": "patches/val_patch_manifest_v1.json" },
+    "brain_fixture_rel": { "type": "string", "const": "fixtures/brain_suitepack_dev_v15_1.json" },
+    "source_symbol": { "type": "string", "minLength": 1 },
+    "source_path_rel": { "type": "string", "minLength": 1 },
+    "val_eligible_marker": { "const": true }
+  }
+}

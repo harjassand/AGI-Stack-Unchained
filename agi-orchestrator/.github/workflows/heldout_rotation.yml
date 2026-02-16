@@ -1,0 +1,83 @@
+name: heldout-rotation
+
+on:
+  workflow_dispatch:
+    inputs:
+      seed:
+        description: "Selection seed"
+        required: true
+        default: "123"
+      target_size:
+        description: "Number of episodes to select"
+        required: true
+        default: "5"
+      stratify:
+        description: "Stratify by tags"
+        required: true
+        default: "false"
+      pool_path:
+        description: "Optional pool JSONL path in repo; leave empty to use generated pool"
+        required: false
+        default: ""
+
+jobs:
+  rotate-heldout:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Configure git auth for private deps
+        env:
+          CDEL_TOKEN: ${{ secrets.CDEL_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TOKEN="${CDEL_TOKEN:-${GITHUB_TOKEN}}"
+          if [ -n "$TOKEN" ]; then
+            git config --global url."https://x-access-token:${TOKEN}@github.com/".insteadOf "https://github.com/"
+          fi
+      - name: Install dependencies
+        run: |
+          python -m pip install -U pip
+          pip install -e ".[dev]"
+      - name: Prepare pool
+        id: pool
+        run: |
+          set -euo pipefail
+          if [ -n "${{ inputs.pool_path }}" ]; then
+            if [ ! -f "${{ inputs.pool_path }}" ]; then
+              echo "pool path not found: ${{ inputs.pool_path }}" >&2
+              exit 1
+            fi
+            echo "pool_path=${{ inputs.pool_path }}" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          POOL_PATH="$RUNNER_TEMP/pyut_pool.jsonl"
+          cat > "$POOL_PATH" <<'EOF'
+{"episode":0,"task_id":"abs_int_v1","fn_name":"abs_int","signature":"def abs_int(x: int) -> int:","tests":[{"args":[-1],"expected":1}],"tags":["edge_value"]}
+{"episode":1,"task_id":"abs_int_v2","fn_name":"abs_int","signature":"def abs_int(x: int) -> int:","tests":[{"args":[3],"expected":3}],"tags":["small"]}
+{"episode":2,"task_id":"abs_int_v3","fn_name":"abs_int","signature":"def abs_int(x: int) -> int:","tests":[{"args":[-10],"expected":10}],"tags":["large_int"]}
+{"episode":3,"task_id":"abs_int_v4","fn_name":"abs_int","signature":"def abs_int(x: int) -> int:","tests":[{"args":[0],"expected":0}],"tags":["edge_value"]}
+{"episode":4,"task_id":"abs_int_v5","fn_name":"abs_int","signature":"def abs_int(x: int) -> int:","tests":[{"args":[1],"expected":1}],"tags":["edge_value"]}
+EOF
+          echo "pool_path=$POOL_PATH" >> "$GITHUB_OUTPUT"
+      - name: Generate heldout candidate
+        run: |
+          set -euo pipefail
+          OUT_DIR="$RUNNER_TEMP/heldout_rotation"
+          mkdir -p "$OUT_DIR"
+          python scripts/generate_pyut_heldout_candidate_suite.py \
+            --pool "${{ steps.pool.outputs.pool_path }}" \
+            --out-dir "$OUT_DIR" \
+            --seed "${{ inputs.seed }}" \
+            --target-size "${{ inputs.target_size }}" \
+            $( [ "${{ inputs.stratify }}" = "true" ] && echo "--stratify" )
+          echo "OUT_DIR=$OUT_DIR" >> "$GITHUB_ENV"
+      - name: Upload rotation artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: heldout-rotation
+          path: |
+            ${{ env.OUT_DIR }}/heldout_rotation_manifest.json
+            ${{ env.OUT_DIR }}/heldout_candidate_*.jsonl

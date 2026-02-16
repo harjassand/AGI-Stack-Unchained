@@ -1,0 +1,74 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v18_0/dmpl_modelpack_v1",
+  "title": "DMPL Modelpack v1",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "schema_id": {"const": "dmpl_modelpack_v1"},
+    "dc1_id": {"type": "string", "const": "dc1:q32_v1"},
+    "opset_id": {"type": "string", "pattern": "^opset:eudrs_u_v1:sha256:[0-9a-f]{64}$"},
+
+    "dims": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "d_u32": {"type": "integer", "minimum": 0, "maximum": 4294967295},
+        "p_u32": {"type": "integer", "minimum": 0, "maximum": 4294967295},
+        "embed_dim_u32": {"type": "integer", "minimum": 0, "maximum": 4294967295}
+      },
+      "required": ["d_u32", "p_u32", "embed_dim_u32"]
+    },
+
+    "forward_arch_id": {"const": "dmpl_linear_pwl_v1"},
+    "value_arch_id": {"const": "dmpl_linear_v1"},
+    "activation_id": {"const": "hard_tanh_q32_v1"},
+    "gating_arch_id": {"const": "linear_gate_v1"},
+    "inverse_head_supported_b": {"type": "boolean"},
+
+    "tensor_specs": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "name": {"type": "string", "minLength": 1},
+          "shape_u32": {"type": "array", "items": {"type": "integer", "minimum": 0, "maximum": 4294967295}},
+          "role": {"type": "string", "enum": ["forward", "value", "gate", "inverse"]}
+        },
+        "required": ["name", "shape_u32", "role"]
+      }
+    },
+
+    "patch_policy": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "allowed_patch_types": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 2,
+          "uniqueItems": true,
+          "items": {"type": "string", "enum": ["matrix_patch", "lowrank_patch"]}
+        },
+        "vm_patch_allowed_b": {"const": false}
+      },
+      "required": ["allowed_patch_types", "vm_patch_allowed_b"]
+    }
+  },
+  "required": [
+    "schema_id",
+    "dc1_id",
+    "opset_id",
+    "dims",
+    "forward_arch_id",
+    "value_arch_id",
+    "activation_id",
+    "gating_arch_id",
+    "inverse_head_supported_b",
+    "tensor_specs",
+    "patch_policy"
+  ]
+}
+

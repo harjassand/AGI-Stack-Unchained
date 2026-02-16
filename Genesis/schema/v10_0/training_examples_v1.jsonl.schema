@@ -1,0 +1,79 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v10_0/training_examples_v1.jsonl",
+  "title": "Training example v1 (JSONL line)",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "example_id",
+    "example_type",
+    "prompt",
+    "completion",
+    "source"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "training_example_v1"
+    },
+    "example_id": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "example_type": {
+      "type": "string",
+      "enum": [
+        "MATH_PROOF",
+        "SCI_DEV_SUPERVISED",
+        "SUPEREGO_DECISION"
+      ]
+    },
+    "prompt": {
+      "type": "string"
+    },
+    "completion": {
+      "type": "string"
+    },
+    "source": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "source_kind",
+        "source_run_id",
+        "source_receipt_hash",
+        "source_artifact_hashes",
+        "split"
+      ],
+      "properties": {
+        "source_kind": {
+          "type": "string",
+          "enum": [
+            "V8_MATH",
+            "V9_SCIENCE"
+          ]
+        },
+        "source_run_id": {
+          "type": "string"
+        },
+        "source_receipt_hash": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "source_artifact_hashes": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^sha256:[0-9a-f]{64}$"
+          }
+        },
+        "split": {
+          "type": "string",
+          "enum": [
+            "TRAIN",
+            "DEV"
+          ]
+        }
+      }
+    }
+  }
+}

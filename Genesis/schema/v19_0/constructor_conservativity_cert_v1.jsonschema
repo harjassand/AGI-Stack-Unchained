@@ -1,0 +1,46 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v19_0/constructor_conservativity_cert_v1",
+  "title": "Constructor conservativity cert v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_name",
+    "schema_version",
+    "cert_id",
+    "overlap_profile_id",
+    "result",
+    "reason_code"
+  ],
+  "$defs": {
+    "sha256": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    }
+  },
+  "properties": {
+    "schema_name": {
+      "const": "constructor_conservativity_cert_v1"
+    },
+    "schema_version": {
+      "const": "v19_0"
+    },
+    "cert_id": {
+      "$ref": "#/$defs/sha256"
+    },
+    "overlap_profile_id": {
+      "$ref": "#/$defs/sha256"
+    },
+    "result": {
+      "type": "string",
+      "enum": [
+        "PASS",
+        "FAIL"
+      ]
+    },
+    "reason_code": {
+      "type": "string",
+      "minLength": 1
+    }
+  }
+}

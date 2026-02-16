@@ -1,0 +1,199 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v19_0/treaty_v1",
+  "title": "Federated treaty v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_name",
+    "schema_version",
+    "treaty_id",
+    "polity_i_id",
+    "polity_j_id",
+    "ok_overlap_signature_ref",
+    "overlap_subset_decl",
+    "overlap_test_set_ids",
+    "coherence_test_set_ids",
+    "phi_translator_bundle_ref",
+    "psi_refutation_translator_bundle_ref",
+    "ref_core_profile_ref",
+    "dispute_rule"
+  ],
+  "properties": {
+    "schema_name": {
+      "const": "treaty_v1"
+    },
+    "schema_version": {
+      "const": "v19_0"
+    },
+    "treaty_id": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "polity_i_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "polity_j_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "ok_overlap_signature_ref": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "overlap_subset_decl": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "kinds",
+        "schema_ids"
+      ],
+      "properties": {
+        "kinds": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "enum": [
+              "OK_PORTABLE_RECEIPT_V1",
+              "OK_PORTABLE_ARTIFACT_REF_V1",
+              "OK_TRANSLATION_ASSERTION_V1",
+              "OK_COMMUTATIVITY_ASSERTION_V1",
+              "OK_REFUTATION_WITNESS_V1"
+            ]
+          }
+        },
+        "schema_ids": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "string",
+            "pattern": "^sha256:[0-9a-f]{64}$"
+          }
+        }
+      }
+    },
+    "overlap_test_set_ids": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": {
+        "type": "string",
+        "pattern": "^sha256:[0-9a-f]{64}$"
+      }
+    },
+    "coherence_test_set_ids": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": {
+        "type": "string",
+        "pattern": "^sha256:[0-9a-f]{64}$"
+      }
+    },
+    "phi_translator_bundle_ref": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "bundle_id",
+        "translator_domain"
+      ],
+      "properties": {
+        "bundle_id": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "translator_domain": {
+          "type": "string",
+          "enum": [
+            "OVERLAP_OK_IR",
+            "RECEIPT_JSON"
+          ]
+        }
+      }
+    },
+    "psi_refutation_translator_bundle_ref": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "bundle_id",
+        "translator_domain"
+      ],
+      "properties": {
+        "bundle_id": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "translator_domain": {
+          "type": "string",
+          "enum": [
+            "OVERLAP_OK_IR",
+            "RECEIPT_JSON"
+          ]
+        }
+      }
+    },
+    "ref_core_profile_ref": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "dispute_rule": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "budgets",
+        "resolution_rule",
+        "allowed_outcomes"
+      ],
+      "properties": {
+        "budgets": {
+          "$ref": "https://genesis.engine/specs/v19_0/budget_spec_v1"
+        },
+        "resolution_rule": {
+          "type": "string",
+          "enum": [
+            "REQUIRE_OK_VALID_REFUTATION_FOR_REJECT",
+            "STRICT_REFCORE_REPLAY"
+          ]
+        },
+        "allowed_outcomes": {
+          "type": "array",
+          "uniqueItems": true,
+          "minItems": 1,
+          "items": {
+            "type": "string",
+            "enum": [
+              "PORTABLE_ACCEPT",
+              "PORTABLE_REJECT",
+              "SAFE_SPLIT"
+            ]
+          }
+        }
+      }
+    },
+    "rwq_policy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "policy_name",
+        "deterministic"
+      ],
+      "properties": {
+        "policy_name": {
+          "type": "string"
+        },
+        "deterministic": {
+          "const": true
+        },
+        "rules": {
+          "type": "array",
+          "items": {
+            "type": "object"
+          }
+        }
+      }
+    }
+  }
+}

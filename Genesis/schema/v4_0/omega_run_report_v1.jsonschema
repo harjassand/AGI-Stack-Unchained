@@ -1,0 +1,25 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v4_0/omega_run_report_v1",
+  "title": "Omega run report v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "spec_version",
+    "root_swarm_run_id",
+    "icore_id",
+    "closed_epochs",
+    "checkpoints_written",
+    "final_checkpoint_receipt_hash"
+  ],
+  "properties": {
+    "schema": {"const": "omega_run_report_v1"},
+    "spec_version": {"const": "v4_0"},
+    "root_swarm_run_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "icore_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "closed_epochs": {"type": "integer", "minimum": 0},
+    "checkpoints_written": {"type": "integer", "minimum": 0},
+    "final_checkpoint_receipt_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"}
+  }
+}

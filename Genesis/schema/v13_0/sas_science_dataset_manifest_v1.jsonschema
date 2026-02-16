@@ -1,0 +1,76 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v13_0/sas_science_dataset_manifest_v1",
+  "title": "SAS-Science dataset manifest v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "manifest_version",
+    "dataset_name",
+    "bodies",
+    "dim",
+    "frame_kind",
+    "units",
+    "timestep_policy",
+    "preprocess",
+    "split_policy",
+    "security"
+  ],
+  "properties": {
+    "manifest_version": {"const": "sas_science_dataset_manifest_v1"},
+    "dataset_name": {"type": "string"},
+    "bodies": {"type": "array", "items": {"type": "string"}, "minItems": 1},
+    "dim": {"type": "integer", "enum": [2, 3]},
+    "frame_kind": {
+      "type": "string",
+      "enum": ["HELIOCENTRIC_SUN_AT_ORIGIN_V1", "BARYCENTRIC_WITH_SUN_ROW_V1"]
+    },
+    "units": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["time_unit", "length_unit"],
+      "properties": {
+        "time_unit": {"type": "string", "enum": ["DAY", "SECOND"]},
+        "length_unit": {"type": "string", "enum": ["AU", "METER"]}
+      }
+    },
+    "timestep_policy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["require_uniform_dt", "uniform_dt_tolerance_q32"],
+      "properties": {
+        "require_uniform_dt": {"type": "boolean"},
+        "uniform_dt_tolerance_q32": {"$ref": "q32_v1.jsonschema"}
+      }
+    },
+    "preprocess": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["smoothing", "derivative_method"],
+      "properties": {
+        "smoothing": {"type": "string", "enum": ["NONE", "MOVING_AVG_V1"]},
+        "window_odd": {"type": "integer", "minimum": 1},
+        "derivative_method": {"const": "CENTRAL_DIFF_V1"}
+      }
+    },
+    "split_policy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "dev_fraction_q32", "guard_steps"],
+      "properties": {
+        "kind": {"const": "TIME_CONTIGUOUS_V1"},
+        "dev_fraction_q32": {"$ref": "q32_v1.jsonschema"},
+        "guard_steps": {"type": "integer", "minimum": 0}
+      }
+    },
+    "security": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["forbidden_string_scan", "forbidden_strings"],
+      "properties": {
+        "forbidden_string_scan": {"type": "boolean"},
+        "forbidden_strings": {"type": "array", "items": {"type": "string"}}
+      }
+    }
+  }
+}

@@ -1,0 +1,94 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v4_0/omega_checkpoint_receipt_v1",
+  "title": "Omega checkpoint receipt v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "spec_version",
+    "receipt_hash",
+    "root_swarm_run_id",
+    "icore_id",
+    "checkpoint_index",
+    "closed_epoch_index",
+    "meta_head",
+    "active_system",
+    "cumulative",
+    "rolling_windows",
+    "acceleration"
+  ],
+  "properties": {
+    "schema": {"const": "omega_checkpoint_receipt_v1"},
+    "spec_version": {"const": "v4_0"},
+    "receipt_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "root_swarm_run_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "icore_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "checkpoint_index": {"type": "integer", "minimum": 0},
+    "closed_epoch_index": {"type": "integer", "minimum": 0},
+    "meta_head": {"$ref": "#/$defs/meta_head"},
+    "active_system": {"$ref": "#/$defs/active_system"},
+    "cumulative": {"$ref": "#/$defs/cumulative"},
+    "rolling_windows": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/rolling_window"}
+    },
+    "acceleration": {"$ref": "#/$defs/acceleration"}
+  },
+  "$defs": {
+    "meta_head": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["meta_epoch_index", "meta_block_id", "meta_state_hash", "meta_policy_hash"],
+      "properties": {
+        "meta_epoch_index": {"type": "integer", "minimum": 0},
+        "meta_block_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+        "meta_state_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+        "meta_policy_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"}
+      }
+    },
+    "active_system": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["active_promotion_bundle_id", "active_ontology_id", "active_macros_id"],
+      "properties": {
+        "active_promotion_bundle_id": {"type": "string"},
+        "active_ontology_id": {"type": "string"},
+        "active_macros_id": {"type": "string"}
+      }
+    },
+    "cumulative": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["tasks_attempted", "tasks_passed", "compute_used_total"],
+      "properties": {
+        "tasks_attempted": {"type": "integer", "minimum": 0},
+        "tasks_passed": {"type": "integer", "minimum": 0},
+        "compute_used_total": {"type": "integer", "minimum": 0}
+      }
+    },
+    "rolling_window": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["window_index", "window_tasks", "pass_rate_num", "pass_rate_den", "compute_num"],
+      "properties": {
+        "window_index": {"type": "integer", "minimum": 0},
+        "window_tasks": {"type": "integer", "minimum": 1},
+        "pass_rate_num": {"type": "integer", "minimum": 0},
+        "pass_rate_den": {"type": "integer", "minimum": 1},
+        "compute_num": {"type": "integer", "minimum": 0}
+      }
+    },
+    "acceleration": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["metric", "consecutive_windows", "accel_ratio_num", "accel_ratio_den"],
+      "properties": {
+        "metric": {"const": "ACCEL_INDEX_V1"},
+        "consecutive_windows": {"type": "integer", "minimum": 0},
+        "accel_ratio_num": {"type": "integer", "minimum": 0},
+        "accel_ratio_den": {"type": "integer", "minimum": 1}
+      }
+    }
+  }
+}

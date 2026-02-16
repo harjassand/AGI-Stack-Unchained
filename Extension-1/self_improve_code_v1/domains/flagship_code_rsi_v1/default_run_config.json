@@ -1,0 +1,82 @@
+{
+  "schema_version": "flagship_code_rsi_v1",
+  "run_id": "AUTO",
+  "seed": 1,
+  "run_wall_timeout_s": 0,
+  "epoch_wall_timeout_s": 0,
+  "target_repo_id": "agi-system",
+  "target_repo_path": "../agi-system",
+  "baseline_commit": "PIN_THIS_40_HEX",
+  "candidate": {
+    "format": "repo_patch_candidate_v1",
+    "patch_format": "unidiff",
+    "max_patch_bytes": 200000
+  },
+  "curriculum": {
+    "ladder": [
+      {
+        "name": "t0",
+        "sealed_dev_plan": "code_agentic_v1_dev_ladder_t0",
+        "devscreen_suite": "code_agentic_dev_t0"
+      },
+      {
+        "name": "t1",
+        "sealed_dev_plan": "code_agentic_v1_dev_ladder_t1",
+        "devscreen_suite": "code_agentic_dev_t1"
+      },
+      {
+        "name": "t2",
+        "sealed_dev_plan": "code_agentic_v1_dev_ladder_t2",
+        "devscreen_suite": "code_agentic_dev_t2"
+      }
+    ],
+    "advance_rule": {
+      "type": "pass_rate_threshold",
+      "threshold": "0.70",
+      "min_epochs": 2
+    },
+    "min_submissions_before_advancing": 20,
+    "deescalate_after_epochs": 3,
+    "rolling_window": 5
+  },
+  "proposal": {
+    "candidates_per_epoch": 32,
+    "topk_to_sealed_dev": 4,
+    "explore_fraction": "0.25",
+    "max_attempts_per_slot": 10,
+    "max_total_attempts": 800,
+    "min_eligible_per_epoch": 4,
+    "template_allowlist": [
+      "guard_nonetype_attr_v2",
+      "guard_keyerror_v1",
+      "guard_indexerror_v1",
+      "add_missing_import_v1",
+      "wrap_try_except_fallback_v1",
+      "initialize_none_default_v1",
+      "fix_bool_condition_v1",
+      "return_early_on_invalid_v1"
+    ]
+  },
+  "devscreen": {
+    "enabled": true,
+    "suite_id": "code_agentic_dev_t0",
+    "timeout_s": 600,
+    "max_evals_per_epoch": 6
+  },
+  "sealed_dev": {
+    "enabled": true,
+    "cdel_endpoint": "http://127.0.0.1:8000",
+    "cdel_root": "../CDEL-v2",
+    "eval_plan_id": "code_agentic_v1_dev_ladder_t0",
+    "timeout_s": 3600
+  },
+  "sealed_heldout": {
+    "enabled": false,
+    "eval_plan_id": "code_agentic_v1_sealed_heldout",
+    "timeout_s": 7200
+  },
+  "output": {
+    "runs_root": "runs/self_improve_code_v1",
+    "write_canonical_json": true
+  }
+}

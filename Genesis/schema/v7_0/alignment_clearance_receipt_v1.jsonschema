@@ -1,0 +1,30 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v7_0/alignment_clearance_receipt_v1",
+  "title": "Alignment clearance receipt v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "policy_hash",
+    "icore_id",
+    "meta_hash",
+    "clearance_level",
+    "issued_at_tick",
+    "alignment_report_hash",
+    "ledger_head_hash"
+  ],
+  "properties": {
+    "schema_version": {"const": "alignment_clearance_receipt_v1"},
+    "policy_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "icore_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "meta_hash": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "clearance_level": {
+      "type": "string",
+      "enum": ["NONE", "BOUNDED", "RESEARCH", "BOUNDLESS"]
+    },
+    "issued_at_tick": {"type": "integer", "minimum": 0},
+    "alignment_report_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "ledger_head_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"}
+  }
+}

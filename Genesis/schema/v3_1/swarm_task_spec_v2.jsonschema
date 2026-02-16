@@ -1,0 +1,53 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v3_1/swarm_task_spec_v2",
+  "title": "Swarm task spec v2",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "spec_version",
+    "task_type",
+    "domain",
+    "required_capabilities",
+    "base_barrier_head_hash",
+    "base_frontier_state_head_hash",
+    "inputs",
+    "budgets"
+  ],
+  "properties": {
+    "schema": {"const": "swarm_task_spec_v2"},
+    "spec_version": {"const": "v3_1"},
+    "task_type": {"type": "string"},
+    "domain": {"type": "string"},
+    "required_capabilities": {
+      "type": "array",
+      "minItems": 1,
+      "items": {"type": "string"}
+    },
+    "base_barrier_head_hash": {"type": "string", "pattern": "^(sha256:[0-9a-f]{64}|GENESIS)$"},
+    "base_frontier_state_head_hash": {"type": "string", "pattern": "^(sha256:[0-9a-f]{64}|GENESIS)$"},
+    "inputs": {"$ref": "#/$defs/inputs"},
+    "budgets": {"$ref": "#/$defs/budgets"}
+  },
+  "$defs": {
+    "inputs": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["problem_id", "problem_payload_relpath"],
+      "properties": {
+        "problem_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+        "problem_payload_relpath": {"type": "string"}
+      }
+    },
+    "budgets": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["work_cost_limit", "max_attempts"],
+      "properties": {
+        "work_cost_limit": {"type": "integer", "minimum": 0},
+        "max_attempts": {"type": "integer", "minimum": 1}
+      }
+    }
+  }
+}

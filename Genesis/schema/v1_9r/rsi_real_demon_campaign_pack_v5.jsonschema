@@ -1,0 +1,83 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v1_9r/rsi_real_demon_campaign_pack_v5",
+  "title": "RSI real demon campaign pack v5",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "schema_version",
+    "epochs",
+    "strict_rsi",
+    "proposals",
+    "translation",
+    "autonomy",
+    "demon"
+  ],
+  "properties": {
+    "schema": {"const": "rsi_real_demon_campaign_pack_v5"},
+    "schema_version": {"type": "integer", "const": 5},
+    "epochs": {"type": "integer"},
+    "strict_rsi": {"type": "boolean"},
+    "proposals": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["ontology_v3_dir", "macros_v2_dir", "metabolism_v1_dir"],
+      "properties": {
+        "ontology_v3_dir": {"type": "string"},
+        "macros_v2_dir": {"type": "string"},
+        "metabolism_v1_dir": {"type": "string", "const": "__AUTONOMY_RUNDIR_V1__"}
+      }
+    },
+    "translation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["translation_inputs_path"],
+      "properties": {
+        "translation_inputs_path": {"type": "string"}
+      }
+    },
+    "autonomy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["enabled", "metabolism"],
+      "properties": {
+        "enabled": {"type": "boolean", "const": true},
+        "metabolism": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "schema",
+            "schema_version",
+            "algorithm",
+            "manifest_rundir_path",
+            "proposals_rundir_subdir"
+          ],
+          "properties": {
+            "schema": {"const": "metabolism_autonomy_config_v1"},
+            "schema_version": {"type": "integer", "const": 1},
+            "algorithm": {"type": "string", "const": "autopatch_enum_v1"},
+            "manifest_rundir_path": {
+              "type": "string",
+              "const": "autonomy/metabolism_v1/autonomy_manifest_v1.json"
+            },
+            "proposals_rundir_subdir": {
+              "type": "string",
+              "const": "autonomy/metabolism_v1/proposals"
+            }
+          }
+        }
+      }
+    },
+    "demon": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["eval_onto_every_n_epochs", "eval_macro_every_n_epochs", "eval_metabolism_every_n_epochs"],
+      "properties": {
+        "eval_onto_every_n_epochs": {"type": "integer"},
+        "eval_macro_every_n_epochs": {"type": "integer"},
+        "eval_metabolism_every_n_epochs": {"type": "integer"}
+      }
+    }
+  }
+}

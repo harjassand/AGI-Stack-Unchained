@@ -1,0 +1,13 @@
+{
+  "schema_version": 1,
+  "kind": "constraint_spec",
+  "domain": "tooluse",
+  "constraints": {
+    "banned_tools": ["network", "subprocess"],
+    "max_steps": 6,
+    "max_file_writes": 2,
+    "allow_path_escape": false,
+    "allow_network": false,
+    "allow_subprocess": false
+  }
+}

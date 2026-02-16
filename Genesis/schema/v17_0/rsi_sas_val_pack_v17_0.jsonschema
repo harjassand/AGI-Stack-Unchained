@@ -1,0 +1,35 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v17_0/rsi_sas_val_pack_v17_0",
+  "title": "RSI SAS VAL pack v17.0",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "policy_rel",
+    "workload_suitepack_rel",
+    "microkernel_task_rel",
+    "toolchain_rust_rel",
+    "toolchain_val_runner_rel",
+    "target_arch",
+    "target_simd",
+    "seed_u64",
+    "baseline_kind",
+    "candidate_kind",
+    "double_run_mode"
+  ],
+  "properties": {
+    "schema_version": { "const": "rsi_sas_val_pack_v17_0" },
+    "policy_rel": { "type": "string", "const": "sas_val_policy_v1.json" },
+    "workload_suitepack_rel": { "type": "string", "const": "workload/kernel_workload_suitepack_v1.json" },
+    "microkernel_task_rel": { "type": "string", "const": "microkernels/microkernel_task_pilot_v1.json" },
+    "toolchain_rust_rel": { "type": "string", "const": "toolchains/toolchain_manifest_rust_v1.json" },
+    "toolchain_val_runner_rel": { "type": "string", "const": "toolchains/toolchain_manifest_val_runner_v1.json" },
+    "target_arch": { "const": "aarch64" },
+    "target_simd": { "const": "neon128" },
+    "seed_u64": { "type": "integer", "minimum": 0 },
+    "baseline_kind": { "const": "KERNEL_SHA256_BASELINE_V1" },
+    "candidate_kind": { "const": "VAL_MACHINE_CODE_V1" },
+    "double_run_mode": { "const": true }
+  }
+}

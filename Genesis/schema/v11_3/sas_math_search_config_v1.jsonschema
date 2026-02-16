@@ -1,0 +1,35 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v11_0/sas_math_search_config_v1",
+  "title": "SAS-MATH search config v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version"],
+  "properties": {
+    "schema_version": {"const": "sas_math_search_config_v1"},
+    "candidates": {
+      "type": "array",
+      "items": {"$ref": "sas_math_policy_ir_v1.jsonschema"}
+    },
+    "policy_families": {
+      "type": "array",
+      "items": {"type": "string"}
+    },
+    "seeds": {"type": "array", "items": {"type": "integer"}},
+    "max_attempts_per_problem": {"type": "array", "items": {"type": "integer"}},
+    "toy_checker_proofs": {
+      "type": "array",
+      "items": {
+        "type": "array",
+        "items": {"type": "string"}
+      }
+    },
+    "lean_tactics": {
+      "type": "array",
+      "items": {
+        "type": "array",
+        "items": {"type": "string"}
+      }
+    }
+  }
+}

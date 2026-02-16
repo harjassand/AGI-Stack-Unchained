@@ -1,0 +1,20 @@
+== epoch 1 ==
+-rw-r--r--@  1 harjas  staff   523 Jan 30 18:12 macro_tokenization_report_heldout_v1.json
+-rw-r--r--@  1 harjas  staff   500 Jan 30 18:12 rho_report_v1.json
+-rw-r--r--@  1 harjas  staff   121 Jan 30 18:12 rsi_ignition_report_v1.json
+== epoch 2 ==
+-rw-r--r--@  1 harjas  staff   680 Jan 30 18:12 macro_tokenization_report_heldout_v1.json
+-rw-r--r--@  1 harjas  staff   486 Jan 30 18:12 rho_report_v1.json
+-rw-r--r--@  1 harjas  staff   121 Jan 30 18:12 rsi_ignition_report_v1.json
+== epoch 3 ==
+-rw-r--r--@  1 harjas  staff   787 Jan 30 18:12 macro_tokenization_report_heldout_v1.json
+-rw-r--r--@  1 harjas  staff   486 Jan 30 18:12 rho_report_v1.json
+-rw-r--r--@  1 harjas  staff   121 Jan 30 18:12 rsi_ignition_report_v1.json
+== epoch 4 ==
+-rw-r--r--@  1 harjas  staff   787 Jan 30 18:12 macro_tokenization_report_heldout_v1.json
+-rw-r--r--@  1 harjas  staff   486 Jan 30 18:12 rho_report_v1.json
+-rw-r--r--@  1 harjas  staff   234 Jan 30 18:12 rsi_ignition_report_v1.json
+== epoch 5 ==
+-rw-r--r--@  1 harjas  staff   787 Jan 30 18:12 macro_tokenization_report_heldout_v1.json
+-rw-r--r--@  1 harjas  staff   486 Jan 30 18:12 rho_report_v1.json
+-rw-r--r--@  1 harjas  staff   236 Jan 30 18:12 rsi_ignition_report_v1.json

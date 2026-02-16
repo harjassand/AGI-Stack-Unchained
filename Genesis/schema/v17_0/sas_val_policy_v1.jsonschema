@@ -1,0 +1,59 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v17_0/sas_val_policy_v1",
+  "title": "SAS VAL policy v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "require_safety_before_exec",
+    "require_semantic_identity",
+    "require_dual_decoder_parity",
+    "require_dual_lifter_parity",
+    "max_code_bytes",
+    "max_blocks_len",
+    "forbidden_insn_mnemonics",
+    "forbidden_regs",
+    "allowed_isa_profile",
+    "require_feature_crypto_sha2",
+    "equivalence_vectors",
+    "perf_gate_valcycles_num",
+    "perf_gate_valcycles_den",
+    "perf_gate_wallclock_num",
+    "perf_gate_wallclock_den",
+    "benchmark_reps",
+    "benchmark_warmup_reps",
+    "spawn_gate_baseline_min"
+  ],
+  "properties": {
+    "schema_version": { "const": "sas_val_policy_v1" },
+    "require_safety_before_exec": { "const": true },
+    "require_semantic_identity": { "const": true },
+    "require_dual_decoder_parity": { "const": true },
+    "require_dual_lifter_parity": { "const": true },
+    "max_code_bytes": { "type": "integer", "minimum": 1 },
+    "max_blocks_len": { "type": "integer", "minimum": 1 },
+    "forbidden_insn_mnemonics": { "type": "array", "items": { "type": "string" }, "minItems": 1 },
+    "forbidden_regs": { "type": "array", "items": { "type": "string" }, "minItems": 1 },
+    "allowed_isa_profile": { "const": "VAL_AARCH64_SHA256_SUBSET_V1" },
+    "require_feature_crypto_sha2": { "type": "boolean" },
+    "equivalence_vectors": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["n_kat", "n_random", "random_max_len", "random_seed_u64"],
+      "properties": {
+        "n_kat": { "type": "integer", "minimum": 1 },
+        "n_random": { "type": "integer", "const": 10000 },
+        "random_max_len": { "type": "integer", "const": 4096 },
+        "random_seed_u64": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "perf_gate_valcycles_num": { "type": "integer", "minimum": 1 },
+    "perf_gate_valcycles_den": { "type": "integer", "minimum": 1 },
+    "perf_gate_wallclock_num": { "type": "integer", "minimum": 1 },
+    "perf_gate_wallclock_den": { "type": "integer", "minimum": 1 },
+    "benchmark_reps": { "type": "integer", "minimum": 1 },
+    "benchmark_warmup_reps": { "type": "integer", "minimum": 0 },
+    "spawn_gate_baseline_min": { "type": "integer", "minimum": 1 }
+  }
+}

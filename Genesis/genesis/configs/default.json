@@ -1,0 +1,70 @@
+{
+  "seed": 0,
+  "iterations": 5,
+  "repair_attempts": 4,
+  "archive_path": "genesis_archive.jsonl",
+  "run_log_path": "genesis_run.jsonl",
+  "seed_capsule": "genesis/capsules/seed_capsule.json",
+  "epoch_id": "epoch-1",
+  "dataset_config": "genesis/configs/datasets.json",
+  "dataset_id": "shadow_eval",
+  "forager_max_tests": 3,
+  "library_path": "genesis/library.json",
+  "distill_every": 1,
+  "distill_min_count": 2,
+  "operator_sequence": [
+    "swap",
+    "swap"
+  ],
+  "force_reuse_if_available": true,
+  "cdel_url": "http://127.0.0.1:8000/evaluate",
+  "max_cdel_calls_per_epoch": 2,
+  "max_compute_units_per_eval": 20,
+  "promotions_max": 2,
+  "receipts_dir": "genesis/receipts",
+  "shadow_margin": 0.05,
+  "shadow_margin_step": 0.02,
+  "shadow_margin_max": 0.2,
+  "shadow_calibration_path": "genesis/shadow_calibration.json",
+  "local_budget": {
+    "alpha_total": "0.002",
+    "epsilon_total": "2",
+    "delta_total": "0",
+    "compute_total_units": 20
+  },
+  "default_bid": {
+    "grade": "DeploymentGrade",
+    "alpha_bid": "0.001",
+    "privacy_bid": {
+      "epsilon": "1",
+      "delta": "0"
+    },
+    "compute_bid": {
+      "max_compute_units": 15,
+      "max_wall_time_ms": 5000,
+      "max_adversary_strength": 3
+    }
+  },
+  "bid_policy": {
+    "metric_threshold": 0.7,
+    "alpha_mult_low": "0.5",
+    "alpha_mult_high": "1",
+    "epsilon_mult_low": "0.5",
+    "epsilon_mult_high": "1",
+    "call_mult_final": "0.5",
+    "alpha_mult_repaired": "0.8",
+    "epsilon_mult_repaired": "0.8",
+    "min_compute_units": 5
+  },
+  "protocol_caps": {
+    "max_promotions": 0,
+    "max_cdel_calls": 0,
+    "max_dp_queries": 0,
+    "max_stat_queries": 0,
+    "max_robust_queries": 0
+  },
+  "promotion_stride": 1,
+  "promotion_min_margin": 0.0,
+  "promotion_novelty_margin": 0.0,
+  "max_wall_time_ms_per_eval": 0
+}

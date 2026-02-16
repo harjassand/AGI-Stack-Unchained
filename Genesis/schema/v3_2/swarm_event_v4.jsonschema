@@ -1,0 +1,374 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v3_2/swarm_event_v4",
+  "title": "Swarm ledger event v4",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "spec_version",
+    "seq",
+    "prev_event_hash",
+    "event_type",
+    "payload",
+    "event_ref_hash",
+    "event_hash"
+  ],
+  "properties": {
+    "schema": {"const": "swarm_event_v4"},
+    "spec_version": {"const": "v3_2"},
+    "seq": {"type": "integer", "minimum": 1},
+    "prev_event_hash": {"type": "string", "pattern": "^(sha256:[0-9a-f]{64}|GENESIS)$"},
+    "event_type": {
+      "type": "string",
+      "enum": [
+        "SWARM_INIT",
+        "AGENT_REGISTER",
+        "EPOCH_BEGIN",
+        "TASK_ASSIGN",
+        "TASK_RESULT",
+        "RESULT_VERIFY",
+        "BARRIER_UPDATE_PROPOSE",
+        "BARRIER_UPDATE_ACCEPT",
+        "SUBSWARM_SPAWN",
+        "SUBSWARM_JOIN_ATTEMPT",
+        "SUBSWARM_JOIN_ACCEPT",
+        "SUBSWARM_JOIN_REJECT",
+        "BRIDGE_OFFER_PUBLISH",
+        "BRIDGE_IMPORT_ACCEPT",
+        "BRIDGE_IMPORT_REJECT",
+        "EPOCH_END",
+        "SWARM_END"
+      ]
+    },
+    "payload": {"type": "object"},
+    "event_ref_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "event_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"}
+  },
+  "allOf": [
+    {"if": {"properties": {"event_type": {"const": "SWARM_INIT"}}}, "then": {"properties": {"payload": {"$ref": "#/$defs/swarm_init"}}}},
+    {"if": {"properties": {"event_type": {"const": "AGENT_REGISTER"}}}, "then": {"properties": {"payload": {"$ref": "#/$defs/agent_register"}}}},
+    {"if": {"properties": {"event_type": {"const": "EPOCH_BEGIN"}}}, "then": {"properties": {"payload": {"$ref": "#/$defs/epoch_begin"}}}},
+    {"if": {"properties": {"event_type": {"const": "TASK_ASSIGN"}}}, "then": {"properties": {"payload": {"$ref": "#/$defs/task_assign"}}}},
+    {"if": {"properties": {"event_type": {"const": "TASK_RESULT"}}}, "then": {"properties": {"payload": {"$ref": "#/$defs/task_result"}}}},
+    {"if": {"properties": {"event_type": {"const": "RESULT_VERIFY"}}}, "then": {"properties": {"payload": {"$ref": "#/$defs/result_verify"}}}},
+    {"if": {"properties": {"event_type": {"const": "BARRIER_UPDATE_PROPOSE"}}}, "then": {"properties": {"payload": {"$ref": "#/$defs/barrier_update_propose"}}}},
+    {"if": {"properties": {"event_type": {"const": "BARRIER_UPDATE_ACCEPT"}}}, "then": {"properties": {"payload": {"$ref": "#/$defs/barrier_update_accept"}}}},
+    {"if": {"properties": {"event_type": {"const": "SUBSWARM_SPAWN"}}}, "then": {"properties": {"payload": {"$ref": "#/$defs/subswarm_spawn"}}}},
+    {"if": {"properties": {"event_type": {"const": "SUBSWARM_JOIN_ATTEMPT"}}}, "then": {"properties": {"payload": {"$ref": "#/$defs/subswarm_join_attempt"}}}},
+    {"if": {"properties": {"event_type": {"const": "SUBSWARM_JOIN_ACCEPT"}}}, "then": {"properties": {"payload": {"$ref": "#/$defs/subswarm_join_accept"}}}},
+    {"if": {"properties": {"event_type": {"const": "SUBSWARM_JOIN_REJECT"}}}, "then": {"properties": {"payload": {"$ref": "#/$defs/subswarm_join_reject"}}}},
+    {"if": {"properties": {"event_type": {"const": "BRIDGE_OFFER_PUBLISH"}}}, "then": {"properties": {"payload": {"$ref": "#/$defs/bridge_offer_publish"}}}},
+    {"if": {"properties": {"event_type": {"const": "BRIDGE_IMPORT_ACCEPT"}}}, "then": {"properties": {"payload": {"$ref": "#/$defs/bridge_import_accept"}}}},
+    {"if": {"properties": {"event_type": {"const": "BRIDGE_IMPORT_REJECT"}}}, "then": {"properties": {"payload": {"$ref": "#/$defs/bridge_import_reject"}}}},
+    {"if": {"properties": {"event_type": {"const": "EPOCH_END"}}}, "then": {"properties": {"payload": {"$ref": "#/$defs/epoch_end"}}}},
+    {"if": {"properties": {"event_type": {"const": "SWARM_END"}}}, "then": {"properties": {"payload": {"$ref": "#/$defs/swarm_end"}}}}
+  ],
+  "$defs": {
+    "swarm_init": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "swarm_run_id",
+        "pack_relpath",
+        "pack_hash",
+        "icore_id_expected",
+        "num_agents",
+        "max_epochs",
+        "commit_policy"
+      ],
+      "properties": {
+        "swarm_run_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+        "pack_relpath": {"type": "string"},
+        "pack_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+        "icore_id_expected": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+        "num_agents": {"type": "integer", "minimum": 1},
+        "max_epochs": {"type": "integer", "minimum": 1},
+        "commit_policy": {"type": "string"}
+      }
+    },
+    "agent_register": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "agent_id",
+        "role",
+        "capabilities",
+        "agent_icore_receipt_relpath",
+        "core_id_observed"
+      ],
+      "properties": {
+        "agent_id": {"type": "string", "pattern": "^agent_[0-9]{4}$"},
+        "role": {"type": "string"},
+        "capabilities": {"type": "array", "items": {"type": "string"}},
+        "agent_icore_receipt_relpath": {"type": "string"},
+        "core_id_observed": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"}
+      }
+    },
+    "epoch_begin": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["epoch_index", "barrier_ledger_head_hash", "frontier_state_head_hash"],
+      "properties": {
+        "epoch_index": {"type": "integer", "minimum": 1},
+        "barrier_ledger_head_hash": {"type": "string", "pattern": "^(sha256:[0-9a-f]{64}|GENESIS)$"},
+        "frontier_state_head_hash": {"type": "string", "pattern": "^(sha256:[0-9a-f]{64}|GENESIS)$"}
+      }
+    },
+    "task_assign": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["epoch_index", "task_id", "agent_id", "task_spec_relpath", "base_barrier_head_hash"],
+      "properties": {
+        "epoch_index": {"type": "integer", "minimum": 1},
+        "task_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+        "agent_id": {"type": "string", "pattern": "^(agent_[0-9]{4}|NONE)$"},
+        "task_spec_relpath": {"type": "string"},
+        "base_barrier_head_hash": {"type": "string", "pattern": "^(sha256:[0-9a-f]{64}|GENESIS)$"}
+      }
+    },
+    "task_result": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["epoch_index", "task_id", "agent_id", "result_id", "result_manifest_relpath", "status"],
+      "properties": {
+        "epoch_index": {"type": "integer", "minimum": 1},
+        "task_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+        "agent_id": {"type": "string", "pattern": "^(agent_[0-9]{4}|NONE)$"},
+        "result_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+        "result_manifest_relpath": {"type": "string"},
+        "status": {"type": "string", "enum": ["OK", "FAIL"]}
+      }
+    },
+    "result_verify": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["result_id", "verdict", "reason", "verifier_receipt_relpath"],
+      "properties": {
+        "result_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+        "verdict": {"type": "string", "enum": ["VALID", "INVALID"]},
+        "reason": {"type": "string"},
+        "verifier_receipt_relpath": {"type": "string"}
+      }
+    },
+    "barrier_update_propose": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["proposal_id", "result_id", "base_barrier_head_hash", "proposed_barrier_entry_relpath"],
+      "properties": {
+        "proposal_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+        "result_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+        "base_barrier_head_hash": {"type": "string", "pattern": "^(sha256:[0-9a-f]{64}|GENESIS)$"},
+        "proposed_barrier_entry_relpath": {"type": "string"}
+      }
+    },
+    "barrier_update_accept": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["proposal_id", "accepted", "barrier_entry_hash", "barrier_ledger_head_ref_hash_new"],
+      "properties": {
+        "proposal_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+        "accepted": {"type": "boolean"},
+        "barrier_entry_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+        "barrier_ledger_head_ref_hash_new": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"}
+      }
+    },
+    "subswarm_spawn": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "parent_epoch_index",
+        "parent_task_id",
+        "sponsor_agent_id",
+        "depth",
+        "subswarm_slot",
+        "child_swarm_run_id",
+        "child_pack_relpath",
+        "child_pack_hash",
+        "child_out_dir_relpath",
+        "child_expected_icore_id",
+        "child_limits"
+      ],
+      "properties": {
+        "parent_epoch_index": {"type": "integer", "minimum": 1},
+        "parent_task_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+        "sponsor_agent_id": {"type": "string", "pattern": "^agent_[0-9]{4}$"},
+        "depth": {"type": "integer", "minimum": 1},
+        "subswarm_slot": {"type": "integer", "minimum": 0},
+        "child_swarm_run_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+        "child_pack_relpath": {"type": "string"},
+        "child_pack_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+        "child_out_dir_relpath": {"type": "string"},
+        "child_expected_icore_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+        "child_limits": {"$ref": "#/$defs/child_limits"}
+      }
+    },
+    "child_limits": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["num_agents", "max_epochs", "max_tasks_per_epoch", "max_accepts_per_epoch"],
+      "properties": {
+        "num_agents": {"type": "integer", "minimum": 1},
+        "max_epochs": {"type": "integer", "minimum": 1},
+        "max_tasks_per_epoch": {"type": "integer", "minimum": 1},
+        "max_accepts_per_epoch": {"type": "integer", "minimum": 0}
+      }
+    },
+    "subswarm_join_attempt": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "parent_epoch_index",
+        "child_swarm_run_id",
+        "child_out_dir_relpath",
+        "attempt_index",
+        "expected_child_receipt_relpath",
+        "join_policy"
+      ],
+      "properties": {
+        "parent_epoch_index": {"type": "integer", "minimum": 1},
+        "child_swarm_run_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+        "child_out_dir_relpath": {"type": "string"},
+        "attempt_index": {"type": "integer", "minimum": 1},
+        "expected_child_receipt_relpath": {"type": "string"},
+        "join_policy": {"type": "string"}
+      }
+    },
+    "subswarm_join_accept": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "parent_epoch_index",
+        "child_swarm_run_id",
+        "child_receipt_relpath",
+        "child_swarm_ledger_head_ref_hash",
+        "child_barrier_ledger_head_ref_hash",
+        "export_bundle_relpath",
+        "export_bundle_hash",
+        "joined_artifact_set_hash",
+        "base_barrier_head_ref_hash_at_spawn",
+        "base_barrier_head_ref_hash_now",
+        "staleness"
+      ],
+      "properties": {
+        "parent_epoch_index": {"type": "integer", "minimum": 1},
+        "child_swarm_run_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+        "child_receipt_relpath": {"type": "string"},
+        "child_swarm_ledger_head_ref_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+        "child_barrier_ledger_head_ref_hash": {"type": "string", "pattern": "^(sha256:[0-9a-f]{64}|GENESIS)$"},
+        "export_bundle_relpath": {"type": "string"},
+        "export_bundle_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+        "joined_artifact_set_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+        "base_barrier_head_ref_hash_at_spawn": {"type": "string", "pattern": "^(sha256:[0-9a-f]{64}|GENESIS)$"},
+        "base_barrier_head_ref_hash_now": {"type": "string", "pattern": "^(sha256:[0-9a-f]{64}|GENESIS)$"},
+        "staleness": {"$ref": "#/$defs/subswarm_staleness"}
+      }
+    },
+    "subswarm_staleness": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["is_stale", "reason"],
+      "properties": {
+        "is_stale": {"type": "boolean"},
+        "reason": {"type": "string"}
+      }
+    },
+    "subswarm_join_reject": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["parent_epoch_index", "child_swarm_run_id", "child_out_dir_relpath", "reason"],
+      "properties": {
+        "parent_epoch_index": {"type": "integer", "minimum": 1},
+        "child_swarm_run_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+        "child_out_dir_relpath": {"type": "string"},
+        "reason": {"type": "string"}
+      }
+    },
+    "bridge_offer_publish": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["epoch_index", "offer_id", "offer_path", "offer_topics", "artifacts", "publisher_result_verify_event_ref_hash"],
+      "properties": {
+        "epoch_index": {"type": "integer", "minimum": 1},
+        "offer_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+        "offer_path": {"type": "string"},
+        "offer_topics": {"type": "array", "items": {"type": "string"}},
+        "artifacts": {
+          "type": "array",
+          "items": {"$ref": "#/$defs/bridge_artifact_ref"}
+        },
+        "publisher_result_verify_event_ref_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"}
+      }
+    },
+    "bridge_import_accept": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "epoch_index",
+        "offer_id",
+        "offer_path",
+        "import_dir_relpath",
+        "import_manifest_relpath",
+        "import_receipt_relpath",
+        "imported_artifacts_set_hash"
+      ],
+      "properties": {
+        "epoch_index": {"type": "integer", "minimum": 1},
+        "offer_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+        "offer_path": {"type": "string"},
+        "import_dir_relpath": {"type": "string"},
+        "import_manifest_relpath": {"type": "string"},
+        "import_receipt_relpath": {"type": "string"},
+        "imported_artifacts_set_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"}
+      }
+    },
+    "bridge_import_reject": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["epoch_index", "offer_id", "offer_path", "reason"],
+      "properties": {
+        "epoch_index": {"type": "integer", "minimum": 1},
+        "offer_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+        "offer_path": {"type": "string"},
+        "reason": {
+          "type": "string",
+          "enum": ["WRONG_ROOT", "ICORE_MISMATCH", "SCHEMA_INVALID", "BLOB_MISSING", "PROVENANCE_INVALID", "KIND_NOT_ALLOWED", "DUPLICATE_ACCEPT"]
+        }
+      }
+    },
+    "bridge_artifact_ref": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "blob_sha256", "exchange_blob_path", "bytes"],
+      "properties": {
+        "kind": {"type": "string"},
+        "blob_sha256": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+        "exchange_blob_path": {"type": "string"},
+        "bytes": {"type": "integer", "minimum": 0}
+      }
+    },
+    "epoch_end": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["epoch_index", "tasks_assigned", "results_ok", "results_valid", "barrier_updates_accepted"],
+      "properties": {
+        "epoch_index": {"type": "integer", "minimum": 1},
+        "tasks_assigned": {"type": "integer", "minimum": 0},
+        "results_ok": {"type": "integer", "minimum": 0},
+        "results_valid": {"type": "integer", "minimum": 0},
+        "barrier_updates_accepted": {"type": "integer", "minimum": 0}
+      }
+    },
+    "swarm_end": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["verdict", "reason", "swarm_ledger_head_ref_hash", "barrier_ledger_head_ref_hash"],
+      "properties": {
+        "verdict": {"type": "string", "enum": ["VALID", "INVALID"]},
+        "reason": {"type": "string"},
+        "swarm_ledger_head_ref_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+        "barrier_ledger_head_ref_hash": {"type": "string", "pattern": "^(sha256:[0-9a-f]{64}|GENESIS)$"}
+      }
+    }
+  }
+}

@@ -1,0 +1,65 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v19_0/ok_canonicalization_profile_v1",
+  "title": "Pinned ICAN profile v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_name",
+    "schema_version",
+    "profile_id",
+    "encoding",
+    "sort_keys",
+    "separators",
+    "allow_floats",
+    "allowed_json_types",
+    "newline_policy",
+    "v1_7r_equivalent"
+  ],
+  "properties": {
+    "schema_name": {
+      "const": "ok_canonicalization_profile_v1"
+    },
+    "schema_version": {
+      "const": "v19_0"
+    },
+    "profile_id": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "encoding": {
+      "const": "UTF-8"
+    },
+    "sort_keys": {
+      "const": "LEXICOGRAPHIC"
+    },
+    "separators": {
+      "const": "COMPACT_JSON"
+    },
+    "allow_floats": {
+      "const": false
+    },
+    "allowed_json_types": {
+      "type": "array",
+      "minItems": 6,
+      "uniqueItems": true,
+      "items": {
+        "type": "string",
+        "enum": [
+          "object",
+          "array",
+          "string",
+          "integer",
+          "boolean",
+          "null"
+        ]
+      }
+    },
+    "newline_policy": {
+      "const": "LF_ONLY_REJECT_CR"
+    },
+    "v1_7r_equivalent": {
+      "const": true
+    }
+  }
+}

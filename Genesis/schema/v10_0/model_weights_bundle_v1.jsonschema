@@ -1,0 +1,64 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v10_0/model_weights_bundle_v1",
+  "title": "Model weights bundle v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "bundle_id",
+    "base_model_id",
+    "weights_hash",
+    "weights_path",
+    "training_receipt_hash",
+    "training_ledger_head_hash",
+    "corpus_manifest_hash",
+    "toolchain_manifest_hash",
+    "training_config_hash",
+    "created_utc"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "model_weights_bundle_v1"
+    },
+    "bundle_id": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "base_model_id": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "weights_hash": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "weights_path": {
+      "type": "string"
+    },
+    "training_receipt_hash": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "training_ledger_head_hash": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "corpus_manifest_hash": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "toolchain_manifest_hash": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "training_config_hash": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "created_utc": {
+      "type": "string",
+      "format": "date-time"
+    }
+  }
+}

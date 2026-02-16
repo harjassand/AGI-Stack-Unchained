@@ -1,0 +1,46 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/ccai_x_mind_v1/intervention_log_entry_v1.schema.json",
+  "title": "CCAI-X Mind v1 Intervention Log Entry",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "format",
+    "schema_version",
+    "t",
+    "action_token",
+    "target_mechanism_id",
+    "mech_hash_before",
+    "mech_hash_after",
+    "do_payload_hash",
+    "prev_link_hash",
+    "link_hash"
+  ],
+  "properties": {
+    "format": {"const": "intervention_log_entry_v1"},
+    "schema_version": {"const": "1"},
+    "t": {"type": "integer", "minimum": 0},
+    "action_token": {"$ref": "#/$defs/identifier"},
+    "target_mechanism_id": {"$ref": "#/$defs/identifier"},
+    "mech_hash_before": {"$ref": "#/$defs/hash"},
+    "mech_hash_after": {"$ref": "#/$defs/hash"},
+    "do_payload_hash": {"$ref": "#/$defs/hash"},
+    "prev_link_hash": {"$ref": "#/$defs/hash"},
+    "link_hash": {"$ref": "#/$defs/hash"},
+    "x_extensions": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {}
+    }
+  },
+  "$defs": {
+    "identifier": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9_./-]{0,127}$"
+    },
+    "hash": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    }
+  }
+}

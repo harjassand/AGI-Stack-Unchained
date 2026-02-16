@@ -1,0 +1,55 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v3_2/swarm_graph_report_v1",
+  "title": "Swarm graph report v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "spec_version",
+    "root_swarm_run_id",
+    "nodes",
+    "authority_edges",
+    "knowledge_edges"
+  ],
+  "properties": {
+    "schema": {"const": "swarm_graph_report_v1"},
+    "spec_version": {"const": "v3_2"},
+    "root_swarm_run_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "nodes": {"type": "array", "items": {"$ref": "#/$defs/node"}},
+    "authority_edges": {"type": "array", "items": {"$ref": "#/$defs/authority_edge"}},
+    "knowledge_edges": {"type": "array", "items": {"$ref": "#/$defs/knowledge_edge"}}
+  },
+  "$defs": {
+    "node": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["swarm_run_id", "parent_swarm_run_id", "depth", "out_dir_relpath"],
+      "properties": {
+        "swarm_run_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+        "parent_swarm_run_id": {"type": ["string", "null"], "pattern": "^sha256:[0-9a-f]{64}$"},
+        "depth": {"type": "integer", "minimum": 0},
+        "out_dir_relpath": {"type": "string"}
+      }
+    },
+    "authority_edge": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["parent_swarm_run_id", "child_swarm_run_id"],
+      "properties": {
+        "parent_swarm_run_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+        "child_swarm_run_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"}
+      }
+    },
+    "knowledge_edge": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["importer_swarm_run_id", "publisher_swarm_run_id", "offer_id"],
+      "properties": {
+        "importer_swarm_run_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+        "publisher_swarm_run_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+        "offer_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"}
+      }
+    }
+  }
+}

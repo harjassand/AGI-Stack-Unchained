@@ -1,0 +1,30 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v1_6r/ontology_patch_v2",
+  "title": "Ontology patch v2",
+  "type": "object",
+  "additionalProperties": false,
+  "patternProperties": {
+    "^x-": {}
+  },
+  "required": [
+    "schema",
+    "schema_version",
+    "patch_id",
+    "base_ontology_id",
+    "proposed_ontology_def_hash"
+  ],
+  "properties": {
+    "schema": {"const": "ontology_patch_v2"},
+    "schema_version": {"type": "integer", "const": 2},
+    "patch_id": {"type": "string", "pattern": "^sha256:[a-f0-9]{64}$"},
+    "base_ontology_id": {
+      "anyOf": [
+        {"type": "string", "pattern": "^sha256:[a-f0-9]{64}$"},
+        {"type": "null"}
+      ]
+    },
+    "proposed_ontology_def_hash": {"type": "string", "pattern": "^sha256:[a-f0-9]{64}$"},
+    "notes": {"anyOf": [{"type": "string"}, {"type": "null"}]}
+  }
+}

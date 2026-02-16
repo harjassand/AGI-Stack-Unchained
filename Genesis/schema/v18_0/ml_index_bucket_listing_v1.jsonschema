@@ -1,0 +1,36 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v18_0/ml_index_bucket_listing_v1",
+  "title": "ML-Index Bucket Listing v1",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "schema_id": {"const": "ml_index_bucket_listing_v1"},
+    "index_manifest_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "buckets": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "bucket_id_u32": {"type": "integer", "minimum": 0, "maximum": 4294967295},
+          "pages": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "page_index_u32": {"type": "integer", "minimum": 0, "maximum": 4294967295},
+                "page_ref": {"$ref": "https://genesis.engine/specs/v18_0/eudrs_u_artifact_ref_v1"}
+              },
+              "required": ["page_index_u32", "page_ref"]
+            }
+          }
+        },
+        "required": ["bucket_id_u32", "pages"]
+      }
+    }
+  },
+  "required": ["schema_id", "index_manifest_id", "buckets"]
+}
+

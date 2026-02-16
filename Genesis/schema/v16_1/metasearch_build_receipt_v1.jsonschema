@@ -1,0 +1,33 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v16_1/metasearch_build_receipt_v1",
+  "title": "Metasearch build receipt v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "created_utc",
+    "receipt_id",
+    "crate_tree_hash",
+    "cargo_lock_sha256",
+    "rust_toolchain_file_sha256",
+    "build_cmdline",
+    "binary_relpath",
+    "binary_sha256",
+    "cargo_version",
+    "rustc_version"
+  ],
+  "properties": {
+    "schema_version": { "const": "metasearch_build_receipt_v1" },
+    "created_utc": { "const": "1970-01-01T00:00:00Z" },
+    "receipt_id": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" },
+    "crate_tree_hash": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" },
+    "cargo_lock_sha256": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" },
+    "rust_toolchain_file_sha256": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" },
+    "build_cmdline": { "type": "array", "minItems": 1, "items": { "type": "string" } },
+    "binary_relpath": { "type": "string", "minLength": 1 },
+    "binary_sha256": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" },
+    "cargo_version": { "type": "string", "minLength": 1 },
+    "rustc_version": { "type": "string", "minLength": 1 }
+  }
+}

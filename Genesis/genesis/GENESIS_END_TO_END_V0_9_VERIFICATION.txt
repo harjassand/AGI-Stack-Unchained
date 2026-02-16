@@ -1,0 +1,7 @@
+Commands:
+  CDEL_ROOT=cdel python3 genesis/run_end_to_end_v0_9.py
+
+Results:
+  run_end_to_end_v0_9: PASS
+  failure_pattern_id present in genesis_run.jsonl
+  at least one promotion PASS recorded

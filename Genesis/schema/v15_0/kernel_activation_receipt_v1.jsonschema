@@ -1,0 +1,42 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v15_0/kernel_activation_receipt_v1",
+  "title": "Kernel activation receipt v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "kernel_component_id",
+    "binary_sha256",
+    "abi_version",
+    "activated_by_promotion_bundle_sha256",
+    "activated_utc",
+    "activation_hash"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "kernel_activation_receipt_v1"
+    },
+    "kernel_component_id": {
+      "const": "SAS_KERNEL_V15"
+    },
+    "binary_sha256": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "abi_version": {
+      "const": "kernel_run_spec_v1"
+    },
+    "activated_by_promotion_bundle_sha256": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "activated_utc": {
+      "type": "string"
+    },
+    "activation_hash": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    }
+  }
+}

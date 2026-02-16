@@ -1,0 +1,95 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v1_5r/rsi_real_campaign_pack_v1",
+  "title": "RSI real campaign pack v1",
+  "type": "object",
+  "additionalProperties": false,
+  "patternProperties": {
+    "^x-": {}
+  },
+  "required": [
+    "schema",
+    "schema_version",
+    "N_epochs",
+    "insertion_epochs",
+    "macro_proposal_epochs",
+    "family_proposals_by_epoch",
+    "macro_proposals_by_epoch",
+    "expected_frontier_events"
+  ],
+  "properties": {
+    "schema": {"const": "rsi_real_campaign_pack_v1"},
+    "schema_version": {"type": "integer", "const": 1},
+    "N_epochs": {"type": "integer", "minimum": 1},
+    "insertion_epochs": {
+      "type": "array",
+      "items": {"type": "integer", "minimum": 1}
+    },
+    "macro_proposal_epochs": {
+      "type": "array",
+      "items": {"type": "integer", "minimum": 1}
+    },
+    "family_proposals_by_epoch": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "array",
+        "items": {"type": "string"}
+      }
+    },
+    "macro_proposals_by_epoch": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "array",
+        "items": {"type": "string"}
+      }
+    },
+    "mech_patch_proposals_by_epoch": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "array",
+        "items": {"type": "string"}
+      }
+    },
+    "expected_frontier_events": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["min_insertions"],
+        "properties": {
+          "min_insertions": {"type": "integer", "minimum": 1}
+        }
+      }
+    },
+    "enable_macro_miner": {"type": "boolean"},
+    "enable_policy_synthesizer": {"type": "boolean"},
+    "enable_family_generalizer": {"type": "boolean"},
+    "enable_meta_patch_searcher": {"type": "boolean"},
+    "macro_miner_top_k": {"type": "integer", "minimum": 0},
+    "macro_miner_trace_window": {"type": "integer", "minimum": 1},
+    "base_policy_action": {"type": "integer"},
+    "policy_synthesizer_epochs": {
+      "type": "array",
+      "items": {"type": "integer", "minimum": 1}
+    },
+    "meta_patch_proposal_epochs": {
+      "type": "array",
+      "items": {"type": "integer", "minimum": 1}
+    },
+    "meta_benchmark_pack_path": {"type": "string"},
+    "integrity_expected": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "must_emit_integrity_receipt": {"type": "boolean"}
+      }
+    },
+    "portfolio_expected": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "must_emit_portfolio_receipt": {"type": "boolean"}
+      }
+    }
+  }
+}

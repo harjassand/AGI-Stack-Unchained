@@ -1,0 +1,16 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v12_0/sas_code_problem_spec_v1",
+  "title": "SAS-CODE problem spec v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "problem_id", "domain", "baseline_algo_id", "candidate_algo_id"],
+  "properties": {
+    "schema_version": {"const": "sas_code_problem_spec_v1"},
+    "problem_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "domain": {"const": "SAS_CODE_SORT_V1"},
+    "baseline_algo_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "candidate_algo_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "description": {"type": "string"}
+  }
+}

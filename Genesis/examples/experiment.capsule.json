@@ -1,0 +1,161 @@
+{
+  "schema_version": "1.0.1",
+  "capsule_version": "1.0.0",
+  "forward_compat": "x_prefix_only",
+  "canonicalization": "gcj-1",
+  "capsule_id": "5f7e9c10-1a2b-4c3d-8e9f-0a1b2c3d4e55",
+  "artifact_type": "EXPERIMENT",
+  "parents": [],
+  "operators_used": [
+    "compose"
+  ],
+  "build_hashes": {
+    "ir_hash": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+    "container_hash": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+    "dependency_hashes": []
+  },
+  "commitments": {
+    "capsule_hash": "8c151eb1ba7bad3b581ac7e6a04716d59533d2bfd5a5ddb6094094432df5a975",
+    "checkpoint_merkle_root": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
+  },
+  "ir_payload": {
+    "format": "GIR1",
+    "version": "1.0",
+    "payload_base64": "AA=="
+  },
+  "entrypoints": [
+    {
+      "name": "run_experiment",
+      "signature": {
+        "inputs": [
+          {
+            "name": "input_spec",
+            "type": "ExperimentSpec"
+          }
+        ],
+        "outputs": [
+          {
+            "name": "dataset_handle",
+            "type": "DatasetHandle"
+          }
+        ]
+      }
+    }
+  ],
+  "effects": {
+    "allow": [
+      "read_only",
+      "filesystem_read"
+    ],
+    "deny": [
+      "network",
+      "filesystem_write",
+      "process_spawn"
+    ]
+  },
+  "contract": {
+    "functional_spec": {
+      "spec_language": "DSL1",
+      "clauses": [
+        {
+          "id": "fs-1",
+          "clause_type": "functional",
+          "text": "Output dataset_handle includes handle_id, schema_id, checksum, and provenance."
+        }
+      ]
+    },
+    "safety_spec": {
+      "invariants": [
+        {
+          "id": "s-1",
+          "clause_type": "safety",
+          "text": "No writes outside the sandbox."
+        }
+      ],
+      "forbidden_behaviors": []
+    },
+    "resource_spec": {
+      "max_wall_time_ms": 1000,
+      "max_memory_mb": 512,
+      "max_sample_count": 1000,
+      "max_gpu_seconds": 0
+    },
+    "statistical_spec": {
+      "metrics": [
+        {
+          "name": "info_gain",
+          "direction": "maximize",
+          "target": 0.1
+        }
+      ],
+      "decision_rule": "threshold",
+      "confidence_requirement": {
+        "delta": 0.05
+      }
+    },
+    "robustness_spec": {
+      "mode": "certified_slices",
+      "slice_family": {
+        "family": "finite_template",
+        "capacity": {
+          "parameters": {
+            "templates": 5
+          }
+        }
+      },
+      "risk_metric": "info_gain",
+      "risk_bound": 0.05
+    }
+  },
+  "assumptions": [
+    {
+      "assumption_id": "A-1",
+      "statement": "Simulator outputs are stable under fixed seeds.",
+      "scope": "simulator",
+      "falsification_test": {
+        "method": "replay_check",
+        "power_target": 0.9,
+        "min_detectable_delta": 0.01,
+        "anytime_valid": true
+      },
+      "uncertainty_set": {
+        "class": "simulator_noise",
+        "radius": 0.01
+      },
+      "failure_probability": 0.01
+    }
+  ],
+  "budget_bid": {
+    "grade": "ResearchGrade",
+    "alpha_bid": "0.01",
+    "privacy_bid": {
+      "epsilon": "0",
+      "delta": "0"
+    },
+    "compute_bid": {
+      "max_compute_units": 500,
+      "max_wall_time_ms": 1000,
+      "max_adversary_strength": 0
+    }
+  },
+  "evidence": {
+    "certificates": [],
+    "unit_tests": [],
+    "property_tests": [],
+    "checkpoints": []
+  },
+  "reproducibility": {
+    "determinism_mode": "seeded",
+    "seed_policy": "harness_seeded",
+    "runtime_env": {
+      "os": "linux",
+      "arch": "x86_64",
+      "kernel_isa": "KISA-1"
+    }
+  },
+  "provenance": {
+    "created_by": "genesis",
+    "timestamp": "2025-01-01T00:00:00Z",
+    "source_repo": "local"
+  }
+}

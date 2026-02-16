@@ -1,0 +1,55 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v1_7r/macro_eval_report_v2",
+  "title": "Macro eval report v2",
+  "type": "object",
+  "additionalProperties": false,
+  "patternProperties": {
+    "^x-": {}
+  },
+  "required": [
+    "schema",
+    "schema_version",
+    "epoch_id",
+    "corpus",
+    "best_macro",
+    "decision",
+    "x-meta"
+  ],
+  "properties": {
+    "schema": {"const": "macro_eval_report_v2"},
+    "schema_version": {"type": "integer", "const": 2},
+    "epoch_id": {"type": "string"},
+    "corpus": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["window_epochs", "trace_hashes", "corpus_hash"],
+      "properties": {
+        "window_epochs": {"type": "array", "items": {"type": "integer"}},
+        "trace_hashes": {"type": "array", "items": {"type": "string", "pattern": "^sha256:[a-f0-9]{64}$"}},
+        "corpus_hash": {"type": "string", "pattern": "^sha256:[a-f0-9]{64}$"}
+      }
+    },
+    "best_macro": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["macro_id", "ctx_mdl_gain_bits", "support_families_hold", "support_total_hold"],
+      "properties": {
+        "macro_id": {"type": "string", "pattern": "^sha256:[a-f0-9]{64}$"},
+        "ctx_mdl_gain_bits": {"type": "integer"},
+        "support_families_hold": {"type": "integer"},
+        "support_total_hold": {"type": "integer"}
+      }
+    },
+    "decision": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["passes", "reason"],
+      "properties": {
+        "passes": {"type": "boolean"},
+        "reason": {"type": "string"}
+      }
+    },
+    "x-meta": {"type": "object"}
+  }
+}

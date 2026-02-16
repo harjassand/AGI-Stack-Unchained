@@ -1,0 +1,56 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "intervention_log_v1_1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "format",
+    "schema_version",
+    "suite_id",
+    "episode_id",
+    "regime_id",
+    "records",
+    "log_sha256"
+  ],
+  "properties": {
+    "format": {"const": "intervention_log_v1_1"},
+    "schema_version": {"const": 1},
+    "suite_id": {"type": "string"},
+    "episode_id": {"type": "string"},
+    "regime_id": {"type": "string"},
+    "records": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/record"}
+    },
+    "log_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+  },
+  "$defs": {
+    "record": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "t",
+        "o_t",
+        "a_requested",
+        "a_applied",
+        "do_event_type",
+        "do_event_payload",
+        "attestation"
+      ],
+      "properties": {
+        "t": {"type": "integer", "minimum": 0},
+        "o_t": {
+          "type": "array",
+          "minItems": 32,
+          "maxItems": 32,
+          "items": {"type": "integer", "enum": [0, 1]}
+        },
+        "a_requested": {"type": "object"},
+        "a_applied": {"type": "object"},
+        "do_event_type": {"enum": ["SET", "TOGGLE", "NOOP"]},
+        "do_event_payload": {"type": "object"},
+        "attestation": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+      }
+    }
+  }
+}

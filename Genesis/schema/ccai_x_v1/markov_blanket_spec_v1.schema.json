@@ -1,0 +1,98 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/ccai_x_v1/markov_blanket_spec_v1.schema.json",
+  "title": "CCAI-X v1 Markov Blanket Spec",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "format",
+    "schema_version",
+    "blanket_id",
+    "channels",
+    "side_channel_policy",
+    "attestation_requirements"
+  ],
+  "properties": {
+    "format": {"const": "markov_blanket_spec_v1"},
+    "schema_version": {"const": "1"},
+    "blanket_id": {"$ref": "#/$defs/identifier"},
+    "channels": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["observation", "action"],
+      "properties": {
+        "observation": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["mode", "token_schema_id"],
+          "properties": {
+            "mode": {"const": "read_only"},
+            "token_schema_id": {"$ref": "#/$defs/identifier"}
+          }
+        },
+        "action": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["mode", "token_schema_id"],
+          "properties": {
+            "mode": {"const": "write_only"},
+            "token_schema_id": {"$ref": "#/$defs/identifier"}
+          }
+        }
+      }
+    },
+    "side_channel_policy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "network_allowed",
+        "clock_allowed",
+        "env_var_allowlist",
+        "fs_read_allowlist_prefixes",
+        "fs_write_allowlist_prefixes"
+      ],
+      "properties": {
+        "network_allowed": {"const": false},
+        "clock_allowed": {"const": false},
+        "env_var_allowlist": {
+          "type": "array",
+          "items": {"$ref": "#/$defs/identifier"},
+          "uniqueItems": true
+        },
+        "fs_read_allowlist_prefixes": {
+          "type": "array",
+          "items": {"type": "string"},
+          "uniqueItems": true
+        },
+        "fs_write_allowlist_prefixes": {
+          "type": "array",
+          "items": {"type": "string"},
+          "uniqueItems": true
+        }
+      }
+    },
+    "attestation_requirements": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "requires_syscall_log",
+        "requires_io_transcript_hash_chain"
+      ],
+      "properties": {
+        "requires_syscall_log": {"type": "boolean"},
+        "requires_io_transcript_hash_chain": {"type": "boolean"}
+      }
+    },
+    "x_extensions": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {}
+    }
+  },
+  "$defs": {
+    "identifier": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9_./-]{0,127}$"
+    }
+  }
+}

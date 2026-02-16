@@ -1,0 +1,100 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v18_0/dmpl_lasum_report_v1",
+  "title": "DMPL LASUM Report v1",
+  "type": "object",
+  "additionalProperties": false,
+  "$defs": {
+    "sha256_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "q32_i64": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {"q": {"type": "integer", "minimum": -9223372036854775808, "maximum": 9223372036854775807}},
+      "required": ["q"]
+    },
+    "u32": {"type": "integer", "minimum": 0, "maximum": 4294967295},
+    "status_obj": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "ok_b": {"type": "boolean"},
+        "reason_code": {"type": "string"}
+      },
+      "required": ["ok_b", "reason_code"],
+      "allOf": [
+        {
+          "if": {"properties": {"ok_b": {"const": true}}},
+          "then": {"properties": {"reason_code": {"const": "DMPL_OK"}}}
+        },
+        {
+          "if": {"properties": {"ok_b": {"const": false}}},
+          "then": {"properties": {"reason_code": {"pattern": "^DMPL_E_[A-Z0-9_]+$"}}}
+        }
+      ]
+    }
+  },
+  "properties": {
+    "schema_id": {"const": "dmpl_lasum_report_v1"},
+    "dc1_id": {"type": "string", "const": "dc1:q32_v1"},
+    "opset_id": {"type": "string", "pattern": "^opset:eudrs_u_v1:sha256:[0-9a-f]{64}$"},
+
+    "candidate_droot_id": {"$ref": "#/$defs/sha256_id"},
+    "eval_suite_id": {"$ref": "#/$defs/sha256_id"},
+
+    "credit_by_level": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "ladder_level_u32": {"$ref": "#/$defs/u32"},
+          "credit_q32": {"$ref": "#/$defs/q32_i64"}
+        },
+        "required": ["ladder_level_u32", "credit_q32"]
+      }
+    },
+
+    "credit_by_concept": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "concept_shard_id": {
+            "anyOf": [
+              {"$ref": "#/$defs/sha256_id"},
+              {"const": "RESIDUAL"}
+            ]
+          },
+          "credit_q32": {"$ref": "#/$defs/q32_i64"}
+        },
+        "required": ["concept_shard_id", "credit_q32"]
+      }
+    },
+
+    "totals": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "total_credit_q32": {"$ref": "#/$defs/q32_i64"},
+        "total_ufc_q32": {"$ref": "#/$defs/q32_i64"},
+        "ok_b": {"type": "boolean"}
+      },
+      "required": ["total_credit_q32", "total_ufc_q32", "ok_b"]
+    },
+
+    "status": {"$ref": "#/$defs/status_obj"}
+  },
+  "required": [
+    "schema_id",
+    "dc1_id",
+    "opset_id",
+    "candidate_droot_id",
+    "eval_suite_id",
+    "credit_by_level",
+    "credit_by_concept",
+    "totals",
+    "status"
+  ]
+}
+

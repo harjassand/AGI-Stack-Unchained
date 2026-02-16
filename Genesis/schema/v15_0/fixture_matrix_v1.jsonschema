@@ -1,0 +1,63 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v15_0/fixture_matrix_v1",
+  "title": "Fixture matrix v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "fixtures"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "fixture_matrix_v1"
+    },
+    "fixtures": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "capability_id",
+          "kernel_support",
+          "reference_state_rel",
+          "reference_snapshot_rel",
+          "reference_promotion_bundle_rel",
+          "reference_files",
+          "python_driver"
+        ],
+        "properties": {
+          "capability_id": {
+            "type": "string"
+          },
+          "kernel_support": {
+            "enum": [
+              "REQUIRED",
+              "OPTIONAL",
+              "NONE"
+            ]
+          },
+          "reference_state_rel": {
+            "type": "string"
+          },
+          "reference_snapshot_rel": {
+            "type": "string"
+          },
+          "reference_promotion_bundle_rel": {
+            "type": "string"
+          },
+          "reference_files": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "python_driver": {
+            "type": "string"
+          }
+        }
+      }
+    }
+  }
+}

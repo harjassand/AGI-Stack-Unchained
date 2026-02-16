@@ -1,0 +1,49 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v5_0/toolchain_manifest_v1",
+  "title": "Toolchain manifest v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["created_utc", "host", "toolchain", "measurement"],
+  "properties": {
+    "created_utc": {"type": "string"},
+    "host": {"$ref": "#/$defs/host"},
+    "toolchain": {"$ref": "#/$defs/toolchain"},
+    "measurement": {"$ref": "#/$defs/measurement"}
+  },
+  "$defs": {
+    "host": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["hostname", "hw_model", "arch", "os_product_version", "os_build_version"],
+      "properties": {
+        "hostname": {"type": "string"},
+        "hw_model": {"type": "string"},
+        "arch": {"const": "arm64"},
+        "os_product_version": {"type": "string"},
+        "os_build_version": {"type": "string"}
+      }
+    },
+    "toolchain": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["python_version", "clang_version", "xcodebuild_version"],
+      "properties": {
+        "python_version": {"type": "string"},
+        "clang_version": {"type": "string"},
+        "rustc_version": {"type": ["string", "null"]},
+        "xcodebuild_version": {"type": ["string", "null"]}
+      }
+    },
+    "measurement": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["powermetrics_path", "powermetrics_help_hash"],
+      "properties": {
+        "powermetrics_path": {"const": "/usr/bin/powermetrics"},
+        "powermetrics_help_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"}
+      }
+    }
+  }
+}
+

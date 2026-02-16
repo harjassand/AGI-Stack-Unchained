@@ -1,0 +1,22 @@
+# CCAI-X Mind v1 sealed heldout plan
+
+task_id = "ccai_x_mind_v1"
+schema_version = "1"
+plan_id = "ccai_x_mind_v1_sealed_heldout"
+max_steps_per_episode = 2
+max_episodes = 5
+max_total_compute_units = 1000
+suitepack_dir_env = "CDEL_CCAI_X_HELDOUT_DIR"
+required_suite_families = ["psi_swap", "ambiguity_trap", "invariance", "coherence", "tamper_dark_room"]
+coherence_residual_bound_fp = 5000
+require_proof_carrying_efe = true
+require_workspace_replay = true
+require_coherence_gate = true
+receipt_kind = "ccai_x_mind_v1_eval"
+
+[suite_thresholds]
+psi_swap = 1000
+ambiguity_trap = 1000
+invariance = 1000
+coherence = 1000
+tamper_dark_room = 1000

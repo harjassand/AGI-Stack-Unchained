@@ -1,0 +1,129 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v19_0/ok_refutation_witness_v1",
+  "title": "Overlap-kernel refutation witness v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_name",
+    "schema_version",
+    "witness_id",
+    "dispute_kind",
+    "subject",
+    "check_procedure_ref",
+    "evidence"
+  ],
+  "properties": {
+    "schema_name": {
+      "const": "ok_refutation_witness_v1"
+    },
+    "schema_version": {
+      "const": "v19_0"
+    },
+    "witness_id": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "dispute_kind": {
+      "type": "string",
+      "enum": [
+        "TRANSLATION_MISMATCH",
+        "PORTABILITY_VERIFICATION_FAIL",
+        "COMMUTATIVITY_FAIL"
+      ]
+    },
+    "subject": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "origin_polity_ids",
+        "treaty_ids",
+        "input_overlap_object_id",
+        "translated_object_ids"
+      ],
+      "properties": {
+        "origin_polity_ids": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "treaty_ids": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "string",
+            "pattern": "^sha256:[0-9a-f]{64}$"
+          }
+        },
+        "input_overlap_object_id": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "translated_object_ids": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^sha256:[0-9a-f]{64}$"
+          }
+        }
+      }
+    },
+    "check_procedure_ref": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "checker_name",
+        "checker_id"
+      ],
+      "properties": {
+        "checker_name": {
+          "type": "string"
+        },
+        "checker_id": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        }
+      }
+    },
+    "evidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "overlap_object_ids",
+        "translator_bundle_ids",
+        "budgets"
+      ],
+      "properties": {
+        "overlap_object_ids": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "string",
+            "pattern": "^sha256:[0-9a-f]{64}$"
+          }
+        },
+        "translator_bundle_ids": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "string",
+            "pattern": "^sha256:[0-9a-f]{64}$"
+          }
+        },
+        "overlap_object_bytes_b64": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9+/]*={0,2}$"
+          }
+        },
+        "budgets": {
+          "$ref": "https://genesis.engine/specs/v19_0/budget_spec_v1"
+        }
+      }
+    }
+  }
+}

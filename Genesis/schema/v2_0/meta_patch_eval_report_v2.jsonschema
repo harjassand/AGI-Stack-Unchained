@@ -1,0 +1,68 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v2_0/meta_patch_eval_report_v2",
+  "title": "Meta patch eval report v2",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "schema_version",
+    "epoch",
+    "workvec_base",
+    "workvec_patch",
+    "work_cost_base",
+    "work_cost_patch",
+    "rho_met",
+    "rho_met_min",
+    "efficiency_vector_dominance",
+    "efficiency_scalar_gate",
+    "efficiency_gate_passed"
+  ],
+  "properties": {
+    "schema": {"const": "meta_patch_eval_report_v2"},
+    "schema_version": {"type": "integer", "const": 2},
+    "epoch": {"type": "integer"},
+    "workvec_base": {"$ref": "#/$defs/workvec_v1"},
+    "workvec_patch": {"$ref": "#/$defs/workvec_v1"},
+    "work_cost_base": {"type": "integer", "minimum": 0},
+    "work_cost_patch": {"type": "integer", "minimum": 0},
+    "rho_met": {"$ref": "#/$defs/rational_pair"},
+    "rho_met_min": {"$ref": "#/$defs/rational_pair"},
+    "efficiency_vector_dominance": {"type": "boolean"},
+    "efficiency_scalar_gate": {"type": "boolean"},
+    "efficiency_gate_passed": {"type": "boolean"}
+  },
+  "$defs": {
+    "rational_pair": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["num", "den"],
+      "properties": {
+        "num": {"type": "integer", "minimum": 0},
+        "den": {"type": "integer", "minimum": 1}
+      }
+    },
+    "workvec_v1": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema",
+        "schema_version",
+        "sha256_calls_total",
+        "canon_calls_total",
+        "sha256_bytes_total",
+        "canon_bytes_total",
+        "onto_ctx_hash_compute_calls_total"
+      ],
+      "properties": {
+        "schema": {"const": "workvec_v1"},
+        "schema_version": {"type": "integer", "const": 1},
+        "sha256_calls_total": {"type": "integer", "minimum": 0},
+        "canon_calls_total": {"type": "integer", "minimum": 0},
+        "sha256_bytes_total": {"type": "integer", "minimum": 0},
+        "canon_bytes_total": {"type": "integer", "minimum": 0},
+        "onto_ctx_hash_compute_calls_total": {"type": "integer", "minimum": 0}
+      }
+    }
+  }
+}

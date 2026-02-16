@@ -1,0 +1,51 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v1_7r/ontology_snapshot_v3",
+  "title": "Ontology snapshot v3",
+  "type": "object",
+  "additionalProperties": false,
+  "patternProperties": {
+    "^x-": {}
+  },
+  "required": [
+    "schema",
+    "schema_version",
+    "snapshot_id",
+    "epoch_id",
+    "ontology_id",
+    "trained_on",
+    "context_kernel_state",
+    "x-meta"
+  ],
+  "properties": {
+    "schema": {"const": "ontology_snapshot_v3"},
+    "schema_version": {"type": "integer", "const": 3},
+    "snapshot_id": {"type": "string", "pattern": "^sha256:[a-f0-9]{64}$"},
+    "epoch_id": {"type": "string"},
+    "ontology_id": {"type": "string", "pattern": "^sha256:[a-f0-9]{64}$"},
+    "trained_on": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["window_epochs", "corpus_hash"],
+      "properties": {
+        "window_epochs": {"type": "array", "items": {"type": "integer"}},
+        "corpus_hash": {"type": "string", "pattern": "^sha256:[a-f0-9]{64}$"}
+      }
+    },
+    "context_kernel_state": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema", "schema_version", "selected_concept_ids", "arity"],
+      "properties": {
+        "schema": {"const": "onto_context_kernel_state_v1"},
+        "schema_version": {"type": "integer", "const": 1},
+        "selected_concept_ids": {
+          "type": "array",
+          "items": {"type": "string", "pattern": "^sha256:[a-f0-9]{64}$"}
+        },
+        "arity": {"type": "integer"}
+      }
+    },
+    "x-meta": {"type": "object"}
+  }
+}

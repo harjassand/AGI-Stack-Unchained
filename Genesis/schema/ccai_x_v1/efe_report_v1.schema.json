@@ -1,0 +1,90 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/ccai_x_v1/efe_report_v1.schema.json",
+  "title": "CCAI-X v1 EFE Report",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "format",
+    "schema_version",
+    "t",
+    "candidate_id",
+    "isa_id",
+    "policy_set_id",
+    "policies",
+    "chosen_policy_id",
+    "chosen_action_token",
+    "tie_break_witness"
+  ],
+  "properties": {
+    "format": {"const": "efe_report_v1"},
+    "schema_version": {"const": "1"},
+    "t": {"type": "integer"},
+    "candidate_id": {"$ref": "#/$defs/hash"},
+    "isa_id": {"$ref": "#/$defs/identifier"},
+    "policy_set_id": {"$ref": "#/$defs/identifier"},
+    "policies": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/policy"},
+      "uniqueItems": true
+    },
+    "chosen_policy_id": {"$ref": "#/$defs/identifier"},
+    "chosen_action_token": {"$ref": "#/$defs/identifier"},
+    "tie_break_witness": {"$ref": "#/$defs/tie_break_witness"},
+    "x_extensions": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {}
+    }
+  },
+  "$defs": {
+    "identifier": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9_./-]{0,127}$"
+    },
+    "hash": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "policy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "policy_id",
+        "actions",
+        "risk_fp",
+        "ambiguity_fp",
+        "epistemic_fp",
+        "complexity_fp",
+        "total_G_fp"
+      ],
+      "properties": {
+        "policy_id": {"$ref": "#/$defs/identifier"},
+        "actions": {
+          "type": "array",
+          "items": {"$ref": "#/$defs/identifier"},
+          "minItems": 1
+        },
+        "risk_fp": {"type": "integer"},
+        "ambiguity_fp": {"type": "integer"},
+        "epistemic_fp": {"type": "integer"},
+        "complexity_fp": {"type": "integer"},
+        "total_G_fp": {"type": "integer"}
+      }
+    },
+    "tie_break_witness": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["rule", "compared_against_policy_id"],
+      "properties": {
+        "rule": {"const": "min_total_G_then_min_risk_then_lex"},
+        "compared_against_policy_id": {
+          "anyOf": [
+            {"$ref": "#/$defs/identifier"},
+            {"const": ""}
+          ]
+        }
+      }
+    }
+  }
+}

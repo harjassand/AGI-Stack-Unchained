@@ -1,0 +1,39 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v6_0/daemon_ledger_v1",
+  "title": "Daemon ledger v1 (JSONL line)",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "seq",
+    "tick",
+    "event_type",
+    "event_payload",
+    "prev_entry_hash",
+    "entry_hash"
+  ],
+  "properties": {
+    "seq": {"type": "integer", "minimum": 1},
+    "tick": {"type": "integer", "minimum": 0},
+    "event_type": {
+      "type": "string",
+      "enum": [
+        "BOOT",
+        "HEARTBEAT",
+        "TICK_BEGIN",
+        "ACTIVITY_DONE",
+        "CHECKPOINT",
+        "PAUSED",
+        "RESUMED",
+        "STOP_REQUESTED",
+        "SHUTDOWN",
+        "RECOVERY_TAIL_TRUNCATED",
+        "META_DRIFT_DETECTED",
+        "FATAL"
+      ]
+    },
+    "event_payload": {"type": "object"},
+    "prev_entry_hash": {"type": "string", "pattern": "^(GENESIS|[0-9a-f]{64})$"},
+    "entry_hash": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+  }
+}

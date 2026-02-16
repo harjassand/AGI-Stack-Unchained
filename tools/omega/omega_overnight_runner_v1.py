@@ -58,6 +58,10 @@ _POLYMATH_STALL_P_TICK_U64 = 10
 _POLYMATH_STALL_Q_TICK_U64 = 30
 _POLYMATH_ROUTER_BOOTSTRAP_GOAL_ID = "goal_auto_00_polymath_router_bootstrap_0001"
 _POLYMATH_ROUTER_CONQUER_GOAL_ID = "goal_auto_00_polymath_router_conquer_0001"
+_DEFAULT_COORDINATOR_MODULE = "orchestrator.omega_v18_0.coordinator_v1"
+_DEFAULT_STATE_DIR_REL = Path("daemon") / "rsi_omega_daemon_v18_0" / "state"
+_COORDINATOR_MODULE = _DEFAULT_COORDINATOR_MODULE
+_STATE_DIR_REL = _DEFAULT_STATE_DIR_REL
 _VAL_V17_CAMPAIGN_ID = "rsi_sas_val_v17_0"
 _VAL_V17_V16_FIXTURE_REL = Path("workload/v16_1_fixture/v16_1_state_fixture.tar.gz")
 _VAL_V17_V16_FIXTURE_STATE_DIR_IN_TAR_DEFAULT = "rsi_sas_metasearch_v16_1/state"
@@ -127,7 +131,7 @@ def _slug_token(value: str) -> str:
 
 
 def _state_dir(run_dir: Path) -> Path:
-    return run_dir / "daemon" / "rsi_omega_daemon_v18_0" / "state"
+    return run_dir / _STATE_DIR_REL
 
 
 def _write_json(path: Path, payload: dict[str, Any]) -> None:
@@ -861,13 +865,16 @@ def _purge_repo_runtime_modules() -> None:
             sys.modules.pop(name, None)
 
 
-def _load_run_tick(repo_root: Path) -> Callable[..., dict[str, Any]]:
+def _load_run_tick(repo_root: Path, *, coordinator_module: str) -> Callable[..., dict[str, Any]]:
     _ensure_repo_import_path(repo_root)
     _purge_repo_runtime_modules()
-    module = importlib.import_module("orchestrator.omega_v18_0.coordinator_v1")
+    module_name = str(coordinator_module).strip()
+    if not module_name:
+        raise RuntimeError("missing coordinator module")
+    module = importlib.import_module(module_name)
     run_tick = getattr(module, "run_tick", None)
     if not callable(run_tick):
-        raise RuntimeError("missing run_tick in worktree coordinator")
+        raise RuntimeError(f"missing run_tick in worktree coordinator: {module_name}")
     return run_tick
 
 
@@ -3351,6 +3358,8 @@ def _write_morning_diff(
 
 def main() -> None:
     global _REPO_ROOT
+    global _COORDINATOR_MODULE
+    global _STATE_DIR_REL
 
     parser = argparse.ArgumentParser(prog="omega_overnight_runner_v1")
     parser.add_argument("--hours", type=float, default=10.0)
@@ -3360,6 +3369,8 @@ def main() -> None:
         "--campaign_pack",
         default="campaigns/rsi_omega_daemon_v18_0_prod/rsi_omega_daemon_pack_v1.json",
     )
+    parser.add_argument("--coordinator_module", default=_DEFAULT_COORDINATOR_MODULE)
+    parser.add_argument("--state_dir_rel", default=_DEFAULT_STATE_DIR_REL.as_posix())
     parser.add_argument("--meta_core_mode", choices=("production", "sandbox"), default="production")
     parser.add_argument("--git_branch", default="")
     parser.add_argument("--worktree_dir", default="")
@@ -3395,6 +3406,14 @@ def main() -> None:
     parser.add_argument("--profile", choices=("full", "refinery", "unified"), default="full")
     parser.add_argument("--promo_focus", type=int, default=0)
     args = parser.parse_args()
+
+    coordinator_module = str(args.coordinator_module).strip() or _DEFAULT_COORDINATOR_MODULE
+    state_dir_rel_raw = str(args.state_dir_rel).strip()
+    state_dir_rel = Path(state_dir_rel_raw or _DEFAULT_STATE_DIR_REL.as_posix())
+    if state_dir_rel.is_absolute() or ".." in state_dir_rel.parts:
+        raise RuntimeError("state_dir_rel must be a repo-relative path")
+    _COORDINATOR_MODULE = coordinator_module
+    _STATE_DIR_REL = state_dir_rel
 
     runs_root = Path(args.runs_root).resolve()
     runs_root.mkdir(parents=True, exist_ok=True)
@@ -3659,7 +3678,11 @@ def main() -> None:
             }
         )
 
-    run_tick = _load_run_tick(_REPO_ROOT) if not preloop_abort_b else (lambda **kwargs: {"safe_halt": False})
+    run_tick = (
+        _load_run_tick(_REPO_ROOT, coordinator_module=_COORDINATOR_MODULE)
+        if not preloop_abort_b
+        else (lambda **kwargs: {"safe_halt": False})
+    )
 
     if profile == "refinery" and enable_polymath_refinery_proposer:
         if canonical_polymath_store is None:

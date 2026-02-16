@@ -10,6 +10,9 @@ RUNS_ROOT="${RUNS_ROOT:-runs}"
 SEGMENT_HOURS="${SEGMENT_HOURS:-6}"
 SERIES_BASE="${SERIES_BASE:-omega_unified_wild_$(date -u +%Y%m%d_%H%M%S)}"
 PROMO_FOCUS="${PROMO_FOCUS:-1}"
+OMEGA_CAMPAIGN_PACK="${OMEGA_CAMPAIGN_PACK:-campaigns/rsi_omega_daemon_v18_0_prod/rsi_omega_daemon_pack_v1.json}"
+OMEGA_COORDINATOR_MODULE="${OMEGA_COORDINATOR_MODULE:-orchestrator.omega_v18_0.coordinator_v1}"
+OMEGA_STATE_DIR_REL="${OMEGA_STATE_DIR_REL:-daemon/rsi_omega_daemon_v18_0/state}"
 
 GE_MAX_CCAPS="${GE_MAX_CCAPS:-6}"
 POLYMATH_SCOUT_EVERY_TICKS="${POLYMATH_SCOUT_EVERY_TICKS:-2}"
@@ -86,7 +89,9 @@ while true; do
       --runs_root "$RUNS_ROOT" \
       --profile unified \
       --meta_core_mode sandbox \
-      --campaign_pack campaigns/rsi_omega_daemon_v18_0_prod/rsi_omega_daemon_pack_v1.json \
+      --campaign_pack "$OMEGA_CAMPAIGN_PACK" \
+      --coordinator_module "$OMEGA_COORDINATOR_MODULE" \
+      --state_dir_rel "$OMEGA_STATE_DIR_REL" \
       --enable_ge_sh1_optimizer 1 \
       --enable_llm_router 1 \
       --ge_max_ccaps "$GE_MAX_CCAPS" \

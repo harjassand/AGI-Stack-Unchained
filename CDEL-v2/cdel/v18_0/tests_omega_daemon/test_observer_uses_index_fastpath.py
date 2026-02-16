@@ -119,3 +119,6 @@ def test_observer_uses_index_fastpath(tmp_path, monkeypatch) -> None:
     )
 
     assert int(report["metrics"]["science_rmse_q32"]["q"]) == 321
+    assert "OBJ_EXPAND_CAPABILITIES" in report["metrics"]
+    assert "OBJ_MAXIMIZE_SCIENCE" in report["metrics"]
+    assert "OBJ_MAXIMIZE_SPEED" in report["metrics"]

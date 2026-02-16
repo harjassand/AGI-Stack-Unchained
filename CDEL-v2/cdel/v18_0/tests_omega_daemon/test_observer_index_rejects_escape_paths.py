@@ -104,6 +104,9 @@ def test_observer_index_rejects_escape_paths(tmp_path, monkeypatch) -> None:
             objectives_hash="sha256:" + ("d" * 64),
         )
         assert int(report["metrics"]["science_rmse_q32"]["q"]) == 222
+        assert "OBJ_EXPAND_CAPABILITIES" in report["metrics"]
+        assert "OBJ_MAXIMIZE_SCIENCE" in report["metrics"]
+        assert "OBJ_MAXIMIZE_SPEED" in report["metrics"]
     except OmegaV18Error as exc:
         assert "SCHEMA_FAIL" in str(exc)
         return

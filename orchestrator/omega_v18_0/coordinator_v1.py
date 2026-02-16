@@ -32,6 +32,7 @@ from cdel.v18_0.omega_run_scorecard_v1 import build_run_scorecard, load_latest_r
 from cdel.v18_0.omega_runaway_v1 import (
     advance_runaway_state,
     bootstrap_runaway_state,
+    check_runaway_condition,
     load_latest_runaway_state,
     load_runaway_config,
     runaway_enabled,
@@ -531,6 +532,7 @@ def run_tick(
             previous_run_scorecard=prev_run_scorecard,
             previous_run_scorecard_source=prev_run_scorecard_source,
             previous_observation_report=prev_observation_report,
+            registry=registry,
         )
         promotion_success_rate = {"num_u64": 0, "den_u64": 1}
         invalid_rate = {"num_u64": 0, "den_u64": 1}
@@ -1011,6 +1013,11 @@ def run_tick(
             previous_scorecard=prev_run_scorecard,
         )
         write_run_scorecard(state_root / "perf", scorecard_payload)
+        runaway_active, runaway_level_u64, runaway_reason = check_runaway_condition(
+            observation_report=observation_report,
+            runaway_cfg=runaway_cfg,
+            runaway_state=runaway_payload,
+        )
 
         return {
             "status": "SAFE_HALT" if safe_halt else "OK",
@@ -1020,6 +1027,9 @@ def run_tick(
             "tick_snapshot_hash": snapshot_hash,
             "action_kind": decision_plan.get("action_kind"),
             "safe_halt": safe_halt,
+            "runaway_state": "ACTIVE" if runaway_active else "INACTIVE",
+            "runaway_level_u64": int(runaway_level_u64),
+            "runaway_reason": str(runaway_reason),
         }
 
 

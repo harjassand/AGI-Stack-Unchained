@@ -26,6 +26,8 @@ def main() -> None:
             prev_state_dir=Path(args.prev_state_dir) if args.prev_state_dir else None,
         )
         print(result.get("status", "OK"))
+        if str(result.get("runaway_state", "")).strip() == "ACTIVE":
+            print(f"Runaway State: ACTIVE (Level {int(result.get('runaway_level_u64', 0))})")
         for key, value in result.items():
             if key == "status":
                 continue
@@ -43,6 +45,8 @@ def main() -> None:
             prev_state_dir=prev_state_dir,
         )
         print(result.get("status", "OK"))
+        if str(result.get("runaway_state", "")).strip() == "ACTIVE":
+            print(f"Runaway State: ACTIVE (Level {int(result.get('runaway_level_u64', 0))})")
         for key, value in result.items():
             if key == "status":
                 continue

@@ -106,7 +106,7 @@ def test_stall_escalation_route_switch() -> None:
         runaway_cfg=runaway_cfg,
         runaway_state=state0,
     )
-    assert plan0["campaign_id"] == "rsi_sas_science_v13_0"
+    assert plan0["campaign_id"] == "rsi_sas_metasearch_v16_1"
 
     state1 = advance_runaway_state(
         prev_state=state0,
@@ -136,5 +136,5 @@ def test_stall_escalation_route_switch() -> None:
         runaway_state=state1,
     )
 
-    assert int(state1["metric_states"]["science_rmse_q32"]["escalation_level_u64"]) == 1
+    assert int(state1["metric_states"]["science_rmse_q32"]["escalation_level_u64"]) == 5
     assert plan1["campaign_id"] == "rsi_sas_metasearch_v16_1"

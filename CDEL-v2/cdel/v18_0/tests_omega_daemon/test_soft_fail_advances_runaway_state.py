@@ -120,7 +120,7 @@ def test_soft_fail_advances_runaway_state() -> None:
         runaway_cfg=runaway_cfg,
         runaway_state=state0,
     )
-    assert plan0["campaign_id"] == "rsi_sas_science_v13_0"
+    assert plan0["campaign_id"] == "rsi_sas_val_v17_0"
 
     state1 = advance_runaway_state(
         prev_state=state0,
@@ -132,7 +132,7 @@ def test_soft_fail_advances_runaway_state() -> None:
         promoted_and_activated=False,
         subverifier_invalid_stall=True,
     )
-    assert int(state1["metric_states"]["science_rmse_q32"]["escalation_level_u64"]) == 1
+    assert int(state1["metric_states"]["science_rmse_q32"]["escalation_level_u64"]) == 5
 
     plan1, _ = decide(
         tick_u64=2,
@@ -151,7 +151,7 @@ def test_soft_fail_advances_runaway_state() -> None:
         runaway_cfg=runaway_cfg,
         runaway_state=state1,
     )
-    assert plan1["campaign_id"] == "rsi_sas_metasearch_v16_1"
+    assert plan1["campaign_id"] == "rsi_sas_val_v17_0"
 
     state2 = advance_runaway_state(
         prev_state=state1,
@@ -163,7 +163,7 @@ def test_soft_fail_advances_runaway_state() -> None:
         promoted_and_activated=False,
         subverifier_invalid_stall=True,
     )
-    assert int(state2["metric_states"]["science_rmse_q32"]["escalation_level_u64"]) == 2
+    assert int(state2["metric_states"]["science_rmse_q32"]["escalation_level_u64"]) == 5
 
     plan2, _ = decide(
         tick_u64=3,

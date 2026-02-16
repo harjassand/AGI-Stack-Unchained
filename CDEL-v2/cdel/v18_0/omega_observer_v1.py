@@ -35,6 +35,11 @@ _POLYMATH_VOID_REPORT_REL = "polymath/registry/polymath_void_report_v1.jsonl"
 _POLYMATH_SCOUT_STATUS_REL = "polymath/registry/polymath_scout_status_v1.json"
 _POLYMATH_PORTFOLIO_REL = "polymath/registry/polymath_portfolio_v1.json"
 _POLYMATH_STALE_AGE_U64 = (1 << 63) - 1
+_NON_CARRY_SERIES_KEYS = {
+    "OBJ_EXPAND_CAPABILITIES",
+    "OBJ_MAXIMIZE_SCIENCE",
+    "OBJ_MAXIMIZE_SPEED",
+}
 _LEGACY_SKILL_SOURCES: tuple[tuple[str, str, str, str], ...] = (
     (
         "omega_skill_transfer_report_v1",
@@ -834,6 +839,27 @@ def _load_legacy_skill_metrics(*, root: Path) -> tuple[dict[str, Any], list[dict
     return metrics, sources
 
 
+def _capability_expansion_q32(registry: dict[str, Any] | None) -> int:
+    if not isinstance(registry, dict):
+        return 0
+    rows = registry.get("capabilities")
+    if not isinstance(rows, list):
+        return 0
+    return int(len(rows) << 32)
+
+
+def _maximize_science_q32(science_rmse_q32: int) -> int:
+    rmse_q = max(0, min(int(science_rmse_q32), int(Q32_ONE)))
+    return int(Q32_ONE - rmse_q)
+
+
+def _maximize_speed_q32(previous_tick_total_ns_u64: int) -> int:
+    total_ns = int(previous_tick_total_ns_u64)
+    if total_ns <= 0:
+        return 0
+    return int(rat_q32(1_000_000_000, total_ns))
+
+
 def observe(
     *,
     tick_u64: int,
@@ -849,6 +875,7 @@ def observe(
     previous_run_scorecard: dict[str, Any] | None = None,
     previous_run_scorecard_source: dict[str, str] | None = None,
     previous_observation_report: dict[str, Any] | None = None,
+    registry: dict[str, Any] | None = None,
 ) -> tuple[dict[str, Any], str]:
     root = repo_root()
     index = load_index(root)
@@ -911,6 +938,9 @@ def observe(
     ge_metrics, ge_sources = _load_ge_metrics(root=root)
     code_metrics, code_sources = _load_code_metrics(root=root, index=index)
     legacy_skill_metrics, legacy_skill_sources = _load_legacy_skill_metrics(root=root)
+    capability_expansion_q32 = _capability_expansion_q32(registry)
+    maximize_science_q32 = _maximize_science_q32(science_q)
+    maximize_speed_q32 = _maximize_speed_q32(previous_tick_total_ns_u64)
 
     sources: list[dict[str, str]] = [src_meta, src_hotloop, src_build, src_science]
     sources.extend(polymath_sources)
@@ -961,6 +991,9 @@ def observe(
             "runaway_blocked_recent3_u64": int(runaway_blocked_recent3_u64),
             "verifier_overhead_q32": {"q": verifier_overhead_q32},
             "previous_tick_total_ns_u64": previous_tick_total_ns_u64,
+            "OBJ_EXPAND_CAPABILITIES": {"q": int(capability_expansion_q32)},
+            "OBJ_MAXIMIZE_SCIENCE": {"q": int(maximize_science_q32)},
+            "OBJ_MAXIMIZE_SPEED": {"q": int(maximize_speed_q32)},
             "domain_coverage_ratio": dict(polymath_metrics["domain_coverage_ratio"]),
             "top_void_score_q32": dict(polymath_metrics["top_void_score_q32"]),
             "domains_bootstrapped_u64": int(polymath_metrics["domains_bootstrapped_u64"]),
@@ -995,6 +1028,9 @@ def observe(
             "runaway_blocked_noop_rate_rat": [runaway_blocked_noop_rate_rat],
             "runaway_blocked_recent3_u64": [int(runaway_blocked_recent3_u64)],
             "previous_tick_total_ns_u64": [previous_tick_total_ns_u64],
+            "OBJ_EXPAND_CAPABILITIES": [{"q": int(capability_expansion_q32)}],
+            "OBJ_MAXIMIZE_SCIENCE": [{"q": int(maximize_science_q32)}],
+            "OBJ_MAXIMIZE_SPEED": [{"q": int(maximize_speed_q32)}],
             "domain_coverage_ratio": [dict(polymath_metrics["domain_coverage_ratio"])],
             "top_void_score_q32": [dict(polymath_metrics["top_void_score_q32"])],
             "domains_bootstrapped_u64": [int(polymath_metrics["domains_bootstrapped_u64"])],
@@ -1033,6 +1069,8 @@ def observe(
                     continue
                 prev_rows = prev_series.get(key)
                 if not isinstance(prev_rows, list):
+                    continue
+                if key in _NON_CARRY_SERIES_KEYS:
                     continue
                 cur_series[key] = [*prev_rows, rows[-1]][-64:]
 

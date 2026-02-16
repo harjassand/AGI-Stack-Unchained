@@ -6,7 +6,7 @@ from typing import Any
 
 from .omega_budgets_v1 import has_budget
 from .omega_common_v1 import canon_hash_obj, cmp_q32, fail, q32_int, q32_mul, rat_q32, validate_schema
-from .omega_runaway_v1 import resolve_env_overrides, resolve_route_campaign, runaway_enabled
+from .omega_runaway_v1 import check_runaway_condition, resolve_env_overrides, resolve_route_campaign, runaway_enabled
 from .omega_temperature_v1 import temperature_band_from_q32
 
 
@@ -251,6 +251,14 @@ def _runaway_decision(
     metric_states = runaway_state.get("metric_states")
     if not isinstance(metrics, dict) or not isinstance(objective_rows, list) or not isinstance(metric_states, dict):
         fail("SCHEMA_FAIL")
+    runaway_active, forced_escalation_level, runaway_reason = check_runaway_condition(
+        observation_report=observation_report,
+        runaway_cfg=runaway_cfg,
+        runaway_state=runaway_state,
+    )
+    if not runaway_active:
+        fail("SCHEMA_FAIL")
+    tie_break_path.append(f"RUNAWAY_REASON:{runaway_reason}")
 
     candidates: list[dict[str, Any]] = []
     for row in objective_rows:
@@ -258,7 +266,7 @@ def _runaway_decision(
             fail("SCHEMA_FAIL")
         metric_id = str(row.get("metric_id", "")).strip()
         direction = str(row.get("direction", "")).strip()
-        if not metric_id or direction != "MINIMIZE":
+        if not metric_id or direction not in {"MINIMIZE", "MAXIMIZE"}:
             fail("SCHEMA_FAIL")
         metric_state = metric_states.get(metric_id)
         metric_obs = metrics.get(metric_id)
@@ -266,9 +274,13 @@ def _runaway_decision(
             fail("SCHEMA_FAIL")
         last_q = q32_int(metric_state.get("last_value_q32"))
         current_target_q = q32_int(metric_state.get("current_target_q32"))
-        gap_q = max(0, int(last_q) - int(current_target_q))
+        gap_q = 0
+        if direction == "MINIMIZE":
+            gap_q = max(0, int(last_q) - int(current_target_q))
+        else:
+            gap_q = max(0, int(current_target_q) - int(last_q))
         score_q = q32_mul(gap_q, q32_int(row.get("weight_q32")))
-        escalation_level = int(metric_state.get("escalation_level_u64", 0))
+        escalation_level = int(forced_escalation_level)
         campaign_id = resolve_route_campaign(runaway_cfg, metric_id, escalation_level)
         cap = cap_map.get(campaign_id)
         if cap is None or not bool(cap.get("enabled", False)):
@@ -279,6 +291,7 @@ def _runaway_decision(
             {
                 "metric_id": metric_id,
                 "score_q": int(score_q),
+                "objective_rank": 0 if metric_id == "OBJ_EXPAND_CAPABILITIES" else 1,
                 "campaign_id": campaign_id,
                 "capability_id": str(cap.get("capability_id")),
                 "campaign_pack_hash": canon_hash_obj({"campaign_pack_rel": cap.get("campaign_pack_rel")}),
@@ -300,7 +313,7 @@ def _runaway_decision(
         )
         if goal_candidate is not None:
             tie_break_path.append("RUNAWAY_NO_CANDIDATE_FALLBACK:GOAL_SELECTED")
-            fallback_escalation_level = 0
+            fallback_escalation_level = int(forced_escalation_level)
             fallback_env_overrides = resolve_env_overrides(
                 runaway_cfg, str(goal_candidate["campaign_id"]), fallback_escalation_level
             )
@@ -345,7 +358,14 @@ def _runaway_decision(
             }
         )
 
-    candidates.sort(key=lambda row: (-int(row["score_q"]), str(row["metric_id"]), str(row["campaign_id"])))
+    candidates.sort(
+        key=lambda row: (
+            int(row.get("objective_rank", 1)),
+            -int(row["score_q"]),
+            str(row["metric_id"]),
+            str(row["campaign_id"]),
+        )
+    )
     for row in candidates:
         tie_break_path.append(
             f"RUNAWAY_CAND:{row['metric_id']}:{row['campaign_id']}:score={row['score_q']}:lvl={row['escalation_level_u64']}"
@@ -378,7 +398,7 @@ def _runaway_decision(
         )
         if goal_candidate is not None:
             tie_break_path.append("RUNAWAY_FALLBACK:GOAL_SELECTED")
-            fallback_escalation_level = 0
+            fallback_escalation_level = int(forced_escalation_level)
             fallback_env_overrides = resolve_env_overrides(
                 runaway_cfg, str(goal_candidate["campaign_id"]), fallback_escalation_level
             )

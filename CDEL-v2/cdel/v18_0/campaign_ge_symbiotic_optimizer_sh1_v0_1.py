@@ -101,15 +101,48 @@ def _resolve_capability_backlog(pack: dict[str, Any]) -> list[str]:
     return out
 
 
-def _build_capability_backlog_patch(*, root: Path, pack: dict[str, Any]) -> bytes:
-    backlog = _resolve_capability_backlog(pack)
-    if not backlog:
-        return b""
-
+def _resolve_backlog_relpaths(pack: dict[str, Any]) -> tuple[str, str]:
     registry_rel = str(pack.get("backlog_registry_rel", _DEFAULT_BACKLOG_REGISTRY_REL)).strip() or _DEFAULT_BACKLOG_REGISTRY_REL
     goal_queue_rel = (
         str(pack.get("backlog_goal_queue_rel", _DEFAULT_BACKLOG_GOAL_QUEUE_REL)).strip() or _DEFAULT_BACKLOG_GOAL_QUEUE_REL
     )
+    return registry_rel, goal_queue_rel
+
+
+def _validate_goal_queue_payload_minimal(goal_queue_payload: dict[str, Any]) -> list[dict[str, Any]]:
+    if str(goal_queue_payload.get("schema_version", "")).strip() != "omega_goal_queue_v1":
+        fail("SCHEMA_FAIL")
+    goals = goal_queue_payload.get("goals")
+    if not isinstance(goals, list):
+        fail("SCHEMA_FAIL")
+    out: list[dict[str, Any]] = []
+    for row in goals:
+        if not isinstance(row, dict):
+            fail("SCHEMA_FAIL")
+        goal_id = str(row.get("goal_id", "")).strip()
+        capability_id = str(row.get("capability_id", "")).strip()
+        status = str(row.get("status", "")).strip()
+        if not goal_id or not capability_id or not status:
+            fail("SCHEMA_FAIL")
+        out.append(row)
+    return out
+
+
+def _patch_touches_relpath(*, patch_bytes: bytes, relpath: str) -> bool:
+    target = f"+++ b/{str(relpath).strip().replace('\\', '/')}"
+    for raw in patch_bytes.decode("utf-8", errors="replace").splitlines():
+        line = raw.split("\t", 1)[0].strip()
+        if line == target:
+            return True
+    return False
+
+
+def _build_capability_backlog_patch(*, root: Path, pack: dict[str, Any], skip_registry_diff: bool = False) -> bytes:
+    backlog = _resolve_capability_backlog(pack)
+    if not backlog:
+        return b""
+
+    registry_rel, goal_queue_rel = _resolve_backlog_relpaths(pack)
     registry_path = root / registry_rel
     goal_queue_path = root / goal_queue_rel
     if not registry_path.exists() or not registry_path.is_file():
@@ -123,7 +156,12 @@ def _build_capability_backlog_patch(*, root: Path, pack: dict[str, Any]) -> byte
     registry_payload = load_canon_dict(registry_path)
     goal_queue_payload = load_canon_dict(goal_queue_path)
     validate_schema(registry_payload, "omega_capability_registry_v2")
-    validate_schema(goal_queue_payload, "omega_goal_queue_v1")
+    # Some v18 installs do not ship a dedicated omega_goal_queue_v1 schema file.
+    # Keep deterministic shape checks so backlog injection still runs fail-closed.
+    try:
+        validate_schema(goal_queue_payload, "omega_goal_queue_v1")
+    except Exception:  # noqa: BLE001
+        _validate_goal_queue_payload_minimal(goal_queue_payload)
 
     capabilities = registry_payload.get("capabilities")
     goals = goal_queue_payload.get("goals")
@@ -186,7 +224,7 @@ def _build_capability_backlog_patch(*, root: Path, pack: dict[str, Any]) -> byte
 
     patch_chunks: list[str] = []
     patch_registry = _build_unified_patch(relpath=registry_rel, before=registry_before, after=registry_after)
-    if patch_registry:
+    if patch_registry and not skip_registry_diff:
         patch_chunks.append(patch_registry)
     patch_goals = _build_unified_patch(relpath=goal_queue_rel, before=goal_queue_before, after=goal_queue_after)
     if patch_goals:
@@ -225,6 +263,12 @@ def _inject_capability_backlog_patch(
         return ccap_id, ccap_relpath, patch_relpath, False
 
     original_patch = patch_path.read_bytes()
+    registry_rel, _goal_queue_rel = _resolve_backlog_relpaths(pack)
+    skip_registry_diff = _patch_touches_relpath(patch_bytes=original_patch, relpath=registry_rel)
+    backlog_patch_bytes = _build_capability_backlog_patch(root=root, pack=pack, skip_registry_diff=skip_registry_diff)
+    if not backlog_patch_bytes:
+        return ccap_id, ccap_relpath, patch_relpath, False
+
     merged_patch = original_patch
     if merged_patch and not merged_patch.endswith(b"\n"):
         merged_patch += b"\n"

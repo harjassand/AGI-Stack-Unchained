@@ -5,7 +5,13 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-from .omega_common_v1 import fail, load_canon_dict, validate_schema, write_hashed_json
+from .omega_common_v1 import (
+    fail,
+    load_canon_dict,
+    normalize_execution_mode,
+    validate_schema,
+    write_hashed_json,
+)
 
 
 _ACTION_KINDS = {"RUN_CAMPAIGN", "RUN_GOAL_TASK", "NOOP", "SAFE_HALT"}
@@ -27,6 +33,7 @@ def build_tick_outcome(
     noop_reason: str,
     activation_reasons: list[str] | None = None,
     activation_meta_verdict: str | None = None,
+    execution_mode: str | None = None,
 ) -> dict[str, Any]:
     action_kind_norm = str(action_kind).strip()
     if action_kind_norm not in _ACTION_KINDS:
@@ -39,6 +46,11 @@ def build_tick_outcome(
     promotion_status_norm = str(promotion_status).strip()
     if promotion_status_norm not in _PROMOTION_STATUSES:
         fail("SCHEMA_FAIL")
+
+    if execution_mode is None:
+        execution_mode_norm = "STRICT"
+    else:
+        execution_mode_norm = normalize_execution_mode(execution_mode)
 
     campaign_id_norm: str | None = None
     if campaign_id is not None:
@@ -68,6 +80,7 @@ def build_tick_outcome(
         "subverifier_status": subverifier_status_norm,
         "promotion_status": promotion_status_norm,
         "promotion_reason_code": str(promotion_reason_code),
+        "execution_mode": execution_mode_norm,
         "activation_success": bool(activation_success),
         "activation_reasons": activation_reasons_norm,
         "activation_meta_verdict": activation_meta_verdict_norm,

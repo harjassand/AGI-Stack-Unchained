@@ -222,10 +222,13 @@ def sealed_proof_check_receipt(
     if os.pathsep in str(work_path):
         run_temp = tempfile.TemporaryDirectory()
         run_path = Path(run_temp.name)
+    run_path.mkdir(parents=True, exist_ok=True)
 
     try:
         proof_path = run_path / "proof.lean"
         preamble_path = run_path / "SASCodePreambleV12.lean"
+        proof_path.parent.mkdir(parents=True, exist_ok=True)
+        preamble_path.parent.mkdir(parents=True, exist_ok=True)
         proof_path.write_text(proof_text, encoding="utf-8")
         preamble_path.write_bytes(lean_preamble_path.read_bytes())
 
@@ -284,6 +287,7 @@ def sealed_proof_check_receipt(
             receipt["lean_preamble_sha256"] = lean_preamble_sha256
         # Always persist proof to the requested work_dir, even if we executed in a temp dir.
         if work_dir is not None and work_path != run_path:
+            work_path.mkdir(parents=True, exist_ok=True)
             (work_path / "proof.lean").write_text(proof_text, encoding="utf-8")
         return receipt
     finally:

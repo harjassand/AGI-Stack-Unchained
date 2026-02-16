@@ -648,10 +648,8 @@ def _verify_once(
         out_dir=subrun_root / "ccap" / "ek_runs" / ccap_id.split(":", 1)[1][:16],
     )
 
-    determinism_check = "PASS"
+    determinism_check = str(ek_result.get("determinism_check", "REFUTED"))
     eval_status = str(ek_result.get("eval_status", "REFUTED"))
-    if eval_status == "REFUTED":
-        eval_status = "FAIL"
     decision = str(ek_result.get("decision", "REJECT"))
     applied_tree_id = str(ek_result.get("applied_tree_id", _ZERO_SHA))
     realized_out_id = str(ek_result.get("realized_out_id", ""))

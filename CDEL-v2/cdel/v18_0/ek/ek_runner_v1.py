@@ -12,6 +12,7 @@ from pathlib import Path
 from typing import Any
 
 from ...v1_7r.canon import write_canon_json
+from ..authority.authority_hash_v1 import load_authority_pins
 from ..ccap_runtime_v1 import (
     apply_patch_bytes,
     compute_workspace_tree_id,
@@ -423,6 +424,14 @@ def _run_score_stage(*, base_repo_root: Path, candidate_repo_root: Path, work_di
 
 
 def _active_ek_id(repo_root: Path) -> str:
+    try:
+        pins = load_authority_pins(repo_root)
+        pinned_active = str(pins.get("active_ek_id", "")).strip()
+        if pinned_active.startswith("sha256:"):
+            return pinned_active
+    except Exception:  # noqa: BLE001
+        pass
+
     active_path = repo_root / "authority" / "evaluation_kernels" / "ek_active_v1.json"
     payload = load_canon_dict(active_path)
     if not isinstance(payload, dict) or payload.get("schema_version") != "ek_active_v1":

@@ -14,6 +14,7 @@ from cdel.v18_0.omega_common_v1 import (
     canon_hash_obj,
     fail,
     load_canon_dict,
+    resolve_execution_mode,
     validate_schema,
     write_hashed_json,
 )
@@ -542,6 +543,7 @@ def run_tick(
 
     lock_path = daemon_root / "LOCK"
     with acquire_lock(lock_path):
+        execution_mode = resolve_execution_mode()
         deterministic_timing = _deterministic_timing_enabled()
         tick_start_ns = time.monotonic_ns()
         stage_timings_ns: dict[str, int] = {stage: 0 for stage in _TIMING_STAGES}
@@ -993,6 +995,7 @@ def run_tick(
                 "activation_receipt_hash": activation_hash,
                 "rollback_receipt_hash": rollback_hash,
                 "trace_hash_chain_hash": trace_hash,
+                "execution_mode": execution_mode,
                 "budget_remaining": budget_remaining,
                 "cooldowns": cooldowns,
                 "goal_queue_hash": goal_queue_hash,
@@ -1067,6 +1070,7 @@ def run_tick(
             manifest_changed=manifest_changed,
             safe_halt=safe_halt,
             noop_reason=noop_reason,
+            execution_mode=execution_mode,
         )
         write_tick_outcome(state_root / "perf", tick_outcome)
 

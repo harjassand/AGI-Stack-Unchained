@@ -98,6 +98,7 @@
         }
       }
     },
-    "goal_queue_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"}
+    "goal_queue_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "execution_mode": {"type": "string", "enum": ["STRICT", "BLACKBOX"]}
   }
 }

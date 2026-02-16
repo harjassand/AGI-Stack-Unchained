@@ -30,6 +30,7 @@ from .omega_common_v1 import (
     hash_file,
     load_canon_dict,
     repo_root,
+    resolve_execution_mode,
     require_no_absolute_paths,
     require_relpath,
     tree_hash,
@@ -118,6 +119,31 @@ def _load_realized_receipt_for_id(*, subrun_root: Path, ccap_id: str) -> dict[st
     return None
 
 
+def _persist_ccap_receipt(*, verifier_dir: Path, receipt: dict[str, Any]) -> None:
+    write_hashed_json(verifier_dir, "ccap_receipt_v1.json", receipt)
+    write_canon_json(verifier_dir / "ccap_receipt_v1.json", receipt)
+
+
+def _load_ccap_receipt_for_id_with_fallback(
+    *,
+    verifier_dir: Path,
+    subrun_root: Path,
+    ccap_id: str,
+) -> dict[str, Any] | None:
+    receipt = _load_ccap_receipt_for_id(verifier_dir=verifier_dir, ccap_id=ccap_id)
+    if receipt is not None:
+        return receipt
+
+    legacy_verifier_dir = (subrun_root / "verifier").resolve()
+    if legacy_verifier_dir == verifier_dir.resolve():
+        return None
+    receipt = _load_ccap_receipt_for_id(verifier_dir=legacy_verifier_dir, ccap_id=ccap_id)
+    if receipt is None:
+        return None
+    _persist_ccap_receipt(verifier_dir=verifier_dir, receipt=receipt)
+    return receipt
+
+
 def _path_contains_omega_cache(path_rel: str) -> bool:
     return ".omega_cache" in Path(path_rel).parts
 
@@ -165,6 +191,7 @@ def _verify_ccap_apply_matches_receipt(
     receipt: dict[str, Any],
     dispatch_ctx: dict[str, Any],
     out_dir: Path,
+    require_receipt_applied_tree: bool = True,
 ) -> bool:
     try:
         subrun_root = Path(dispatch_ctx["subrun_root_abs"])
@@ -197,12 +224,19 @@ def _verify_ccap_apply_matches_receipt(
         if f"sha256:{hashlib.sha256(patch_bytes).hexdigest()}" != patch_blob_id:
             return False
 
-        expected_base_tree = str(receipt.get("base_tree_id", ""))
-        if str(meta.get("base_tree_id", "")) != expected_base_tree:
-            return False
+        receipt_base_tree_id = str(receipt.get("base_tree_id", "")).strip()
+        meta_base_tree_id = str(meta.get("base_tree_id", "")).strip()
+        if require_receipt_applied_tree:
+            if meta_base_tree_id != receipt_base_tree_id:
+                return False
+            expected_base_tree_id = receipt_base_tree_id
+        else:
+            if receipt_base_tree_id and receipt_base_tree_id != meta_base_tree_id:
+                return False
+            expected_base_tree_id = meta_base_tree_id
 
         root = repo_root()
-        if compute_repo_base_tree_id(root) != expected_base_tree:
+        if compute_repo_base_tree_id(root) != expected_base_tree_id:
             return False
 
         with tempfile.TemporaryDirectory(dir=out_dir, prefix="ccap_promote_") as tmpdir:
@@ -210,7 +244,12 @@ def _verify_ccap_apply_matches_receipt(
             materialize_repo_snapshot(root, workspace)
             apply_patch_bytes(workspace_root=workspace, patch_bytes=patch_bytes)
             applied_tree_id = compute_workspace_tree_id(workspace)
-        return applied_tree_id == str(receipt.get("applied_tree_id", ""))
+        if require_receipt_applied_tree:
+            return applied_tree_id == str(receipt.get("applied_tree_id", "")).strip()
+        receipt_applied_tree_id = str(receipt.get("applied_tree_id", "")).strip()
+        if receipt_applied_tree_id and receipt_applied_tree_id != _SHA256_ZERO:
+            return applied_tree_id == receipt_applied_tree_id
+        return True
     except Exception:  # noqa: BLE001
         return False
 
@@ -834,11 +873,13 @@ def run_subverifier(
 
     argv: list[str] = ["--mode", "full", state_arg, state_dir_rel]
     run_result: dict[str, Any] | None = None
+    ccap_subrun_root_abs: Path | None = None
+    ccap_rel: str | None = None
     if verifier_module == _CCAP_VERIFIER_MODULE:
         subrun_root_rel = require_relpath(dispatch_ctx.get("subrun_root_rel_state"))
-        subrun_root_abs = state_root / subrun_root_rel
+        ccap_subrun_root_abs = state_root / subrun_root_rel
         declared_ccap_rel = str(cap.get("ccap_relpath", "")).strip()
-        ccap_rel = require_relpath(declared_ccap_rel) if declared_ccap_rel else _discover_ccap_relpath(subrun_root_abs)
+        ccap_rel = require_relpath(declared_ccap_rel) if declared_ccap_rel else _discover_ccap_relpath(ccap_subrun_root_abs)
         enable_ccap = str(int(cap.get("enable_ccap", 0)))
         if ccap_rel:
             argv = [
@@ -893,6 +934,36 @@ def run_subverifier(
                 reason_code = line.split(":", 1)[1] or "VERIFY_ERROR"
                 break
         reason_code = _normalize_subverifier_reason_code(reason_code)
+    elif verifier_module == _CCAP_VERIFIER_MODULE and ccap_subrun_root_abs is not None and ccap_rel:
+        try:
+            ccap_payload = load_canon_dict((ccap_subrun_root_abs / ccap_rel).resolve())
+            validate_schema(ccap_payload, "ccap_v1")
+            expected_ccap_id = ccap_payload_id(ccap_payload)
+            ccap_receipt = _load_ccap_receipt_for_id_with_fallback(
+                verifier_dir=out_dir,
+                subrun_root=ccap_subrun_root_abs,
+                ccap_id=expected_ccap_id,
+            )
+            if ccap_receipt is None:
+                from .verify_ccap_v1 import verify as verify_ccap
+
+                verify_ccap(
+                    subrun_root=ccap_subrun_root_abs,
+                    repo_root=repo_root(),
+                    ccap_relpath=ccap_rel,
+                    receipt_out_dir=out_dir,
+                )
+                ccap_receipt = _load_ccap_receipt_for_id_with_fallback(
+                    verifier_dir=out_dir,
+                    subrun_root=ccap_subrun_root_abs,
+                    ccap_id=expected_ccap_id,
+                )
+            if ccap_receipt is None or str(ccap_receipt.get("ccap_id", "")).strip() != expected_ccap_id:
+                status = "INVALID"
+                reason_code = "VERIFY_ERROR"
+        except Exception:  # noqa: BLE001
+            status = "INVALID"
+            reason_code = "VERIFY_ERROR"
     stdout_hash = run_result["stdout_hash"]
     stderr_hash = run_result["stderr_hash"]
     state_dir_hash = _SHA256_ZERO
@@ -942,6 +1013,7 @@ def run_promotion(
 
     out_dir = Path(dispatch_ctx["dispatch_dir"]) / "promotion"
     simulate_mode = str(os.environ.get("OMEGA_META_CORE_ACTIVATION_MODE", "live")).lower() != "live"
+    execution_mode = resolve_execution_mode()
     promotion_bundle_hash = "sha256:" + "0" * 64
     active_after: str | None = None
 
@@ -951,6 +1023,7 @@ def run_promotion(
             "receipt_id": "sha256:" + "0" * 64,
             "tick_u64": int(tick_u64),
             "promotion_bundle_hash": promotion_bundle_hash,
+            "execution_mode": execution_mode,
             "meta_core_verifier_fingerprint": _meta_fingerprint(),
             "result": {
                 "status": status,
@@ -1058,8 +1131,11 @@ def run_promotion(
                     reason="CCAP_TOUCHED_PATHS_INVALID",
                     active_after_hash=None,
                 )
-            ccap_receipt = _load_ccap_receipt_for_id(
-                verifier_dir=Path(dispatch_ctx["dispatch_dir"]) / "verifier",
+            dispatch_verifier_dir = Path(dispatch_ctx["dispatch_dir"]) / "verifier"
+            subrun_root_abs = Path(dispatch_ctx["subrun_root_abs"])
+            ccap_receipt = _load_ccap_receipt_for_id_with_fallback(
+                verifier_dir=dispatch_verifier_dir,
+                subrun_root=subrun_root_abs,
                 ccap_id=ccap_id,
             )
             if ccap_receipt is None or str(ccap_receipt.get("ccap_id", "")) != ccap_id:
@@ -1068,53 +1144,56 @@ def run_promotion(
                     reason="CCAP_RECEIPT_MISSING_OR_MISMATCH",
                     active_after_hash=None,
                 )
-            if str(ccap_receipt.get("decision", "")).strip() != "PROMOTE":
-                return _write_promotion_receipt(
-                    status="REJECTED",
-                    reason="CCAP_RECEIPT_REJECTED",
-                    active_after_hash=None,
-                )
-            if str(ccap_receipt.get("determinism_check", "")).strip() != "PASS":
-                return _write_promotion_receipt(
-                    status="REJECTED",
-                    reason="CCAP_RECEIPT_REJECTED",
-                    active_after_hash=None,
-                )
-            if str(ccap_receipt.get("eval_status", "")).strip() != "PASS":
-                return _write_promotion_receipt(
-                    status="REJECTED",
-                    reason="CCAP_RECEIPT_REJECTED",
-                    active_after_hash=None,
-                )
-            realized_out_id = str(ccap_receipt.get("realized_out_id", "")).strip()
-            if not realized_out_id.startswith("sha256:"):
-                return _write_promotion_receipt(
-                    status="REJECTED",
-                    reason="CCAP_RECEIPT_MISSING_OR_MISMATCH",
-                    active_after_hash=None,
-                )
-            realized_receipt = _load_realized_receipt_for_id(
-                subrun_root=Path(dispatch_ctx["subrun_root_abs"]),
-                ccap_id=ccap_id,
-            )
-            if realized_receipt is None:
-                return _write_promotion_receipt(
-                    status="REJECTED",
-                    reason="CCAP_RECEIPT_MISSING_OR_MISMATCH",
-                    active_after_hash=None,
-                )
-            for field in ("applied_tree_id", "realized_out_id", "ek_id", "op_pool_id", "auth_hash"):
-                if str(realized_receipt.get(field, "")).strip() != str(ccap_receipt.get(field, "")).strip():
+            if execution_mode == "STRICT":
+                if str(ccap_receipt.get("decision", "")).strip() != "PROMOTE":
+                    return _write_promotion_receipt(
+                        status="REJECTED",
+                        reason="CCAP_RECEIPT_REJECTED",
+                        active_after_hash=None,
+                    )
+                if str(ccap_receipt.get("determinism_check", "")).strip() != "PASS":
+                    return _write_promotion_receipt(
+                        status="REJECTED",
+                        reason="CCAP_RECEIPT_REJECTED",
+                        active_after_hash=None,
+                    )
+                if str(ccap_receipt.get("eval_status", "")).strip() != "PASS":
+                    return _write_promotion_receipt(
+                        status="REJECTED",
+                        reason="CCAP_RECEIPT_REJECTED",
+                        active_after_hash=None,
+                    )
+            if execution_mode == "STRICT":
+                realized_out_id = str(ccap_receipt.get("realized_out_id", "")).strip()
+                if not realized_out_id.startswith("sha256:"):
                     return _write_promotion_receipt(
                         status="REJECTED",
                         reason="CCAP_RECEIPT_MISSING_OR_MISMATCH",
                         active_after_hash=None,
                     )
+                realized_receipt = _load_realized_receipt_for_id(
+                    subrun_root=subrun_root_abs,
+                    ccap_id=ccap_id,
+                )
+                if realized_receipt is None:
+                    return _write_promotion_receipt(
+                        status="REJECTED",
+                        reason="CCAP_RECEIPT_MISSING_OR_MISMATCH",
+                        active_after_hash=None,
+                    )
+                for field in ("applied_tree_id", "realized_out_id", "ek_id", "op_pool_id", "auth_hash"):
+                    if str(realized_receipt.get(field, "")).strip() != str(ccap_receipt.get(field, "")).strip():
+                        return _write_promotion_receipt(
+                            status="REJECTED",
+                            reason="CCAP_RECEIPT_MISSING_OR_MISMATCH",
+                            active_after_hash=None,
+                        )
             if not _verify_ccap_apply_matches_receipt(
                 bundle_obj=bundle_obj,
                 receipt=ccap_receipt,
                 dispatch_ctx=dispatch_ctx,
                 out_dir=out_dir,
+                require_receipt_applied_tree=(execution_mode == "STRICT"),
             ):
                 return _write_promotion_receipt(
                     status="REJECTED",

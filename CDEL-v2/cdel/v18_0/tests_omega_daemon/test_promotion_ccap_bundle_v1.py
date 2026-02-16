@@ -5,7 +5,7 @@ from pathlib import Path
 from cdel.v18_0.omega_allowlists_v1 import load_allowlists
 from cdel.v18_0.omega_common_v1 import canon_hash_obj
 from cdel.v18_0.omega_promoter_v1 import run_promotion
-from cdel.v1_7r.canon import write_canon_json
+from cdel.v1_7r.canon import load_canon_json, write_canon_json
 
 
 def _allowlists() -> dict:
@@ -183,6 +183,7 @@ def _patch_meta_core(monkeypatch, tmp_path: Path) -> None:
 
 
 def test_ccap_promotion_rejects_when_receipt_not_promote(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.delenv("OMEGA_BLACKBOX", raising=False)
     dispatch_ctx, subverifier = _setup_dispatch(tmp_path, receipt_decision="REJECT")
     _patch_meta_core(monkeypatch, tmp_path)
     monkeypatch.setattr("cdel.v18_0.omega_promoter_v1._verify_ccap_apply_matches_receipt", lambda **_: True)
@@ -194,11 +195,13 @@ def test_ccap_promotion_rejects_when_receipt_not_promote(tmp_path: Path, monkeyp
         allowlists=_allowlists(),
     )
     assert receipt is not None
+    assert receipt["execution_mode"] == "STRICT"
     assert receipt["result"]["status"] == "REJECTED"
     assert receipt["result"]["reason_code"] == "CCAP_RECEIPT_REJECTED"
 
 
 def test_ccap_promotion_rejects_when_apply_hash_mismatch(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.delenv("OMEGA_BLACKBOX", raising=False)
     dispatch_ctx, subverifier = _setup_dispatch(tmp_path, receipt_decision="PROMOTE")
     _patch_meta_core(monkeypatch, tmp_path)
     monkeypatch.setattr("cdel.v18_0.omega_promoter_v1._verify_ccap_apply_matches_receipt", lambda **_: False)
@@ -210,11 +213,13 @@ def test_ccap_promotion_rejects_when_apply_hash_mismatch(tmp_path: Path, monkeyp
         allowlists=_allowlists(),
     )
     assert receipt is not None
+    assert receipt["execution_mode"] == "STRICT"
     assert receipt["result"]["status"] == "REJECTED"
     assert receipt["result"]["reason_code"] == "CCAP_APPLY_MISMATCH"
 
 
 def test_ccap_promotion_promotes_when_receipt_and_replay_match(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.delenv("OMEGA_BLACKBOX", raising=False)
     dispatch_ctx, subverifier = _setup_dispatch(tmp_path, receipt_decision="PROMOTE")
     _patch_meta_core(monkeypatch, tmp_path)
     monkeypatch.setattr("cdel.v18_0.omega_promoter_v1._verify_ccap_apply_matches_receipt", lambda **_: True)
@@ -226,11 +231,13 @@ def test_ccap_promotion_promotes_when_receipt_and_replay_match(tmp_path: Path, m
         allowlists=_allowlists(),
     )
     assert receipt is not None
+    assert receipt["execution_mode"] == "STRICT"
     assert receipt["result"]["status"] == "PROMOTED"
     assert receipt["result"]["reason_code"] is None
 
 
 def test_ccap_promotion_rejects_when_realized_receipt_missing(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.delenv("OMEGA_BLACKBOX", raising=False)
     dispatch_ctx, subverifier = _setup_dispatch(tmp_path, receipt_decision="PROMOTE")
     realized_dir = Path(dispatch_ctx["subrun_root_abs"]) / "ccap" / "realized"
     if realized_dir.exists():
@@ -246,5 +253,92 @@ def test_ccap_promotion_rejects_when_realized_receipt_missing(tmp_path: Path, mo
         allowlists=_allowlists(),
     )
     assert receipt is not None
+    assert receipt["execution_mode"] == "STRICT"
     assert receipt["result"]["status"] == "REJECTED"
     assert receipt["result"]["reason_code"] == "CCAP_RECEIPT_MISSING_OR_MISMATCH"
+
+
+def test_ccap_promotion_blackbox_ignores_verdict_fields(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setenv("OMEGA_BLACKBOX", "1")
+    dispatch_ctx, subverifier = _setup_dispatch(tmp_path, receipt_decision="REJECT")
+    _patch_meta_core(monkeypatch, tmp_path)
+    monkeypatch.setattr("cdel.v18_0.omega_promoter_v1._verify_ccap_apply_matches_receipt", lambda **_: True)
+
+    receipt, _ = run_promotion(
+        tick_u64=1,
+        dispatch_ctx=dispatch_ctx,
+        subverifier_receipt=subverifier,
+        allowlists=_allowlists(),
+    )
+    assert receipt is not None
+    assert receipt["execution_mode"] == "BLACKBOX"
+    assert receipt["result"]["status"] == "PROMOTED"
+    assert receipt["result"]["reason_code"] is None
+
+
+def test_ccap_promotion_blackbox_still_rejects_apply_mismatch(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setenv("OMEGA_BLACKBOX", "true")
+    dispatch_ctx, subverifier = _setup_dispatch(tmp_path, receipt_decision="REJECT")
+    _patch_meta_core(monkeypatch, tmp_path)
+    monkeypatch.setattr("cdel.v18_0.omega_promoter_v1._verify_ccap_apply_matches_receipt", lambda **_: False)
+
+    receipt, _ = run_promotion(
+        tick_u64=1,
+        dispatch_ctx=dispatch_ctx,
+        subverifier_receipt=subverifier,
+        allowlists=_allowlists(),
+    )
+    assert receipt is not None
+    assert receipt["execution_mode"] == "BLACKBOX"
+    assert receipt["result"]["status"] == "REJECTED"
+    assert receipt["result"]["reason_code"] == "CCAP_APPLY_MISMATCH"
+
+
+def test_ccap_promotion_blackbox_still_requires_valid_subverifier(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setenv("OMEGA_BLACKBOX", "1")
+    dispatch_ctx, _ = _setup_dispatch(tmp_path, receipt_decision="REJECT")
+    subverifier = {"result": {"status": "INVALID", "reason_code": "VERIFY_ERROR"}}
+    _patch_meta_core(monkeypatch, tmp_path)
+    monkeypatch.setattr("cdel.v18_0.omega_promoter_v1._verify_ccap_apply_matches_receipt", lambda **_: True)
+
+    receipt, _ = run_promotion(
+        tick_u64=1,
+        dispatch_ctx=dispatch_ctx,
+        subverifier_receipt=subverifier,
+        allowlists=_allowlists(),
+    )
+    assert receipt is not None
+    assert receipt["execution_mode"] == "BLACKBOX"
+    assert receipt["result"]["status"] == "REJECTED"
+    assert receipt["result"]["reason_code"] == "SUBVERIFIER_INVALID"
+
+
+def test_ccap_promotion_blackbox_accepts_refuted_receipt_without_realized(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setenv("OMEGA_BLACKBOX", "1")
+    dispatch_ctx, subverifier = _setup_dispatch(tmp_path, receipt_decision="REJECT")
+    verifier_dir = Path(dispatch_ctx["dispatch_dir"]) / "verifier"
+    ccap_receipt_path = next(verifier_dir.glob("sha256_*.ccap_receipt_v1.json"))
+    ccap_receipt = load_canon_json(ccap_receipt_path)
+    ccap_receipt["applied_tree_id"] = "sha256:" + ("0" * 64)
+    ccap_receipt["realized_out_id"] = ""
+    ccap_receipt["determinism_check"] = "REFUTED"
+    ccap_receipt["eval_status"] = "REFUTED"
+    write_canon_json(ccap_receipt_path, ccap_receipt)
+    write_canon_json(verifier_dir / "ccap_receipt_v1.json", ccap_receipt)
+    realized_dir = Path(dispatch_ctx["subrun_root_abs"]) / "ccap" / "realized"
+    if realized_dir.exists():
+        for path in realized_dir.glob("*"):
+            path.unlink()
+    _patch_meta_core(monkeypatch, tmp_path)
+    monkeypatch.setattr("cdel.v18_0.omega_promoter_v1._verify_ccap_apply_matches_receipt", lambda **_: True)
+
+    receipt, _ = run_promotion(
+        tick_u64=1,
+        dispatch_ctx=dispatch_ctx,
+        subverifier_receipt=subverifier,
+        allowlists=_allowlists(),
+    )
+    assert receipt is not None
+    assert receipt["execution_mode"] == "BLACKBOX"
+    assert receipt["result"]["status"] == "PROMOTED"
+    assert receipt["result"]["reason_code"] is None

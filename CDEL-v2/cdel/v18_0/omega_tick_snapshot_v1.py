@@ -4,13 +4,14 @@ from __future__ import annotations
 
 from typing import Any
 
-from .omega_common_v1 import validate_schema, write_hashed_json
+from .omega_common_v1 import normalize_execution_mode, validate_schema, write_hashed_json
 
 
 def build_snapshot(payload: dict[str, Any]) -> dict[str, Any]:
     obj = dict(payload)
     obj.setdefault("schema_version", "omega_tick_snapshot_v1")
     obj.setdefault("snapshot_id", "sha256:" + "0" * 64)
+    obj["execution_mode"] = normalize_execution_mode(obj.get("execution_mode", "STRICT"))
     no_id = dict(obj)
     no_id.pop("snapshot_id", None)
     from .omega_common_v1 import canon_hash_obj

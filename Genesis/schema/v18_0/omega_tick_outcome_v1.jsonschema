@@ -34,6 +34,7 @@
     "subverifier_status": {"type": "string", "enum": ["VALID", "INVALID", "N/A"]},
     "promotion_status": {"type": "string", "enum": ["PROMOTED", "REJECTED", "SKIPPED", "N/A"]},
     "promotion_reason_code": {"type": "string"},
+    "execution_mode": {"type": "string", "enum": ["STRICT", "BLACKBOX"]},
     "activation_success": {"type": "boolean"},
     "activation_reasons": {
       "type": "array",

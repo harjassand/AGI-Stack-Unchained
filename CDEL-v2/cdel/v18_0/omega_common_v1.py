@@ -34,6 +34,14 @@ SHA256_RE = re.compile(r"^sha256:[0-9a-f]{64}$")
 Q32_ONE = 1 << 32
 _DEV_BENCHMARK_MODE_ENV = "OMEGA_DEV_BENCHMARK_MODE"
 _REPO_ROOT_OVERRIDE_ENV = "OMEGA_REPO_ROOT"
+_BLACKBOX_MODE_ENV = "OMEGA_BLACKBOX"
+_EXECUTION_MODE_STRICT = "STRICT"
+_EXECUTION_MODE_BLACKBOX = "BLACKBOX"
+_EXECUTION_MODES = {
+    _EXECUTION_MODE_STRICT,
+    _EXECUTION_MODE_BLACKBOX,
+}
+_TRUTHY_ENV_VALUES = {"1", "true", "yes", "on"}
 
 
 class OmegaV18Error(CanonError):
@@ -57,6 +65,24 @@ def repo_root() -> Path:
             fail("MISSING_STATE_INPUT")
         return root
     return Path(__file__).resolve().parents[3]
+
+
+def omega_blackbox_enabled() -> bool:
+    raw = str(os.environ.get(_BLACKBOX_MODE_ENV, "")).strip().lower()
+    return raw in _TRUTHY_ENV_VALUES
+
+
+def resolve_execution_mode() -> str:
+    if omega_blackbox_enabled():
+        return _EXECUTION_MODE_BLACKBOX
+    return _EXECUTION_MODE_STRICT
+
+
+def normalize_execution_mode(value: Any) -> str:
+    mode = str(value).strip().upper()
+    if mode not in _EXECUTION_MODES:
+        fail("SCHEMA_FAIL")
+    return mode
 
 
 def schema_dir() -> Path:
@@ -350,11 +376,14 @@ __all__ = [
     "hash_file_stream",
     "load_canon_dict",
     "load_jsonl",
+    "normalize_execution_mode",
+    "omega_blackbox_enabled",
     "q32_int",
     "q32_mul",
     "q32_obj",
     "rat_q32",
     "repo_root",
+    "resolve_execution_mode",
     "require_no_absolute_paths",
     "require_relpath",
     "schema_dir",

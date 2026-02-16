@@ -9,6 +9,7 @@ from ..v18_0 import omega_promoter_v1 as v18_promoter
 from ..v18_0.omega_common_v1 import (
     canon_hash_obj,
     load_canon_dict,
+    resolve_execution_mode,
     require_no_absolute_paths,
     validate_schema as validate_v18_schema,
     write_hashed_json,
@@ -335,11 +336,13 @@ def _write_v18_reject(
 ) -> tuple[dict[str, Any], str]:
     out_dir = Path(dispatch_ctx["dispatch_dir"]) / "promotion"
     out_dir.mkdir(parents=True, exist_ok=True)
+    execution_mode = resolve_execution_mode()
     payload = {
         "schema_version": "omega_promotion_receipt_v1",
         "receipt_id": "sha256:" + ("0" * 64),
         "tick_u64": int(tick_u64),
         "promotion_bundle_hash": promotion_bundle_hash,
+        "execution_mode": execution_mode,
         "meta_core_verifier_fingerprint": v18_promoter._meta_fingerprint(),
         "result": {
             "status": "REJECTED",

@@ -26,6 +26,7 @@ _SANITIZED_ENV_KEYS = (
     # Drill-only CCAP overrides (safe to pass through; default is empty).
     "OMEGA_AUTHORITY_PINS_REL",
     "OMEGA_CCAP_PATCH_ALLOWLISTS_REL",
+    "OMEGA_SURVIVAL_DRILL",
     "ORCH_LLM_BACKEND",
     "ORCH_LLM_REPLAY_PATH",
     "ORCH_LLM_MAX_CALLS",

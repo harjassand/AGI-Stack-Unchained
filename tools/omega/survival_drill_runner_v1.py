@@ -172,6 +172,8 @@ def main() -> int:
 
     prev_state_dir: Path | None = None
     start_head = _git(["rev-parse", "HEAD"]).strip()
+    ge_promoted_b = False
+    ge_campaign_id = "rsi_ge_symbiotic_optimizer_sh1_v0_1"
     for tick_u64 in range(1, int(max(1, int(args.tick_budget))) + 1):
         tick_dir = drill_root / f"tick_{tick_u64:04d}"
         tick_dir.mkdir(parents=True, exist_ok=True)
@@ -215,6 +217,40 @@ def main() -> int:
         dispatch_dir = _latest_dispatch_dir(state_root)
         if dispatch_dir is not None:
             evidence: dict[str, Any] = {"dispatch_dir": dispatch_dir.as_posix()}
+            # Record dispatch campaign + promotion outcome (we need to prove GE+CCAP actually ran).
+            dispatch_receipts = sorted(dispatch_dir.glob("*.omega_dispatch_receipt_v1.json"), key=lambda p: p.as_posix())
+            if dispatch_receipts:
+                try:
+                    d = json.loads(dispatch_receipts[-1].read_text(encoding="utf-8"))
+                    evidence["dispatch_receipt"] = {"path": dispatch_receipts[-1].as_posix(), "campaign_id": d.get("campaign_id")}
+                    if str(d.get("campaign_id", "")).strip() == ge_campaign_id:
+                        promo_dir = dispatch_dir / "promotion"
+                        promo_receipts = sorted(promo_dir.glob("*.omega_promotion_receipt_v1.json"), key=lambda p: p.as_posix())
+                        promo_rows = []
+                        for pr in promo_receipts:
+                            try:
+                                pd = json.loads(pr.read_text(encoding="utf-8"))
+                            except Exception:
+                                continue
+                            res = pd.get("result") if isinstance(pd, dict) else None
+                            status = res.get("status") if isinstance(res, dict) else None
+                            reason = res.get("reason_code") if isinstance(res, dict) else None
+                            promo_rows.append({"path": pr.as_posix(), "status": status, "reason_code": reason})
+                            if str(status).strip() == "PROMOTED":
+                                ge_promoted_b = True
+                        evidence["ge_promotion_receipts"] = promo_rows
+                        _write_json(
+                            tick_dir / "ge_promotion_evidence_v1.json",
+                            {
+                                "schema_version": "SURVIVAL_DRILL_GE_PROMOTION_EVIDENCE_v1",
+                                "tick_u64": tick_u64,
+                                "dispatch_dir": dispatch_dir.as_posix(),
+                                "ge_promoted_b": bool(ge_promoted_b),
+                                "promotion_receipts": promo_rows,
+                            },
+                        )
+                except Exception:
+                    pass
             verifier_dir = dispatch_dir / "verifier"
             receipts = sorted(verifier_dir.glob("*.ccap_receipt_v1.json"), key=lambda p: p.as_posix())
             if (verifier_dir / "ccap_receipt_v1.json").exists():
@@ -253,13 +289,14 @@ def main() -> int:
                     "cap_frontier_u64": cap_frontier,
                 },
             )
-            if cap_frontier > 1:
+            if cap_frontier > 1 and ge_promoted_b:
                 _write_json(
                     drill_root / "SURVIVAL_DRILL_SUCCESS_v1.json",
                     {
                         "schema_version": "SURVIVAL_DRILL_SUCCESS_v1",
                         "tick_u64": tick_u64,
                         "cap_frontier_u64": cap_frontier,
+                        "ge_promoted_b": True,
                         "start_head": start_head,
                         "end_head": _git(["rev-parse", "HEAD"]).strip(),
                     },

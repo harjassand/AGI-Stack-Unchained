@@ -101,8 +101,8 @@ def materialize_repo_snapshot(repo_root: Path, out_dir: Path) -> None:
             shutil.copy2(src, dst)
 
 
-def _iter_tree_files(root: Path) -> list[tuple[str, Path]]:
-    out: list[tuple[str, Path]] = []
+def _iter_tree_entries(root: Path) -> list[tuple[str, str, Path]]:
+    out: list[tuple[str, str, Path]] = []
     stack = [root]
     while stack:
         cur = stack.pop()
@@ -114,12 +114,15 @@ def _iter_tree_files(root: Path) -> list[tuple[str, Path]]:
             if rel.startswith(".git/") or rel == ".git":
                 continue
             if entry.is_symlink():
-                fail("SCHEMA_FAIL")
+                # CCAP workspaces may include symlinks (for example, repo fixtures that point into
+                # `runs/`). Treat them as hashed entries rather than hard-failing.
+                out.append((rel, "symlink", path))
+                continue
             if entry.is_dir(follow_symlinks=False):
                 stack.append(path)
                 continue
             if entry.is_file(follow_symlinks=False):
-                out.append((rel, path))
+                out.append((rel, "file", path))
     out.sort(key=lambda row: row[0])
     return out
 
@@ -150,13 +153,25 @@ def compute_workspace_tree_id(workspace_root: Path) -> str:
         except Exception:
             pass
 
-    files = [{"path": rel, "sha256": hash_file_stream(path)} for rel, path in _iter_tree_files(workspace_root)]
+    files: list[dict[str, str]] = []
+    for rel, kind, path in _iter_tree_entries(workspace_root):
+        if kind == "file":
+            digest = hash_file_stream(path)
+        else:
+            try:
+                target = os.readlink(path)
+            except OSError:
+                fail("MISSING_STATE_INPUT")
+            digest = canon_hash_obj({"schema_version": "ccap_symlink_v1", "target": str(target)})
+        files.append({"path": rel, "sha256": digest})
     return canon_hash_obj({"schema_version": "ccap_workspace_tree_v1", "files": files})
 
 
 def workspace_disk_mb(workspace_root: Path) -> int:
     total = 0
-    for _rel, path in _iter_tree_files(workspace_root):
+    for _rel, kind, path in _iter_tree_entries(workspace_root):
+        if kind != "file":
+            continue
         total += int(path.stat().st_size)
     return max(0, (total + (1024 * 1024 - 1)) // (1024 * 1024))
 

@@ -592,11 +592,30 @@ def _meta_core_root() -> Path:
 
 def _find_promotion_bundle(dispatch_ctx: dict[str, Any]) -> tuple[Path | None, str | None]:
     cap = dispatch_ctx["campaign_entry"]
-    subrun_root: Path = dispatch_ctx["subrun_root_abs"]
-    rel_pattern = str(cap.get("promotion_bundle_rel", ""))
+    rel_pattern = str(cap.get("promotion_bundle_rel", "")).strip()
     if not rel_pattern:
         return None, None
-    matches = sorted(subrun_root.glob(rel_pattern))
+
+    subrun_root: Path | None = None
+    subrun_root_raw = dispatch_ctx.get("subrun_root_abs")
+    if isinstance(subrun_root_raw, Path):
+        subrun_root = subrun_root_raw
+    elif isinstance(subrun_root_raw, str) and subrun_root_raw.strip():
+        subrun_root = Path(subrun_root_raw)
+
+    if subrun_root is None:
+        # Some unit tests call helpers with only state_root + relpaths.
+        state_root_raw = dispatch_ctx.get("state_root")
+        subrun_root_rel_raw = dispatch_ctx.get("subrun_root_rel_state")
+        if state_root_raw is None or subrun_root_rel_raw is None:
+            return None, None
+        try:
+            subrun_root_rel = require_relpath(subrun_root_rel_raw)
+        except Exception:  # noqa: BLE001
+            return None, None
+        subrun_root = Path(state_root_raw) / subrun_root_rel
+
+    matches = sorted(subrun_root.glob(rel_pattern), key=lambda row: row.as_posix())
     if not matches:
         return None, None
     path = matches[0]
@@ -913,7 +932,23 @@ def run_subverifier(
         subrun_root_rel = require_relpath(dispatch_ctx.get("subrun_root_rel_state"))
         ccap_subrun_root_abs = state_root / subrun_root_rel
         declared_ccap_rel = str(cap.get("ccap_relpath", "")).strip()
-        ccap_rel = require_relpath(declared_ccap_rel) if declared_ccap_rel else _discover_ccap_relpath(ccap_subrun_root_abs)
+        if declared_ccap_rel:
+            ccap_rel = require_relpath(declared_ccap_rel)
+        else:
+            # Prefer the CCAP chosen by the promotion bundle selector so subverifier
+            # and promoter agree on the CCAP id/receipt identity when multiple
+            # candidates exist under the subrun root.
+            bundle_path, _bundle_hash = _find_promotion_bundle(dispatch_ctx)
+            if bundle_path is not None:
+                try:
+                    bundle_obj, _ = load_bundle(bundle_path)
+                    bundle_ccap_rel = str(bundle_obj.get("ccap_relpath", "")).strip()
+                    if bundle_ccap_rel:
+                        ccap_rel = normalize_subrun_relpath(bundle_ccap_rel)
+                except Exception:  # noqa: BLE001
+                    ccap_rel = None
+            if not ccap_rel:
+                ccap_rel = _discover_ccap_relpath(ccap_subrun_root_abs)
         enable_ccap = str(int(cap.get("enable_ccap", 0)))
         if ccap_rel:
             argv = [

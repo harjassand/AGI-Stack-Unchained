@@ -801,9 +801,23 @@ def _capability_frontier_metrics(
     *,
     root: Path,
     registry: dict[str, Any],
+    exclude_run_dir: Path | None = None,
+    exclude_after_or_equal_tick_u64: int | None = None,
     window_ticks_u64: int = _CAPABILITY_FRONTIER_WINDOW_U64,
 ) -> dict[str, int]:
     records: list[dict[str, Any]] = []
+    exclude_root: Path | None = None
+    if exclude_run_dir is not None:
+        try:
+            exclude_root = exclude_run_dir.resolve()
+        except Exception:  # noqa: BLE001
+            exclude_root = exclude_run_dir
+    exclude_tick_u64: int | None = None
+    if exclude_after_or_equal_tick_u64 is not None:
+        try:
+            exclude_tick_u64 = int(exclude_after_or_equal_tick_u64)
+        except Exception:  # noqa: BLE001
+            exclude_tick_u64 = None
     for dispatch_dir in sorted(root.glob("runs/*/daemon/rsi_omega_daemon_v*/state/dispatch/*"), key=lambda row: row.as_posix()):
         if not dispatch_dir.is_dir():
             continue
@@ -819,6 +833,17 @@ def _capability_frontier_metrics(
             continue
         dispatch_payload, dispatch_tick_u64 = dispatch_row
         activation_payload, activation_tick_u64 = activation_row
+        record_tick_u64 = int(max(dispatch_tick_u64, activation_tick_u64))
+        if exclude_root is not None and exclude_tick_u64 is not None and record_tick_u64 >= exclude_tick_u64:
+            try:
+                dispatch_dir.resolve().relative_to(exclude_root)
+            except Exception:  # noqa: BLE001
+                pass
+            else:
+                # Observation is computed at the start of the tick; exclude receipts from the
+                # current run that are generated later in the same tick (and therefore would not
+                # have been visible during the original observation scan).
+                continue
         capability_id = str(dispatch_payload.get("capability_id", "")).strip()
         if not capability_id:
             continue
@@ -826,7 +851,7 @@ def _capability_frontier_metrics(
         after_hash = str(activation_payload.get("after_active_manifest_hash", ""))
         records.append(
             {
-                "tick_u64": int(max(dispatch_tick_u64, activation_tick_u64)),
+                "tick_u64": record_tick_u64,
                 "capability_id": capability_id,
                 "activation_success": bool(activation_payload.get("activation_success", False)),
                 "manifest_changed": before_hash != after_hash,
@@ -883,6 +908,8 @@ def _recompute_observation_from_sources(
     registry_hash: str,
     objectives_hash: str,
     prev_observation: dict[str, Any] | None,
+    exclude_run_dir: Path | None = None,
+    exclude_after_or_equal_tick_u64: int | None = None,
 ) -> dict[str, Any]:
     sources = observation_payload.get("sources")
     if not isinstance(sources, list):
@@ -1110,7 +1137,12 @@ def _recompute_observation_from_sources(
         "num_u64": int(code_pass_u64),
         "den_u64": int(max(1, code_reports_u64)),
     }
-    capability_frontier = _capability_frontier_metrics(root=root, registry=registry)
+    capability_frontier = _capability_frontier_metrics(
+        root=root,
+        registry=registry,
+        exclude_run_dir=exclude_run_dir,
+        exclude_after_or_equal_tick_u64=exclude_after_or_equal_tick_u64,
+    )
     capability_expansion_q32 = int(int(capability_frontier["cap_frontier_u64"]) << 32)
     maximize_science_q32 = _maximize_science_q32(int(by_schema["sas_science_promotion_bundle_v1"]))
     maximize_speed_q32 = _maximize_speed_q32(int(previous_tick_total_ns_u64))
@@ -1587,6 +1619,9 @@ def verify(state_dir: Path, *, mode: str = "full") -> str:
     )
     if prev_observation is None:
         prev_observation = _derive_prev_observation_from_payload(obs_payload)
+    exclude_run_dir: Path | None = None
+    if daemon_root.parent.name == "daemon":
+        exclude_run_dir = daemon_root.parent.parent
     recomputed_obs = _recompute_observation_from_sources(
         root=_repo_root(),
         runs_roots=_observer_runs_roots(root=_repo_root(), daemon_root=daemon_root),
@@ -1596,6 +1631,8 @@ def verify(state_dir: Path, *, mode: str = "full") -> str:
         registry_hash=registry_hash,
         objectives_hash=objectives_hash,
         prev_observation=prev_observation,
+        exclude_run_dir=exclude_run_dir,
+        exclude_after_or_equal_tick_u64=int(obs_payload.get("tick_u64", 0)),
     )
     if canon_hash_obj(recomputed_obs) != canon_hash_obj(obs_payload):
         fail("NONDETERMINISTIC")

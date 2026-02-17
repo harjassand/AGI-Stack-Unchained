@@ -52,6 +52,8 @@ class VerifierWorker:
         except (TypeError, ValueError):
             fail("SCHEMA_FAIL")
         recompute_supports_registry = "registry" in recompute_params
+        recompute_supports_exclude_run_dir = "exclude_run_dir" in recompute_params
+        recompute_supports_exclude_tick = "exclude_after_or_equal_tick_u64" in recompute_params
         if "registry_hash" not in recompute_params:
             fail("SCHEMA_FAIL")
 
@@ -70,9 +72,18 @@ class VerifierWorker:
             registry_hash: str,
             objectives_hash: str,
             prev_observation: dict[str, Any] | None = None,
+            exclude_run_dir: Path | None = None,
+            exclude_after_or_equal_tick_u64: int | None = None,
         ) -> dict[str, Any]:
             if registry is not None and not isinstance(registry, dict):
                 fail("SCHEMA_FAIL")
+            if exclude_run_dir is not None and not isinstance(exclude_run_dir, Path):
+                fail("SCHEMA_FAIL")
+            if exclude_after_or_equal_tick_u64 is not None:
+                try:
+                    int(exclude_after_or_equal_tick_u64)
+                except Exception:  # noqa: BLE001
+                    fail("SCHEMA_FAIL")
             key = canon_hash_obj(
                 {
                     "sources": observation_payload.get("sources"),
@@ -81,6 +92,10 @@ class VerifierWorker:
                     "objectives_hash": objectives_hash,
                     "runs_roots": [str(path) for path in (runs_roots or [])],
                     "prev_observation_hash": canon_hash_obj(prev_observation) if isinstance(prev_observation, dict) else "",
+                    "exclude_run_dir": str(exclude_run_dir) if exclude_run_dir is not None else "",
+                    "exclude_after_or_equal_tick_u64": (
+                        int(exclude_after_or_equal_tick_u64) if exclude_after_or_equal_tick_u64 is not None else None
+                    ),
                 }
             )
             expected_obs_hash = canon_hash_obj(observation_payload)
@@ -98,6 +113,10 @@ class VerifierWorker:
                 "objectives_hash": objectives_hash,
                 "prev_observation": prev_observation,
             }
+            if recompute_supports_exclude_run_dir:
+                recompute_kwargs["exclude_run_dir"] = exclude_run_dir
+            if recompute_supports_exclude_tick:
+                recompute_kwargs["exclude_after_or_equal_tick_u64"] = exclude_after_or_equal_tick_u64
             if recompute_supports_registry:
                 if registry is None:
                     fail("SCHEMA_FAIL")

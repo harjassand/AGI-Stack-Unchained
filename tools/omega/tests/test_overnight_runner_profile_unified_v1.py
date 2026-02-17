@@ -62,6 +62,11 @@ def _write_registry(path: Path) -> None:
                 "capability_id": "RSI_MODEL_GENESIS_V10",
                 "enabled": False,
             },
+            {
+                "campaign_id": "rsi_eudrs_u_train_v1",
+                "capability_id": "RSI_EUDRS_U_TRAIN",
+                "enabled": False,
+            },
             {"campaign_id": "rsi_ge_symbiotic_optimizer_sh1_v0_1", "capability_id": "RSI_GE_SH1_OPTIMIZER", "enabled": False},
             {"campaign_id": "rsi_omega_self_optimize_core_v1", "capability_id": "RSI_OMEGA_SELF_OPTIMIZE_CORE", "enabled": True},
         ],
@@ -165,6 +170,7 @@ def test_prepare_overlay_unified_enables_multifamily_and_injects_goals(tmp_path:
     assert bool(by_campaign["rsi_omega_skill_swarm_v1"].get("enabled", False)) is True
     assert bool(by_campaign["rsi_omega_skill_model_genesis_v1"].get("enabled", False)) is True
     assert bool(by_campaign["rsi_model_genesis_v10_0"].get("enabled", False)) is True
+    assert bool(by_campaign["rsi_eudrs_u_train_v1"].get("enabled", False)) is True
     assert bool(by_campaign["rsi_ge_symbiotic_optimizer_sh1_v0_1"].get("enabled", False)) is True
     assert bool(by_campaign["rsi_omega_self_optimize_core_v1"].get("enabled", True)) is False
 
@@ -192,6 +198,7 @@ def test_prepare_overlay_unified_enables_multifamily_and_injects_goals(tmp_path:
     assert "RSI_OMEGA_SKILL_SWARM" in capability_ids
     assert "RSI_OMEGA_SKILL_MODEL_GENESIS" in capability_ids
     assert "RSI_MODEL_GENESIS_V10" in capability_ids
+    assert "RSI_EUDRS_U_TRAIN" in capability_ids
     assert "RSI_GE_SH1_OPTIMIZER" in capability_ids
 
     ge_goals = [
@@ -217,6 +224,7 @@ def test_prepare_overlay_unified_enables_multifamily_and_injects_goals(tmp_path:
     assert "rsi_omega_skill_swarm_v1" in enabled_campaign_ids
     assert "rsi_omega_skill_model_genesis_v1" in enabled_campaign_ids
     assert "rsi_model_genesis_v10_0" in enabled_campaign_ids
+    assert "rsi_eudrs_u_train_v1" in enabled_campaign_ids
 
 
 def test_prepare_overlay_unified_keeps_injected_goals_with_full_queue(tmp_path: Path, monkeypatch) -> None:
@@ -314,6 +322,7 @@ def test_prepare_overlay_unified_keeps_injected_goals_with_full_queue(tmp_path: 
         "RSI_OMEGA_SKILL_SWARM",
         "RSI_OMEGA_SKILL_MODEL_GENESIS",
         "RSI_MODEL_GENESIS_V10",
+        "RSI_EUDRS_U_TRAIN",
         "RSI_GE_SH1_OPTIMIZER",
     }
     assert required_caps.issubset(capability_ids)

@@ -45,6 +45,8 @@ _GOAL_REFRESH_IDLE_TICKS_U64 = 64
 _GE_CAMPAIGN_ID = "rsi_ge_symbiotic_optimizer_sh1_v0_1"
 _GE_CAPABILITY_ID = "RSI_GE_SH1_OPTIMIZER"
 _MODEL_GENESIS_CAMPAIGN_ID = "rsi_model_genesis_v10_0"
+_EUDRS_U_TRAIN_CAMPAIGN_ID = "rsi_eudrs_u_train_v1"
+_EUDRS_U_TRAIN_CAPABILITY_ID = "RSI_EUDRS_U_TRAIN"
 _MODEL_GENESIS_CAPABILITY_ID = "RSI_MODEL_GENESIS_V10"
 _VOID_TO_GOALS_MAX_GOALS_U64 = 2
 _POLYMATH_VOID_REPORT_REL = "polymath/registry/polymath_void_report_v1.jsonl"
@@ -2358,6 +2360,7 @@ def _prepare_campaign_pack_overlay(
             "rsi_polymath_bootstrap_domain_v1",
             "rsi_polymath_conquer_domain_v1",
             _MODEL_GENESIS_CAMPAIGN_ID,
+            _EUDRS_U_TRAIN_CAMPAIGN_ID,
             *[campaign_id for campaign_id, _capability_id, _goal_id in _UNIFIED_SKILL_ROWS],
         ]
         if enable_ge_sh1_optimizer:
@@ -2417,6 +2420,7 @@ def _prepare_campaign_pack_overlay(
             ("goal_auto_00_unified_polymath_scout_0001", "RSI_POLYMATH_SCOUT"),
             ("goal_auto_00_unified_polymath_bootstrap_0001", "RSI_POLYMATH_BOOTSTRAP_DOMAIN"),
             ("goal_auto_00_unified_polymath_conquer_0001", "RSI_POLYMATH_CONQUER_DOMAIN"),
+            ("goal_auto_00_unified_eudrs_u_train_0001", _EUDRS_U_TRAIN_CAPABILITY_ID),
         ]
         unified_goals.extend(
             (goal_id, capability_id)

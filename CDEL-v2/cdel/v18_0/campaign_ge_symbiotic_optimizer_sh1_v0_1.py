@@ -48,6 +48,14 @@ def _load_pack(path: Path) -> dict[str, Any]:
 
 def _discover_runs_root(out_dir: Path) -> Path | None:
     current = out_dir.resolve()
+    # When running under the live-wire worktree (which is itself nested under `runs/<series>/`),
+    # prefer the current series directory so GE does not scan the entire historical `runs/` corpus.
+    for parent in [current, *current.parents]:
+        try:
+            if parent.parent.name == "runs":
+                return parent
+        except Exception:  # noqa: BLE001
+            continue
     for parent in [current, *current.parents]:
         if parent.name == "runs":
             return parent

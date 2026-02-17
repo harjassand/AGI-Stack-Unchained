@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
 from typing import Any
 
@@ -17,6 +18,7 @@ _ENV_OVERRIDE_ALLOWLIST: dict[str, set[str]] = {
 FORCED_RUNAWAY_ACTIVE = True
 FORCED_ESCALATION_LEVEL_U64 = 5
 FORCED_RUNAWAY_REASON = "TESTING"
+_ENV_DISABLE_FORCED_RUNAWAY = "OMEGA_DISABLE_FORCED_RUNAWAY"
 
 
 def load_runaway_config(path: Path) -> tuple[dict[str, Any], str]:
@@ -40,6 +42,18 @@ def check_runaway_condition(
     runaway_cfg: dict[str, Any] | None = None,  # noqa: ARG001
     runaway_state: dict[str, Any] | None = None,  # noqa: ARG001
 ) -> tuple[bool, int, str]:
+    # Acceptance runs need to be able to schedule from goals (for example EUDRS), but the daemon
+    # currently supports a forced runaway mode for deterministic testing. This env gate keeps the
+    # default behavior while allowing goal scheduling when explicitly requested.
+    raw_disable = os.environ.get(_ENV_DISABLE_FORCED_RUNAWAY)
+    if raw_disable is not None:
+        raw_disable = str(raw_disable).strip()
+        if raw_disable == "1":
+            return False, 0, "DISABLED_BY_ENV"
+        if raw_disable in {"", "0"}:
+            pass
+        else:
+            fail("SCHEMA_FAIL")
     return FORCED_RUNAWAY_ACTIVE, int(FORCED_ESCALATION_LEVEL_U64), FORCED_RUNAWAY_REASON
 
 

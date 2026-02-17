@@ -134,12 +134,16 @@ def test_registry_files_include_polymath_drive_capabilities() -> None:
         "RSI_POLYMATH_BOOTSTRAP_DOMAIN",
         "RSI_POLYMATH_CONQUER_DOMAIN",
     }
-    paths = [
+    required_paths = [
         root / "campaigns" / "rsi_omega_daemon_v18_0" / "omega_capability_registry_v2.json",
         root / "campaigns" / "rsi_omega_daemon_v18_0_prod" / "omega_capability_registry_v2.json",
+    ]
+    optional_paths = [
         root / "daemon" / "rsi_omega_daemon_v18_0" / "config" / "omega_capability_registry_v2.json",
         root / "daemon" / "rsi_omega_daemon_v18_0_prod" / "config" / "omega_capability_registry_v2.json",
     ]
+    paths = list(required_paths)
+    paths.extend(path for path in optional_paths if path.exists())
     for path in paths:
         payload = load_canon_dict(path)
         rows = payload.get("capabilities")

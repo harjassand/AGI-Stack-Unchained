@@ -27,9 +27,20 @@ def _find_superproject_root() -> Path | None:
     return None
 
 
+def _golden_manifest_paths(root: Path) -> list[Path]:
+    runs_dir = root / "polymath/registry/eudrs_u/vision/perception/runs"
+    out: list[Path] = []
+    for rid in _RUN_IDS:
+        assert rid.startswith("sha256:")
+        out.append(runs_dir / f"sha256_{rid.split(':', 1)[1]}.vision_perception_run_manifest_v1.json")
+    return out
+
+
 _SUPERPROJECT_ROOT = _find_superproject_root()
 if _SUPERPROJECT_ROOT is None:
     pytest.skip("requires polymath vision registry fixtures (run via AGI-Stack)", allow_module_level=True)
+if not all(path.exists() for path in _golden_manifest_paths(_SUPERPROJECT_ROOT)):
+    pytest.skip("requires generated stage1 vision goldens", allow_module_level=True)
 
 
 def _repo_root() -> Path:

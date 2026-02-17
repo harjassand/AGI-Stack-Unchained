@@ -343,11 +343,19 @@ def _resolve_ccap_subrun_root_for_bundle(*, bundle_obj: dict[str, Any], dispatch
     # CCAP promotion bundles reference files under the subrun root via `ccap_relpath`/`patch_relpath`.
     # Some dispatch receipts (notably in sandboxed drill runs) may omit `subrun_root_abs`; fail closed
     # unless we can deterministically locate the correct subrun directory.
+    ccap_relpath = normalize_subrun_relpath(str(bundle_obj.get("ccap_relpath", "")))
+    patch_relpath = normalize_subrun_relpath(str(bundle_obj.get("patch_relpath", "")))
+    if not ccap_relpath or not patch_relpath:
+        raise RuntimeError("SCHEMA_FAIL")
+
     raw = dispatch_ctx.get("subrun_root_abs")
     if isinstance(raw, str) and raw.strip():
         path = Path(raw).resolve()
         if path.exists() and path.is_dir():
-            return path
+            # Fail-closed: accept dispatch-provided subrun roots only if they actually contain the
+            # CCAP bundle's referenced files.
+            if (path / ccap_relpath).is_file() and (path / patch_relpath).is_file():
+                return path
 
     dispatch_dir_raw = dispatch_ctx.get("dispatch_dir")
     if not isinstance(dispatch_dir_raw, str) or not dispatch_dir_raw.strip():
@@ -359,11 +367,6 @@ def _resolve_ccap_subrun_root_for_bundle(*, bundle_obj: dict[str, Any], dispatch
     subruns_root = state_root / "subruns"
     if not subruns_root.exists() or not subruns_root.is_dir():
         raise RuntimeError("MISSING_STATE_INPUT")
-
-    ccap_relpath = normalize_subrun_relpath(str(bundle_obj.get("ccap_relpath", "")))
-    patch_relpath = normalize_subrun_relpath(str(bundle_obj.get("patch_relpath", "")))
-    if not ccap_relpath or not patch_relpath:
-        raise RuntimeError("SCHEMA_FAIL")
 
     candidate: Path | None = None
     for entry in sorted(subruns_root.iterdir(), key=lambda p: p.as_posix()):

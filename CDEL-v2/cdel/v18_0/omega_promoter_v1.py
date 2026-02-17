@@ -28,6 +28,7 @@ from .omega_common_v1 import (
     OmegaV18Error,
     canon_hash_obj,
     hash_file,
+    hash_bytes,
     load_canon_dict,
     repo_root,
     resolve_execution_mode,
@@ -146,6 +147,57 @@ def _load_ccap_receipt_for_id_with_fallback(
 
 def _path_contains_omega_cache(path_rel: str) -> bool:
     return ".omega_cache" in Path(path_rel).parts
+
+
+def _tree_hash_ccap_subrun_for_receipt(subrun_root: Path) -> str:
+    """Hash a CCAP subrun for subverifier receipt purposes without traversing EK workspaces.
+
+    `ccap/ek_runs/**` can contain a full repo snapshot (very large) and may include symlinks
+    (for example `tools/omega/verifier_corpus_v1/*/state`). Those are legitimate in the repo
+    but would make `tree_hash()` fail-closed and/or be prohibitively expensive.
+
+    This hash is used only for receipt integrity (replay anchoring), not for promotion gating.
+    """
+
+    if not subrun_root.exists() or not subrun_root.is_dir():
+        fail("MISSING_STATE_INPUT")
+
+    include_files: list[dict[str, str]] = []
+
+    def _add_tree(root: Path, rel_prefix: str) -> None:
+        if not root.exists() or not root.is_dir():
+            return
+        stack = [root]
+        while stack:
+            cur = stack.pop()
+            for entry in sorted(cur.iterdir(), key=lambda p: p.name):
+                rel = (Path(rel_prefix) / entry.relative_to(root)).as_posix()
+                # Exclude EK workspaces entirely.
+                if rel.startswith("ccap/ek_runs/"):
+                    continue
+                if entry.is_symlink():
+                    try:
+                        target = os.readlink(entry)
+                    except OSError:
+                        fail("SCHEMA_FAIL")
+                    include_files.append({"path": rel, "sha256": hash_bytes(target.encode("utf-8"))})
+                elif entry.is_dir():
+                    stack.append(entry)
+                elif entry.is_file():
+                    include_files.append({"path": rel, "sha256": hash_file(entry)})
+
+    # Core CCAP + promotion artifacts.
+    _add_tree((subrun_root / "ccap").resolve(), "ccap")
+    _add_tree((subrun_root / "promotion").resolve(), "promotion")
+
+    # Helpful GE summary artifacts if present.
+    for name in ("ge_symbiotic_optimizer_summary_v0_3.json", "ge_xs_snapshot_v1.json", "ge_run_inputs_fingerprint_v2.json"):
+        p = (subrun_root / name).resolve()
+        if p.exists() and p.is_file():
+            include_files.append({"path": name, "sha256": hash_file(p)})
+
+    include_files.sort(key=lambda row: row["path"])
+    return canon_hash_obj({"schema_version": "omega_ccap_subrun_hash_v1", "files": include_files})
 
 
 def _touches_ek_authority(path_rel: str) -> bool:
@@ -1041,12 +1093,21 @@ def run_subverifier(
     stderr_hash = run_result["stderr_hash"]
     state_dir_hash = _SHA256_ZERO
     state_hash_root = replay_state_dir_abs
-    if verifier_module == _CCAP_VERIFIER_MODULE and (not replay_state_dir_abs.exists() or not replay_state_dir_abs.is_dir()):
-        subrun_root_abs = Path(dispatch_ctx["subrun_root_abs"])
-        if subrun_root_abs.exists() and subrun_root_abs.is_dir():
-            state_hash_root = subrun_root_abs
     try:
-        state_dir_hash = tree_hash(state_hash_root)
+        if verifier_module == _CCAP_VERIFIER_MODULE:
+            if ccap_subrun_root_abs is not None:
+                subrun_root_abs = ccap_subrun_root_abs
+            elif "subrun_root_abs" in dispatch_ctx:
+                subrun_root_abs = Path(dispatch_ctx["subrun_root_abs"])
+            else:
+                subrun_root_abs = (state_root / str(dispatch_ctx.get("subrun_root_rel_state", "")).strip()).resolve()
+            state_dir_hash = _tree_hash_ccap_subrun_for_receipt(subrun_root_abs)
+        else:
+            if verifier_module == _CCAP_VERIFIER_MODULE and (not replay_state_dir_abs.exists() or not replay_state_dir_abs.is_dir()):
+                subrun_root_abs = Path(dispatch_ctx["subrun_root_abs"])
+                if subrun_root_abs.exists() and subrun_root_abs.is_dir():
+                    state_hash_root = subrun_root_abs
+            state_dir_hash = tree_hash(state_hash_root)
     except OmegaV18Error:
         status = "INVALID"
         reason_code = "MISSING_STATE_INPUT"

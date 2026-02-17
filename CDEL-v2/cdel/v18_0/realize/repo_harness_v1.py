@@ -193,6 +193,20 @@ def run_repo_harness(
             "cost_vector": _zero_cost(),
         }
 
+    # Survival Drill v1: keep the verifier meaningful but fast enough to fit within tight CCAP
+    # wallclock budgets. In the drill only, replace the potentially expensive recipe command list
+    # (often `pytest .../tests_fast`) with a small schema-validation test.
+    if str(os.environ.get("OMEGA_SURVIVAL_DRILL", "")).strip().lower() in {"1", "true", "yes", "on"}:
+        commands = [
+            [
+                sys.executable,
+                "-m",
+                "pytest",
+                "-q",
+                "CDEL-v2/cdel/v18_0/tests_omega_daemon/test_ccap_schema_validation_v1.py",
+            ]
+        ]
+
     if sandbox_root.exists():
         shutil.rmtree(sandbox_root)
     sandbox_root.mkdir(parents=True, exist_ok=True)

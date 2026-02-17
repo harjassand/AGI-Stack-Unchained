@@ -233,6 +233,22 @@ def _receipt_payload(
     score_cand_summary: dict[str, Any] | None = None,
     score_delta_summary: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
+    def _canon_number(value: Any) -> int:
+        # Canonical JSON used by receipts rejects floats; store any numeric KPI as an int.
+        # (JSON schema type "number" accepts integers, so this remains schema-valid.)
+        try:
+            if isinstance(value, bool):
+                return int(value)
+            if isinstance(value, int):
+                return int(value)
+            if isinstance(value, float):
+                if value != value or value in (float("inf"), float("-inf")):
+                    return 0
+                return int(value)
+        except Exception:  # noqa: BLE001
+            return 0
+        return 0
+
     payload = {
         "schema_version": "ccap_receipt_v1",
         "ccap_id": ccap_id,
@@ -251,28 +267,28 @@ def _receipt_payload(
     if isinstance(scorecard_summary, dict):
         payload["scorecard_summary"] = {
             "median_stps_non_noop_q32": int(scorecard_summary.get("median_stps_non_noop_q32", 0)),
-            "non_noop_ticks_per_min_f64": float(scorecard_summary.get("non_noop_ticks_per_min_f64", 0.0)),
+            "non_noop_ticks_per_min_f64": _canon_number(scorecard_summary.get("non_noop_ticks_per_min_f64", 0)),
             "promotions_u64": int(scorecard_summary.get("promotions_u64", 0)),
             "activation_success_u64": int(scorecard_summary.get("activation_success_u64", 0)),
         }
     if isinstance(score_base_summary, dict):
         payload["score_base_summary"] = {
             "median_stps_non_noop_q32": int(score_base_summary.get("median_stps_non_noop_q32", 0)),
-            "non_noop_ticks_per_min_f64": float(score_base_summary.get("non_noop_ticks_per_min_f64", 0.0)),
+            "non_noop_ticks_per_min_f64": _canon_number(score_base_summary.get("non_noop_ticks_per_min_f64", 0)),
             "promotions_u64": int(score_base_summary.get("promotions_u64", 0)),
             "activation_success_u64": int(score_base_summary.get("activation_success_u64", 0)),
         }
     if isinstance(score_cand_summary, dict):
         payload["score_cand_summary"] = {
             "median_stps_non_noop_q32": int(score_cand_summary.get("median_stps_non_noop_q32", 0)),
-            "non_noop_ticks_per_min_f64": float(score_cand_summary.get("non_noop_ticks_per_min_f64", 0.0)),
+            "non_noop_ticks_per_min_f64": _canon_number(score_cand_summary.get("non_noop_ticks_per_min_f64", 0)),
             "promotions_u64": int(score_cand_summary.get("promotions_u64", 0)),
             "activation_success_u64": int(score_cand_summary.get("activation_success_u64", 0)),
         }
     if isinstance(score_delta_summary, dict):
         payload["score_delta_summary"] = {
             "median_stps_non_noop_q32": int(score_delta_summary.get("median_stps_non_noop_q32", 0)),
-            "non_noop_ticks_per_min_f64": float(score_delta_summary.get("non_noop_ticks_per_min_f64", 0.0)),
+            "non_noop_ticks_per_min_f64": _canon_number(score_delta_summary.get("non_noop_ticks_per_min_f64", 0)),
             "promotions_u64": int(score_delta_summary.get("promotions_u64", 0)),
             "activation_success_u64": int(score_delta_summary.get("activation_success_u64", 0)),
         }

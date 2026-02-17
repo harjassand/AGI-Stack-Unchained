@@ -711,10 +711,42 @@ def _find_promotion_bundle(dispatch_ctx: dict[str, Any]) -> tuple[Path | None, s
 
     matches = sorted(subrun_root.glob(rel_pattern), key=lambda row: row.as_posix())
     if not matches:
+        inferred = _infer_subrun_root_from_state(dispatch_ctx=dispatch_ctx)
+        if inferred is not None and inferred != subrun_root:
+            matches = sorted(inferred.glob(rel_pattern))
+    if not matches:
         return None, None
     path = matches[0]
     _, digest = load_bundle(path)
     return path, digest
+
+
+def _infer_subrun_root_from_state(*, dispatch_ctx: dict[str, Any]) -> Path | None:
+    # Some dispatch receipts omit or misreport `subrun_root_abs`. When that happens, we can still
+    # deterministically infer the subrun directory from `state_root/subruns/<dispatch_id>_*`.
+    try:
+        state_root_raw = dispatch_ctx.get("state_root")
+        dispatch_dir_raw = dispatch_ctx.get("dispatch_dir")
+        if not isinstance(state_root_raw, Path):
+            state_root = Path(str(state_root_raw)).resolve()
+        else:
+            state_root = state_root_raw.resolve()
+        dispatch_dir = Path(str(dispatch_dir_raw)).resolve()
+    except Exception:  # noqa: BLE001
+        return None
+    if not state_root.exists() or not state_root.is_dir() or not dispatch_dir.exists() or not dispatch_dir.is_dir():
+        return None
+    dispatch_id = dispatch_dir.name
+    subruns_root = state_root / "subruns"
+    if not subruns_root.exists() or not subruns_root.is_dir():
+        return None
+    candidates = sorted(subruns_root.glob(f"{dispatch_id}_*"), key=lambda p: p.as_posix())
+    if len(candidates) != 1:
+        return None
+    candidate = candidates[0].resolve()
+    if candidate.exists() and candidate.is_dir():
+        return candidate
+    return None
 
 
 def _copy_file_clone_or_copy(src: Path, dst: Path) -> None:

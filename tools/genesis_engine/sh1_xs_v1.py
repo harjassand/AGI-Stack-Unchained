@@ -70,16 +70,54 @@ def load_ge_config(path: Path) -> dict[str, Any]:
     return payload
 
 
-def _collect_matching_paths(*, recent_runs_root: Path | None, globs: list[str]) -> list[Path]:
+def _receipt_search_roots(recent_runs_root: Path | None) -> list[Path]:
+    """Return deterministic search roots for receipt ingest.
+
+    Production run directories contain a full repo clone under `_worktree/` which
+    makes naive `runs/**/*.json` globs very expensive. Receipts/refutations and
+    CCAP bundles live under `daemon/` (and some test fixtures use `state/`), so
+    we scope search to `*/daemon/` and `*/state/` (or the direct subdirs if the
+    caller already points at a single run).
+    """
+
     if recent_runs_root is None:
         return []
     if not recent_runs_root.exists() or not recent_runs_root.is_dir():
         return []
+
+    direct_roots: set[Path] = set()
+    for direct in ("daemon", "state"):
+        candidate = recent_runs_root / direct
+        if candidate.exists() and candidate.is_dir():
+            direct_roots.add(candidate)
+    if direct_roots:
+        return sorted(direct_roots, key=lambda row: row.as_posix())
+
+    roots: list[Path] = []
+    for child in sorted(recent_runs_root.iterdir(), key=lambda row: row.as_posix()):
+        if not child.is_dir():
+            continue
+        for rel in ("daemon", "state"):
+            candidate = child / rel
+            if candidate.exists() and candidate.is_dir():
+                roots.append(candidate)
+
+    # If we failed to discover any daemon roots, fall back to scanning the given root.
+    if not roots:
+        return [recent_runs_root]
+    return sorted(set(roots), key=lambda row: row.as_posix())
+
+
+def _collect_matching_paths(*, recent_runs_root: Path | None, globs: list[str]) -> list[Path]:
+    roots = _receipt_search_roots(recent_runs_root)
+    if not roots:
+        return []
     picks: set[Path] = set()
-    for pattern in globs:
-        for path in recent_runs_root.glob(str(pattern)):
-            if path.is_file():
-                picks.add(path)
+    for root in roots:
+        for pattern in globs:
+            for path in root.glob(str(pattern)):
+                if path.is_file():
+                    picks.add(path)
     return sorted(picks, key=lambda row: row.as_posix())
 
 
@@ -124,10 +162,12 @@ def _find_ccap_bundle_path(*, recent_runs_root: Path | None, receipt_path: Path,
     if len(ccap_hex) != 64:
         raise _invalid("SCHEMA_FAIL")
 
-    candidates = sorted(
-        recent_runs_root.glob(f"**/sha256_{ccap_hex}.ccap_v1.json"),
-        key=lambda row: row.as_posix(),
-    )
+    candidates: set[Path] = set()
+    for root in _receipt_search_roots(recent_runs_root):
+        for candidate in root.glob(f"**/sha256_{ccap_hex}.ccap_v1.json"):
+            if candidate.is_file():
+                candidates.add(candidate)
+    candidates = sorted(candidates, key=lambda row: row.as_posix())
     if not candidates:
         raise _invalid("MISSING_STATE_INPUT")
     ranked = sorted(candidates, key=lambda row: (_path_distance(receipt_path, row), row.as_posix()))
@@ -153,10 +193,12 @@ def _find_patch_path_for_ccap(*, recent_runs_root: Path | None, ccap_path: Path,
     if recent_runs_root is None or not recent_runs_root.exists() or not recent_runs_root.is_dir():
         raise _invalid("MISSING_STATE_INPUT")
 
-    global_candidates = sorted(
-        recent_runs_root.glob(f"**/{filename}"),
-        key=lambda row: row.as_posix(),
-    )
+    global_candidates: set[Path] = set()
+    for root in _receipt_search_roots(recent_runs_root):
+        for candidate in root.glob(f"**/{filename}"):
+            if candidate.is_file():
+                global_candidates.add(candidate)
+    global_candidates = sorted(global_candidates, key=lambda row: row.as_posix())
     if not global_candidates:
         raise _invalid("MISSING_STATE_INPUT")
     ranked = sorted(global_candidates, key=lambda row: (_path_distance(ccap_path, row), row.as_posix()))

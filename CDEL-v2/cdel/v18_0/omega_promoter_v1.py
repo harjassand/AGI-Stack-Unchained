@@ -278,7 +278,6 @@ def _verify_ccap_apply_matches_receipt(
         # Promotion calls this before emitting any promotion receipt, so the target
         # directory might not exist yet. Ensure we can always create a scratch dir.
         out_dir.mkdir(parents=True, exist_ok=True)
-
         subrun_root = _resolve_ccap_subrun_root_for_bundle(bundle_obj=bundle_obj, dispatch_ctx=dispatch_ctx)
         ccap_relpath = normalize_subrun_relpath(str(bundle_obj.get("ccap_relpath", "")))
         patch_relpath = normalize_subrun_relpath(str(bundle_obj.get("patch_relpath", "")))

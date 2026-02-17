@@ -383,6 +383,10 @@ def run(*, campaign_pack: Path, out_dir: Path) -> None:
 
     run_env = os.environ.copy()
     run_env["OMEGA_ENFORCE_DETERMINISTIC_COMPILATION"] = "1" if enforce_deterministic_compilation else "0"
+    # Ensure the GE tool and the rest of the CCAP pipeline are using the same pins payload.
+    # (The drill runner sets this env var globally; we also set it here so the campaign is
+    # self-contained when invoked outside the runner.)
+    run_env["OMEGA_AUTHORITY_PINS_REL"] = authority_rel
 
     run_result = subprocess.run(
         cmd,
@@ -393,6 +397,12 @@ def run(*, campaign_pack: Path, out_dir: Path) -> None:
         check=False,
     )
     if int(run_result.returncode) != 0:
+        # Persist subprocess output for drill evidence; the dispatcher only captures this module's stderr.
+        try:
+            (out_dir / "ge_symbiotic_optimizer_v0_3.stdout.txt").write_text(run_result.stdout or "", encoding="utf-8")
+            (out_dir / "ge_symbiotic_optimizer_v0_3.stderr.txt").write_text(run_result.stderr or "", encoding="utf-8")
+        except Exception:
+            pass
         fail("VERIFY_ERROR")
 
     summary_path = out_dir / "ge_symbiotic_optimizer_summary_v0_3.json"

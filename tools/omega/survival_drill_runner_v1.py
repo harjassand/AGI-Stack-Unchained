@@ -62,10 +62,26 @@ def _latest_observation(state_root: Path) -> dict[str, Any] | None:
     obs_dir = state_root / "observations"
     if not obs_dir.exists():
         return None
-    paths = sorted(obs_dir.glob("sha256_*.omega_observation_report_v1.json"), key=lambda p: p.as_posix())
+    # Observation filenames are content-addressed; lexicographic order is not correlated with tick.
+    # Select by max tick_u64 for stable per-tick evidence.
+    paths = list(obs_dir.glob("sha256_*.omega_observation_report_v1.json"))
     if not paths:
         return None
-    return json.loads(paths[-1].read_text(encoding="utf-8"))
+    best: tuple[int, str, dict[str, Any]] | None = None
+    for p in paths:
+        try:
+            payload = json.loads(p.read_text(encoding="utf-8"))
+        except Exception:
+            continue
+        tick = payload.get("tick_u64")
+        try:
+            tick_u64 = int(tick)
+        except Exception:
+            continue
+        key = (tick_u64, p.as_posix(), payload)
+        if best is None or (key[0] > best[0]) or (key[0] == best[0] and key[1] > best[1]):
+            best = key
+    return best[2] if best is not None else None
 
 
 def _run_py(cmd: list[str], *, env: dict[str, str] | None = None) -> None:

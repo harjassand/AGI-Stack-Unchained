@@ -1310,8 +1310,13 @@ def main() -> None:
     ge_config = load_ge_config(ge_config_path)
     validate_schema(ge_config, "ge_config_v1")
 
-    # The CLI allows explicit pin paths but governance authority remains this exact payload.
-    expected_authority_path = (repo_root / "authority" / "authority_pins_v1.json").resolve()
+    # The CLI allows explicit pin paths but governance authority remains a single, explicit payload.
+    # In survival drill runs we allow a drill-only pins file (selected via OMEGA_AUTHORITY_PINS_REL)
+    # while keeping the check fail-closed: the caller must pass the exact resolved path.
+    pins_rel = str(os.environ.get("OMEGA_AUTHORITY_PINS_REL", "authority/authority_pins_v1.json")).strip()
+    if not pins_rel:
+        pins_rel = "authority/authority_pins_v1.json"
+    expected_authority_path = (repo_root / pins_rel).resolve()
     if authority_pins_path != expected_authority_path:
         raise _invalid("SCHEMA_FAIL")
     pins = load_authority_pins(repo_root)

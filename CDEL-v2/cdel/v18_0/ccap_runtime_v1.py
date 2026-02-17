@@ -73,16 +73,24 @@ def compute_repo_base_tree_id(repo_root: Path) -> str:
 
 
 def materialize_repo_snapshot(repo_root: Path, out_dir: Path) -> None:
+    # Faster export of the repo snapshot using git plumbing (binds to index).
     if out_dir.exists():
         shutil.rmtree(out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
-    for rel in tracked_files(repo_root):
-        src = (repo_root / rel).resolve()
-        if not src.exists() or not src.is_file() or src.is_symlink():
-            fail("MISSING_STATE_INPUT")
-        dst = out_dir / rel
-        dst.parent.mkdir(parents=True, exist_ok=True)
-        shutil.copy2(src, dst)
+
+    # Require no unstaged changes (index is the snapshot source).
+    unstaged = _run_git(repo_root, ["diff", "--name-only"])
+    if unstaged.returncode != 0:
+        fail("MISSING_STATE_INPUT")
+    if (unstaged.stdout or "").strip():
+        fail("VERIFY_ERROR")
+
+    # Export the index to the workspace directory.
+    # checkout-index writes files with their correct modes and is far faster than Python copy loops.
+    prefix = str(out_dir.resolve()).rstrip("/") + "/"
+    run = _run_git(repo_root, ["checkout-index", "-a", "-f", "--prefix", prefix])
+    if run.returncode != 0:
+        fail("VERIFY_ERROR")
 
 
 def _iter_tree_files(root: Path) -> list[tuple[str, Path]]:
@@ -109,6 +117,31 @@ def _iter_tree_files(root: Path) -> list[tuple[str, Path]]:
 
 
 def compute_workspace_tree_id(workspace_root: Path) -> str:
+    # Prefer git tree identity when the workspace is a git repo (apply_patch_bytes initializes one).
+    # This avoids hashing every file's bytes in Python.
+    git_dir = (workspace_root / ".git").resolve()
+    if git_dir.exists():
+        add = subprocess.run(
+            ["git", "-C", str(workspace_root), "add", "-A"],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        if add.returncode != 0:
+            fail("VERIFY_ERROR")
+        tree = subprocess.run(
+            ["git", "-C", str(workspace_root), "write-tree"],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        if tree.returncode != 0:
+            fail("VERIFY_ERROR")
+        tree_hex = str((tree.stdout or "")).strip()
+        if not tree_hex:
+            fail("VERIFY_ERROR")
+        return canon_hash_obj({"schema_version": "ccap_workspace_tree_git_v1", "tree": tree_hex})
+
     files = [{"path": rel, "sha256": hash_file_stream(path)} for rel, path in _iter_tree_files(workspace_root)]
     return canon_hash_obj({"schema_version": "ccap_workspace_tree_v1", "files": files})
 

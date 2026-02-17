@@ -169,3 +169,114 @@ def test_runaway_decider_prefers_capability_expansion_priority() -> None:
     assert plan["runaway_selected_metric_id"] == "OBJ_EXPAND_CAPABILITIES"
     assert int(plan["runaway_escalation_level_u64"]) == 5
     assert "RUNAWAY_REASON:TESTING" in plan["tie_break_path"]
+
+
+def test_runaway_decider_can_be_disabled_by_env(monkeypatch) -> None:
+    monkeypatch.setenv("OMEGA_DISABLE_FORCED_RUNAWAY", "1")
+
+    plan, _ = decide(
+        tick_u64=7,
+        state={
+            "policy_hash": _hash("1"),
+            "registry_hash": _hash("2"),
+            "budget_remaining": {
+                "cpu_cost_q32": {"q": 1 << 40},
+                "build_cost_q32": {"q": 1 << 40},
+                "verifier_cost_q32": {"q": 1 << 40},
+                "disk_bytes_u64": 1 << 40,
+            },
+            "cooldowns": {},
+            "goals": {},
+        },
+        observation_report_hash=_hash("3"),
+        issue_bundle_hash=_hash("4"),
+        observation_report={
+            "metrics": {
+                "OBJ_EXPAND_CAPABILITIES": {"q": 10},
+                "OBJ_MAXIMIZE_SCIENCE": {"q": 10},
+                "OBJ_MAXIMIZE_SPEED": {"q": 10},
+            }
+        },
+        issue_bundle={"issues": []},
+        policy={"rules": []},
+        policy_hash=_hash("1"),
+        registry={
+            "capabilities": [
+                {
+                    "campaign_id": "rsi_sas_code_v12_0",
+                    "capability_id": "RSI_SAS_CODE",
+                    "enabled": True,
+                    "budget_cost_hint_q32": {"q": 1},
+                    "cooldown_ticks_u64": 0,
+                    "campaign_pack_rel": "campaigns/rsi_sas_code_v12_0/rsi_sas_code_pack_v1.json",
+                    "state_dir_rel": "daemon/rsi_sas_code_v12_0/state",
+                    "promotion_bundle_rel": "*.json",
+                    "orchestrator_module": "orchestrator.rsi_sas_code_v12_0",
+                    "verifier_module": "cdel.v12_0.verify_rsi_sas_code_v1",
+                },
+            ]
+        },
+        registry_hash=_hash("2"),
+        budgets_hash=_hash("5"),
+        goal_queue={
+            "schema_version": "omega_goal_queue_v1",
+            "goals": [
+                {
+                    "goal_id": "goal_auto_00_0000_test_0001",
+                    "capability_id": "RSI_SAS_CODE",
+                    "status": "PENDING",
+                }
+            ],
+        },
+        objectives={
+            "schema_version": "omega_objectives_v1",
+            "objective_set_id": "o1",
+            "metrics": [
+                {
+                    "metric_id": "OBJ_EXPAND_CAPABILITIES",
+                    "direction": "MAXIMIZE",
+                    "target_q32": {"q": 1000},
+                    "weight_q32": {"q": 1 << 32},
+                }
+            ],
+        },
+        runaway_cfg={
+            "schema_version": "omega_runaway_config_v1",
+            "enabled": True,
+            "objective_set_path_rel": "omega_objectives_v1.json",
+            "tighten_factor_q32": {"q": 4080218931},
+            "min_improve_delta_q32": {"OBJ_EXPAND_CAPABILITIES": {"q": 1}},
+            "stall_window_ticks_u64": 1,
+            "stall_escalate_after_u64": 1,
+            "max_escalation_level_u64": 5,
+            "per_metric_route_table": {
+                "OBJ_EXPAND_CAPABILITIES": [{"level_u64": 0, "campaign_id": "rsi_sas_code_v12_0"}],
+            },
+            "per_campaign_intensity_table": {
+                "rsi_sas_code_v12_0": [{"level_u64": 0, "env_overrides": {}}],
+            },
+        },
+        runaway_state={
+            "schema_version": "omega_runaway_state_v1",
+            "state_id": _hash("8"),
+            "tick_u64": 6,
+            "objective_set_hash": _hash("9"),
+            "metric_states": {
+                "OBJ_EXPAND_CAPABILITIES": {
+                    "current_target_q32": {"q": 1000},
+                    "best_value_q32": {"q": 10},
+                    "last_value_q32": {"q": 10},
+                    "last_improve_tick_u64": 0,
+                    "stall_ticks_u64": 0,
+                    "escalation_level_u64": 0,
+                    "tighten_round_u64": 0,
+                }
+            },
+            "campaign_intensity_levels": {},
+            "version_minor_u64": 0,
+        },
+    )
+
+    assert plan["action_kind"] == "RUN_GOAL_TASK"
+    assert plan["campaign_id"] == "rsi_sas_code_v12_0"
+    assert "RUNAWAY_INACTIVE:DISABLED_BY_ENV" in plan["tie_break_path"]

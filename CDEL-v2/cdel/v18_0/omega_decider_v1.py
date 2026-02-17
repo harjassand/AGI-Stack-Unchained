@@ -592,25 +592,32 @@ def decide(
     if runaway_enabled(runaway_cfg):
         if not isinstance(runaway_cfg, dict) or not isinstance(runaway_state, dict) or not isinstance(objectives, dict):
             fail("SCHEMA_FAIL")
-        return _runaway_decision(
-            tick_u64=tick_u64,
-            state=state,
-            observation_report_hash=observation_report_hash,
-            issue_bundle_hash=issue_bundle_hash,
+        runaway_active, _level_u64, runaway_reason = check_runaway_condition(
             observation_report=observation_report,
-            policy_hash=policy_hash,
-            registry_hash=registry_hash,
-            budgets_hash=budgets_hash,
-            goals=pending_goals,
-            cap_map=cap_map,
-            cap_by_id=cap_by_id,
             runaway_cfg=runaway_cfg,
             runaway_state=runaway_state,
-            objectives=objectives,
-            issues=issues,
-            rules=rules,
-            tie_break_path=tie_break_path,
         )
+        if runaway_active:
+            return _runaway_decision(
+                tick_u64=tick_u64,
+                state=state,
+                observation_report_hash=observation_report_hash,
+                issue_bundle_hash=issue_bundle_hash,
+                observation_report=observation_report,
+                policy_hash=policy_hash,
+                registry_hash=registry_hash,
+                budgets_hash=budgets_hash,
+                goals=pending_goals,
+                cap_map=cap_map,
+                cap_by_id=cap_by_id,
+                runaway_cfg=runaway_cfg,
+                runaway_state=runaway_state,
+                objectives=objectives,
+                issues=issues,
+                rules=rules,
+                tie_break_path=tie_break_path,
+            )
+        tie_break_path.append(f"RUNAWAY_INACTIVE:{runaway_reason}")
 
     goal_candidate = _goal_plan_candidate(
         tick_u64=tick_u64,

@@ -1209,6 +1209,13 @@ def _emit_ccap(
     if not isinstance(dsbx_ids, list) or not dsbx_ids:
         raise _invalid("MISSING_STATE_INPUT")
 
+    # Survival Drill v1: the default wallclock budget (10 minutes) is too tight for
+    # deterministic repo-harness runs on some machines. In the drill only, allow
+    # a larger wallclock cap so CCAP can be promoted without weakening verifier checks.
+    wall_ms_max = 600000
+    if str(os.environ.get("OMEGA_SURVIVAL_DRILL", "")).strip().lower() in {"1", "true", "yes", "on"}:
+        wall_ms_max = 1200000
+
     ccap_obj = {
         "meta": {
             "ccap_version": 1,
@@ -1238,13 +1245,13 @@ def _emit_ccap(
             ),
         },
         "budgets": {
-            "cpu_ms_max": 3600000,
-            "wall_ms_max": 3600000,
-            "mem_mb_max": 8192,
-            "disk_mb_max": 8192,
-            "fds_max": 512,
-            "procs_max": 128,
-            "threads_max": 512,
+            "cpu_ms_max": 600000,
+            "wall_ms_max": wall_ms_max,
+            "mem_mb_max": 4096,
+            "disk_mb_max": 2048,
+            "fds_max": 256,
+            "procs_max": 64,
+            "threads_max": 256,
             "net": "forbidden",
         },
     }

@@ -37,8 +37,8 @@ _SUBRUN_PRUNE_FILE_NAMES = (".DS_Store",)
 _SUBRUN_PRUNE_CAMPAIGN_ALLOWLIST: dict[str, tuple[str, ...]] = {}
 
 
-def _pinned_pythonpath() -> str:
-    root = repo_root()
+def _pinned_pythonpath(root: Path | None = None) -> str:
+    root = (root or repo_root()).resolve()
     return ":".join(
         [
             str(root),
@@ -228,13 +228,14 @@ def dispatch_campaign(
     dispatch_dir = state_root / "dispatch" / action_id
     subrun_root_rel_from_state = f"subruns/{action_id}_{campaign_id}"
     subrun_root_abs = state_root / subrun_root_rel_from_state
+    omega_repo_root = repo_root().resolve()
     workspace_namespace = str(os.environ.get("OMEGA_EXEC_WORKSPACE_NAMESPACE", "")).strip()
     if workspace_namespace:
         workspace_prefix = hashlib.sha256(workspace_namespace.encode("utf-8")).hexdigest()[:12]
         exec_root_name = f"{workspace_prefix}_{action_id}_{campaign_id}"
     else:
         exec_root_name = f"{action_id}_{campaign_id}"
-    exec_root_abs = repo_root() / _EXEC_WORKSPACE_ROOT_REL / exec_root_name
+    exec_root_abs = omega_repo_root / _EXEC_WORKSPACE_ROOT_REL / exec_root_name
     campaign_pack_arg = campaign_pack_rel
     out_dir_arg = f"{_EXEC_WORKSPACE_ROOT_REL}/{exec_root_name}"
 
@@ -266,12 +267,12 @@ def dispatch_campaign(
     run_result = run_module(
         py_module=py_module,
         argv=argv,
-        cwd=repo_root(),
+        cwd=omega_repo_root,
         output_dir=dispatch_dir,
         extra_env={
             "OMEGA_TICK_U64": str(int(tick_u64)),
             "OMEGA_RUN_SEED_U64": str(run_seed_u64),
-            "PYTHONPATH": _pinned_pythonpath(),
+            "PYTHONPATH": _pinned_pythonpath(omega_repo_root),
             **(invocation_env_overrides or {}),
         },
     )
@@ -332,12 +333,13 @@ def dispatch_campaign(
         "state_root": state_root,
         "dispatch_receipt_path": out_path,
         "campaign_entry": cap,
+        "repo_root_abs": omega_repo_root,
         "exec_root_abs": exec_root_abs,
         "exec_state_rel_repo": f"{_EXEC_WORKSPACE_ROOT_REL}/{exec_root_name}/{subrun_state_rel}",
         "subrun_root_abs": subrun_root_abs,
         "subrun_root_rel_state": subrun_root_rel_from_state,
         "subrun_state_rel_state": f"{subrun_root_rel_from_state}/{subrun_state_rel}",
-        "pythonpath": _pinned_pythonpath(),
+        "pythonpath": _pinned_pythonpath(omega_repo_root),
         "invocation_env_overrides": dict(invocation_env_overrides or {}),
     }
     return receipt, digest, ctx

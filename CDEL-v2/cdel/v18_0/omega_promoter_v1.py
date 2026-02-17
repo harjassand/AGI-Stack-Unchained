@@ -157,6 +157,35 @@ def _bundle_requires_ek_meta_verify(touched_paths: list[str]) -> bool:
     return any(_touches_ek_authority(row) for row in touched_paths)
 
 
+def _resolve_repo_root_for_dispatch(dispatch_ctx: dict[str, Any]) -> Path:
+    """Best-effort repo-root resolution for promotion/subverifier replay.
+
+    Omega runs can execute against a git worktree whose tracked contents differ from
+    the original checkout (for example due to runner overlays). CCAP receipts bind
+    `base_tree_id` to the repo root used during evaluation; promotion must replay
+    patch application against that same root to avoid false `CCAP_APPLY_MISMATCH`.
+    """
+
+    candidate = dispatch_ctx.get("repo_root_abs")
+    if isinstance(candidate, (str, Path)):
+        repo = Path(candidate).resolve()
+        if repo.exists() and repo.is_dir():
+            return repo
+
+    exec_root = dispatch_ctx.get("exec_root_abs")
+    if isinstance(exec_root, (str, Path)):
+        exec_path = Path(exec_root).resolve()
+        # omega_executor_v1 computes exec_root_abs as:
+        #   <repo_root>/.omega_v18_exec_workspace/<exec_root_name>
+        # so parents[1] is the repo root even if the exec workspace was pruned.
+        if len(exec_path.parents) >= 2:
+            repo = exec_path.parents[1]
+            if repo.exists() and repo.is_dir():
+                return repo
+
+    return repo_root().resolve()
+
+
 def _load_ek_meta_verify_receipt(promotion_dir: Path) -> dict[str, Any] | None:
     candidates = sorted(promotion_dir.glob("sha256_*.ek_meta_verify_receipt_v1.json"), key=lambda row: row.as_posix())
     plain = promotion_dir / "ek_meta_verify_receipt_v1.json"
@@ -235,7 +264,7 @@ def _verify_ccap_apply_matches_receipt(
                 return False
             expected_base_tree_id = meta_base_tree_id
 
-        root = repo_root()
+        root = _resolve_repo_root_for_dispatch(dispatch_ctx)
         if compute_repo_base_tree_id(root) != expected_base_tree_id:
             return False
 
@@ -876,6 +905,7 @@ def run_subverifier(
     ccap_subrun_root_abs: Path | None = None
     ccap_rel: str | None = None
     if verifier_module == _CCAP_VERIFIER_MODULE:
+        repo_root_for_ccap = _resolve_repo_root_for_dispatch(dispatch_ctx)
         subrun_root_rel = require_relpath(dispatch_ctx.get("subrun_root_rel_state"))
         ccap_subrun_root_abs = state_root / subrun_root_rel
         declared_ccap_rel = str(cap.get("ccap_relpath", "")).strip()
@@ -888,7 +918,7 @@ def run_subverifier(
                 "--subrun_root",
                 subrun_root_rel,
                 "--repo_root",
-                str(repo_root()),
+                str(repo_root_for_ccap),
                 "--receipt_out_dir",
                 str(out_dir),
                 "--enable_ccap",
@@ -949,7 +979,7 @@ def run_subverifier(
 
                 verify_ccap(
                     subrun_root=ccap_subrun_root_abs,
-                    repo_root=repo_root(),
+                    repo_root=repo_root_for_ccap,
                     ccap_relpath=ccap_rel,
                     receipt_out_dir=out_dir,
                 )

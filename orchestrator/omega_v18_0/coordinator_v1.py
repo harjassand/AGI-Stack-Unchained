@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import json
 import os
+import subprocess
 import time
 from pathlib import Path
 from typing import Any
@@ -66,6 +68,83 @@ _FAMILY_BY_CAPABILITY = {
     "RSI_SAS_VAL": "VAL",
     "RSI_SAS_SCIENCE": "SCIENCE",
 }
+
+_SURVIVAL_DRILL_STATE_DIRNAME = "survival_drill"
+_SURVIVAL_DRILL_START_MARKER = "drill_start_v1.json"
+
+
+def _env_truthy(name: str) -> bool:
+    return str(os.environ.get(name, "")).strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _resolve_repo_root_for_git() -> Path:
+    here = Path(__file__).resolve()
+    for parent in [here.parent, *here.parents]:
+        if (parent / ".git").exists():
+            return parent
+    return Path.cwd().resolve()
+
+
+def _survival_drill_allowed_authors() -> set[str]:
+    raw = str(os.environ.get("OMEGA_SURVIVAL_DRILL_ALLOWED_AUTHORS", "")).strip()
+    if raw:
+        return {row.strip() for row in raw.split(",") if row.strip()}
+    return {"omega-bot", "SH1_OPTIMIZER"}
+
+
+def _git(repo_root: Path, args: list[str]) -> str:
+    run = subprocess.run(
+        ["git", *args],
+        cwd=repo_root,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    if int(run.returncode) != 0:
+        raise RuntimeError(f"git {' '.join(args)} failed: {run.stderr.strip()}")
+    return run.stdout
+
+
+def _enforce_survival_drill_git_guard(*, run_root: Path, tick_u64: int) -> None:
+    if not _env_truthy("OMEGA_SURVIVAL_DRILL"):
+        return
+
+    repo_root = _resolve_repo_root_for_git()
+    drill_dir = (run_root / _SURVIVAL_DRILL_STATE_DIRNAME).resolve()
+    drill_dir.mkdir(parents=True, exist_ok=True)
+    marker_path = drill_dir / _SURVIVAL_DRILL_START_MARKER
+
+    # If the runner doesn't call a dedicated tick0, initialize on first observed tick.
+    if (int(tick_u64) <= 0) or (not marker_path.exists()):
+        head = _git(repo_root, ["rev-parse", "HEAD"]).strip()
+        marker = {
+            "schema_version": "OMEGA_SURVIVAL_DRILL_START_v1",
+            "start_head_sha": head,
+            "allowed_authors": sorted(_survival_drill_allowed_authors()),
+        }
+        marker_path.write_text(json.dumps(marker, sort_keys=True, separators=(",", ":")) + "\n", encoding="utf-8")
+        return
+
+    if not marker_path.is_file():
+        raise RuntimeError("SURVIVAL_DRILL_MARKER_INVALID")
+
+    marker = json.loads(marker_path.read_text(encoding="utf-8"))
+    if not isinstance(marker, dict) or marker.get("schema_version") != "OMEGA_SURVIVAL_DRILL_START_v1":
+        raise RuntimeError("SURVIVAL_DRILL_MARKER_INVALID")
+    start_head = str(marker.get("start_head_sha", "")).strip()
+    if not start_head:
+        raise RuntimeError("SURVIVAL_DRILL_MARKER_INVALID")
+
+    # Enforce no out-of-band tracked changes (ignore untracked runtime artifacts).
+    status = _git(repo_root, ["status", "--porcelain=v1", "-uno"]).strip()
+    if status:
+        raise RuntimeError("SURVIVAL_DRILL_DIRTY_WORKTREE")
+
+    allowed_authors = _survival_drill_allowed_authors()
+    log = _git(repo_root, ["log", "--format=%an", f"{start_head}..HEAD"]).splitlines()
+    bad = sorted({row.strip() for row in log if row.strip() and row.strip() not in allowed_authors})
+    if bad:
+        raise RuntimeError(f"SURVIVAL_DRILL_FORBIDDEN_COMMIT_AUTHORS:{','.join(bad)}")
 
 
 def _write_payload(dir_path: Path, suffix: str, payload: dict[str, Any], id_field: str | None = None) -> tuple[Path, dict[str, Any], str]:
@@ -458,6 +537,7 @@ def run_tick(
     with acquire_lock(lock_path):
         execution_mode = resolve_execution_mode()
         tick_start_ns = time.monotonic_ns()
+        _enforce_survival_drill_git_guard(run_root=run_root, tick_u64=tick_u64)
         stage_timings_ns: dict[str, int] = {
             "freeze_pack_config": 0,
             "observe": 0,

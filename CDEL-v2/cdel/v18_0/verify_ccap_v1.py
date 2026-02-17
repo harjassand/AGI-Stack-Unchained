@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import os
 from pathlib import Path
 from typing import Any
 
@@ -69,7 +70,15 @@ def _parse_patch_touched_paths(patch_bytes: bytes) -> list[str]:
 
 
 def _load_pinned_patch_allowlists(repo_root: Path, pins: dict[str, Any]) -> dict[str, list[str]]:
-    allowlists_path = repo_root / "authority" / "ccap_patch_allowlists_v1.json"
+    override = str(os.environ.get("OMEGA_CCAP_PATCH_ALLOWLISTS_REL", "")).strip()
+    if override:
+        rel = override.replace("\\", "/").lstrip("./")
+        path = Path(rel)
+        if path.is_absolute() or ".." in path.parts:
+            raise RuntimeError("SCHEMA_FAIL")
+        allowlists_path = (repo_root / path).resolve()
+    else:
+        allowlists_path = repo_root / "authority" / "ccap_patch_allowlists_v1.json"
     payload = load_canon_dict(allowlists_path)
     if payload.get("schema_version") != "ccap_patch_allowlists_v1":
         raise RuntimeError("SCHEMA_FAIL")

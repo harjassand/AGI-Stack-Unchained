@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import re
+import os
 from pathlib import Path
 from typing import Any
 
@@ -75,6 +76,13 @@ def _normalize_authority_pins(pins: dict[str, Any]) -> dict[str, Any]:
 
 
 def authority_pins_path(repo_root: Path) -> Path:
+    override = str(os.environ.get("OMEGA_AUTHORITY_PINS_REL", "")).strip()
+    if override:
+        rel = override.replace("\\", "/").lstrip("./")
+        path = Path(rel)
+        if path.is_absolute() or ".." in path.parts:
+            fail("SCHEMA_FAIL")
+        return (Path(repo_root).resolve() / path).resolve()
     return Path(repo_root).resolve() / "authority" / "authority_pins_v1.json"
 
 

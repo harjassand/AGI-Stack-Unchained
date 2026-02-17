@@ -935,18 +935,22 @@ def run_subverifier(
         if declared_ccap_rel:
             ccap_rel = require_relpath(declared_ccap_rel)
         else:
-            # Prefer the CCAP chosen by the promotion bundle selector so subverifier
-            # and promoter agree on the CCAP id/receipt identity when multiple
-            # candidates exist under the subrun root.
-            bundle_path, _bundle_hash = _find_promotion_bundle(dispatch_ctx)
-            if bundle_path is not None:
+            # Align CCAP selection with promotion bundle selection to prevent deterministic
+            # receipt/bundle mismatches when a campaign emits multiple CCAP candidates.
+            rel_pattern = str(cap.get("promotion_bundle_rel", "")).strip()
+            if rel_pattern:
                 try:
-                    bundle_obj, _ = load_bundle(bundle_path)
-                    bundle_ccap_rel = str(bundle_obj.get("ccap_relpath", "")).strip()
-                    if bundle_ccap_rel:
-                        ccap_rel = normalize_subrun_relpath(bundle_ccap_rel)
-                except Exception:  # noqa: BLE001
-                    ccap_rel = None
+                    matches = sorted(ccap_subrun_root_abs.glob(rel_pattern), key=lambda row: row.as_posix())
+                except Exception:
+                    matches = []
+                if matches:
+                    try:
+                        bundle_obj, _ = load_bundle(matches[0])
+                        bundle_ccap_rel = normalize_subrun_relpath(str(bundle_obj.get("ccap_relpath", "")).strip())
+                        if bundle_ccap_rel:
+                            ccap_rel = bundle_ccap_rel
+                    except Exception:
+                        ccap_rel = None
             if not ccap_rel:
                 ccap_rel = _discover_ccap_relpath(ccap_subrun_root_abs)
         enable_ccap = str(int(cap.get("enable_ccap", 0)))

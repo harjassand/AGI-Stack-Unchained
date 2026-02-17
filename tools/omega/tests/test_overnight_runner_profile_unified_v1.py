@@ -205,7 +205,7 @@ def test_prepare_overlay_unified_enables_multifamily_and_injects_goals(tmp_path:
         row for row in goal_rows if isinstance(row, dict) and str(row.get("capability_id", "")) == "RSI_GE_SH1_OPTIMIZER"
     ]
     assert len(ge_goals) == 1
-    assert str(ge_goals[0].get("goal_id", "")) == "goal_auto_00_unified_ge_sh1_0001"
+    assert str(ge_goals[0].get("goal_id", "")) == "goal_auto_00_unified_00_ge_sh1_0001"
 
     plan_payload = json.loads((run_dir / "OMEGA_UNIFIED_PROFILE_PLAN_v1.json").read_text(encoding="utf-8"))
     assert plan_payload.get("schema_version") == "OMEGA_UNIFIED_PROFILE_PLAN_v1"

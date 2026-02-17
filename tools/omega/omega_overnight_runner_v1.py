@@ -920,6 +920,32 @@ def _inject_pending_goals(*, goal_queue_path: Path, pending_goals: list[tuple[st
     if not isinstance(goals, list):
         goals = []
         payload["goals"] = goals
+
+    desired_caps: set[str] = set()
+    for _goal_id, capability_id in pending_goals:
+        value = str(capability_id).strip()
+        if value:
+            desired_caps.add(value)
+
+    protected_pairs: set[tuple[str, str]] = set()
+    if desired_caps:
+        protected_caps: set[str] = set()
+        for row in goals:
+            if not isinstance(row, dict):
+                continue
+            if str(row.get("status", "")).strip() != "PENDING":
+                continue
+            capability_id_value = str(row.get("capability_id", "")).strip()
+            if not capability_id_value or capability_id_value not in desired_caps:
+                continue
+            if capability_id_value in protected_caps:
+                continue
+            goal_id_value = str(row.get("goal_id", "")).strip()
+            if not goal_id_value:
+                continue
+            protected_caps.add(capability_id_value)
+            protected_pairs.add((goal_id_value, capability_id_value))
+
     existing_pending_caps = {
         str(row.get("capability_id", "")).strip()
         for row in goals
@@ -944,14 +970,29 @@ def _inject_pending_goals(*, goal_queue_path: Path, pending_goals: list[tuple[st
                 "status": "PENDING",
             }
         )
-    if not to_add:
-        _write_json(goal_queue_path, payload)
-        return
+
     # Keep injected goals inside the synthesizer cap (goal_synthesizer_v1 _MAX_GOALS_U64=300).
     over_limit = (len(goals) + len(to_add)) - _GOAL_QUEUE_MAX_LEN_U64
     if over_limit > 0:
-        del goals[-over_limit:]
-    goals.extend(to_add)
+        idx = len(goals) - 1
+        while over_limit > 0 and idx >= 0:
+            row = goals[idx]
+            if isinstance(row, dict):
+                pair = (
+                    str(row.get("goal_id", "")).strip(),
+                    str(row.get("capability_id", "")).strip(),
+                )
+                if pair in protected_pairs:
+                    idx -= 1
+                    continue
+            del goals[idx]
+            over_limit -= 1
+            idx -= 1
+        while over_limit > 0 and goals:
+            goals.pop()
+            over_limit -= 1
+    if to_add:
+        goals.extend(to_add)
     _write_json(goal_queue_path, payload)
 
 
@@ -2472,7 +2513,7 @@ def _prepare_campaign_pack_overlay(
             ("goal_auto_00_unified_polymath_scout_0001", "RSI_POLYMATH_SCOUT"),
             ("goal_auto_00_unified_polymath_bootstrap_0001", "RSI_POLYMATH_BOOTSTRAP_DOMAIN"),
             ("goal_auto_00_unified_polymath_conquer_0001", "RSI_POLYMATH_CONQUER_DOMAIN"),
-            ("goal_auto_00_unified_eudrs_u_train_0001", _EUDRS_U_TRAIN_CAPABILITY_ID),
+            ("goal_auto_00_unified_01_eudrs_u_train_0001", _EUDRS_U_TRAIN_CAPABILITY_ID),
         ]
         unified_goals.extend(
             (goal_id, capability_id)
@@ -2480,7 +2521,7 @@ def _prepare_campaign_pack_overlay(
         )
         unified_goals.append(("goal_auto_00_unified_model_genesis_v10_0001", _MODEL_GENESIS_CAPABILITY_ID))
         if enable_ge_sh1_optimizer:
-            unified_goals.append(("goal_auto_00_unified_ge_sh1_0001", _GE_CAPABILITY_ID))
+            unified_goals.append(("goal_auto_00_unified_00_ge_sh1_0001", _GE_CAPABILITY_ID))
         _inject_pending_goals(
             goal_queue_path=goal_queue_path,
             pending_goals=unified_goals,

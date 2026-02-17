@@ -129,7 +129,10 @@ def run(*, campaign_pack: Path, out_dir: Path) -> None:
     ]:
         path.mkdir(parents=True, exist_ok=True)
 
-    frozen_config_src = _repo_root() / "daemon" / "rsi_sas_system_v14_0" / "config"
+    # Omega runs freeze config into the campaign pack under `campaigns/`. Some older layouts used
+    # a `daemon/.../config` path; fall back to the pack path so unified profile runs work out of
+    # the box.
+    frozen_config_src = _repo_root() / "campaigns" / "rsi_sas_system_v14_0"
     _copy_tree(frozen_config_src, config_dir)
     pack_path = config_dir / "rsi_sas_system_pack_v1.json"
     if not pack_path.exists():

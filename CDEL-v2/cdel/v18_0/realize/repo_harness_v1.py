@@ -199,7 +199,10 @@ def run_repo_harness(
     work_dir = sandbox_root / "work"
     out_dir = sandbox_root / "out"
     transcript_dir = sandbox_root / "transcript"
-    shutil.copytree(applied_tree_checkout_dir, work_dir)
+    # Preserve symlinks rather than dereferencing them.
+    # The repo contains legitimate symlinks (e.g. verifier corpora pointing at runs/ state);
+    # dereferencing can explode the sandbox size or fail on broken links in materialized snapshots.
+    shutil.copytree(applied_tree_checkout_dir, work_dir, symlinks=True)
     out_dir.mkdir(parents=True, exist_ok=True)
     transcript_dir.mkdir(parents=True, exist_ok=True)
 

@@ -962,6 +962,58 @@ def _inject_pending_goal(*, goal_queue_path: Path, goal_id: str, capability_id: 
     )
 
 
+def _prioritize_first_pending_goals(*, goal_queue_path: Path, capability_ids: list[str]) -> None:
+    """Move the first PENDING goal for each requested capability to the front, in order.
+
+    This is primarily used to make unified acceptance runs deterministic: we want "headline"
+    capabilities (for example GE promotions and EUDRS) to dispatch quickly even if the base goal
+    queue is long.
+    """
+    if not capability_ids:
+        return
+    try:
+        payload = _load_json(goal_queue_path)
+    except Exception:  # noqa: BLE001
+        return
+    if not isinstance(payload, dict):
+        return
+    goals = payload.get("goals")
+    if not isinstance(goals, list) or not goals:
+        return
+
+    want = [str(cap).strip() for cap in capability_ids if str(cap).strip()]
+    if not want:
+        return
+
+    first_pending_idx: dict[str, int] = {}
+    for idx, row in enumerate(goals):
+        if not isinstance(row, dict):
+            continue
+        if str(row.get("status", "")).strip() != "PENDING":
+            continue
+        cap = str(row.get("capability_id", "")).strip()
+        if not cap or cap in first_pending_idx:
+            continue
+        first_pending_idx[cap] = int(idx)
+
+    move_indices: list[int] = []
+    for cap in want:
+        idx = first_pending_idx.get(cap)
+        if idx is None:
+            continue
+        if idx in move_indices:
+            continue
+        move_indices.append(int(idx))
+
+    if not move_indices:
+        return
+
+    move_set = set(move_indices)
+    reordered = [goals[idx] for idx in move_indices] + [row for idx, row in enumerate(goals) if idx not in move_set]
+    payload["goals"] = reordered
+    _write_json(goal_queue_path, payload)
+
+
 def _requested_sh1_scaffold_domains() -> list[str]:
     raw = str(os.environ.get("OMEGA_SH1_SCAFFOLD_DOMAINS", "")).strip()
     if raw:
@@ -2466,6 +2518,12 @@ def _prepare_campaign_pack_overlay(
         reason_tag="overlay_bootstrap",
     )
     if profile_norm == "unified":
+        priority_caps: list[str] = []
+        if enable_ge_sh1_optimizer:
+            priority_caps.append(_GE_CAPABILITY_ID)
+        priority_caps.append(_EUDRS_U_TRAIN_CAPABILITY_ID)
+        _prioritize_first_pending_goals(goal_queue_path=goal_queue_path, capability_ids=priority_caps)
+
         try:
             goal_payload = _load_json(goal_queue_path)
         except Exception:  # noqa: BLE001

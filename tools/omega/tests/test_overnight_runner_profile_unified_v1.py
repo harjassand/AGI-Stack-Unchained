@@ -326,3 +326,75 @@ def test_prepare_overlay_unified_keeps_injected_goals_with_full_queue(tmp_path: 
         "RSI_GE_SH1_OPTIMIZER",
     }
     assert required_caps.issubset(capability_ids)
+
+
+def test_prepare_overlay_unified_prioritizes_ge_and_eudrs_goals(tmp_path: Path, monkeypatch) -> None:
+    fake_repo = tmp_path / "repo"
+    ge_src = fake_repo / "campaigns" / "rsi_ge_symbiotic_optimizer_sh1_v0_1"
+    ge_src.mkdir(parents=True, exist_ok=True)
+    (ge_src / "rsi_ge_symbiotic_optimizer_sh1_pack_v0_1.json").write_text(
+        json.dumps(
+            {
+                "schema_version": "rsi_ge_symbiotic_optimizer_sh1_pack_v0_1",
+                "max_ccaps": 1,
+                "model_id": "ge-v0_3",
+            },
+            sort_keys=True,
+            separators=(",", ":"),
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+    src = tmp_path / "pack_src_priority"
+    src.mkdir(parents=True, exist_ok=True)
+    campaign_pack = src / "rsi_omega_daemon_pack_v1.json"
+    campaign_pack.write_text(
+        json.dumps(
+            {
+                "schema_version": "rsi_omega_daemon_pack_v1",
+                "goal_queue_rel": "goals/omega_goal_queue_v1.json",
+            },
+            sort_keys=True,
+            separators=(",", ":"),
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    _write_registry(src / "omega_capability_registry_v2.json")
+    (src / "goals").mkdir(parents=True, exist_ok=True)
+    (src / "goals" / "omega_goal_queue_v1.json").write_text(
+        json.dumps(
+            {
+                "schema_version": "omega_goal_queue_v1",
+                "goals": [
+                    {"goal_id": "goal_base_0001", "capability_id": "RSI_SAS_CODE", "status": "PENDING"},
+                    {"goal_id": "goal_base_0002", "capability_id": "RSI_SAS_CODE", "status": "PENDING"},
+                ],
+            },
+            sort_keys=True,
+            separators=(",", ":"),
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+    monkeypatch.setattr(runner, "_REPO_ROOT", fake_repo)
+    run_dir = tmp_path / "runs" / "series_unified_priority"
+    overlay_pack = runner._prepare_campaign_pack_overlay(
+        campaign_pack=campaign_pack,
+        run_dir=run_dir,
+        enable_self_optimize_core=False,
+        enable_polymath_drive=False,
+        enable_polymath_bootstrap=False,
+        enable_ge_sh1_optimizer=True,
+        ge_pack_overrides={"max_ccaps": 2, "model_id": "ge-v0_3_test"},
+        profile="unified",
+    )
+
+    goals = json.loads((overlay_pack.parent / "goals" / "omega_goal_queue_v1.json").read_text(encoding="utf-8"))
+    goal_rows = goals.get("goals") if isinstance(goals, dict) else []
+    assert isinstance(goal_rows, list)
+    assert len(goal_rows) >= 2
+    assert str(goal_rows[0].get("capability_id", "")) == "RSI_GE_SH1_OPTIMIZER"
+    assert str(goal_rows[1].get("capability_id", "")) == "RSI_EUDRS_U_TRAIN"

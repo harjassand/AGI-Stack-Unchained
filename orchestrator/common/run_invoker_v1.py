@@ -23,6 +23,9 @@ _SANITIZED_ENV_KEYS = (
     "OMEGA_POLYMATH_STORE_ROOT",
     "OMEGA_NET_LIVE_OK",
     "OMEGA_GE_STATE_ROOT",
+    # Drill-only CCAP overrides (safe to pass through; default is empty).
+    "OMEGA_AUTHORITY_PINS_REL",
+    "OMEGA_CCAP_PATCH_ALLOWLISTS_REL",
     "ORCH_LLM_BACKEND",
     "ORCH_LLM_REPLAY_PATH",
     "ORCH_LLM_MAX_CALLS",

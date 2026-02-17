@@ -349,8 +349,15 @@ def _resolve_ccap_subrun_root_for_bundle(*, bundle_obj: dict[str, Any], dispatch
         raise RuntimeError("SCHEMA_FAIL")
 
     raw = dispatch_ctx.get("subrun_root_abs")
-    if isinstance(raw, str) and raw.strip():
-        path = Path(raw).resolve()
+    subrun_root: Path | None = None
+    if isinstance(raw, Path):
+        subrun_root = raw
+    elif isinstance(raw, os.PathLike):
+        subrun_root = Path(raw)
+    elif isinstance(raw, str) and raw.strip():
+        subrun_root = Path(raw)
+    if subrun_root is not None:
+        path = subrun_root.resolve()
         if path.exists() and path.is_dir():
             # Fail-closed: accept dispatch-provided subrun roots only if they actually contain the
             # CCAP bundle's referenced files.
@@ -358,9 +365,16 @@ def _resolve_ccap_subrun_root_for_bundle(*, bundle_obj: dict[str, Any], dispatch
                 return path
 
     dispatch_dir_raw = dispatch_ctx.get("dispatch_dir")
-    if not isinstance(dispatch_dir_raw, str) or not dispatch_dir_raw.strip():
+    dispatch_dir: Path | None = None
+    if isinstance(dispatch_dir_raw, Path):
+        dispatch_dir = dispatch_dir_raw
+    elif isinstance(dispatch_dir_raw, os.PathLike):
+        dispatch_dir = Path(dispatch_dir_raw)
+    elif isinstance(dispatch_dir_raw, str) and dispatch_dir_raw.strip():
+        dispatch_dir = Path(dispatch_dir_raw)
+    if dispatch_dir is None:
         raise RuntimeError("MISSING_STATE_INPUT")
-    dispatch_dir = Path(dispatch_dir_raw).resolve()
+    dispatch_dir = dispatch_dir.resolve()
     if not dispatch_dir.exists() or not dispatch_dir.is_dir():
         raise RuntimeError("MISSING_STATE_INPUT")
     state_root = dispatch_dir.parent.parent.resolve()

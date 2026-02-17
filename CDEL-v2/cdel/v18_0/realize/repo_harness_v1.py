@@ -5,6 +5,7 @@ from __future__ import annotations
 import os
 import shutil
 import subprocess
+import sys
 import time
 from pathlib import Path
 from typing import Any
@@ -206,6 +207,10 @@ def run_repo_harness(
     events: list[dict[str, Any]] = []
     command_fail_evidence: list[str] = []
     env = _build_env(allowlist=[str(row) for row in allowlist], out_dir=out_dir)
+    python_executable = str(Path(sys.executable).resolve())
+    python_bin_dir = str(Path(python_executable).parent)
+    path_tail = str(env.get("PATH", "")).strip()
+    env["PATH"] = python_bin_dir if not path_tail else f"{python_bin_dir}{os.pathsep}{path_tail}"
     try:
         cwd = _resolve_cwd(work_dir, str(recipe.get("cwd_policy", "")))
     except RuntimeError:
@@ -233,6 +238,8 @@ def run_repo_harness(
                 "cost_vector": _zero_cost(),
             }
         argv = [str(x) for x in argv_any]
+        if str(argv[0]).strip() in {"python", "python3"}:
+            argv[0] = python_executable
 
         elapsed_ms = _wall_ms_now() - wall_start_ms
         remaining_ms = max(1, wall_budget_ms - elapsed_ms)

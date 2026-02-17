@@ -1,9 +1,10 @@
 from __future__ import annotations
 
+import sys
 from pathlib import Path
 
 from cdel.v18_0.realize.repo_harness_v1 import run_repo_harness
-from cdel.v1_7r.canon import write_canon_json
+from cdel.v1_7r.canon import load_canon_json, write_canon_json
 
 
 def _write_authority(repo_root: Path, *, recipe_id: str) -> dict[str, str]:
@@ -131,3 +132,75 @@ def test_repo_harness_rejects_unknown_recipe_id(tmp_path: Path) -> None:
     )
     assert run["ok"] is False
     assert run["refutation"]["code"] == "EVAL_STAGE_FAIL"
+
+
+def test_repo_harness_rewrites_python3_to_current_interpreter(tmp_path: Path) -> None:
+    repo_root = tmp_path / "repo"
+    applied_tree = tmp_path / "applied_tree"
+    recipe_id = "sha256:" + ("7" * 64)
+    ids = _write_authority(repo_root, recipe_id=recipe_id)
+    applied_tree.mkdir(parents=True, exist_ok=True)
+    (applied_tree / "README.md").write_text("seed\n", encoding="utf-8")
+    sandbox_root = tmp_path / "sandbox"
+
+    run = run_repo_harness(
+        repo_root=repo_root,
+        applied_tree_checkout_dir=applied_tree,
+        build_recipe_id=recipe_id,
+        budgets=_budgets(),
+        env_contract_id=ids["env_contract_id"],
+        dsbx_profile_id=ids["dsbx_profile_id"],
+        toolchain_root_id=ids["toolchain_root_id"],
+        sandbox_root=sandbox_root,
+    )
+
+    assert run["ok"] is True
+    events_payload = load_canon_json(sandbox_root / "transcript" / "events_v1.json")
+    events = events_payload.get("events")
+    assert isinstance(events, list) and events
+    assert events[0]["argv"][0] == str(Path(sys.executable).resolve())
+
+
+def test_repo_harness_runs_pytest_module_with_current_interpreter(tmp_path: Path) -> None:
+    repo_root = tmp_path / "repo"
+    applied_tree = tmp_path / "applied_tree"
+    recipe_id = "sha256:" + ("7" * 64)
+    ids = _write_authority(repo_root, recipe_id=recipe_id)
+    applied_tree.mkdir(parents=True, exist_ok=True)
+    (applied_tree / "README.md").write_text("seed\n", encoding="utf-8")
+    sandbox_root = tmp_path / "sandbox"
+
+    write_canon_json(
+        repo_root / "authority" / "build_recipes" / "build_recipes_v1.json",
+        {
+            "schema_version": "build_recipes_v1",
+            "recipes": [
+                {
+                    "recipe_id": recipe_id,
+                    "recipe_name": "UNIT_PYTEST",
+                    "commands": [["python3", "-m", "pytest", "--version"]],
+                    "env_allowlist": ["PYTHONPATH"],
+                    "cwd_policy": "repo_root",
+                    "out_capture_policy": {"mode": "none"},
+                }
+            ],
+        },
+    )
+
+    run = run_repo_harness(
+        repo_root=repo_root,
+        applied_tree_checkout_dir=applied_tree,
+        build_recipe_id=recipe_id,
+        budgets=_budgets(),
+        env_contract_id=ids["env_contract_id"],
+        dsbx_profile_id=ids["dsbx_profile_id"],
+        toolchain_root_id=ids["toolchain_root_id"],
+        sandbox_root=sandbox_root,
+    )
+
+    assert run["ok"] is True
+    events_payload = load_canon_json(sandbox_root / "transcript" / "events_v1.json")
+    events = events_payload.get("events")
+    assert isinstance(events, list) and events
+    assert events[0]["argv"][0] == str(Path(sys.executable).resolve())
+    assert int(events[0]["return_code"]) == 0

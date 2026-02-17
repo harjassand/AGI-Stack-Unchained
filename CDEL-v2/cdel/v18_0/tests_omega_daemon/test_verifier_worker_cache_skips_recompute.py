@@ -46,6 +46,7 @@ def test_verifier_worker_cache_skips_recompute(tmp_path, monkeypatch) -> None:
         root,
         runs_roots=None,
         observation_payload,
+        registry=None,
         policy_hash,
         registry_hash,
         objectives_hash,
@@ -56,6 +57,7 @@ def test_verifier_worker_cache_skips_recompute(tmp_path, monkeypatch) -> None:
             root=root,
             runs_roots=runs_roots,
             observation_payload=observation_payload,
+            registry=registry,
             policy_hash=policy_hash,
             registry_hash=registry_hash,
             objectives_hash=objectives_hash,
@@ -104,3 +106,42 @@ def test_verifier_worker_cache_skips_recompute(tmp_path, monkeypatch) -> None:
     assert second["ok"] is True
     assert second["verdict"] == "VALID"
     assert calls == calls_after_first
+
+
+def test_verifier_worker_recompute_legacy_signature_is_supported(tmp_path, monkeypatch) -> None:
+    campaign_pack = _prepare_no_dispatch_pack(tmp_path)
+    _, state_dir = run_tick_with_pack(
+        tmp_path=tmp_path / "run",
+        campaign_pack=campaign_pack,
+        tick_u64=1,
+    )
+
+    calls = {"observe": 0}
+
+    def _legacy_observe_wrapper(
+        *,
+        root,
+        runs_roots=None,
+        observation_payload,
+        policy_hash,
+        registry_hash,
+        objectives_hash,
+        prev_observation=None,
+    ):
+        calls["observe"] += 1
+        # Legacy wrapper does not accept `registry`; return canonical payload directly.
+        return observation_payload
+
+    monkeypatch.setattr(verifier_module, "_recompute_observation_from_sources", _legacy_observe_wrapper)
+
+    worker = VerifierWorker()
+    result = worker.handle_request(
+        {
+            "op": "VERIFY",
+            "state_dir": str(state_dir),
+            "mode": "full",
+        }
+    )
+    assert result["ok"] is True
+    assert result["verdict"] == "VALID"
+    assert calls["observe"] >= 1

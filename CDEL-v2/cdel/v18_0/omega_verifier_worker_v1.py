@@ -5,6 +5,7 @@ Protocol: JSONL over stdin/stdout.
 
 from __future__ import annotations
 
+import inspect
 import json
 import sys
 from pathlib import Path
@@ -46,6 +47,13 @@ class VerifierWorker:
         original_recompute_observation = verifier_module._recompute_observation_from_sources
         original_diagnose = verifier_module.diagnose
         original_decide = verifier_module.decide
+        try:
+            recompute_params = inspect.signature(original_recompute_observation).parameters
+        except (TypeError, ValueError):
+            fail("SCHEMA_FAIL")
+        recompute_supports_registry = "registry" in recompute_params
+        if "registry_hash" not in recompute_params:
+            fail("SCHEMA_FAIL")
 
         def _verify_hash_binding_wrapper(path: Path, expected_hash: str, schema_name: str) -> dict[str, Any]:
             payload = original_verify_hash_binding(path, expected_hash, schema_name)
@@ -57,11 +65,14 @@ class VerifierWorker:
             root: Path,
             runs_roots: list[Path] | None,
             observation_payload: dict[str, Any],
+            registry: dict[str, Any] | None = None,
             policy_hash: str,
             registry_hash: str,
             objectives_hash: str,
             prev_observation: dict[str, Any] | None = None,
         ) -> dict[str, Any]:
+            if registry is not None and not isinstance(registry, dict):
+                fail("SCHEMA_FAIL")
             key = canon_hash_obj(
                 {
                     "sources": observation_payload.get("sources"),
@@ -78,15 +89,20 @@ class VerifierWorker:
                 return observation_payload
 
             # Fail closed: cache mismatch triggers full recompute.
-            recomputed = original_recompute_observation(
-                root=root,
-                runs_roots=runs_roots,
-                observation_payload=observation_payload,
-                policy_hash=policy_hash,
-                registry_hash=registry_hash,
-                objectives_hash=objectives_hash,
-                prev_observation=prev_observation,
-            )
+            recompute_kwargs: dict[str, Any] = {
+                "root": root,
+                "runs_roots": runs_roots,
+                "observation_payload": observation_payload,
+                "policy_hash": policy_hash,
+                "registry_hash": registry_hash,
+                "objectives_hash": objectives_hash,
+                "prev_observation": prev_observation,
+            }
+            if recompute_supports_registry:
+                if registry is None:
+                    fail("SCHEMA_FAIL")
+                recompute_kwargs["registry"] = registry
+            recomputed = original_recompute_observation(**recompute_kwargs)
             recomputed_hash = canon_hash_obj(recomputed)
             if recomputed_hash != expected_obs_hash:
                 fail("NONDETERMINISTIC")

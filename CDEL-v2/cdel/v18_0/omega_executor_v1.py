@@ -250,14 +250,14 @@ def dispatch_campaign(
     ]
 
     invocation_env_overrides: dict[str, str] | None = None
-    if runaway_enabled(runaway_cfg):
+    declared = decision_plan.get("runaway_env_overrides")
+    if runaway_enabled(runaway_cfg) and declared is not None:
         if not isinstance(runaway_cfg, dict):
+            fail("SCHEMA_FAIL")
+        if not isinstance(declared, dict):
             fail("SCHEMA_FAIL")
         escalation_level = int(decision_plan.get("runaway_escalation_level_u64", 0))
         expected_env = resolve_env_overrides(runaway_cfg, campaign_id, escalation_level)
-        declared = decision_plan.get("runaway_env_overrides")
-        if not isinstance(declared, dict):
-            fail("SCHEMA_FAIL")
         declared_env = {str(k): str(v) for k, v in declared.items()}
         if declared_env != expected_env:
             fail("NONDETERMINISTIC")

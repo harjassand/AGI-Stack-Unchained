@@ -150,7 +150,6 @@ def test_ccap_apply_replay_uses_repo_root_from_dispatch_ctx(tmp_path: Path, monk
         "repo_root_abs": expected_repo,
     }
     out_dir = tmp_path / "out"
-    out_dir.mkdir(parents=True, exist_ok=True)
 
     ok = _verify_ccap_apply_matches_receipt(
         bundle_obj=bundle_obj,
@@ -160,3 +159,4 @@ def test_ccap_apply_replay_uses_repo_root_from_dispatch_ctx(tmp_path: Path, monk
         require_receipt_applied_tree=True,
     )
     assert ok is True
+    assert out_dir.exists()

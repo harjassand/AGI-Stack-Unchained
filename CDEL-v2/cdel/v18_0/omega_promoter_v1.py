@@ -279,7 +279,7 @@ def _verify_ccap_apply_matches_receipt(
         # directory might not exist yet. Ensure we can always create a scratch dir.
         out_dir.mkdir(parents=True, exist_ok=True)
 
-        subrun_root = Path(dispatch_ctx["subrun_root_abs"])
+        subrun_root = _resolve_ccap_subrun_root_for_bundle(bundle_obj=bundle_obj, dispatch_ctx=dispatch_ctx)
         ccap_relpath = normalize_subrun_relpath(str(bundle_obj.get("ccap_relpath", "")))
         patch_relpath = normalize_subrun_relpath(str(bundle_obj.get("patch_relpath", "")))
         ccap_path = (subrun_root / ccap_relpath).resolve()
@@ -337,6 +337,45 @@ def _verify_ccap_apply_matches_receipt(
         return True
     except Exception:  # noqa: BLE001
         return False
+
+
+def _resolve_ccap_subrun_root_for_bundle(*, bundle_obj: dict[str, Any], dispatch_ctx: dict[str, Any]) -> Path:
+    # CCAP promotion bundles reference files under the subrun root via `ccap_relpath`/`patch_relpath`.
+    # Some dispatch receipts (notably in sandboxed drill runs) may omit `subrun_root_abs`; fail closed
+    # unless we can deterministically locate the correct subrun directory.
+    raw = dispatch_ctx.get("subrun_root_abs")
+    if isinstance(raw, str) and raw.strip():
+        path = Path(raw).resolve()
+        if path.exists() and path.is_dir():
+            return path
+
+    dispatch_dir_raw = dispatch_ctx.get("dispatch_dir")
+    if not isinstance(dispatch_dir_raw, str) or not dispatch_dir_raw.strip():
+        raise RuntimeError("MISSING_STATE_INPUT")
+    dispatch_dir = Path(dispatch_dir_raw).resolve()
+    if not dispatch_dir.exists() or not dispatch_dir.is_dir():
+        raise RuntimeError("MISSING_STATE_INPUT")
+    state_root = dispatch_dir.parent.parent.resolve()
+    subruns_root = state_root / "subruns"
+    if not subruns_root.exists() or not subruns_root.is_dir():
+        raise RuntimeError("MISSING_STATE_INPUT")
+
+    ccap_relpath = normalize_subrun_relpath(str(bundle_obj.get("ccap_relpath", "")))
+    patch_relpath = normalize_subrun_relpath(str(bundle_obj.get("patch_relpath", "")))
+    if not ccap_relpath or not patch_relpath:
+        raise RuntimeError("SCHEMA_FAIL")
+
+    candidate: Path | None = None
+    for entry in sorted(subruns_root.iterdir(), key=lambda p: p.as_posix()):
+        if not entry.is_dir():
+            continue
+        if (entry / ccap_relpath).is_file() and (entry / patch_relpath).is_file():
+            if candidate is not None:
+                raise RuntimeError("VERIFY_ERROR")
+            candidate = entry.resolve()
+    if candidate is None:
+        raise RuntimeError("MISSING_STATE_INPUT")
+    return candidate
 
 
 def _load_json_any(path: Path) -> Any:

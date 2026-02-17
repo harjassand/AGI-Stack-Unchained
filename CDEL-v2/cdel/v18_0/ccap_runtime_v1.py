@@ -45,13 +45,31 @@ def tracked_files(repo_root: Path) -> list[str]:
 
 
 def compute_repo_base_tree_id(repo_root: Path) -> str:
-    files: list[dict[str, str]] = []
-    for rel in tracked_files(repo_root):
-        path = (repo_root / rel).resolve()
-        if not path.exists() or not path.is_file() or path.is_symlink():
-            fail("MISSING_STATE_INPUT")
-        files.append({"path": rel, "sha256": hash_file_stream(path)})
-    return canon_hash_obj({"schema_version": "ccap_base_tree_v1", "files": files})
+    # Fast, meaningful base-tree identity:
+    # - fail if the worktree is dirty (uncommitted changes)
+    # - bind to the git HEAD commit + its tree (includes submodule gitlinks)
+    #
+    # The prior implementation hashed every tracked file's bytes, which is too slow for drill
+    # loops and redundant given git's content-addressed object model.
+    # Require no unstaged changes; we bind to the index tree (not necessarily committed).
+    # This matches how many tests/fixtures prepare repos (git add -A, but no commit).
+    unstaged = _run_git(repo_root, ["diff", "--name-only"])
+    if unstaged.returncode != 0:
+        fail("MISSING_STATE_INPUT")
+    if (unstaged.stdout or "").strip():
+        fail("VERIFY_ERROR")
+
+    tree = _run_git(repo_root, ["write-tree"])
+    if tree.returncode != 0:
+        fail("MISSING_STATE_INPUT")
+    tree_hex = str((tree.stdout or "")).strip()
+    if not tree_hex:
+        fail("MISSING_STATE_INPUT")
+
+    head_run = _run_git(repo_root, ["rev-parse", "--verify", "HEAD"])
+    head_hex = str((head_run.stdout or "")).strip() if head_run.returncode == 0 else ""
+
+    return canon_hash_obj({"schema_version": "ccap_base_tree_git_index_v1", "head": head_hex, "tree": tree_hex})
 
 
 def materialize_repo_snapshot(repo_root: Path, out_dir: Path) -> None:

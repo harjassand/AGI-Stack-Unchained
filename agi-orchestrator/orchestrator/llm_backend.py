@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import time
 from datetime import UTC, datetime
 from dataclasses import dataclass
 from pathlib import Path
@@ -104,18 +105,27 @@ def _validate_gemini_model(model: str) -> str:
 
 def _http_post_json(*, url: str, headers: dict[str, str], payload: dict[str, Any]) -> dict[str, Any]:
     body = json.dumps(payload, separators=(",", ":"), sort_keys=False).encode("utf-8")
-    req = Request(url=url, data=body, method="POST")
-    req.add_header("Content-Type", "application/json")
-    for key, value in headers.items():
-        req.add_header(str(key), str(value))
-    try:
-        with urlopen(req, timeout=60) as resp:  # nosec: B310
-            raw = resp.read().decode("utf-8")
-    except HTTPError as exc:
-        detail = exc.read().decode("utf-8", errors="replace")
-        raise ValueError(f"live llm request failed: HTTP {exc.code}: {detail[:240]}") from exc
-    except URLError as exc:
-        raise ValueError(f"live llm request failed: {exc}") from exc
+    max_attempts = int(os.environ.get("ORCH_LLM_RETRY_429_MAX_ATTEMPTS", "6") or 6)
+    delay_s = float(os.environ.get("ORCH_LLM_RETRY_429_BASE_DELAY_S", "1.0") or 1.0)
+    delay_s = max(0.1, delay_s)
+    for attempt in range(max(1, max_attempts)):
+        req = Request(url=url, data=body, method="POST")
+        req.add_header("Content-Type", "application/json")
+        for key, value in headers.items():
+            req.add_header(str(key), str(value))
+        try:
+            with urlopen(req, timeout=60) as resp:  # nosec: B310
+                raw = resp.read().decode("utf-8")
+            break
+        except HTTPError as exc:
+            detail = exc.read().decode("utf-8", errors="replace")
+            if exc.code == 429 and attempt + 1 < max_attempts:
+                time.sleep(delay_s)
+                delay_s = min(30.0, delay_s * 2.0)
+                continue
+            raise ValueError(f"live llm request failed: HTTP {exc.code}: {detail[:240]}") from exc
+        except URLError as exc:
+            raise ValueError(f"live llm request failed: {exc}") from exc
     try:
         payload_obj = json.loads(raw)
     except json.JSONDecodeError as exc:

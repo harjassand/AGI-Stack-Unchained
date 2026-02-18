@@ -9,6 +9,7 @@ promotion bundle.
 from __future__ import annotations
 
 import argparse
+import difflib
 import hashlib
 import json
 import os
@@ -141,7 +142,7 @@ def _llm_diff_prompt(*, target_relpath: str, target_text: str, pack: dict[str, A
             "target_relpath": str(target_relpath),
             "constraints": {
                 "output_format": "json",
-                "json_schema": {"unified_diff": "string"},
+                "json_schema": {"unified_diff": "string | optional", "updated_file_text": "string | optional"},
                 "diff_must_touch_only_target_relpath_b": True,
                 "diff_must_be_unified_b": True,
             },
@@ -196,6 +197,43 @@ def _extract_patch_from_llm(response: str) -> bytes:
     if not isinstance(diff, str) or not diff.strip():
         raise RuntimeError("LLM_RESPONSE_MISSING_DIFF")
     patch_text = diff
+    if not patch_text.endswith("\n"):
+        patch_text += "\n"
+    return patch_text.encode("utf-8")
+
+
+def _maybe_parse_llm_json_dict(response: str) -> dict[str, Any] | None:
+    text = str(response or "").strip()
+    if not text:
+        return None
+    candidates: list[str] = [text]
+    if "```" in text:
+        for fence in ("```json", "```"):
+            start = text.find(fence)
+            if start >= 0:
+                end = text.find("```", start + len(fence))
+                if end > start:
+                    candidates.insert(0, text[start + len(fence) : end].strip())
+    if "{" in text and "}" in text:
+        candidates.append(text[text.find("{") : text.rfind("}") + 1].strip())
+    for cand in candidates:
+        try:
+            obj = json.loads(cand)
+        except Exception:
+            continue
+        if isinstance(obj, dict):
+            return obj
+    return None
+
+
+def _diff_from_updated_text(*, target_relpath: str, before: str, after: str) -> bytes:
+    rows = difflib.unified_diff(
+        before.splitlines(True),
+        after.splitlines(True),
+        fromfile=f"a/{target_relpath}",
+        tofile=f"b/{target_relpath}",
+    )
+    patch_text = "".join(rows)
     if not patch_text.endswith("\n"):
         patch_text += "\n"
     return patch_text.encode("utf-8")
@@ -720,7 +758,12 @@ def run(*, campaign_pack: Path, out_dir: Path) -> None:
     if len(response) > max_response_chars_u64:
         response = response[: max_response_chars_u64]
     try:
-        patch_bytes = _extract_patch_from_llm(response)
+        obj = _maybe_parse_llm_json_dict(response)
+        updated = (obj or {}).get("updated_file_text") if isinstance(obj, dict) else None
+        if isinstance(updated, str) and updated.strip():
+            patch_bytes = _diff_from_updated_text(target_relpath=target_relpath, before=target_text, after=updated)
+        else:
+            patch_bytes = _extract_patch_from_llm(response)
     except Exception as exc:  # noqa: BLE001
         failure = {
             "schema_version": "coordinator_mutator_llm_failure_v1",

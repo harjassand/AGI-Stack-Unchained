@@ -7,6 +7,7 @@ before emitting a CCAP bundle.
 from __future__ import annotations
 
 import argparse
+import difflib
 import hashlib
 import json
 import os
@@ -35,6 +36,19 @@ def _sha256_prefixed(data: bytes) -> str:
 
 def _canonical_dumps(payload: dict[str, Any]) -> str:
     return json.dumps(payload, sort_keys=True, separators=(",", ":"), ensure_ascii=True)
+
+
+def _diff_from_updated_text(*, target_relpath: str, before: str, after: str) -> str:
+    rows = difflib.unified_diff(
+        before.splitlines(True),
+        after.splitlines(True),
+        fromfile=f"a/{target_relpath}",
+        tofile=f"b/{target_relpath}",
+    )
+    patch_text = "".join(rows)
+    if not patch_text.endswith("\n"):
+        patch_text += "\n"
+    return patch_text
 
 def _extract_json_obj(text: str) -> dict[str, Any]:
     raw = str(text or "").strip()
@@ -532,7 +546,7 @@ def run(*, campaign_pack: Path, out_dir: Path) -> None:
             "run_seed_u64": int(run_seed_u64),
             "task": task,
             "target_relpath": str(target_relpath),
-            "constraints": {"output_format": "json", "json_schema": {"unified_diff": "string"}},
+            "constraints": {"output_format": "json", "json_schema": {"unified_diff": "string | optional", "updated_file_text": "string | optional"}},
             "target_file_head": target_text[:20000],
         }
     )
@@ -540,6 +554,9 @@ def run(*, campaign_pack: Path, out_dir: Path) -> None:
     patch_text = None
     try:
         obj = _extract_json_obj(str(response or ""))
+        updated = obj.get("updated_file_text") if isinstance(obj, dict) else None
+        if isinstance(updated, str) and updated.strip():
+            patch_text = _diff_from_updated_text(target_relpath=target_relpath, before=target_text, after=updated)
         if isinstance(obj.get("unified_diff"), str):
             patch_text = str(obj["unified_diff"])
     except Exception:

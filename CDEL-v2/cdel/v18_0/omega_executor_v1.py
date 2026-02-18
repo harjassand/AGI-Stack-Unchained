@@ -39,11 +39,17 @@ _SUBRUN_PRUNE_CAMPAIGN_ALLOWLIST: dict[str, tuple[str, ...]] = {}
 
 def _pinned_pythonpath(root: Path | None = None) -> str:
     root = (root or repo_root()).resolve()
+    # When running inside an ignite git worktree, Extension-1/agi-orchestrator may be
+    # untracked and therefore absent from the worktree. Allow pointing at the host
+    # checkout for that subtree while keeping the mutated worktree as the primary root.
+    host_root_raw = str(os.environ.get("OMEGA_HOST_REPO_ROOT", "")).strip()
+    host_ext = (Path(host_root_raw) / "Extension-1" / "agi-orchestrator") if host_root_raw else None
+    ext_root = host_ext if (host_ext is not None and host_ext.exists()) else (root / "Extension-1" / "agi-orchestrator")
     return ":".join(
         [
             str(root),
             str(root / "CDEL-v2"),
-            str(root / "Extension-1" / "agi-orchestrator"),
+            str(ext_root),
         ]
     )
 

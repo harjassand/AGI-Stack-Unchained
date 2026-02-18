@@ -149,7 +149,8 @@ def _llm_diff_prompt(*, target_relpath: str, target_text: str, pack: dict[str, A
             "pack_hints": {
                 "death_injection_enabled_b": bool(death_enabled),
             },
-            "target_file_head": target_text[:20000],
+            # Provide full file contents to support updated_file_text responses without truncation bugs.
+            "target_file_text": target_text,
         }
     )
 
@@ -761,6 +762,20 @@ def run(*, campaign_pack: Path, out_dir: Path) -> None:
         obj = _maybe_parse_llm_json_dict(response)
         updated = (obj or {}).get("updated_file_text") if isinstance(obj, dict) else None
         if isinstance(updated, str) and updated.strip():
+            # Guard against partial-file outputs (common when the model doesn't have full context).
+            if len(updated) < int(0.80 * len(target_text)) or "def run_tick(" not in updated:
+                _write_verify_failure(
+                    out_dir,
+                    {
+                        "tick_u64": int(tick_u64),
+                        "target_relpath": target_relpath,
+                        "reason": "UPDATED_FILE_TEXT_INVARIANT_FAIL",
+                        "detail": "missing run_tick or too short",
+                        "updated_chars_u64": int(len(updated)),
+                        "target_chars_u64": int(len(target_text)),
+                    },
+                )
+                return
             patch_bytes = _diff_from_updated_text(target_relpath=target_relpath, before=target_text, after=updated)
         else:
             patch_bytes = _extract_patch_from_llm(response)

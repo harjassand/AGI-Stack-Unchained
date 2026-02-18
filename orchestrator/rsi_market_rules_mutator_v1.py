@@ -547,7 +547,7 @@ def run(*, campaign_pack: Path, out_dir: Path) -> None:
             "task": task,
             "target_relpath": str(target_relpath),
             "constraints": {"output_format": "json", "json_schema": {"unified_diff": "string | optional", "updated_file_text": "string | optional"}},
-            "target_file_head": target_text[:20000],
+            "target_file_text": target_text,
         }
     )
     response = backend.generate(prompt)
@@ -556,6 +556,20 @@ def run(*, campaign_pack: Path, out_dir: Path) -> None:
         obj = _extract_json_obj(str(response or ""))
         updated = obj.get("updated_file_text") if isinstance(obj, dict) else None
         if isinstance(updated, str) and updated.strip():
+            required_markers = ["def select_winner", "def settle_and_advance_market_state", "def bid_market_enabled"]
+            if len(updated) < int(0.80 * len(target_text)) or any(marker not in updated for marker in required_markers):
+                failure = {
+                    "schema_version": "market_rules_mutator_verify_failure_v1",
+                    "tick_u64": int(tick_u64),
+                    "target_relpath": target_relpath,
+                    "reason": "UPDATED_FILE_TEXT_INVARIANT_FAIL",
+                    "detail": "missing required markers or too short",
+                    "updated_chars_u64": int(len(updated)),
+                    "target_chars_u64": int(len(target_text)),
+                }
+                failure["failure_id"] = canon_hash_obj({k: v for k, v in failure.items() if k != "failure_id"})
+                write_canon_json(out_dir / "market_rules_mutator_verify_failure_v1.json", failure)
+                return
             patch_text = _diff_from_updated_text(target_relpath=target_relpath, before=target_text, after=updated)
         if isinstance(obj.get("unified_diff"), str):
             patch_text = str(obj["unified_diff"])

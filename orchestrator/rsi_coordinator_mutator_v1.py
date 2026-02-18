@@ -755,7 +755,21 @@ def run(*, campaign_pack: Path, out_dir: Path) -> None:
     )
     if len(prompt) > max_prompt_chars_u64:
         prompt = prompt[: max_prompt_chars_u64]
-    response = backend.generate(prompt)
+    try:
+        response = backend.generate(prompt)
+    except Exception as exc:  # noqa: BLE001
+        detail = str(exc)[:4000]
+        failure = {
+            "schema_version": "coordinator_mutator_llm_failure_v1",
+            "tick_u64": int(tick_u64),
+            "target_relpath": target_relpath,
+            "detail": detail,
+        }
+        failure["failure_id"] = canon_hash_obj({k: v for k, v in failure.items() if k != "failure_id"})
+        write_canon_json(out_dir / "coordinator_mutator_llm_failure_v1.json", failure)
+        if "HTTP 429" in detail or "RESOURCE_EXHAUSTED" in detail:
+            time.sleep(60.0)
+        return
     if len(response) > max_response_chars_u64:
         response = response[: max_response_chars_u64]
     try:

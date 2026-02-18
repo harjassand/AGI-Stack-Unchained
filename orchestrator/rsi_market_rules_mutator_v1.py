@@ -550,7 +550,21 @@ def run(*, campaign_pack: Path, out_dir: Path) -> None:
             "target_file_text": target_text,
         }
     )
-    response = backend.generate(prompt)
+    try:
+        response = backend.generate(prompt)
+    except Exception as exc:  # noqa: BLE001
+        detail = str(exc)[:4000]
+        failure = {
+            "schema_version": "market_rules_mutator_llm_failure_v1",
+            "tick_u64": int(tick_u64),
+            "target_relpath": target_relpath,
+            "detail": detail,
+        }
+        failure["failure_id"] = canon_hash_obj({k: v for k, v in failure.items() if k != "failure_id"})
+        write_canon_json(out_dir / "market_rules_mutator_llm_failure_v1.json", failure)
+        if "HTTP 429" in detail or "RESOURCE_EXHAUSTED" in detail:
+            time.sleep(60.0)
+        return
     patch_text = None
     try:
         obj = _extract_json_obj(str(response or ""))

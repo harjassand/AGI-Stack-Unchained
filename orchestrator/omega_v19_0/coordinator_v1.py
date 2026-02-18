@@ -113,6 +113,11 @@ def _deterministic_timing_enabled() -> bool:
     raw = str(os.environ.get("OMEGA_V19_DETERMINISTIC_TIMING", "1")).strip().lower()
     return raw not in {"0", "false", "off", "no"}
 
+def _phase3_mutation_signal_enabled() -> bool:
+    # Phase 3 DoD evidence: allow emitting a stable, greppable log line from the
+    # mutated coordinator path. Bench/structural runs force this off.
+    return str(os.environ.get("OMEGA_PHASE3_MUTATION_SIGNAL", "0")).strip() == "1"
+
 
 def _write_payload(dir_path: Path, suffix: str, payload: dict[str, Any], id_field: str | None = None) -> tuple[Path, dict[str, Any], str]:
     return write_hashed_json(dir_path, suffix, payload, id_field=id_field)
@@ -619,6 +624,8 @@ def run_tick(
         except Exception:
             pass
         deterministic_timing = _deterministic_timing_enabled()
+        if _phase3_mutation_signal_enabled():
+            print("SIGNAL=PHASE3_MUTATED_COORDINATOR v=1")
         tick_start_ns = time.monotonic_ns()
         stage_timings_ns: dict[str, int] = {stage: 0 for stage in _TIMING_STAGES}
 

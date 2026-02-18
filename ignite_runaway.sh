@@ -756,6 +756,7 @@ while :; do
 	    cd "$WORKTREE_DIR" || exit 1
 	    env \
 	      PYTHONPATH=".:CDEL-v2:Extension-1/agi-orchestrator${PYTHONPATH:+:${PYTHONPATH}}" \
+	      OMEGA_PHASE3_MUTATION_SIGNAL="${OMEGA_PHASE3_MUTATION_SIGNAL:-1}" \
 	      OMEGA_META_CORE_ACTIVATION_MODE="$ACTIVATION_MODE" \
 	      OMEGA_ALLOW_SIMULATE_ACTIVATION="$ALLOW_SIMULATE" \
 	      "${cmd[@]}"

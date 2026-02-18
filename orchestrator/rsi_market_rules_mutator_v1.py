@@ -117,6 +117,8 @@ def _run_daemon_loop(
     env = dict(os.environ)
     env["OMEGA_RUN_SEED_U64"] = str(int(run_seed_u64))
     env["OMEGA_V19_DETERMINISTIC_TIMING"] = ("1" if deterministic_timing else "0")
+    env["OMEGA_PHASE3_MUTATION_SIGNAL"] = "0"
+    env["OMEGA_DEV_DEATH_INJECTION_OK"] = "0"
     env["PYTHONPATH"] = env.get("PYTHONPATH", "") or ".:CDEL-v2:Extension-1/agi-orchestrator"
     cmd = [
         sys.executable,
@@ -161,6 +163,8 @@ def _run_daemon_loop_measured(
     env = dict(os.environ)
     env["OMEGA_RUN_SEED_U64"] = str(int(run_seed_u64))
     env["OMEGA_V19_DETERMINISTIC_TIMING"] = ("1" if deterministic_timing else "0")
+    env["OMEGA_PHASE3_MUTATION_SIGNAL"] = "0"
+    env["OMEGA_DEV_DEATH_INJECTION_OK"] = "0"
     env["PYTHONPATH"] = env.get("PYTHONPATH", "") or ".:CDEL-v2:Extension-1/agi-orchestrator"
     cmd = [
         sys.executable,

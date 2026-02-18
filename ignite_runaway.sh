@@ -40,25 +40,6 @@ if [[ "${WORKTREE_DIR:0:1}" != "/" ]]; then
   WORKTREE_DIR="${ROOT}/${WORKTREE_DIR}"
 fi
 
-maybe_load_google_api_key() {
-  # Avoid embedding secrets in process args/logs. If GOOGLE_API_KEY is unset,
-  # load it from a local file (default: ~/.config/omega/google_api_key).
-  if [[ -n "${GOOGLE_API_KEY:-}" ]]; then
-    return 0
-  fi
-  if [[ -z "${GOOGLE_API_KEY_FILE:-}" ]]; then
-    return 0
-  fi
-  if [[ ! -f "$GOOGLE_API_KEY_FILE" ]]; then
-    return 0
-  fi
-  # Strip CR/LF and whitespace.
-  GOOGLE_API_KEY="$(tr -d '\r\n' <"$GOOGLE_API_KEY_FILE" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')"
-  if [[ -n "${GOOGLE_API_KEY:-}" ]]; then
-    export GOOGLE_API_KEY
-  fi
-}
-
 ensure_worktree() {
   local worktree_dir="$1"
   mkdir -p "$(dirname "$worktree_dir")"
@@ -73,7 +54,6 @@ ensure_worktree() {
 }
 
 ensure_worktree "$WORKTREE_DIR"
-maybe_load_google_api_key
 
 ignite_on_success() {
   local tick_u64="$1"
@@ -777,7 +757,7 @@ while :; do
 	  (
 	    cd "$WORKTREE_DIR" || exit 1
 	    env \
-	      PYTHONPATH=".:CDEL-v2:${ROOT}/Extension-1/agi-orchestrator${PYTHONPATH:+:${PYTHONPATH}}" \
+	      PYTHONPATH=".:CDEL-v2:${ROOT}/agi-orchestrator${PYTHONPATH:+:${PYTHONPATH}}" \
 	      OMEGA_HOST_REPO_ROOT="$ROOT" \
 	      OMEGA_PHASE3_MUTATION_SIGNAL="${OMEGA_PHASE3_MUTATION_SIGNAL:-1}" \
 	      OMEGA_META_CORE_ACTIVATION_MODE="$ACTIVATION_MODE" \

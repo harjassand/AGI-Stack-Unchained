@@ -59,6 +59,21 @@ def _sha256_prefixed(text: str) -> str:
 def _iso_utc_now() -> str:
     return datetime.now(UTC).replace(microsecond=0).isoformat().replace("+00:00", "Z")
 
+def _load_secret_from_file(*, env_key: str, default_rel: str) -> str:
+    """Best-effort secret load without propagating secrets through subprocess env."""
+    direct = os.environ.get(env_key, "").strip()
+    if direct:
+        return direct
+    home = os.environ.get("HOME", "").strip()
+    if not home:
+        return ""
+    path = Path(home) / default_rel
+    try:
+        raw = path.read_text(encoding="utf-8")
+    except Exception:
+        return ""
+    return raw.strip()
+
 
 def _validate_openai_model(model: str) -> str:
     value = str(model or "").strip()
@@ -496,7 +511,7 @@ def get_backend(logger: LLMCallLogger | None = None) -> LLMBackend:
         replay_path = os.environ.get("ORCH_LLM_REPLAY_PATH")
         if not replay_path:
             raise ValueError("ORCH_LLM_REPLAY_PATH is required for gemini_harvest backend")
-        api_key = os.environ.get("GOOGLE_API_KEY", "").strip()
+        api_key = _load_secret_from_file(env_key="GOOGLE_API_KEY", default_rel=".config/omega/google_api_key")
         if not api_key:
             raise ValueError("GOOGLE_API_KEY is required for gemini_harvest backend")
         model = _validate_gemini_model(os.environ.get("ORCH_GEMINI_MODEL", "gemini-2.0-flash"))

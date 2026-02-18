@@ -120,7 +120,7 @@ def _run_daemon_loop(
     env["OMEGA_PHASE3_MUTATION_SIGNAL"] = "0"
     env["OMEGA_DEV_DEATH_INJECTION_OK"] = "0"
     host_root = str(env.get("OMEGA_HOST_REPO_ROOT", "") or "").strip()
-    host_ext = str(Path(host_root) / "Extension-1" / "agi-orchestrator") if host_root else "Extension-1/agi-orchestrator"
+    host_ext = str(Path(host_root) / "agi-orchestrator") if host_root else "agi-orchestrator"
     env["PYTHONPATH"] = env.get("PYTHONPATH", "") or f".:CDEL-v2:{host_ext}"
     cmd = [
         sys.executable,
@@ -168,7 +168,7 @@ def _run_daemon_loop_measured(
     env["OMEGA_PHASE3_MUTATION_SIGNAL"] = "0"
     env["OMEGA_DEV_DEATH_INJECTION_OK"] = "0"
     host_root = str(env.get("OMEGA_HOST_REPO_ROOT", "") or "").strip()
-    host_ext = str(Path(host_root) / "Extension-1" / "agi-orchestrator") if host_root else "Extension-1/agi-orchestrator"
+    host_ext = str(Path(host_root) / "agi-orchestrator") if host_root else "agi-orchestrator"
     env["PYTHONPATH"] = env.get("PYTHONPATH", "") or f".:CDEL-v2:{host_ext}"
     cmd = [
         sys.executable,

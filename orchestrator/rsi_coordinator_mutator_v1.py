@@ -171,6 +171,52 @@ def _extract_patch_from_llm(response: str) -> bytes:
                     candidates.insert(0, text[start + len(fence) : end].strip())
     if "{" in text and "}" in text:
         candidates.append(text[text.find("{") : text.rfind("}") + 1].strip())
+
+    # Some providers return "JSON" that contains raw newlines inside string literals (invalid JSON).
+    # Best-effort: extract+decode the unified_diff string without full JSON parsing.
+    def _extract_loose_json_string_field(src: str, field: str) -> str | None:
+        needle = f"\"{field}\""
+        idx = src.find(needle)
+        if idx < 0:
+            return None
+        colon = src.find(":", idx + len(needle))
+        if colon < 0:
+            return None
+        k = colon + 1
+        while k < len(src) and src[k].isspace():
+            k += 1
+        if k >= len(src) or src[k] != "\"":
+            return None
+        k += 1
+        raw_chars: list[str] = []
+        escaped = False
+        while k < len(src):
+            ch = src[k]
+            if escaped:
+                raw_chars.append(ch)
+                escaped = False
+            else:
+                if ch == "\\":
+                    raw_chars.append(ch)
+                    escaped = True
+                elif ch == "\"":
+                    break
+                else:
+                    raw_chars.append(ch)
+            k += 1
+        raw = "".join(raw_chars)
+        cooked = raw.replace("\r", "\\r").replace("\n", "\\n")
+        try:
+            return json.loads("\"" + cooked + "\"")
+        except Exception:  # noqa: BLE001
+            return (
+                cooked.replace("\\n", "\n")
+                .replace("\\r", "\r")
+                .replace("\\t", "\t")
+                .replace("\\\"", "\"")
+                .replace("\\\\", "\\")
+            )
+
     last_err: Exception | None = None
     for cand in candidates:
         try:
@@ -180,6 +226,12 @@ def _extract_patch_from_llm(response: str) -> bytes:
             last_err = exc
             continue
     if obj is None:
+        loose = _extract_loose_json_string_field(text, "unified_diff")
+        if isinstance(loose, str) and loose.strip():
+            patch_text = loose
+            if not patch_text.endswith("\n"):
+                patch_text += "\n"
+            return patch_text.encode("utf-8")
         # Fall back: accept raw unified diff output (common for some LLMs).
         for cand in candidates:
             if "+++ b/" in cand and ("--- a/" in cand or "diff --git " in cand):
@@ -224,6 +276,56 @@ def _maybe_parse_llm_json_dict(response: str) -> dict[str, Any] | None:
             continue
         if isinstance(obj, dict):
             return obj
+    # Best-effort extraction for invalid JSON-with-newlines responses.
+    def _extract(field: str) -> str | None:
+        needle = f"\"{field}\""
+        idx = text.find(needle)
+        if idx < 0:
+            return None
+        colon = text.find(":", idx + len(needle))
+        if colon < 0:
+            return None
+        k = colon + 1
+        while k < len(text) and text[k].isspace():
+            k += 1
+        if k >= len(text) or text[k] != "\"":
+            return None
+        k += 1
+        raw_chars: list[str] = []
+        escaped = False
+        while k < len(text):
+            ch = text[k]
+            if escaped:
+                raw_chars.append(ch)
+                escaped = False
+            else:
+                if ch == "\\":
+                    raw_chars.append(ch)
+                    escaped = True
+                elif ch == "\"":
+                    break
+                else:
+                    raw_chars.append(ch)
+            k += 1
+        raw = "".join(raw_chars)
+        cooked = raw.replace("\r", "\\r").replace("\n", "\\n")
+        try:
+            return json.loads("\"" + cooked + "\"")
+        except Exception:  # noqa: BLE001
+            return (
+                cooked.replace("\\n", "\n")
+                .replace("\\r", "\r")
+                .replace("\\t", "\t")
+                .replace("\\\"", "\"")
+                .replace("\\\\", "\\")
+            )
+
+    updated = _extract("updated_file_text")
+    unified = _extract("unified_diff")
+    if isinstance(updated, str) and updated.strip():
+        return {"updated_file_text": updated}
+    if isinstance(unified, str) and unified.strip():
+        return {"unified_diff": unified}
     return None
 
 

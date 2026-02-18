@@ -73,6 +73,56 @@ def _extract_json_obj(text: str) -> dict[str, Any]:
             continue
         if isinstance(obj, dict):
             return obj
+    # Best-effort extraction for invalid JSON-with-newlines responses.
+    def _extract_loose_json_string_field(src: str, field: str) -> str | None:
+        needle = f"\"{field}\""
+        idx = src.find(needle)
+        if idx < 0:
+            return None
+        colon = src.find(":", idx + len(needle))
+        if colon < 0:
+            return None
+        k = colon + 1
+        while k < len(src) and src[k].isspace():
+            k += 1
+        if k >= len(src) or src[k] != "\"":
+            return None
+        k += 1
+        raw_chars: list[str] = []
+        escaped = False
+        while k < len(src):
+            ch = src[k]
+            if escaped:
+                raw_chars.append(ch)
+                escaped = False
+            else:
+                if ch == "\\":
+                    raw_chars.append(ch)
+                    escaped = True
+                elif ch == "\"":
+                    break
+                else:
+                    raw_chars.append(ch)
+            k += 1
+        raw_val = "".join(raw_chars)
+        cooked = raw_val.replace("\r", "\\r").replace("\n", "\\n")
+        try:
+            return json.loads("\"" + cooked + "\"")
+        except Exception:  # noqa: BLE001
+            return (
+                cooked.replace("\\n", "\n")
+                .replace("\\r", "\r")
+                .replace("\\t", "\t")
+                .replace("\\\"", "\"")
+                .replace("\\\\", "\\")
+            )
+
+    updated = _extract_loose_json_string_field(raw, "updated_file_text")
+    unified = _extract_loose_json_string_field(raw, "unified_diff")
+    if isinstance(updated, str) and updated.strip():
+        return {"updated_file_text": updated}
+    if isinstance(unified, str) and unified.strip():
+        return {"unified_diff": unified}
     raise RuntimeError("LLM_RESPONSE_NOT_JSON") from last_err
 
 
@@ -80,6 +130,15 @@ def _extract_unified_diff_text(text: str) -> str | None:
     raw = str(text or "").strip()
     if not raw:
         return None
+    # If the model tried to return JSON but made it invalid, try to extract the unified_diff value anyway.
+    if "\"unified_diff\"" in raw:
+        try:
+            obj = _extract_json_obj(raw)
+            if isinstance(obj.get("unified_diff"), str) and str(obj["unified_diff"]).strip():
+                patch = str(obj["unified_diff"])
+                return patch if patch.endswith("\n") else patch + "\n"
+        except Exception:
+            pass
     candidates: list[str] = [raw]
     if "```" in raw:
         for fence in ("```diff", "```patch", "```json", "```"):

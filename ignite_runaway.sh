@@ -13,6 +13,8 @@ ACTIVATION_MODE="${OMEGA_META_CORE_ACTIVATION_MODE:-simulate}"
 ALLOW_SIMULATE="${OMEGA_ALLOW_SIMULATE_ACTIVATION:-1}"
 WORKTREE_DIR="${OMEGA_IGNITE_WORKTREE_DIR:-${OUT_ROOT}/_worktree}"
 APPLY_TARGETS_CSV="${OMEGA_IGNITE_APPLY_TARGETS:-orchestrator/omega_v19_0/coordinator_v1.py,orchestrator/omega_bid_market_v1.py}"
+GOOGLE_API_KEY_FILE_DEFAULT="${HOME}/.config/omega/google_api_key"
+GOOGLE_API_KEY_FILE="${OMEGA_GOOGLE_API_KEY_FILE:-${GOOGLE_API_KEY_FILE_DEFAULT}}"
 
 if ! [[ "$START_TICK" =~ ^[0-9]+$ ]]; then
   echo "OMEGA_IGNITE_START_TICK must be an unsigned integer" >&2
@@ -38,6 +40,26 @@ if [[ "${WORKTREE_DIR:0:1}" != "/" ]]; then
   WORKTREE_DIR="${ROOT}/${WORKTREE_DIR}"
 fi
 
+maybe_load_google_api_key() {
+  # Avoid embedding secrets in process args/logs. If GOOGLE_API_KEY is unset,
+  # load it from a local file (default: ~/.config/omega/google_api_key).
+  if [[ -n "${GOOGLE_API_KEY:-}" ]]; then
+    return 0
+  fi
+  if [[ -z "${GOOGLE_API_KEY_FILE:-}" ]]; then
+    return 0
+  fi
+  if [[ ! -f "$GOOGLE_API_KEY_FILE" ]]; then
+    return 0
+  fi
+  # Strip CR/LF and whitespace.
+  GOOGLE_API_KEY="$(tr -d '\r\n' <"$GOOGLE_API_KEY_FILE" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')"
+  if [[ -n "${GOOGLE_API_KEY:-}" ]]; then
+    export GOOGLE_API_KEY
+    log_line "SIGNAL=GOOGLE_API_KEY_LOADED source=file path=${GOOGLE_API_KEY_FILE}"
+  fi
+}
+
 ensure_worktree() {
   local worktree_dir="$1"
   mkdir -p "$(dirname "$worktree_dir")"
@@ -52,6 +74,7 @@ ensure_worktree() {
 }
 
 ensure_worktree "$WORKTREE_DIR"
+maybe_load_google_api_key
 
 ignite_on_success() {
   local tick_u64="$1"

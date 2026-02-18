@@ -11,7 +11,7 @@ from typing import Any
 
 from cdel.v18_0.omega_allowlists_v1 import load_allowlists
 from cdel.v18_0.omega_budgets_v1 import debit_budget, load_budgets
-from cdel.v18_0.omega_bid_market_v1 import (
+from orchestrator.omega_bid_market_v1 import (
     bid_market_enabled,
     build_bid_set_v1,
     build_bid_v1,

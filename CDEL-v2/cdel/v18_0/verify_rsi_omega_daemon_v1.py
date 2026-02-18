@@ -43,16 +43,29 @@ from .omega_runaway_v1 import (
     load_runaway_config,
     runaway_enabled,
 )
-from .omega_bid_market_v1 import (
-    bid_market_enabled,
-    build_bid_set_v1,
-    build_bid_v1,
-    build_decision_plan_from_selection,
-    load_optional_bid_market_config,
-    resolve_bidder_params,
-    select_winner,
-    settle_and_advance_market_state,
-)
+try:
+    from orchestrator.omega_bid_market_v1 import (  # type: ignore
+        bid_market_enabled,
+        build_bid_set_v1,
+        build_bid_v1,
+        build_decision_plan_from_selection,
+        load_optional_bid_market_config,
+        resolve_bidder_params,
+        select_winner,
+        settle_and_advance_market_state,
+    )
+except Exception:  # pragma: no cover
+    # Standalone CDEL-v2 runs vendor the market module under cdel.v18_0.
+    from .omega_bid_market_v1 import (
+        bid_market_enabled,
+        build_bid_set_v1,
+        build_bid_v1,
+        build_decision_plan_from_selection,
+        load_optional_bid_market_config,
+        resolve_bidder_params,
+        select_winner,
+        settle_and_advance_market_state,
+    )
 from .omega_temperature_v1 import compute_temperature_q32
 from .omega_trace_hash_chain_v1 import recompute_head
 

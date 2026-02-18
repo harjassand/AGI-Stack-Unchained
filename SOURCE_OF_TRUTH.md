@@ -2,8 +2,8 @@
 
 ## A Complete Reconstruction Manual for the System's Mental Model
 
-**Version**: v19.0 (Super-Unified) | **Generated**: 2025 | **Scope**: Full Codebase  
-**Word Count Target**: 25,000+ words  
+**Version**: v19.0 (Super-Unified) | **Generated**: 2026-02-18 | **Scope**: Full Codebase  
+**Word Count Target**: 30,000+ words  
 **Purpose**: Enable an external intelligence to reconstruct the project's mental model — its intent, architecture, and hidden mechanics — without access to the raw source files.
 
 ---
@@ -22,12 +22,13 @@
    - 2.2 [Observation Phase](#22-observation-phase)
    - 2.3 [Diagnosis Phase](#23-diagnosis-phase)
    - 2.4 [Decision Phase](#24-decision-phase)
-   - 2.5 [Execution & Dispatch Phase](#25-execution--dispatch-phase)
-   - 2.6 [Promotion Phase](#26-promotion-phase)
-   - 2.7 [Activation Phase](#27-activation-phase)
-   - 2.8 [Verification as Replay](#28-verification-as-replay)
-   - 2.9 [The Runaway Escalation Protocol](#29-the-runaway-escalation-protocol)
-   - 2.10 [The Ignite Loop](#210-the-ignite-loop)
+   - 2.5 [The Bid Market (Predation Market)](#25-the-bid-market-predation-market)
+   - 2.6 [Execution & Dispatch Phase](#26-execution--dispatch-phase)
+   - 2.7 [Promotion Phase](#27-promotion-phase)
+   - 2.8 [Activation Phase](#28-activation-phase)
+   - 2.9 [Verification as Replay](#29-verification-as-replay)
+   - 2.10 [The Runaway Escalation Protocol](#210-the-runaway-escalation-protocol)
+   - 2.11 [The Ignite Loop](#211-the-ignite-loop)
 3. [Layer 3: Data Topography & State Management](#layer-3-data-topography--state-management)
    - 3.1 [The Content-Addressed Universe](#31-the-content-addressed-universe)
    - 3.2 [The State Object](#32-the-state-object)
@@ -53,6 +54,24 @@
    - 5.4 [The Polymath Lifecycle](#54-the-polymath-lifecycle)
    - 5.5 [Extension-1: The Proposer Layer](#55-extension-1-the-proposer-layer)
    - 5.6 [Operational Playbook](#56-operational-playbook)
+   - 5.7 [The Native Module Router](#57-the-native-module-router)
+   - 5.8 [The Skill System](#58-the-skill-system)
+   - 5.9 [Self-Optimize-Core Campaign](#59-self-optimize-core-campaign)
+   - 5.10 [Phase0 CCAP & Survival Drill](#510-phase0-ccap--survival-drill)
+6. [Layer 6: The EUDRS-U Stack — Unified Hypothesis for Embodied Intelligence](#layer-6-the-eudrs-u-stack--unified-hypothesis-for-embodied-intelligence)
+   - 6.1 [What Is EUDRS-U?](#61-what-is-eudrs-u)
+   - 6.2 [The Root Tuple](#62-the-root-tuple-eudrs-us-state-object)
+   - 6.3 [The DMPL Runtime](#63-the-dmpl-runtime-deterministic-machine-planning--learning)
+   - 6.4 [The QXRL Training System](#64-the-qxrl-training-system-deterministic-neural-training)
+   - 6.5 [The Vision Pipeline](#65-the-vision-pipeline-deterministic-perception)
+   - 6.6 [The CAC/UFC Certificates](#66-the-cacufc-certificates-verified-advantage--utility)
+   - 6.7 [The ML-Index](#67-the-ml-index-deterministic-retrieval-infrastructure)
+   - 6.8 [The Ontology](#68-the-ontology-hierarchical-concept-management)
+   - 6.9 [The SLS-VM](#69-the-sls-vm-strategy-execution-engine)
+   - 6.10 [The URC-VM](#610-the-urc-vm-universal-reasoning-capsule-vm)
+   - 6.11 [The VPVM STARK Prover](#611-the-vpvm-stark-prover-proof-carrying-code)
+   - 6.12 [EUDRS-U Campaigns & Verification](#612-eudrs-u-campaigns--verification)
+   - 6.13 [Why EUDRS-U Matters](#613-why-eudrs-u-matters)
 
 ---
 
@@ -100,17 +119,17 @@ The reasoning behind making meta-core so minimal is the halting problem applied 
 **Location**: `CDEL-v2/`  
 **Language**: Python  
 **Role**: Deterministic verification of all system operations.  
-**Trust Level**: Verified by RE1. Contains ~50,000+ lines of verification code across 56 distinct verifiers.
+**Trust Level**: Verified by RE1. Contains ~80,000+ lines of verification code across 60+ distinct verifiers.
 
 CDEL-v2 is the workhorse of the system. Its name — "Certified Definitional Extension Ledger" — reveals its heritage: it began as a formal system for defining and verifying extensions to a base logic, and evolved into a general-purpose verification framework.
 
 The key insight behind CDEL-v2's design is **verification through replay**. Rather than checking properties of a result, CDEL-v2 re-executes the computation that produced the result and verifies that its replay produces identical output. This is why determinism is so critical — if every computation is deterministic, then replaying it with the same inputs must produce the same outputs. Any divergence indicates corruption or tampering.
 
-CDEL-v2 is organized into ~54 version directories (`v1_5r` through `v19_0`), each containing verifiers for the campaigns that were current at that version. This accumulation is deliberate — older verifiers are never deleted, because older state bundles still reference them. The system must be able to verify any historical state, not just the current one.
+CDEL-v2 is organized into **43 version directories** (`v1_5r` through `v19_0`), each containing verifiers for the campaigns that were current at that version. This accumulation is deliberate — older verifiers are never deleted, because older state bundles still reference them. The system must be able to verify any historical state, not just the current one.
 
 The current apex versions are:
-- **v18.0**: Contains the Omega daemon verifier (`verify_rsi_omega_daemon_v1.py`, 1,886 lines) and the CCAP universal verifier (`verify_ccap_v1.py`, 819 lines). These two verifiers together form the core of the current verification infrastructure.
-- **v19.0**: Extends v18.0 with federation capabilities — treaty checking, continuity verification, and world snapshot integrity through the Sealed Ingestion Protocol (SIP).
+- **v18.0**: Contains the Omega daemon verifier (`verify_rsi_omega_daemon_v1.py`, 96,356 bytes), the CCAP universal verifier (`verify_ccap_v1.py`, 33,700 bytes), the bid market verifier, native module verifier (`verify_rsi_omega_native_module_v0_1.py`, 11,832 bytes), Polymath verifiers, self-optimize verifier, and the complete EUDRS-U verification surface (88 files, 250KB+ of verification code). The v18.0 directory alone contains 70+ core files and 13 subdirectories.
+- **v19.0**: Extends v18.0 with federation capabilities — treaty checking (31,362 bytes), continuity verification (22,937 bytes), objective J dominance gating, and world snapshot integrity through the Sealed Ingestion Protocol (SIP).
 
 ### RE3: Extension-1 — The Proposer Layer
 
@@ -207,7 +226,7 @@ AGI-Stack-Unchained/
 │
 ├── CDEL-v2/                   # RE2: Verification layer
 │   └── cdel/
-│       ├── v1_5r/ ... v18_0/ # 54 version directories, 56 verifiers
+│       ├── v1_5r/ ... v18_0/ # 43 version directories, 60+ verifiers
 │       ├── v19_0/            # Federation extension
 │       │   ├── federation/   # Treaty verification
 │       │   ├── continuity/   # Overlap continuity checking
@@ -240,7 +259,7 @@ AGI-Stack-Unchained/
 │   ├── omega/                # Omega operational tools
 │   └── polymath/             # Domain discovery tools
 │
-├── campaigns/                 # Campaign configuration packs (78+ campaigns)
+├── campaigns/                 # Campaign configuration packs (86+ campaigns)
 ├── polymath/                  # Domain registry and store
 ├── domains/                   # Conquered domain data
 ├── runs/                      # Execution run outputs
@@ -293,7 +312,7 @@ State flows forward through this pipeline as immutable data structures. Each pha
 
 ## 2.2 Observation Phase
 
-**Module**: `omega_observer_v1.py` (1,195 lines) | **Entry**: `observe()`
+**Module**: `omega_observer_v1.py` (48,672 bytes) | **Entry**: `observe()`
 
 The observation phase collects metrics from across the system and assembles them into a canonical observation report. This report is the system's sensory input — everything the daemon knows about the world at the start of a tick.
 
@@ -313,7 +332,7 @@ The separation from decision-making is intentional: the diagnoser identifies *wh
 
 ## 2.4 Decision Phase
 
-**Module**: `omega_decider_v1.py` (789 lines) | **Entry**: `decide()`
+**Module**: `omega_decider_v1.py` (32,879 bytes) | **Entry**: `decide()`
 
 The decision phase is the daemon's brain. Given observation, diagnosis, state, policy, and campaign registry, it selects the next action through a multi-stage pipeline:
 
@@ -325,15 +344,54 @@ The decision phase is the daemon's brain. Given observation, diagnosis, state, p
 
 Under **runaway mode**, the decider's behavior changes significantly: escalation levels override normal goal selection, forcing capability-expansion campaigns at increasing intensity.
 
-## 2.5 Execution & Dispatch Phase
+## 2.5 The Bid Market (Predation Market)
 
-**Module**: `omega_executor_v1.py` (349 lines) | **Entry**: `dispatch_campaign()`
+**Module**: `omega_bid_market_v1.py` (817 lines, 31,696 bytes) | **Entry**: `select_winner()`, `settle_and_advance_market_state()`
+
+The **Bid Market** (internally called the "predation market") is a deterministic resource-allocation mechanism that replaces simple rule-based campaign selection with an economics-inspired competition. When the bid market is enabled, campaigns compete for execution by submitting bids, and the market allocates the tick to the highest-scoring bidder.
+
+### How It Works
+
+1. **Bid Construction** (`build_bid_v1()`): Each eligible campaign submits a bid containing:
+   - `roi_q32`: Expected return-on-investment in Q32.
+   - `confidence_q32`: Campaign's confidence in its ROI estimate.
+   - `horizon_ticks_u64`: How many future ticks the campaign expects to need.
+   - `predicted_cost_q32`: Estimated compute cost.
+   All values are Q32 fixed-point for deterministic comparison.
+
+2. **Bid Set Assembly** (`build_bid_set_v1()`): All campaign bids are collected into a canonical bid set, hash-bound to the observation report, market state, config, and registry.
+
+3. **Winner Selection** (`select_winner()`, lines 567–700): The market ranks bids using a composite score:
+   - `score_q32` = f(ROI, credibility, confidence, campaign_id)
+   - Credibility is a per-campaign reputation metric that increases with successful ticks and decreases with failures.
+   - Tie-breaking uses `(score desc, roi_q32 desc, credibility_q32 desc, confidence_q32 desc, campaign_id asc)` — fully deterministic.
+
+4. **Settlement** (`settle_and_advance_market_state()`, lines 279–440): After each tick, the market settles:
+   - Computes J (objective function) from the observation report.
+   - Updates per-campaign bankroll based on actual vs. predicted performance.
+   - Applies bankruptcy rules: campaigns that exhaust their bankroll are disabled.
+   - Advances credibility scores based on outcome.
+   - Emits a settlement receipt binding all inputs and outputs.
+
+### Market State
+
+The market maintains per-campaign state:
+- `bankroll_q32`: Available budget (starts at configured initial value).
+- `credibility_q32`: Reputation score (clamped to [0, Q32_ONE]).
+- `streak_u64`: Consecutive wins/losses.
+- `last_selected_tick_u64`: When the campaign was last chosen.
+
+The market state is content-addressed and hash-chained, making it fully auditable and replay-verifiable. The `campaign_bid_market_toy_v1.py` provides a toy implementation for testing, with corresponding good/bad test campaigns in `campaigns/rsi_bid_market_toy_good_v1/` and `campaigns/rsi_bid_market_toy_bad_v1/`.
+
+## 2.6 Execution & Dispatch Phase
+
+**Module**: `omega_executor_v1.py` (12,708 bytes) | **Entry**: `dispatch_campaign()`
 
 The executor dispatches the selected campaign through workspace materialization (isolated directory with only permitted files), pruning (stripping large binaries and historical data), subprocess execution (with controlled `PYTHONPATH` and timeouts), and output collection. The executor is deliberately simple — a launch mechanism, not a control mechanism. Intelligence lives in the decider and promoter.
 
-## 2.6 Promotion Phase
+## 2.7 Promotion Phase
 
-**Module**: `omega_promoter_v1.py` (1,535 lines — the largest module) | **Entry**: `run_promotion()`
+**Module**: `omega_promoter_v1.py` (63,925 bytes — the largest module) | **Entry**: `run_promotion()`
 
 The promotion phase is where verification meets commitment. It orchestrates multi-layer verification:
 
@@ -345,21 +403,21 @@ The promotion phase is where verification meets commitment. It orchestrates mult
 
 **Reason codes** (`CCAP_REJECTION`, `CONTINUITY_VIOLATION`, `BUDGET_EXHAUSTED`, `SCHEMA_MISMATCH`) are consumed by the Genesis Engine SH-1's receipt-driven learning system — the proposer learns from rejections.
 
-## 2.7 Activation Phase
+## 2.8 Activation Phase
 
-**Module**: `omega_activator_v1.py` (332 lines) | **Entry**: `apply_activation()`, `rollback_activation()`
+**Module**: `omega_activator_v1.py` (18,311 bytes) | **Entry**: `apply_activation()`, `rollback_activation()`
 
 If promotion succeeds, activation wraps meta-core's commit process: Stage -> Canary (dry-run) -> Commit (atomic pointer swap) -> Ledger (crash-safe audit entry). Rollback is always available as a safety valve — it's an atomic pointer swap + ledger entry. Simulate mode (`OMEGA_META_CORE_ACTIVATION_MODE=simulate`) skips the actual state swap for testing.
 
-## 2.8 Verification as Replay
+## 2.9 Verification as Replay
 
-**Module**: `verify_rsi_omega_daemon_v1.py` (1,886 lines) | **Entry**: `verify()`
+**Module**: `verify_rsi_omega_daemon_v1.py` (96,356 bytes) | **Entry**: `verify()`
 
 The Omega verifier can verify any tick by replaying the entire pipeline and confirming outputs match. It loads the observation report and confirms its hash, verifies the parent chain, replays decision logic, confirms execution outputs match schemas, and replays promotion logic. Any divergence between replay and recorded artifacts fails verification. This is the power of determinism: verification is simply re-execution.
 
-## 2.9 The Runaway Escalation Protocol
+## 2.10 The Runaway Escalation Protocol
 
-**Module**: `omega_runaway_v1.py` (360 lines)
+**Module**: `omega_runaway_v1.py` (13,962 bytes)
 
 When the system detects stagnation (flat or declining capability scores over multiple ticks), it enters runaway mode — controlled escalation through levels 0 to 5+, where each level increases compute budgets, shifts routing toward more aggressive strategies, and loosens non-constitutional constraints.
 
@@ -367,7 +425,7 @@ At level 5 with reason `TESTING`, the system prioritizes `OBJ_EXPAND_CAPABILITIE
 
 `OMEGA_DISABLE_FORCED_RUNAWAY=1` prevents entry; `OMEGA_BLACKBOX` forces a specific level.
 
-## 2.10 The Ignite Loop
+## 2.11 The Ignite Loop
 
 **Script**: `ignite_runaway.sh` (307 lines)
 
@@ -891,29 +949,53 @@ Additional tools in the orchestrator:
 
 ## 5.2 Campaign Configuration
 
-Each campaign is configured through a **campaign pack** JSON file in the `campaigns/` directory. The 78+ campaigns span multiple operational domains:
+Each campaign is configured through a **campaign pack** JSON file in the `campaigns/` directory. The **86+ campaigns** span multiple operational domains:
 
 ### Self-Improvement Campaigns
 - `rsi_ge_symbiotic_optimizer_sh1_v0_1`: Genesis Engine SH-1 code generation.
-- `rsi_omega_daemon_v18_0` / `rsi_omega_daemon_v19_0`: Omega daemon execution.
-- `rsi_omega_daemon_v19_0_super_unified`: The master campaign for the ignite loop.
+- `rsi_omega_daemon_v18_0` / `rsi_omega_daemon_v18_0_prod`: Omega v18 daemon execution.
+- `rsi_omega_daemon_v19_0` / `rsi_omega_daemon_v19_0_unified` / `rsi_omega_daemon_v19_0_super_unified`: v19 unified daemon.
+- `rsi_omega_daemon_v19_0_llm_enabled`: Full LLM-integrated daemon for advanced reasoning.
+- `rsi_self_optimize_core_v1`: Self-optimization of core Omega modules (hotspot patching).
+- `rsi_shadow_proposal_v1`: Shadow-mode proposal testing.
 
 ### Scientific Campaigns
 - `rsi_sas_science_v13_0`: Scientific theory discovery and validation.
-- `rsi_boundless_science_v*`: Open-ended scientific exploration.
+- `rsi_boundless_science_v*`: Open-ended scientific exploration (v4 through v9).
 - `rsi_boundless_math_v*`: Mathematical conjecture generation and proof.
 
 ### System Campaigns
 - `rsi_sas_code_v12_0`: Code-level self-amendment.
 - `rsi_sas_system_v14_0`: System-level self-amendment.
 - `rsi_sas_kernel_v15_0`: Kernel-level verification.
-- `rsi_sas_metasearch_v16_1`: Search optimization.
+- `rsi_sas_metasearch_v16_0` / `rsi_sas_metasearch_v16_1`: Search optimization.
 - `rsi_sas_val_v17_0`: Native code lift verification.
 
 ### Polymath Campaigns
 - `rsi_polymath_scout_v1`: Domain void discovery.
 - `rsi_polymath_bootstrap_domain_v1`: New domain setup.
 - `rsi_polymath_conquer_domain_v1`: Domain conquest and validation.
+
+### EUDRS-U Campaigns
+- `rsi_eudrs_u_vision_capture_v1`: Vision pipeline stage 0 — frame capture.
+- `rsi_eudrs_u_vision_perception_v1`: Perception module execution.
+- `rsi_eudrs_u_dmpl_plan_v1`: DMPL deterministic planning.
+- `rsi_eudrs_u_qxrl_train_v1`: QXRL neural training replay.
+- `rsi_eudrs_u_ontology_update_v1`: Ontology concept hierarchy update.
+- `rsi_eudrs_u_ml_index_build_v1`: ML-Index rebuild.
+- `rsi_eudrs_u_promote_v1`: EUDRS-U root-tuple promotion.
+
+### Bid Market & Skill Campaigns
+- `rsi_bid_market_toy_good_v1` / `rsi_bid_market_toy_bad_v1`: Bid-market test campaigns.
+- `rsi_omega_skill_*_v1`: 11 skill campaign types (efficiency, ontology, persistence, thermo, transfer, etc.).
+- `rsi_omega_native_module_v0_1`: Native module integration testing.
+
+### Hardening & Resilience Campaigns
+- `rsi_omega_phase0_immune_repair_ccap_v0_1`: Phase0 immune-system repair testing.
+- `rsi_omega_phase0_victim_ccap_v0_1`: Deliberate adversarial CCAP testing.
+- `rsi_survival_drill_v*`: Multi-scenario survival testing.
+- `rsi_omega_daemon_hardening_v1`: Daemon hardening and stress testing.
+- `rsi_omega_daemon_integrity_v*`: Integrity verification campaigns.
 
 ### Architecture Campaigns
 - `rsi_arch_synthesis_v11_*`: Automated architecture proposals.
@@ -1083,6 +1165,314 @@ CDEL-v2/scripts/smoke_rebuild.sh
 CDEL-v2/scripts/smoke_statcert_adopt.sh
 ```
 
+## 5.7 The Native Module Router
+
+**Module**: `orchestrator/native/native_router_v1.py` (595 lines, 21,122 bytes) | **Entry**: `route_native_call()`, `native_healthcheck()`
+
+The **Native Module Router** provides a ctypes-based FFI bridge for compiled native modules (shared libraries), enabling performance-critical operations to run at native speed while remaining within the deterministic verification framework.
+
+### Architecture
+
+1. **ABI v1 Protocol**: Native modules expose a C ABI with structured input/output. The router handles bloblist encoding/decoding — serializing Python data into flat binary buffers, calling the native function, and deserializing the result.
+
+2. **Shadow-Mode Dual Execution**: When a native module is first deployed, the router runs both the Python reference implementation and the native implementation in parallel, comparing outputs. Any divergence triggers an automatic disable of the native module and fallback to Python. This ensures that native compilation never introduces non-determinism.
+
+3. **Healthcheck Vectors**: `native_healthcheck()` runs deterministic test vectors against each native module to verify correctness. Healthcheck results are content-addressed and hash-bound to the module's binary hash.
+
+4. **Policy Registry**: A gating registry (`orchestrator/native/native_policy_v1.json`) controls which operations are eligible for native acceleration. Operations not in the registry always use the Python path.
+
+5. **Caching & Statistics**: The router maintains a per-module LRU cache and collects runtime statistics (call count, total time, mismatch count) for observability.
+
+Native modules are verified by `verify_rsi_omega_native_module_v0_1.py` (11,832 bytes), which replays healthcheck vectors and validates shadow-mode comparison results.
+
+## 5.8 The Skill System
+
+**Directory**: `CDEL-v2/cdel/v18_0/skills/` (7 files, ~21KB total)
+
+The **Skill System** provides a generic framework for running modular analytical tasks ("skills") against the daemon's state, producing structured reports that feed back into the observation pipeline.
+
+### Core Components
+
+- **`skill_runner_v1.py`** (224 lines): The generic skill executor. Given a tick number, state root, config directory, and adapter module name, it:
+  1. Discovers the authoritative state root (checking `OMEGA_DAEMON_STATE_ROOT_REL`, `OMEGA_DAEMON_STATE_ROOT`, or scanning `runs/`).
+  2. Builds an `inputs_descriptor` by hashing the current snapshot, observation, state, trace chain, perf, stats, and scorecard.
+  3. Invokes the adapter's `compute_skill_report()` function.
+  4. Normalizes the output (Q32 metrics, flags, recommendations) into a canonical `omega_skill_report_v1` artifact.
+  5. Writes the report content-addressed to disk.
+
+- **Domain Adapters** (5 adapters): Each adapter implements a `compute_skill_report()` function for its domain:
+  - `eff_flywheel_v2_0_adapter_v1.py`: Efficiency flywheel — measures throughput and resource utilization.
+  - `ontology_v2_v1_6r_adapter_v1.py`: Ontology health — concept hierarchy completeness and stability.
+  - `persistence_v6_adapter_v1.py`: State persistence — data durability and recovery readiness.
+  - `thermo_v5_adapter_v1.py`: System thermodynamics — thermal budget and cooling efficiency.
+  - `transfer_v1_6r_adapter_v1.py`: Knowledge transfer — cross-domain learning effectiveness.
+
+Each skill report contains Q32 metrics (e.g., `{"throughput_q32": {"q": 2147483648}}`), boolean flags (e.g., `["HEALTHY", "BUDGET_OK"]`), and actionable recommendations (e.g., `{"kind": "OPTIMIZE", "detail": "Consider reducing batch size"}`). Skill campaigns in `campaigns/rsi_omega_skill_*_v1/` invoke these adapters through the orchestrator.
+
+## 5.9 Self-Optimize-Core Campaign
+
+**Module**: `campaign_self_optimize_core_v1.py` (342 lines, 12,219 bytes) | **Entry**: `run()`
+
+The **Self-Optimize-Core** campaign enables the Omega daemon to optimize its own core modules through a controlled benchmark-driven process.
+
+### How It Works
+
+1. **Hotspot Identification**: The campaign scans the latest tick performance artifacts to find the slowest execution stage (highest median nanoseconds).
+
+2. **Patch Generation**: A deterministic hotspot patch is generated targeting the identified bottleneck. The patch is constrained to only modify files within allowed prefixes (`CDEL-v2/cdel/v18_0/`, `tools/omega/`, `Genesis/schema/v18_0/`) and is explicitly forbidden from touching verifiers (`CDEL-v2/cdel/v18_0/verify_rsi_*`), meta-core engine (`meta-core/engine/`), or the kernel (`meta-core/kernel/`).
+
+3. **Microbenchmark A/B Testing**: The campaign runs the Omega daemon for `N` ticks (default 20) on both the original and patched code, collecting timing data. It compares median stage timings to determine whether the patch actually improves performance.
+
+4. **CCAP Emission**: If the patch passes the performance gate (new median < old median for the target stage), a CCAP bundle is emitted for verification. If the patch regresses performance, it is discarded with a documented reason.
+
+This campaign is a key example of the system's self-optimizing capability — the daemon literally benchmarks and patches its own execution pipeline.
+
+## 5.10 Phase0 CCAP & Survival Drill
+
+### Phase0 CCAP — Adversarial Testing
+
+**Modules**: `campaign_phase0_victim_ccap_v0_1.py` + `campaign_phase0_immune_repair_ccap_v0_1.py`
+
+The **Phase0 CCAP** campaigns deliberately test the system's immune system by generating adversarial CCAP bundles:
+
+- **Victim Campaign** (`phase0_victim_ccap`): Generates intentionally malformed or policy-violating CCAP bundles to verify that the verification pipeline correctly rejects them. This is adversarial red-teaming of the system's own defenses.
+- **Immune Repair Campaign** (`phase0_immune_repair_ccap`): After a victim campaign, this campaign verifies that the immune system remains intact and can correctly process legitimate CCAP bundles. It serves as a regression test for the verification infrastructure.
+
+Both campaigns are gated by authority pins and verified by their respective CDEL-v2 verifiers.
+
+### Survival Drill Campaigns
+
+**Directory**: `campaigns/rsi_survival_drill_v*/`
+
+Survival drills stress-test the daemon's resilience by simulating failure scenarios: corrupted state, missing artifacts, budget exhaustion, and forced rollbacks. Each drill produces a survival report documenting which failure modes were handled correctly and which revealed weaknesses. The drill results feed into the observation pipeline, enabling the decider to route toward hardening campaigns when vulnerabilities are detected.
+
+---
+
+# Layer 6: The EUDRS-U Stack — Unified Hypothesis for Embodied Intelligence
+
+## 6.1 What Is EUDRS-U?
+
+**EUDRS-U** (Embodied Unified Decision & Reasoning System — Unified hypothesis) is the AGI-Stack's most ambitious subsystem: a complete, deterministic, replay-verifiable machine-learning and decision-planning stack that operates entirely within the RE1-RE4 trust model. It represents the system's path from *text-level self-improvement* (CCAP patches, campaign configs) to *neural-level self-improvement* — deterministic training, inference, planning, and world-modeling with full cryptographic verification.
+
+EUDRS-U is implemented as a sub-package within RE2: `CDEL-v2/cdel/v18_0/eudrs_u/` containing **88 files** totaling over **800,000 bytes** of deterministic runtime and verification logic. It has its own orchestrator campaigns, schemas, verifiers, and a dedicated artifact namespace under `polymath/registry/eudrs_u/`.
+
+### Why It Exists
+
+Before EUDRS-U, the AGI-Stack's self-improvement was limited to text-level operations — generating Python patches, modifying JSON configurations, adjusting campaign parameters. EUDRS-U extends self-improvement to the neural level: the system can now train neural networks, run deterministic inference, plan actions in world models, and perceive structured environments — all with the same replay-verification guarantees that protect CCAP patches. This is the architectural bridge between "code that rewrites code" and "code that learns from experience."
+
+## 6.2 The Root Tuple — EUDRS-U's State Object
+
+**Schema**: `eudrs_u_root_tuple_v1` | **Module**: `eudrs_u_root_tuple_v1.py`
+
+The Root Tuple is EUDRS-U's equivalent of the Omega state object — a compact, content-addressed JSON document that represents the complete state of the learning subsystem at a given epoch. It contains **8 component roots**:
+
+| Root | Symbol | Manages |
+|------|--------|---------|
+| `SRoot` | S | **Strategy** — Active strategy cartridge and SLS-VM state |
+| `ORoot` | O | **Ontology** — Concept hierarchy with stability gates |
+| `KRoot` | K | **Knowledge** — ML-Index retrieval infrastructure state |
+| `CRoot` | C | **CAC/UFC** — Certificate store for advantage and utility-flow proofs |
+| `MRoot` | M | **Model** — QXRL neural weights manifest (Merkle-sharded Q32 tensors) |
+| `IRoot` | I | **Inference** — DMPL planner state and action traces |
+| `WRoot` | W | **World** — Vision pipeline perception state |
+| `DRoot` | D | **Data** — Training dataset pack references |
+
+Each root is a SHA-256 hash pointing to the corresponding subsystem's state artifact. The Root Tuple's own hash creates a single commitment to the entire EUDRS-U state.
+
+**Epoch monotonicity**: The Root Tuple carries an `epoch_u64` field that must strictly increase with each promotion. The EUDRS-U promotion verifier (`verify_eudrs_u_promotion_v1.py`, 954 lines) checks that `staged_epoch > active_epoch`, preventing replay attacks where an old tuple could overwrite a newer one.
+
+## 6.3 The DMPL Runtime — Deterministic Machine Planning & Learning
+
+**Module**: `dmpl_planner_dcbts_l_v1.py` (641 lines) | **Entry**: `dmpl_planner_dcbts_l_v1()`
+
+The DMPL (Deterministic Machine Planning & Learning) runtime provides the planning subsystem. Its core algorithm is **DCBTS-L** (Deterministic Constrained Beam-search Tree Search — Laddered):
+
+### How DCBTS-L Plans
+
+1. **Action Enumeration**: Given a Z-Vector (a deterministic state representation), the planner enumerates all legal actions from the current state. Each action is scored using the Q32 value function.
+
+2. **Layered Expansion**: The search tree is expanded in layers (hence "Laddered"). At each layer, the top-K nodes by score are expanded (beam pruning), preventing exponential blowup. The beam width is configurable via budget parameters.
+
+3. **Z-Vector Transitions**: Each action application produces a new Z-Vector through a deterministic state transition function. The transition function operates entirely in Q32 arithmetic — no floating-point at any stage.
+
+4. **Trace Recording**: Every expansion step records: the parent node, action taken, resulting Z-Vector hash, and Q32 score. This trace is content-addressed and forms part of the promotion evidence.
+
+5. **Plan Result**: The planner emits a `PlanResultV1` containing the best plan (sequence of actions), its total score, the full expansion trace, and budget consumption metrics. All values are deterministic and replay-verifiable.
+
+The DMPL subsystem also includes: `dmpl_sgd_v1.py` (SGD optimizer for plan scoring), `dmpl_trace_v1.py` (trace management), `dmpl_retrieval_v1.py` (ML-Index integration), `dmpl_batch_v1.py` (batch planning), `dmpl_loss_v1.py` (loss computation), and `dmpl_forward_v1.py` (forward model).
+
+## 6.4 The QXRL Training System — Deterministic Neural Training
+
+**Module**: `qxrl_train_replay_v1.py` (1,144 lines) | **Entry**: `qxrl_train_replay_v1()`
+
+QXRL (Q32 eXtensible Representation Learning) is the system's deterministic neural training framework. Unlike conventional ML frameworks that use IEEE 754 floating-point, QXRL operates entirely in **Q32 integer arithmetic**, making every training step bitwise-reproducible.
+
+### Architecture
+
+- **Weights Manifest**: Neural network weights are stored as a Merkle-sharded manifest. Each shard contains Q32 tensor blocks with deterministic layout. The manifest's Merkle root commits to all weights simultaneously.
+
+- **Q32 Tensor Operations**: Forward and backward passes use Q32 `mul`, `add`, `div` operations. Activations, gradients, and optimizer state are all Q32 integers. This eliminates platform-dependent floating-point rounding.
+
+- **Deterministic PRNG**: Batch selection, dropout masks, and any stochastic operations use a seeded PRNG (`run_seed`) that produces identical sequences across all platforms. The PRNG is pinned per epoch.
+
+- **Training Loop**: Each training step follows a strict sequence:
+  1. **Batch Selection**: Deterministic indexing from the dataset pack using the epoch's PRNG seed.
+  2. **Forward Pass**: Q32 matrix multiplication, activation functions, and loss computation.
+  3. **Backward Pass**: Q32 gradient computation via computational graph replay.
+  4. **Optimizer Step**: Q32 SGD/Adam state update with deterministic learning rate schedule.
+  5. **Step Digest**: A content-addressed digest of all inputs, intermediates, and outputs for verification.
+
+### Verification
+
+The QXRL verifier replays the entire training step from the same inputs and confirms that: (a) the weights manifest hashes match, (b) the PRNG produced the same batch indices, (c) the forward pass produced the same intermediate hashes, (d) the optimizer update produced the same new weights, and (e) the step digest matches.
+
+## 6.5 The Vision Pipeline — Deterministic Perception
+
+**Orchestrators**: `rsi_eudrs_u_vision_capture_v1.py` (504 lines), `rsi_eudrs_u_vision_perception_v1.py`
+
+The Vision Pipeline provides EUDRS-U with structured world perception through a multi-stage deterministic process:
+
+### Pipeline Stages
+
+1. **Stage 0 — Capture** (`rsi_eudrs_u_vision_capture_v1.py`): Raw frame ingestion. The capture campaign reads from configured vision sources, decodes frames using deterministic codec parameters, and emits content-addressed frame artifacts. Each frame is bound to its source hash and capture parameters.
+
+2. **Stage 1 — Perception**: Frame processing through deterministic vision modules. The perception stage applies feature extraction, object detection, and scene understanding — all using Q32 arithmetic. No stochastic components.
+
+3. **Stage 2 — Index Build**: Processed perception outputs are indexed into the ML-Index for retrieval by the DMPL planner and QXRL trainer. Index entries are content-addressed and Merkle-committed.
+
+The vision pipeline produces **17 distinct artifact types** across the capture, perception, and indexing stages, each with its own Genesis schema.
+
+## 6.6 The CAC/UFC Certificates — Verified Advantage & Utility
+
+**Modules**: `cac_v1.py` (180 lines) + `ufc_v1.py` (79 lines)
+
+The **CAC** (Counterfactual Advantage Certificate) and **UFC** (Utility-Flow Certificate) subsystems provide deterministic structural verification for the system's self-improvement signals:
+
+- **CAC** (`cac_v1.json` + `cac_episode_record_v1.bin`): Encodes counterfactual advantage estimates — "how much better would the outcome have been with a different action?" The CAC verifier checks schema-pinned structural invariants: field presence, type correctness, hash binding, and episode record binary format compliance.
+
+- **UFC** (`ufc_v1.json`): Encodes utility-flow certificates — the net utility gain or loss from a sequence of actions. The UFC verifier focuses on schema-pinned structural invariants required for replay verification, with the full derivation logic defined in the OpSet.
+
+Both certificates feed into the DMPL planner's scoring function and the QXRL trainer's loss computation, creating a verified feedback loop for learning.
+
+## 6.7 The ML-Index — Deterministic Retrieval Infrastructure
+
+**Modules**: `ml_index_v1.py`, `ml_index_build_v1.py`, `ml_index_query_v1.py`
+
+The ML-Index provides deterministic nearest-neighbor retrieval for EUDRS-U's planning and training subsystems. Key properties:
+
+- **Deterministic Insertion**: Index entries are ordered by content hash, ensuring identical insertion order regardless of ingestion timing.
+- **Deterministic Query**: Similarity queries use Q32 distance metrics, producing identical result sets on all platforms.
+- **Merkle-Committed**: The index state is committed via a Merkle root, enabling verification of both the index contents and query results.
+
+The ML-Index is used by: DMPL (retrieving relevant experiences for planning), QXRL (sampling training data), and the Vision Pipeline (indexing perception outputs).
+
+## 6.8 The Ontology — Hierarchical Concept Management
+
+**Modules**: `ontology_v1.py`, `ontology_gate_v1.py`
+
+The Ontology subsystem manages EUDRS-U's concept hierarchy — the structured knowledge representation that organizes learned concepts into a directed acyclic graph. Key features:
+
+- **Stability Gates** (`ontology_gate_v1.py`): Before a concept can be added or modified in the ontology, it must pass stability gates — deterministic checks that the concept doesn't contradict existing knowledge, maintains hierarchical consistency, and has sufficient evidence support. Gates use Q32 confidence thresholds.
+- **Content-Addressed Concepts**: Each concept node is identified by its content hash, making the ontology immutable and auditable.
+- **ORoot Commitment**: The entire ontology state is committed via the ORoot hash in the Root Tuple.
+
+## 6.9 The SLS-VM — Strategy Execution Engine
+
+**Module**: `sls_vm_v1.py` (1,363 lines) | **Entry**: `SLSVirtualMachine.run()`
+
+The **SLS-VM** (Strategy Logic System — Virtual Machine) is a deterministic typed stack machine that executes strategy cartridges. It's EUDRS-U's mechanism for executing complex, multi-step strategies.
+
+### Architecture
+
+- **SLS1 Binary Format**: Strategies are compiled into SLS1 cartridge binaries — a custom bytecode format with a header, instruction stream, and constant pool.
+- **Typed Stack Machine**: The VM operates on a typed stack with operations for integers (Q32), booleans, strings, and structured data. Type mismatches are fatal (fail-closed).
+- **Budget Enforcement**: Every instruction consumes budget units. When the budget is exhausted, the VM halts with `BUDGET_EXHAUSTED`. This prevents infinite loops and bounds computation time.
+- **Deterministic Log Chain**: Every VM execution step appends a log entry with the instruction pointer, stack state hash, and operation result. The log chain is hash-linked, creating a verifiable execution trace.
+- **31 Instruction Opcodes**: Including arithmetic (`ADD_Q32`, `MUL_Q32`, `DIV_Q32`), control flow (`JMP`, `JZ`, `CALL`, `RET`), stack manipulation (`PUSH`, `POP`, `DUP`), comparison (`CMP_Q32`, `CMP_EQ`), and I/O operations that read from the deterministic environment.
+
+## 6.10 The URC-VM — Universal Reasoning Capsule VM
+
+**Module**: `urc_vm_v1.py`
+
+The **URC-VM** executes universal reasoning capsules — portable, deterministic reasoning programs that can perform logical inference, constraint satisfaction, and deductive reasoning. The URC-VM differs from the SLS-VM in that it operates on logical propositions rather than numerical computations, and it provides built-in support for unification, backtracking, and constraint propagation — all in deterministic Q32.
+
+## 6.11 The VPVM STARK Prover — Proof-Carrying Code
+
+**Module**: `vpvm_stark_prover_v1.py` (1,016 lines) | **Entry**: `prove()`, `verify_proof()`
+
+The **VPVM STARK Prover** generates cryptographic proofs of correct computation, enabling **Proof-Carrying Code** for the PCLP (Proof-Carrying Logic Protocol) fast-path.
+
+### Cryptographic Stack
+
+1. **Goldilocks Field**: All arithmetic operates in the Goldilocks prime field (p = 2⁶⁴ − 2³² + 1), chosen for its efficient reduction on 64-bit hardware.
+2. **Poseidon Hash**: The prover uses Poseidon for Merkle tree commitments, optimized for algebraic circuits.
+3. **AIR Constraints**: Computation correctness is expressed as Algebraic Intermediate Representation constraints — polynomial equations that the execution trace must satisfy.
+4. **FRI Protocol**: The Fast Reed-Solomon Interactive Oracle Proof provides the core soundness guarantee, proving that the committed polynomials are close to low-degree polynomials.
+
+### How It Works
+
+1. The prover takes an execution trace (e.g., a QXRL training step or a DMPL planning pass) and expresses it as an AIR table.
+2. It commits to the trace using Poseidon-based Merkle trees.
+3. It constructs the composition polynomial from the AIR constraints.
+4. It runs the FRI protocol to prove that the composition polynomial is low-degree.
+5. It emits a proof artifact that can be verified without re-executing the computation.
+
+This enables a dramatic verification speedup: instead of replaying an entire training step (which could take minutes), the verifier checks a STARK proof (which takes milliseconds). The VPVM prover is the only component in the AGI-Stack that uses modern cryptographic proof systems.
+
+## 6.12 EUDRS-U Campaigns & Verification
+
+### 7 Omega-Dispatchable Campaigns
+
+EUDRS-U is operated through 7 dedicated campaigns, each responsible for one stage of the embodied intelligence pipeline:
+
+| Campaign | Stages | Function |
+|----------|--------|----------|
+| `rsi_eudrs_u_vision_capture_v1` | Capture | Raw frame ingestion from vision sources |
+| `rsi_eudrs_u_vision_perception_v1` | Perception | Feature extraction and scene understanding |
+| `rsi_eudrs_u_dmpl_plan_v1` | Planning | DCBTS-L deterministic planning |
+| `rsi_eudrs_u_qxrl_train_v1` | Training | Deterministic neural network training |
+| `rsi_eudrs_u_ontology_update_v1` | Knowledge | Concept hierarchy maintenance |
+| `rsi_eudrs_u_ml_index_build_v1` | Indexing | Retrieval infrastructure rebuild |
+| `rsi_eudrs_u_promote_v1` | Promotion | Root Tuple advancement |
+
+Each campaign is orchestrated via `orchestrator/rsi_eudrs_u_*_v1.py` scripts and follows the standard Omega tick lifecycle: observe → decide → dispatch → execute → promote → activate.
+
+### Verification Surface
+
+EUDRS-U's verification surface is massive — over **250,000 bytes** of verifier code. The central verifier `verify_eudrs_u_promotion_v1.py` (954 lines) orchestrates:
+
+- Root Tuple epoch monotonicity checks.
+- Per-root hash verification (each SRoot, ORoot, KRoot, etc. must match its referenced artifact).
+- QXRL training step deterministic replay.
+- DMPL planning trace replay.
+- ML-Index Merkle root verification.
+- VPVM STARK proof verification (fast-path when proofs are available).
+- CAC/UFC certificate structural validation.
+- Budget compliance for all component executions.
+
+### EUDRS-U Schemas
+
+EUDRS-U defines **40+ Genesis layer schemas** for its artifacts, including:
+- `eudrs_u_root_tuple_v1`: The master state object.
+- `eudrs_u_dmpl_plan_v1`, `eudrs_u_dmpl_trace_v1`: Planning artifacts.
+- `eudrs_u_qxrl_weights_manifest_v1`, `eudrs_u_qxrl_step_digest_v1`: Training artifacts.
+- `eudrs_u_vision_frame_v1`, `eudrs_u_perception_report_v1`: Vision artifacts.
+- `eudrs_u_cac_v1`, `eudrs_u_ufc_v1`: Certificate artifacts.
+- `eudrs_u_sls_cartridge_v1`, `eudrs_u_sls_exec_log_v1`: Strategy artifacts.
+- `eudrs_u_vpvm_proof_v1`: STARK proof artifacts.
+
+## 6.13 Why EUDRS-U Matters
+
+EUDRS-U is the architectural embodiment of the AGI-Stack's ultimate goal: **neural-level self-improvement with constitutional guarantees**. Before EUDRS-U, the system could modify its own code — but code modification is inherently limited by the creativity of text-based patch generation. With EUDRS-U, the system can:
+
+1. **Learn from experience**: Train neural networks on observation data, creating learned representations that improve planning quality over time.
+2. **Plan deterministically**: Use learned models to plan multi-step actions in world models, evaluating plans via verified advantage certificates.
+3. **Perceive structured environments**: Process visual data through a deterministic vision pipeline, building indexed knowledge bases.
+4. **Prove correctness**: Generate STARK proofs of computation, enabling fast verification without full replay.
+5. **Maintain constitutional control**: Every EUDRS-U operation — training, planning, perception, strategy execution — is replay-verifiable and fail-closed, operating within the same RE1-RE4 trust hierarchy that protects CCAP patches.
+
+This makes EUDRS-U not just a machine learning library, but a **constitutionally-governed learning system** — perhaps the first of its kind. The system can learn and grow, but its learning is bounded by the same verification infrastructure that prevents code-level self-modification from going wrong.
+
 ---
 
 # Appendix A: Critical File Reference
@@ -1209,7 +1599,7 @@ This is the system improving itself: generating patches, verifying them through 
 
 *End of Source of Truth document.*
 *Total coverage: 5 Universal Context layers, 56+ verifiers, 78+ campaigns, 4 trust layers.*
-*Generated from comprehensive analysis of over 15,000 lines of core source code.*
+*Generated from comprehensive analysis of over 25,000+ lines of core source code across 10+ major components.*
 
 ---
 
@@ -2908,5 +3298,5 @@ This is what "AGI-Stack-Unchained" means: **maximum freedom within constitutiona
 ---
 
 *Document: AGI-Stack-Unchained Source of Truth*
-*Total sections: 5 Layers + Deep Dive + Detailed Module Analysis + Design Rationale + 12 Appendices*
-*Generated from analysis of 15,000+ lines of core source code across 6 major components*
+*Total sections: 6 Layers + Deep Dive + Detailed Module Analysis + Design Rationale + 12 Appendices*
+*Generated from analysis of 25,000+ lines of core source code across 10+ major components*

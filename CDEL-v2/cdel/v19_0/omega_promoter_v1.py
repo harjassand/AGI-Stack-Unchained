@@ -6,9 +6,11 @@ from pathlib import Path
 from typing import Any
 
 from ..v18_0 import omega_promoter_v1 as v18_promoter
+from ..v18_0.ccap_runtime_v1 import normalize_subrun_relpath
 from ..v18_0.omega_common_v1 import (
     canon_hash_obj,
     load_canon_dict,
+    repo_root,
     resolve_execution_mode,
     require_no_absolute_paths,
     validate_schema as validate_v18_schema,
@@ -45,6 +47,9 @@ _GOVERNED_PREFIXES = (
 
 _MORPHISMS_REQUIRING_C_CONT = {"M_K", "M_E", "M_M", "M_C"}
 
+_AXIS_EXEMPTIONS_REL = "configs/omega_axis_gate_exemptions_v1.json"
+EXPECTED_AXIS_EXEMPTIONS_ID = "sha256:642fe65d716df82045833cecaf624202d90cf7ffd2edd394e7ffe781fe5f7d28"
+
 
 def _load_axis_bundle_from_bundle(*, bundle_obj: dict[str, Any], bundle_path: Path) -> dict[str, Any] | None:
     axis_ref = bundle_obj.get("axis_upgrade_bundle_ref")
@@ -63,13 +68,113 @@ def _load_axis_bundle_from_bundle(*, bundle_obj: dict[str, Any], bundle_path: Pa
     return None
 
 
-def _requires_axis_bundle(bundle_obj: dict[str, Any]) -> bool:
-    touched = extract_touched_paths(bundle_obj)
+def _parse_patch_touched_paths(patch_bytes: bytes) -> list[str]:
+    touched: list[str] = []
+    seen: set[str] = set()
+    for raw in patch_bytes.decode("utf-8", errors="replace").splitlines():
+        line = raw.strip()
+        if not line.startswith("+++ "):
+            continue
+        if line == "+++ /dev/null":
+            continue
+        if not line.startswith("+++ b/"):
+            continue
+        rel = line[len("+++ b/") :]
+        rel = rel.split("\t", 1)[0].strip()
+        if rel.startswith('"') and rel.endswith('"') and len(rel) >= 2:
+            rel = rel[1:-1]
+        try:
+            normalized = normalize_subrun_relpath(rel)
+        except Exception:
+            normalized = rel.replace("\\", "/").lstrip("./")
+        if normalized and normalized not in seen:
+            touched.append(normalized)
+            seen.add(normalized)
+    return touched
+
+
+def _resolve_ccap_subrun_root_for_bundle(*, bundle_obj: dict[str, Any], bundle_path: Path) -> Path:
+    """Resolve the subrun root that contains CCAP payloads referenced by `bundle_obj`.
+
+    Promotion can execute with different CWDs (subrun root vs state root) depending on call site.
+    Fail closed if we cannot uniquely identify the subrun directory containing both CCAP and patch blobs.
+    """
+    ccap_rel = normalize_subrun_relpath(str(bundle_obj.get("ccap_relpath", "")).strip())
+    patch_rel = normalize_subrun_relpath(str(bundle_obj.get("patch_relpath", "")).strip())
+
+    candidate = bundle_path.parent.parent.resolve()
+    if (candidate / ccap_rel).exists() and (candidate / patch_rel).exists():
+        return candidate
+
+    dispatch_dir = bundle_path.parent.parent.resolve()
+    state_root = dispatch_dir.parent.parent.resolve()
+    subruns_root = state_root / "subruns"
+    candidates: list[Path] = []
+    if subruns_root.exists() and subruns_root.is_dir():
+        for subrun in sorted(subruns_root.glob("*"), key=lambda p: p.as_posix()):
+            if not subrun.is_dir() or subrun.is_symlink():
+                continue
+            if (subrun / ccap_rel).exists() and (subrun / patch_rel).exists():
+                candidates.append(subrun)
+    if len(candidates) != 1:
+        fail("MISSING_STATE_INPUT", safe_halt=True)
+    return candidates[0].resolve()
+
+
+def _effective_touched_paths_for_axis_gate(*, bundle_obj: dict[str, Any], bundle_path: Path) -> list[str]:
+    if str(bundle_obj.get("schema_version", "")).strip() == "omega_promotion_bundle_ccap_v1":
+        subrun_root = _resolve_ccap_subrun_root_for_bundle(bundle_obj=bundle_obj, bundle_path=bundle_path)
+        patch_rel = normalize_subrun_relpath(str(bundle_obj.get("patch_relpath", "")).strip())
+        patch_path = (subrun_root / patch_rel).resolve()
+        if not patch_path.exists() or not patch_path.is_file():
+            fail("MISSING_STATE_INPUT", safe_halt=True)
+        return _parse_patch_touched_paths(patch_path.read_bytes())
+    return extract_touched_paths(bundle_obj)
+
+
+_AXIS_EXEMPTIONS_CACHE: tuple[list[str], str] | None = None
+
+
+def _load_axis_gate_exemptions_config() -> tuple[list[str], str]:
+    global _AXIS_EXEMPTIONS_CACHE
+    cached = _AXIS_EXEMPTIONS_CACHE
+    if cached is not None:
+        return cached
+    path = (repo_root() / _AXIS_EXEMPTIONS_REL).resolve()
+    payload = load_canon_dict(path)
+    if str(payload.get("schema_version", "")).strip() != "omega_axis_gate_exemptions_v1":
+        fail("SCHEMA_ERROR", safe_halt=True)
+    config_id = canon_hash_obj(payload)
+    if config_id != EXPECTED_AXIS_EXEMPTIONS_ID:
+        fail("SCHEMA_ERROR", safe_halt=True)
+    rows = payload.get("exempt_relpaths")
+    if not isinstance(rows, list) or not rows:
+        fail("SCHEMA_ERROR", safe_halt=True)
+    out: list[str] = []
+    seen: set[str] = set()
+    for row in rows:
+        rel = str(row).strip().replace("\\", "/").lstrip("./")
+        if not rel or Path(rel).is_absolute() or ".." in Path(rel).parts:
+            fail("SCHEMA_ERROR", safe_halt=True)
+        if rel not in seen:
+            out.append(rel)
+            seen.add(rel)
+    _AXIS_EXEMPTIONS_CACHE = (out, config_id)
+    return _AXIS_EXEMPTIONS_CACHE
+
+
+def _requires_axis_bundle(*, bundle_obj: dict[str, Any], bundle_path: Path) -> tuple[bool, list[str], list[str], list[str], str]:
+    touched = _effective_touched_paths_for_axis_gate(bundle_obj=bundle_obj, bundle_path=bundle_path)
+    governed: list[str] = []
     for row in touched:
         for prefix in _GOVERNED_PREFIXES:
             if str(row).startswith(prefix):
-                return True
-    return False
+                governed.append(str(row))
+                break
+    exempt_relpaths, exemptions_id = _load_axis_gate_exemptions_config()
+    exempt_set = set(exempt_relpaths)
+    needs_axis = bool(governed) and any(row not in exempt_set for row in governed)
+    return needs_axis, touched, governed, exempt_relpaths, exemptions_id
 
 
 def _is_artifact_ref(value: Any) -> bool:
@@ -377,7 +482,24 @@ def _verify_axis_bundle_gate(
     promotion_dir: Path,
 ) -> None:
     axis_bundle = _load_axis_bundle_from_bundle(bundle_obj=bundle_obj, bundle_path=bundle_path)
-    needs_axis = _requires_axis_bundle(bundle_obj)
+    needs_axis, touched, governed, exempt_relpaths, exemptions_id = _requires_axis_bundle(
+        bundle_obj=bundle_obj,
+        bundle_path=bundle_path,
+    )
+    write_canonical(
+        promotion_dir / "axis_gate_decision_v1.json",
+        {
+            "schema_name": "axis_gate_decision_v1",
+            "schema_version": "v19_0",
+            "bundle_schema_version": str(bundle_obj.get("schema_version", "")).strip(),
+            "effective_touched_paths": list(touched),
+            "governed_touched_paths": list(governed),
+            "exempt_relpaths": list(exempt_relpaths),
+            "exemptions_config_id": str(exemptions_id),
+            "needs_axis_bundle_b": bool(needs_axis),
+            "axis_bundle_present_b": bool(axis_bundle is not None),
+        },
+    )
     if axis_bundle is None:
         if needs_axis:
             fail("MISSING_ARTIFACT", safe_halt=True)

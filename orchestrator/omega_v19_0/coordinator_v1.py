@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import Any, Iterator
 
 from cdel.v18_0.omega_allowlists_v1 import load_allowlists
-from cdel.v18_0.omega_bid_market_v1 import (
+from orchestrator.omega_bid_market_v1 import (
     bid_market_enabled,
     build_bid_set_v1,
     build_bid_v1,

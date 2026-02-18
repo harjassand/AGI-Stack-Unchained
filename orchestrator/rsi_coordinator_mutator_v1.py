@@ -157,10 +157,28 @@ def _extract_patch_from_llm(response: str) -> bytes:
     text = str(response or "").strip()
     if not text:
         raise RuntimeError("NO_LLM_RESPONSE")
-    try:
-        obj = json.loads(text)
-    except Exception as exc:  # noqa: BLE001
-        raise RuntimeError("LLM_RESPONSE_NOT_JSON") from exc
+    obj = None
+    # Tolerate common LLM wrappers: markdown fences or leading commentary.
+    candidates: list[str] = [text]
+    if "```" in text:
+        for fence in ("```json", "```"):
+            start = text.find(fence)
+            if start >= 0:
+                end = text.find("```", start + len(fence))
+                if end > start:
+                    candidates.insert(0, text[start + len(fence) : end].strip())
+    if "{" in text and "}" in text:
+        candidates.append(text[text.find("{") : text.rfind("}") + 1].strip())
+    last_err: Exception | None = None
+    for cand in candidates:
+        try:
+            obj = json.loads(cand)
+            break
+        except Exception as exc:  # noqa: BLE001
+            last_err = exc
+            continue
+    if obj is None:
+        raise RuntimeError("LLM_RESPONSE_NOT_JSON") from last_err
     if not isinstance(obj, dict):
         raise RuntimeError("LLM_RESPONSE_NOT_JSON_OBJECT")
     diff = obj.get("unified_diff")
@@ -658,7 +676,18 @@ def run(*, campaign_pack: Path, out_dir: Path) -> None:
     response = backend.generate(prompt)
     if len(response) > max_response_chars_u64:
         response = response[: max_response_chars_u64]
-    patch_bytes = _extract_patch_from_llm(response)
+    try:
+        patch_bytes = _extract_patch_from_llm(response)
+    except Exception as exc:  # noqa: BLE001
+        failure = {
+            "schema_version": "coordinator_mutator_llm_failure_v1",
+            "tick_u64": int(tick_u64),
+            "target_relpath": target_relpath,
+            "detail": str(exc)[:4000],
+        }
+        failure["failure_id"] = canon_hash_obj({k: v for k, v in failure.items() if k != "failure_id"})
+        write_canon_json(out_dir / "coordinator_mutator_llm_failure_v1.json", failure)
+        return
     if len(patch_bytes) > max_patch_bytes_u64:
         fail("VERIFY_ERROR")
 

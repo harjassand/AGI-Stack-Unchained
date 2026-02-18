@@ -357,6 +357,8 @@ class ProviderHarvestBackend:
             payload={
                 "generationConfig": {
                     "temperature": 0.0,
+                    # Encourage strict JSON-only outputs when prompts request JSON.
+                    "responseMimeType": "application/json",
                 },
                 "contents": [
                     {

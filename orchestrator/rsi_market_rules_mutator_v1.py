@@ -545,11 +545,30 @@ def run(*, campaign_pack: Path, out_dir: Path) -> None:
     patch_text = _ensure_patch_headers(patch_text, target_relpath=target_relpath)
     patch_bytes = patch_text.encode("utf-8")
     if len(patch_bytes) > max_patch_bytes_u64:
-        fail("VERIFY_ERROR")
+        failure = {
+            "schema_version": "market_rules_mutator_verify_failure_v1",
+            "tick_u64": int(tick_u64),
+            "target_relpath": target_relpath,
+            "reason": "PATCH_TOO_LARGE",
+            "patch_bytes_u64": int(len(patch_bytes)),
+            "max_patch_bytes_u64": int(max_patch_bytes_u64),
+        }
+        failure["failure_id"] = canon_hash_obj({k: v for k, v in failure.items() if k != "failure_id"})
+        write_canon_json(out_dir / "market_rules_mutator_verify_failure_v1.json", failure)
+        return
 
     touched = _parse_patch_touched_paths(patch_bytes)
     if set(touched) != {target_relpath}:
-        fail("VERIFY_ERROR")
+        failure = {
+            "schema_version": "market_rules_mutator_verify_failure_v1",
+            "tick_u64": int(tick_u64),
+            "target_relpath": target_relpath,
+            "reason": "TOUCHED_PATHS_MISMATCH",
+            "touched_paths": touched,
+        }
+        failure["failure_id"] = canon_hash_obj({k: v for k, v in failure.items() if k != "failure_id"})
+        write_canon_json(out_dir / "market_rules_mutator_verify_failure_v1.json", failure)
+        return
 
     out_dir = out_dir.resolve()
     reports_dir = out_dir / "daemon" / "rsi_market_rules_mutator_v1" / "state" / "reports"

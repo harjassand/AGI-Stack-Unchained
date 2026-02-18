@@ -211,6 +211,12 @@ def _ensure_patch_headers(patch_bytes: bytes, *, target_relpath: str) -> bytes:
         text += "\n"
     return text.encode("utf-8")
 
+def _write_verify_failure(out_dir: Path, payload: dict[str, Any]) -> None:
+    row = dict(payload)
+    row["schema_version"] = "coordinator_mutator_verify_failure_v1"
+    row["failure_id"] = canon_hash_obj({k: v for k, v in row.items() if k != "failure_id"})
+    write_canon_json(out_dir / "coordinator_mutator_verify_failure_v1.json", row)
+
 
 def _run_daemon_loop(
     *,
@@ -712,15 +718,42 @@ def run(*, campaign_pack: Path, out_dir: Path) -> None:
         return
     patch_bytes = _ensure_patch_headers(patch_bytes, target_relpath=target_relpath)
     if len(patch_bytes) > max_patch_bytes_u64:
-        fail("VERIFY_ERROR")
+        _write_verify_failure(
+            out_dir,
+            {
+                "tick_u64": int(tick_u64),
+                "target_relpath": target_relpath,
+                "reason": "PATCH_TOO_LARGE",
+                "patch_bytes_u64": int(len(patch_bytes)),
+                "max_patch_bytes_u64": int(max_patch_bytes_u64),
+            },
+        )
+        return
 
     touched = _parse_patch_touched_paths(patch_bytes)
     if set(touched) != {target_relpath}:
-        fail("VERIFY_ERROR")
+        _write_verify_failure(
+            out_dir,
+            {
+                "tick_u64": int(tick_u64),
+                "target_relpath": target_relpath,
+                "reason": "TOUCHED_PATHS_MISMATCH",
+                "touched_paths": touched,
+            },
+        )
+        return
     death_cfg = pack.get("death_injection") if isinstance(pack.get("death_injection"), dict) else {}
     death_allowed = bool(death_cfg.get("enabled_b", False)) and str(os.environ.get("OMEGA_DEV_DEATH_INJECTION_OK", "")).strip() == "1"
     if not death_allowed and b"OMEGA_DEV_DEATH_INJECTION_OK" in patch_bytes:
-        fail("VERIFY_ERROR")
+        _write_verify_failure(
+            out_dir,
+            {
+                "tick_u64": int(tick_u64),
+                "target_relpath": target_relpath,
+                "reason": "DEATH_INJECTION_TOKEN_FORBIDDEN",
+            },
+        )
+        return
 
     out_dir = out_dir.resolve()
     reports_dir = out_dir / "daemon" / "rsi_coordinator_mutator_v1" / "state" / "reports"

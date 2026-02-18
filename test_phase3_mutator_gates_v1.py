@@ -263,8 +263,10 @@ def test_phase3_coordinator_mutator_rejects_patch_touching_other_paths(monkeypat
     monkeypatch.setattr(coord_mut.v19_replay_verifier, "verify", lambda *_args, **_kwargs: "VALID")
     monkeypatch.setattr(coord_mut, "_emit_ccap", lambda **_kwargs: ("x", "y", "z", "w"))
 
-    with pytest.raises(OmegaV18Error):
-        coord_mut.run(campaign_pack=pack_path, out_dir=out_dir)
+    coord_mut.run(campaign_pack=pack_path, out_dir=out_dir)
+    failure = json.loads((out_dir / "coordinator_mutator_verify_failure_v1.json").read_text(encoding="utf-8"))
+    assert failure["reason"] == "TOUCHED_PATHS_MISMATCH"
+    assert "orchestrator/omega_v19_0/other.py" in failure.get("touched_paths", [])
 
 
 def test_phase3_coordinator_mutator_death_injection_guard(monkeypatch, tmp_path: Path) -> None:
@@ -301,6 +303,6 @@ def test_phase3_coordinator_mutator_death_injection_guard(monkeypatch, tmp_path:
     monkeypatch.setattr(coord_mut.v19_replay_verifier, "verify", lambda *_args, **_kwargs: "VALID")
     monkeypatch.setattr(coord_mut, "_emit_ccap", lambda **_kwargs: ("x", "y", "z", "w"))
 
-    with pytest.raises(OmegaV18Error):
-        coord_mut.run(campaign_pack=pack_path, out_dir=out_dir)
-
+    coord_mut.run(campaign_pack=pack_path, out_dir=out_dir)
+    failure = json.loads((out_dir / "coordinator_mutator_verify_failure_v1.json").read_text(encoding="utf-8"))
+    assert failure["reason"] == "DEATH_INJECTION_TOKEN_FORBIDDEN"

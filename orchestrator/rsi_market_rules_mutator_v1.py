@@ -443,11 +443,17 @@ def run(*, campaign_pack: Path, out_dir: Path) -> None:
     bench_pack_rel = str(pack.get("bench_pack_rel", _BENCH_PACK_DEFAULT)).strip() or _BENCH_PACK_DEFAULT
 
     backend = get_backend()
+    task = (
+        "Propose a deterministic, replay-valid patch that changes only the target file. "
+        "Focus on market scoring/selection/settlement behavior while preserving determinism and schema compatibility. "
+        "Keep the patch small and avoid adding new dependencies."
+    )
     prompt = _canonical_dumps(
         {
             "schema_version": "rsi_market_rules_mutator_prompt_v1",
             "tick_u64": int(tick_u64),
             "run_seed_u64": int(run_seed_u64),
+            "task": task,
             "target_relpath": str(target_relpath),
             "constraints": {"output_format": "json", "json_schema": {"unified_diff": "string"}},
             "target_file_head": target_text[:20000],

@@ -118,11 +118,26 @@ def _llm_diff_prompt(*, target_relpath: str, target_text: str, pack: dict[str, A
     # Keep prompt simple and JSON-in / JSON-out. The backend may be mock/replay/live.
     death_cfg = pack.get("death_injection") if isinstance(pack.get("death_injection"), dict) else {}
     death_enabled = bool(death_cfg.get("enabled_b", False)) and str(os.environ.get("OMEGA_DEV_DEATH_INJECTION_OK", "")).strip() == "1"
+    task = (
+        "Propose a small, safe performance improvement patch to the target file only. "
+        "Avoid semantic changes. Prefer local variable caching for hot-path globals where safe. "
+        "Also, update the Phase 3 evidence signal so normal runtime logs clearly show the mutated coordinator is active "
+        '(for example, change "SIGNAL=PHASE3_MUTATED_COORDINATOR v=1" to v=2).'
+    )
+    if death_enabled:
+        task = (
+            task
+            + " Death-test mode is enabled: additionally add a crash injection hook that is guarded by "
+            "OMEGA_DEV_DEATH_INJECTION_OK==\"1\" (and ideally a second guard like OMEGA_DEATH_INJECT_TICK_U64==<int>) "
+            "so benchmarks/structural validation (which force OMEGA_DEV_DEATH_INJECTION_OK=0) do not crash, "
+            "but normal ticks in the death-test pack can crash to exercise watchdog rollback."
+        )
     return _canonical_dumps(
         {
             "schema_version": "rsi_coordinator_mutator_prompt_v1",
             "tick_u64": int(tick_u64),
             "run_seed_u64": int(run_seed_u64),
+            "task": task,
             "target_relpath": str(target_relpath),
             "constraints": {
                 "output_format": "json",

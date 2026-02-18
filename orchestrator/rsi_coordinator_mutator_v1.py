@@ -178,6 +178,17 @@ def _extract_patch_from_llm(response: str) -> bytes:
             last_err = exc
             continue
     if obj is None:
+        # Fall back: accept raw unified diff output (common for some LLMs).
+        for cand in candidates:
+            if "+++ b/" in cand and ("--- a/" in cand or "diff --git " in cand):
+                lines = cand.splitlines()
+                start = 0
+                for idx, line in enumerate(lines):
+                    if line.startswith("diff --git ") or line.startswith("--- a/"):
+                        start = idx
+                        break
+                patch_text = "\n".join(lines[start:]).strip() + "\n"
+                return patch_text.encode("utf-8")
         raise RuntimeError("LLM_RESPONSE_NOT_JSON") from last_err
     if not isinstance(obj, dict):
         raise RuntimeError("LLM_RESPONSE_NOT_JSON_OBJECT")

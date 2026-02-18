@@ -62,6 +62,30 @@ def _extract_json_obj(text: str) -> dict[str, Any]:
     raise RuntimeError("LLM_RESPONSE_NOT_JSON") from last_err
 
 
+def _extract_unified_diff_text(text: str) -> str | None:
+    raw = str(text or "").strip()
+    if not raw:
+        return None
+    candidates: list[str] = [raw]
+    if "```" in raw:
+        for fence in ("```diff", "```patch", "```json", "```"):
+            start = raw.find(fence)
+            if start >= 0:
+                end = raw.find("```", start + len(fence))
+                if end > start:
+                    candidates.insert(0, raw[start + len(fence) : end].strip())
+    for cand in candidates:
+        if "+++ b/" in cand and ("--- a/" in cand or "diff --git " in cand):
+            lines = cand.splitlines()
+            start = 0
+            for idx, line in enumerate(lines):
+                if line.startswith("diff --git ") or line.startswith("--- a/"):
+                    start = idx
+                    break
+            return "\n".join(lines[start:]).strip() + "\n"
+    return None
+
+
 def _parse_patch_touched_paths(patch_bytes: bytes) -> list[str]:
     touched: list[str] = []
     seen: set[str] = set()
@@ -489,29 +513,26 @@ def run(*, campaign_pack: Path, out_dir: Path) -> None:
         }
     )
     response = backend.generate(prompt)
+    patch_text = None
     try:
         obj = _extract_json_obj(str(response or ""))
-    except Exception as exc:  # noqa: BLE001
+        if isinstance(obj.get("unified_diff"), str):
+            patch_text = str(obj["unified_diff"])
+    except Exception:
+        patch_text = None
+
+    if patch_text is None:
+        patch_text = _extract_unified_diff_text(str(response or ""))
+    if patch_text is None:
         failure = {
             "schema_version": "market_rules_mutator_llm_failure_v1",
             "tick_u64": int(tick_u64),
             "target_relpath": target_relpath,
-            "detail": str(exc)[:4000],
+            "detail": "LLM_RESPONSE_INVALID",
         }
         failure["failure_id"] = canon_hash_obj({k: v for k, v in failure.items() if k != "failure_id"})
         write_canon_json(out_dir / "market_rules_mutator_llm_failure_v1.json", failure)
         return
-    if not isinstance(obj.get("unified_diff"), str):
-        failure = {
-            "schema_version": "market_rules_mutator_llm_failure_v1",
-            "tick_u64": int(tick_u64),
-            "target_relpath": target_relpath,
-            "detail": "LLM_RESPONSE_MISSING_DIFF",
-        }
-        failure["failure_id"] = canon_hash_obj({k: v for k, v in failure.items() if k != "failure_id"})
-        write_canon_json(out_dir / "market_rules_mutator_llm_failure_v1.json", failure)
-        return
-    patch_text = str(obj["unified_diff"])
     if not patch_text.endswith("\n"):
         patch_text += "\n"
     patch_bytes = patch_text.encode("utf-8")

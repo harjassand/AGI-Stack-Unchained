@@ -86,6 +86,15 @@ def _extract_unified_diff_text(text: str) -> str | None:
     return None
 
 
+def _ensure_patch_headers(patch_text: str, *, target_relpath: str) -> str:
+    text = str(patch_text or "")
+    if ("--- a/" not in text and "+++ b/" not in text) and "@@" in text:
+        header = f"--- a/{target_relpath}\n+++ b/{target_relpath}\n"
+        text = header + text.lstrip("\n")
+    if not text.endswith("\n"):
+        text += "\n"
+    return text
+
 def _parse_patch_touched_paths(patch_bytes: bytes) -> list[str]:
     touched: list[str] = []
     seen: set[str] = set()
@@ -533,8 +542,7 @@ def run(*, campaign_pack: Path, out_dir: Path) -> None:
         failure["failure_id"] = canon_hash_obj({k: v for k, v in failure.items() if k != "failure_id"})
         write_canon_json(out_dir / "market_rules_mutator_llm_failure_v1.json", failure)
         return
-    if not patch_text.endswith("\n"):
-        patch_text += "\n"
+    patch_text = _ensure_patch_headers(patch_text, target_relpath=target_relpath)
     patch_bytes = patch_text.encode("utf-8")
     if len(patch_bytes) > max_patch_bytes_u64:
         fail("VERIFY_ERROR")

@@ -200,6 +200,17 @@ def _extract_patch_from_llm(response: str) -> bytes:
         patch_text += "\n"
     return patch_text.encode("utf-8")
 
+def _ensure_patch_headers(patch_bytes: bytes, *, target_relpath: str) -> bytes:
+    """If the LLM emitted only hunk fragments, synthesize minimal file headers."""
+    text = patch_bytes.decode("utf-8", errors="replace").lstrip("\ufeff")
+    if ("--- a/" not in text and "+++ b/" not in text) and "@@" in text:
+        # Minimal unified-diff headers that git apply accepts.
+        header = f"--- a/{target_relpath}\n+++ b/{target_relpath}\n"
+        text = header + text.lstrip("\n")
+    if not text.endswith("\n"):
+        text += "\n"
+    return text.encode("utf-8")
+
 
 def _run_daemon_loop(
     *,
@@ -699,6 +710,7 @@ def run(*, campaign_pack: Path, out_dir: Path) -> None:
         failure["failure_id"] = canon_hash_obj({k: v for k, v in failure.items() if k != "failure_id"})
         write_canon_json(out_dir / "coordinator_mutator_llm_failure_v1.json", failure)
         return
+    patch_bytes = _ensure_patch_headers(patch_bytes, target_relpath=target_relpath)
     if len(patch_bytes) > max_patch_bytes_u64:
         fail("VERIFY_ERROR")
 
@@ -724,8 +736,19 @@ def run(*, campaign_pack: Path, out_dir: Path) -> None:
         try:
             patch_path = scratch / "candidate.patch"
             patch_path.write_bytes(patch_bytes)
-            _git(candidate_wt, ["apply", "--check", "-p1", str(patch_path)])
-            _git(candidate_wt, ["apply", "-p1", str(patch_path)])
+            try:
+                _git(candidate_wt, ["apply", "--check", "-p1", str(patch_path)])
+                _git(candidate_wt, ["apply", "-p1", str(patch_path)])
+            except Exception as exc:  # noqa: BLE001
+                failure = {
+                    "schema_version": "coordinator_mutator_patch_apply_failure_v1",
+                    "tick_u64": int(tick_u64),
+                    "target_relpath": target_relpath,
+                    "detail": str(exc)[:4000],
+                }
+                failure["failure_id"] = canon_hash_obj({k: v for k, v in failure.items() if k != "failure_id"})
+                write_canon_json(out_dir / "coordinator_mutator_patch_apply_failure_v1.json", failure)
+                return
 
             try:
                 bench_trials, median_improve = _bench_median_of_5(

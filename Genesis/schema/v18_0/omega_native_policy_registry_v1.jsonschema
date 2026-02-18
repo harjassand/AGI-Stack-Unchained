@@ -1,0 +1,31 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v18_0/omega_native_policy_registry_v1",
+  "title": "Omega native policy registry v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "ops"],
+  "properties": {
+    "schema_version": {"const": "omega_native_policy_registry_v1"},
+    "ops": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["op_id", "py_impl_import", "verification_mode", "arg_encoding", "output_encoding", "purity"],
+        "properties": {
+          "op_id": {"type": "string", "minLength": 1},
+          "py_impl_import": {"type": "string", "minLength": 3},
+          "verification_mode": {"type": "string", "enum": ["VECTORS", "SHADOW"]},
+          "shadow_calls_u32": {"type": "integer", "minimum": 0, "maximum": 4294967295},
+          "vectors_ref": {"type": ["string", "null"]},
+          "arg_encoding": {"const": "BLOBLIST_V1"},
+          "output_encoding": {"type": "string", "enum": ["RAW_BYTES", "U64_LE", "JSON_UTF8"]},
+          "purity": {"const": "PURE"}
+        }
+      }
+    }
+  }
+}
+

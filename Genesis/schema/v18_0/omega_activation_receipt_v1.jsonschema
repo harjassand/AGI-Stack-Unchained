@@ -28,6 +28,54 @@
     "activation_method": {"const": "ATOMIC_POINTER_SWAP"},
     "activation_success": {"type": "boolean"},
     "pass": {"type": "boolean"},
+    "native_module": {
+      "type": ["object", "null"],
+      "additionalProperties": false,
+      "required": [
+        "op_id",
+        "abi_version_u32",
+        "abi_kind",
+        "language",
+        "platform",
+        "binary_sha256",
+        "source_manifest_hash",
+        "vendor_manifest_hash",
+        "build_receipt_hash",
+        "hotspot_report_hash",
+        "toolchain_manifest_hash",
+        "healthcheck_receipt_hash",
+        "bench_report_hash"
+      ],
+      "properties": {
+        "op_id": {"type": "string", "minLength": 1},
+        "abi_version_u32": {"const": 1},
+        "abi_kind": {"const": "BLOBLIST_V1"},
+        "language": {"const": "RUST"},
+        "platform": {"type": "string", "minLength": 1},
+        "binary_sha256": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+        "source_manifest_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+        "vendor_manifest_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+        "build_receipt_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+        "hotspot_report_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+        "toolchain_manifest_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+        "healthcheck_receipt_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+        "bench_report_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"}
+      }
+    },
+    "native_activation_gate_result": {"type": ["string", "null"], "enum": ["PASS", "FAIL", "SKIP", null]},
+    "native_gate_reason": {
+      "type": ["string", "null"],
+      "enum": [
+        "NATIVE_GATE_PASS",
+        "NATIVE_GATE_BINARY_MISSING",
+        "NATIVE_GATE_BINARY_HASH_MISMATCH",
+        "NATIVE_GATE_DLOPEN_FAIL",
+        "NATIVE_GATE_ABI_MISMATCH",
+        "NATIVE_GATE_OP_ID_MISMATCH",
+        "NATIVE_GATE_HEALTHCHECK_FAIL",
+        null
+      ]
+    },
     "reasons": {
       "type": "array",
       "items": {
@@ -38,7 +86,9 @@
           "POINTER_SWAP_FAILED",
           "META_CORE_DENIED",
           "BINDING_MISSING_OR_MISMATCH",
-          "ROLLBACK_REQUIRED"
+          "ROLLBACK_REQUIRED",
+          "NATIVE_GATE_REQUIRED",
+          "NATIVE_GATE_FAILED"
         ]
       }
     }

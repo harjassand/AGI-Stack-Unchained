@@ -1,0 +1,48 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v18_0/omega_native_module_promotion_bundle_v1",
+  "title": "Omega native module promotion bundle v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "bundle_id", "campaign_id", "native_module"],
+  "properties": {
+    "schema_version": {"const": "omega_native_module_promotion_bundle_v1"},
+    "bundle_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "campaign_id": {"type": "string", "minLength": 1},
+    "native_module": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "op_id",
+        "abi_version_u32",
+        "abi_kind",
+        "language",
+        "platform",
+        "binary_sha256",
+        "source_manifest_hash",
+        "vendor_manifest_hash",
+        "build_receipt_hash",
+        "hotspot_report_hash",
+        "toolchain_manifest_hash",
+        "healthcheck_receipt_hash",
+        "bench_report_hash"
+      ],
+      "properties": {
+        "op_id": {"type": "string", "minLength": 1},
+        "abi_version_u32": {"const": 1},
+        "abi_kind": {"const": "BLOBLIST_V1"},
+        "language": {"const": "RUST"},
+        "platform": {"type": "string", "minLength": 1},
+        "binary_sha256": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+        "source_manifest_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+        "vendor_manifest_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+        "build_receipt_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+        "hotspot_report_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+        "toolchain_manifest_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+        "healthcheck_receipt_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+        "bench_report_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"}
+      }
+    }
+  }
+}
+

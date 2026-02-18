@@ -1,0 +1,29 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v18_0/omega_native_source_manifest_v1",
+  "title": "Omega native source manifest v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "manifest_id", "op_id", "crate_tree_hash", "files"],
+  "properties": {
+    "schema_version": {"const": "omega_native_source_manifest_v1"},
+    "manifest_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "op_id": {"type": "string", "minLength": 1},
+    "crate_tree_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "files": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["path_rel", "sha256", "bytes_u64"],
+        "properties": {
+          "path_rel": {"type": "string", "minLength": 1},
+          "sha256": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+          "bytes_u64": {"type": "integer", "minimum": 0}
+        }
+      }
+    }
+  }
+}
+

@@ -544,6 +544,14 @@ def run_tick(
     lock_path = daemon_root / "LOCK"
     with acquire_lock(lock_path):
         execution_mode = resolve_execution_mode()
+        # Ensure per-tick native runtime stats are not contaminated by prior ticks
+        # in the same Python process.
+        try:
+            from orchestrator.native.native_router_v1 import drain_runtime_stats
+
+            _ = drain_runtime_stats()
+        except Exception:
+            pass
         deterministic_timing = _deterministic_timing_enabled()
         tick_start_ns = time.monotonic_ns()
         stage_timings_ns: dict[str, int] = {stage: 0 for stage in _TIMING_STAGES}
@@ -965,6 +973,44 @@ def run_tick(
             _emit("ACTIVATION", activation_hash)
         if rollback_hash is not None:
             _emit("ROLLBACK", rollback_hash)
+
+        # Deterministic evidence that hotpaths actually exercised the runtime
+        # router (and, when active, the native backend). We emit this into the
+        # trace chain so it is covered by the tick snapshot hash.
+        try:
+            from orchestrator.native.native_router_v1 import drain_runtime_stats
+
+            native_ops = drain_runtime_stats()
+        except Exception:
+            native_ops = []
+        if native_ops:
+            stats_payload = {
+                "schema_version": "omega_native_runtime_stats_v1",
+                "stats_id": "sha256:" + ("0" * 64),
+                "tick_u64": int(tick_u64),
+                "ops": native_ops,
+            }
+            validate_schema(stats_payload, "omega_native_runtime_stats_v1")
+            try:
+                from cdel.v1_7r.canon import native_canon_disabled
+            except Exception:
+                native_canon_disabled = None
+            if native_canon_disabled is None:
+                _, _stats_obj, stats_hash = _write_payload(
+                    state_root / "ledger" / "native",
+                    "omega_native_runtime_stats_v1.json",
+                    stats_payload,
+                    id_field="stats_id",
+                )
+            else:
+                with native_canon_disabled():
+                    _, _stats_obj, stats_hash = _write_payload(
+                        state_root / "ledger" / "native",
+                        "omega_native_runtime_stats_v1.json",
+                        stats_payload,
+                        id_field="stats_id",
+                    )
+            _emit("NATIVE_RUNTIME_STATS", stats_hash)
 
         prev_state_hash = canon_hash_obj(prev_state)
         h0 = compute_h0(

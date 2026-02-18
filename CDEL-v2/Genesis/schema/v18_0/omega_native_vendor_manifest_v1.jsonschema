@@ -1,0 +1,16 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v18_0/omega_native_vendor_manifest_v1",
+  "title": "Omega native vendor manifest v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "manifest_id", "vendor_tree_hash", "cargo_config_toml_sha256"],
+  "properties": {
+    "schema_version": {"const": "omega_native_vendor_manifest_v1"},
+    "manifest_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "vendor_tree_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "cargo_config_toml_sha256": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "notes": {"type": "string"}
+  }
+}
+

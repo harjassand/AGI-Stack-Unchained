@@ -18,6 +18,8 @@ def _resolve_state_dir(path: Path) -> Path:
         return root / "state"
     if (root / "daemon" / "rsi_omega_daemon_v18_0" / "state").is_dir():
         return root / "daemon" / "rsi_omega_daemon_v18_0" / "state"
+    if (root / "daemon" / "rsi_omega_daemon_v19_0" / "state").is_dir():
+        return root / "daemon" / "rsi_omega_daemon_v19_0" / "state"
     if root.name == "state" and (root.parent / "config").is_dir():
         return root
     fail_v18("SCHEMA_FAIL")

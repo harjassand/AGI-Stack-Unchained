@@ -1,0 +1,1 @@
+{"cases":[{"argv_hex":[""],"out_u64_le_hex":"25232284e49cf2cb"},{"argv_hex":["61"],"out_u64_le_hex":"af63dc4c8601ec8c"},{"argv_hex":["68656c6c6f"],"out_u64_le_hex":"0bbdaa8046d830a4"},{"argv_hex":["00010203040506070809"],"out_u64_le_hex":"e05707c0218de350"}],"op_id":"omega_demo_fnv1a64_v1","schema_version":"omega_native_vectors_v1"}

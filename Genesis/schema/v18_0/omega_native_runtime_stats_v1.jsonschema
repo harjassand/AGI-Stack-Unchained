@@ -1,0 +1,50 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v18_0/omega_native_runtime_stats_v1",
+  "title": "Omega native runtime stats v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "stats_id", "tick_u64", "ops"],
+  "properties": {
+    "schema_version": {"const": "omega_native_runtime_stats_v1"},
+    "stats_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "tick_u64": {"type": "integer", "minimum": 0},
+    "ops": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "op_id",
+          "calls_u64",
+          "native_returned_u64",
+          "py_returned_u64",
+          "bytes_in_u64",
+          "bytes_out_u64",
+          "active_binary_sha256",
+          "native_load_fail_u64",
+          "native_invoke_fail_u64",
+          "shadow_mismatch_u64"
+        ],
+        "properties": {
+          "op_id": {"type": "string", "minLength": 1},
+          "calls_u64": {"type": "integer", "minimum": 0},
+          "native_returned_u64": {"type": "integer", "minimum": 0},
+          "py_returned_u64": {"type": "integer", "minimum": 0},
+          "bytes_in_u64": {"type": "integer", "minimum": 0},
+          "bytes_out_u64": {"type": "integer", "minimum": 0},
+          "active_binary_sha256": {
+            "anyOf": [
+              {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+              {"type": "string", "const": ""}
+            ]
+          },
+          "native_load_fail_u64": {"type": "integer", "minimum": 0},
+          "native_invoke_fail_u64": {"type": "integer", "minimum": 0},
+          "shadow_mismatch_u64": {"type": "integer", "minimum": 0}
+        }
+      }
+    }
+  }
+}
+

@@ -1,0 +1,39 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v18_0/omega_native_build_receipt_v1",
+  "title": "Omega native build receipt v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "receipt_id",
+    "op_id",
+    "platform",
+    "toolchain_id",
+    "toolchain_manifest_hash",
+    "build_cmdline",
+    "rustflags",
+    "build1_binary_sha256",
+    "build2_binary_sha256",
+    "binary_sha256",
+    "pass"
+  ],
+  "properties": {
+    "schema_version": {"const": "omega_native_build_receipt_v1"},
+    "receipt_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "op_id": {"type": "string", "minLength": 1},
+    "platform": {"type": "string", "minLength": 1},
+    "toolchain_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "toolchain_manifest_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "build_cmdline": {"type": "array", "minItems": 1, "items": {"type": "string"}},
+    "rustflags": {"type": "string"},
+    "cargo_version": {"type": "string"},
+    "rustc_version": {"type": "string"},
+    "build1_binary_sha256": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "build2_binary_sha256": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "binary_sha256": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "pass": {"type": "boolean"},
+    "notes": {"type": "string"}
+  }
+}
+

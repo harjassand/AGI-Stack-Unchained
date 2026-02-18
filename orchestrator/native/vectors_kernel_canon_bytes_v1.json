@@ -1,0 +1,13 @@
+{
+  "schema_version": "omega_native_vectors_v1",
+  "op_id": "omega_kernel_canon_bytes_v1",
+  "cases": [
+    {"argv_hex": ["7b2262223a312c2261223a327d"]},
+    {"argv_hex": ["207b20226222203a2031202c20226122203a2032207d20"]},
+    {"argv_hex": ["7b2261223a7b2262223a322c2261223a317d2c2263223a5b747275652c66616c73652c6e756c6c5d7d"]},
+    {"argv_hex": ["7b2275223a22e29883222c2278223a22736e6f776d616e227d"]},
+    {"argv_hex": ["5b332c322c315d"]},
+    {"argv_hex": ["7b22617272223a5b7b227a223a302c2279223a317d2c7b2262223a322c2261223a337d5d2c226e223a2d377d"]}
+  ]
+}
+

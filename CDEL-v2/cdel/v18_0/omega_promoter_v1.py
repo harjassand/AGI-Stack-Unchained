@@ -476,6 +476,11 @@ def _extract_activation_key(campaign_id: str, promo: dict[str, Any]) -> str:
             if isinstance(domain_id, str) and domain_id.strip():
                 return domain_id
             return canon_hash_obj(promo)
+        if campaign_id == "rsi_omega_native_module_v0_1":
+            native = promo.get("native_module")
+            if not isinstance(native, dict):
+                raise KeyError("native_module")
+            return str(native["binary_sha256"])
     except Exception as exc:  # noqa: BLE001
         raise RuntimeError("ACTIVATION_KEY_MISSING") from exc
     raise RuntimeError("ACTIVATION_KEY_MISSING")
@@ -1237,6 +1242,7 @@ def run_promotion(
     execution_mode = resolve_execution_mode()
     promotion_bundle_hash = "sha256:" + "0" * 64
     active_after: str | None = None
+    native_module_for_receipt: dict[str, Any] | None = None
 
     def _write_promotion_receipt(*, status: str, reason: str | None, active_after_hash: str | None) -> tuple[dict[str, Any], str]:
         payload = {
@@ -1246,6 +1252,7 @@ def run_promotion(
             "promotion_bundle_hash": promotion_bundle_hash,
             "execution_mode": execution_mode,
             "meta_core_verifier_fingerprint": _meta_fingerprint(),
+            "native_module": native_module_for_receipt if status == "PROMOTED" else None,
             "result": {
                 "status": status,
                 "reason_code": reason,
@@ -1502,6 +1509,10 @@ def run_promotion(
                     "subverifier_receipt_hash": canon_hash_obj(subverifier_receipt),
                     "meta_core_promo_verify_receipt_hash": canon_hash_obj(meta_receipt_obj),
                 }
+                native_module = bundle_obj.get("native_module")
+                if isinstance(native_module, dict):
+                    binding_without_id["native_module"] = native_module
+                    native_module_for_receipt = native_module
                 binding_payload = dict(binding_without_id)
                 binding_payload["binding_id"] = canon_hash_obj(binding_without_id)
                 require_no_absolute_paths(binding_payload)

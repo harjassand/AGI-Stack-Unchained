@@ -1,0 +1,30 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v18_0/omega_native_hotspot_report_v1",
+  "title": "Omega native hotspot report v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "report_id", "pinned_workload_id", "ops"],
+  "properties": {
+    "schema_version": {"const": "omega_native_hotspot_report_v1"},
+    "report_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "pinned_workload_id": {"type": "string", "minLength": 1},
+    "ops": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["op_id", "calls_u64", "bytes_in_u64", "score_u64"],
+        "properties": {
+          "op_id": {"type": "string", "minLength": 1},
+          "calls_u64": {"type": "integer", "minimum": 0},
+          "bytes_in_u64": {"type": "integer", "minimum": 0},
+          "score_u64": {"type": "integer", "minimum": 0}
+        }
+      }
+    },
+    "selected_op_id": {"type": ["string", "null"]}
+  }
+}
+

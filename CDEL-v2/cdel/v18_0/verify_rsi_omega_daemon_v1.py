@@ -163,6 +163,9 @@ def _resolve_state_dir(path: Path) -> tuple[Path, Path]:
     if (root / "daemon" / "rsi_omega_daemon_v18_0" / "state").is_dir():
         daemon = root / "daemon" / "rsi_omega_daemon_v18_0"
         return daemon / "state", daemon
+    if (root / "daemon" / "rsi_omega_daemon_v19_0" / "state").is_dir():
+        daemon = root / "daemon" / "rsi_omega_daemon_v19_0"
+        return daemon / "state", daemon
     if root.name == "state" and (root.parent / "config").is_dir():
         return root, root.parent
     fail("SCHEMA_FAIL")
@@ -189,11 +192,17 @@ def _observer_runs_roots(*, root: Path, daemon_root: Path) -> list[Path]:
     else:
         daemon_under_repo = True
     if daemon_under_repo:
-        _add(root / "runs")
-    run_dir = daemon_root.parent.parent
-    _add(run_dir)
-    if not daemon_under_repo:
+        # Prefer the concrete run root over the global runs/ tree to avoid
+        # expensive scans on large repos. _read_observer_source_artifact will
+        # still consider root/runs as a last resort.
+        run_dir = daemon_root.parent.parent
+        _add(run_dir)
         _add(run_dir.parent)
+    else:
+        run_dir = daemon_root.parent.parent
+        _add(run_dir)
+        _add(run_dir.parent)
+        _add(run_dir.parent.parent)
     return roots
 
 
@@ -424,7 +433,68 @@ _OBS_SOURCE_RUNS_DIRECT_STATE_SUBDIR: dict[str, str] = {
     "kernel_hotloop_report_v1": "hotloop",
     "sas_system_perf_report_v1": "artifacts",
     "sas_science_promotion_bundle_v1": "promotion",
+    "omega_tick_perf_v1": "perf",
+    "omega_tick_stats_v1": "perf",
+    "omega_run_scorecard_v1": "perf",
 }
+
+
+def _find_ccap_receipt_candidates_in_runs_root(*, runs_root: Path, filename: str) -> list[Path]:
+    """Locate CCAP receipts under runs_root without scanning the entire runs tree.
+
+    CCAP receipts are emitted under dispatch/*/verifier/ as `sha256_<hex>.ccap_receipt_v1.json`.
+    The observer records them as sources with schema_id=ccap_receipt_v1, but producer_run_id
+    may be set to the receipt hash (not the run id), so we cannot rely on directory naming.
+    """
+    if not runs_root.exists() or not runs_root.is_dir():
+        return []
+    out: list[Path] = []
+    for run_dir in sorted(runs_root.iterdir(), key=lambda p: p.name):
+        if not run_dir.is_dir() or run_dir.is_symlink():
+            continue
+        for daemon_id in ("rsi_omega_daemon_v18_0", "rsi_omega_daemon_v19_0"):
+            for path in sorted(
+                run_dir.glob(f"daemon/{daemon_id}/state/dispatch/*/verifier/{filename}"),
+                key=lambda p: p.as_posix(),
+            ):
+                if path.exists() and path.is_file():
+                    out.append(path)
+    dedup: dict[str, Path] = {}
+    for row in out:
+        dedup[row.as_posix()] = row
+    return sorted(dedup.values(), key=lambda p: p.as_posix())
+
+
+def _find_daemon_perf_candidates_in_runs_root(*, runs_root: Path, filename: str) -> list[Path]:
+    """Locate daemon perf artifacts under runs_root without a full recursive scan.
+
+    Many runs are stored as runs/<run_id>/tick_XXXX/daemon/<daemon_id>/state/perf/<filename>.
+    """
+    if not runs_root.exists() or not runs_root.is_dir():
+        return []
+    out: list[Path] = []
+    for run_dir in sorted(runs_root.iterdir(), key=lambda p: p.name):
+        if not run_dir.is_dir() or run_dir.is_symlink():
+            continue
+        for daemon_id in ("rsi_omega_daemon_v18_0", "rsi_omega_daemon_v19_0"):
+            # Common layout: per-tick subdirectories.
+            for path in sorted(
+                run_dir.glob(f"tick_*/daemon/{daemon_id}/state/perf/{filename}"),
+                key=lambda p: p.as_posix(),
+            ):
+                if path.exists() and path.is_file():
+                    out.append(path)
+            # Legacy/single-tick layout: direct daemon/ subdir.
+            for path in sorted(
+                run_dir.glob(f"daemon/{daemon_id}/state/perf/{filename}"),
+                key=lambda p: p.as_posix(),
+            ):
+                if path.exists() and path.is_file():
+                    out.append(path)
+    dedup: dict[str, Path] = {}
+    for row in out:
+        dedup[row.as_posix()] = row
+    return sorted(dedup.values(), key=lambda p: p.as_posix())
 
 
 def _find_direct_observer_artifacts_in_runs_root(
@@ -442,12 +512,20 @@ def _find_direct_observer_artifacts_in_runs_root(
     if not expected_campaign:
         return []
     candidates: list[Path] = []
+    campaign_candidates: list[str] = [expected_campaign]
+    # v19 runs keep state under rsi_omega_daemon_v19_0, but some sources still
+    # label the producer as v18. Accept either on disk.
+    if expected_campaign.endswith("_v18_0"):
+        campaign_candidates.append(expected_campaign[: -len("_v18_0")] + "_v19_0")
+    elif expected_campaign.endswith("_v19_0"):
+        campaign_candidates.append(expected_campaign[: -len("_v19_0")] + "_v18_0")
     for run_dir in sorted(runs_root.iterdir(), key=lambda p: p.name):
         if not run_dir.is_dir() or run_dir.is_symlink():
             continue
-        candidate = run_dir / "daemon" / expected_campaign / "state" / subdir / filename
-        if candidate.exists() and candidate.is_file():
-            candidates.append(candidate)
+        for camp in campaign_candidates:
+            candidate = run_dir / "daemon" / camp / "state" / subdir / filename
+            if candidate.exists() and candidate.is_file():
+                candidates.append(candidate)
     return candidates
 
 
@@ -643,9 +721,14 @@ def _read_observer_source_artifact(
         if not candidates:
             for search_root in search_roots:
                 if runs_root is not None and search_root == runs_root:
-                    for row in _find_named_files_under_root(root=search_root, filename=filename):
-                        if f"/{producer_run_id}/" in row.as_posix():
-                            candidates.append(row)
+                    if schema_id == "ccap_receipt_v1":
+                        candidates.extend(_find_ccap_receipt_candidates_in_runs_root(runs_root=search_root, filename=filename))
+                    elif schema_id in {"omega_tick_perf_v1", "omega_tick_stats_v1", "omega_run_scorecard_v1"}:
+                        candidates.extend(_find_daemon_perf_candidates_in_runs_root(runs_root=search_root, filename=filename))
+                    else:
+                        for row in _find_named_files_under_root(root=search_root, filename=filename):
+                            if f"/{producer_run_id}/" in row.as_posix():
+                                candidates.append(row)
                     continue
                 candidates.extend(sorted(search_root.glob(f"**/{producer_run_id}/**/{filename}")))
     if not candidates:
@@ -660,7 +743,12 @@ def _read_observer_source_artifact(
                 if direct:
                     candidates.extend(direct)
                 else:
-                    candidates.extend(_find_named_files_under_root(root=search_root, filename=filename))
+                    if schema_id == "ccap_receipt_v1":
+                        candidates.extend(_find_ccap_receipt_candidates_in_runs_root(runs_root=search_root, filename=filename))
+                    elif schema_id in {"omega_tick_perf_v1", "omega_tick_stats_v1", "omega_run_scorecard_v1"}:
+                        candidates.extend(_find_daemon_perf_candidates_in_runs_root(runs_root=search_root, filename=filename))
+                    else:
+                        candidates.extend(_find_named_files_under_root(root=search_root, filename=filename))
                 continue
             candidates.extend(sorted(search_root.glob(f"**/{filename}")))
     if candidates:

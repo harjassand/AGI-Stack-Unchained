@@ -1778,6 +1778,12 @@ def verify(state_dir: Path, *, mode: str = "full") -> str:
             if not isinstance(got_env, dict):
                 fail("NONDETERMINISTIC")
             expected_env = recomputed_decision.get("runaway_env_overrides")
+            # Goal-mode dispatches can occur even when runaway config is present but the
+            # runaway condition is inactive (for example via an explicit env gate used
+            # for acceptance runs). In that case the decision plan intentionally omits
+            # runaway env overrides, and dispatch should run with no overrides.
+            if expected_env is None:
+                expected_env = {}
             if not isinstance(expected_env, dict):
                 fail("NONDETERMINISTIC")
             if {str(k): str(v) for k, v in got_env.items()} != {str(k): str(v) for k, v in expected_env.items()}:

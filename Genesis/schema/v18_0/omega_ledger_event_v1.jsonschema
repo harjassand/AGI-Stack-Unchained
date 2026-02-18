@@ -1,21 +1,26 @@
 {
-  "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://genesis.engine/specs/v18_0/omega_ledger_event_v1",
-  "title": "Omega ledger event v1",
-  "type": "object",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
   "additionalProperties": false,
-  "required": ["schema_version", "event_id", "tick_u64", "event_type", "artifact_hash", "prev_event_id"],
   "properties": {
-    "schema_version": {"const": "omega_ledger_event_v1"},
-    "event_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
-    "tick_u64": {"type": "integer", "minimum": 0},
+    "artifact_hash": {
+      "pattern": "^sha256:[0-9a-f]{64}$",
+      "type": "string"
+    },
+    "event_id": {
+      "pattern": "^sha256:[0-9a-f]{64}$",
+      "type": "string"
+    },
     "event_type": {
-      "type": "string",
       "enum": [
         "STATE",
         "OBSERVATION",
         "NATIVE_RUNTIME_STATS",
         "ISSUE",
+        "BID_MARKET_STATE",
+        "BID_SETTLEMENT",
+        "BID_SET",
+        "BID_SELECTION",
         "DECISION",
         "DISPATCH",
         "SUBVERIFIER",
@@ -24,14 +29,36 @@
         "ROLLBACK",
         "SNAPSHOT",
         "SAFE_HALT"
-      ]
+      ],
+      "type": "string"
     },
-    "artifact_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
     "prev_event_id": {
       "anyOf": [
-        {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
-        {"type": "null"}
+        {
+          "pattern": "^sha256:[0-9a-f]{64}$",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
       ]
+    },
+    "schema_version": {
+      "const": "omega_ledger_event_v1"
+    },
+    "tick_u64": {
+      "minimum": 0,
+      "type": "integer"
     }
-  }
+  },
+  "required": [
+    "schema_version",
+    "event_id",
+    "tick_u64",
+    "event_type",
+    "artifact_hash",
+    "prev_event_id"
+  ],
+  "title": "Omega ledger event v1",
+  "type": "object"
 }

@@ -43,6 +43,16 @@ from .omega_runaway_v1 import (
     load_runaway_config,
     runaway_enabled,
 )
+from .omega_bid_market_v1 import (
+    bid_market_enabled,
+    build_bid_set_v1,
+    build_bid_v1,
+    build_decision_plan_from_selection,
+    load_optional_bid_market_config,
+    resolve_bidder_params,
+    select_winner,
+    settle_and_advance_market_state,
+)
 from .omega_temperature_v1 import compute_temperature_q32
 from .omega_trace_hash_chain_v1 import recompute_head
 
@@ -1580,6 +1590,9 @@ def verify(state_dir: Path, *, mode: str = "full") -> str:
     healthcheck_suite, healthcheck_suite_hash = _load_and_hash(config_dir / "healthcheck_suitepack_v1.json", "healthcheck_suitepack_v1")
     goal_queue = _load_goal_queue_from_config(config_dir)
 
+    bid_market_cfg, bid_market_cfg_hash = load_optional_bid_market_config(config_dir)
+    market_enabled = bid_market_enabled(bid_market_cfg)
+
     snapshot_path = _latest_snapshot_or_fail(state_root / "snapshot")
     snapshot = _verify_hash_binding(snapshot_path, canon_hash_obj(load_canon_dict(snapshot_path)), "omega_tick_snapshot_v1")
 
@@ -1707,6 +1720,11 @@ def verify(state_dir: Path, *, mode: str = "full") -> str:
     )
     if prev_observation is None:
         prev_observation = _derive_prev_observation_from_payload(obs_payload)
+    prev_observation_full = _find_prev_observation_report(
+        state_root=state_root,
+        current_tick_u64=int(obs_payload.get("tick_u64", 0)),
+    )
+    prev_observation_full_hash = canon_hash_obj(prev_observation_full) if isinstance(prev_observation_full, dict) else None
     exclude_run_dir: Path | None = None
     if daemon_root.parent.name == "daemon":
         exclude_run_dir = daemon_root.parent.parent
@@ -1742,25 +1760,204 @@ def verify(state_dir: Path, *, mode: str = "full") -> str:
     if proof.get("plan_hash") != decision_payload.get("plan_id"):
         fail("NONDETERMINISTIC")
 
-    recomputed_decision, _ = decide(
-        tick_u64=int(decision_payload.get("tick_u64", 0)),
-        state=prev_state_payload,
-        observation_report_hash=str(decision_payload.get("observation_report_hash")),
-        issue_bundle_hash=str(decision_payload.get("issue_bundle_hash")),
-        observation_report=obs_payload,
-        issue_bundle=issue_payload,
-        policy=policy,
-        policy_hash=policy_hash,
-        registry=registry,
-        registry_hash=registry_hash,
-        budgets_hash=budgets_hash,
-        goal_queue=goal_queue,
-        objectives=objectives,
-        runaway_cfg=runaway_cfg,
-        runaway_state=prev_runaway_payload,
-    )
-    if canon_hash_obj(recomputed_decision) != canon_hash_obj(decision_payload):
-        fail("NONDETERMINISTIC")
+    if not market_enabled:
+        recomputed_decision, _ = decide(
+            tick_u64=int(decision_payload.get("tick_u64", 0)),
+            state=prev_state_payload,
+            observation_report_hash=str(decision_payload.get("observation_report_hash")),
+            issue_bundle_hash=str(decision_payload.get("issue_bundle_hash")),
+            observation_report=obs_payload,
+            issue_bundle=issue_payload,
+            policy=policy,
+            policy_hash=policy_hash,
+            registry=registry,
+            registry_hash=registry_hash,
+            budgets_hash=budgets_hash,
+            goal_queue=goal_queue,
+            objectives=objectives,
+            runaway_cfg=runaway_cfg,
+            runaway_state=prev_runaway_payload,
+        )
+        if canon_hash_obj(recomputed_decision) != canon_hash_obj(decision_payload):
+            fail("NONDETERMINISTIC")
+    else:
+        if bid_market_cfg is None or bid_market_cfg_hash is None:
+            fail("MISSING_STATE_INPUT")
+
+        snap_state_hash = snapshot.get("bid_market_state_hash")
+        snap_settlement_hash = snapshot.get("bid_settlement_receipt_hash")
+        snap_bid_set_hash = snapshot.get("bid_set_hash")
+        snap_selection_hash = snapshot.get("bid_selection_receipt_hash")
+        for value in [snap_state_hash, snap_settlement_hash, snap_bid_set_hash, snap_selection_hash]:
+            if not isinstance(value, str) or not value.startswith("sha256:") or len(value.split(":", 1)[1]) != 64:
+                fail("MISSING_STATE_INPUT")
+
+        market_state_payload = _verify_hash_binding(
+            find_by_hash(state_root / "market" / "state", "bid_market_state_v1.json", str(snap_state_hash)),
+            str(snap_state_hash),
+            "bid_market_state_v1",
+        )
+        settlement_payload = _verify_hash_binding(
+            find_by_hash(state_root / "market" / "settlement", "bid_settlement_receipt_v1.json", str(snap_settlement_hash)),
+            str(snap_settlement_hash),
+            "bid_settlement_receipt_v1",
+        )
+        bid_set_payload = _verify_hash_binding(
+            find_by_hash(state_root / "market" / "bid_sets", "bid_set_v1.json", str(snap_bid_set_hash)),
+            str(snap_bid_set_hash),
+            "bid_set_v1",
+        )
+        selection_payload = _verify_hash_binding(
+            find_by_hash(state_root / "market" / "selection", "bid_selection_receipt_v1.json", str(snap_selection_hash)),
+            str(snap_selection_hash),
+            "bid_selection_receipt_v1",
+        )
+
+        # Load referenced bids from the current tick's bid set.
+        bids_by_campaign: dict[str, dict[str, Any]] = {}
+        bid_refs = bid_set_payload.get("bids")
+        if not isinstance(bid_refs, list):
+            fail("SCHEMA_FAIL")
+        for ref in bid_refs:
+            if not isinstance(ref, dict):
+                fail("SCHEMA_FAIL")
+            cid = str(ref.get("campaign_id", "")).strip()
+            bh = str(ref.get("bid_hash", "")).strip()
+            if not cid or not bh:
+                fail("SCHEMA_FAIL")
+            bids_by_campaign[cid] = _verify_hash_binding(
+                find_by_hash(state_root / "market" / "bids", "bid_v1.json", bh),
+                bh,
+                "bid_v1",
+            )
+
+        # Load prior tick state/selection receipts referenced by settlement.
+        prev_market_state = None
+        prev_market_state_hash = settlement_payload.get("market_state_before_hash")
+        if prev_market_state_hash is not None:
+            prev_market_state = _verify_hash_binding(
+                find_by_hash(state_root / "market" / "state", "bid_market_state_v1.json", str(prev_market_state_hash)),
+                str(prev_market_state_hash),
+                "bid_market_state_v1",
+            )
+            prev_market_state_hash = str(prev_market_state_hash)
+        else:
+            prev_market_state_hash = None
+
+        prev_selection = None
+        prev_selection_hash = settlement_payload.get("selection_receipt_hash")
+        if prev_selection_hash is not None:
+            prev_selection = _verify_hash_binding(
+                find_by_hash(state_root / "market" / "selection", "bid_selection_receipt_v1.json", str(prev_selection_hash)),
+                str(prev_selection_hash),
+                "bid_selection_receipt_v1",
+            )
+            prev_selection_hash = str(prev_selection_hash)
+        else:
+            prev_selection_hash = None
+
+        expected_settlement, expected_market_state = settle_and_advance_market_state(
+            tick_u64=int(state_payload.get("tick_u64", 0)),
+            config_hash=bid_market_cfg_hash,
+            registry_hash=registry_hash,
+            cfg=bid_market_cfg,
+            registry=registry,
+            objectives=objectives,
+            prev_market_state=prev_market_state,
+            prev_market_state_hash=prev_market_state_hash,
+            prev_selection_receipt=prev_selection,
+            prev_selection_hash=prev_selection_hash,
+            prev_observation_report=prev_observation_full,
+            prev_observation_hash=prev_observation_full_hash,
+            cur_observation_report=obs_payload,
+            cur_observation_hash=str(snapshot.get("observation_report_hash")),
+        )
+        if canon_hash_obj(expected_settlement) != canon_hash_obj(settlement_payload):
+            fail("NONDETERMINISTIC")
+        if canon_hash_obj(expected_market_state) != canon_hash_obj(market_state_payload):
+            fail("NONDETERMINISTIC")
+
+        # Recompute bid emission and set aggregation.
+        market_state_map = {
+            str(row.get("campaign_id")): row
+            for row in (market_state_payload.get("campaign_states") or [])
+            if isinstance(row, dict) and str(row.get("campaign_id", "")).strip()
+        }
+        caps = registry.get("capabilities")
+        if not isinstance(caps, list):
+            fail("SCHEMA_FAIL")
+        expected_bids: dict[str, dict[str, Any]] = {}
+        expected_bid_hash_by_campaign: dict[str, str] = {}
+        for cap in sorted([row for row in caps if isinstance(row, dict)], key=lambda r: str(r.get("campaign_id"))):
+            campaign_id = str(cap.get("campaign_id", "")).strip()
+            if not campaign_id or not bool(cap.get("enabled", False)):
+                continue
+            st = market_state_map.get(campaign_id)
+            if st is None or bool(st.get("disabled_b", False)):
+                continue
+            roi_q32, conf_q32, horizon_u64 = resolve_bidder_params(bid_market_cfg, campaign_id)
+            cost_q32 = int(((cap.get("budget_cost_hint_q32") or {}).get("q", 0)))
+            cost_q32 = max(1, int(cost_q32))
+            bid = build_bid_v1(
+                tick_u64=int(state_payload.get("tick_u64", 0)),
+                campaign_id=campaign_id,
+                capability_id=str(cap.get("capability_id", "")).strip(),
+                observation_report_hash=str(snapshot.get("observation_report_hash")),
+                market_state_hash=str(snap_state_hash),
+                config_hash=bid_market_cfg_hash,
+                registry_hash=registry_hash,
+                roi_q32=roi_q32,
+                confidence_q32=conf_q32,
+                horizon_ticks_u64=horizon_u64,
+                predicted_cost_q32=cost_q32,
+            )
+            expected_bids[campaign_id] = bid
+            expected_bid_hash_by_campaign[campaign_id] = canon_hash_obj(bid)
+
+        expected_bid_set = build_bid_set_v1(
+            tick_u64=int(state_payload.get("tick_u64", 0)),
+            observation_report_hash=str(snapshot.get("observation_report_hash")),
+            market_state_hash=str(snap_state_hash),
+            config_hash=bid_market_cfg_hash,
+            registry_hash=registry_hash,
+            bids_by_campaign=expected_bid_hash_by_campaign,
+        )
+        if canon_hash_obj(expected_bid_set) != canon_hash_obj(bid_set_payload):
+            fail("NONDETERMINISTIC")
+        for cid, expected_hash in expected_bid_hash_by_campaign.items():
+            got = bids_by_campaign.get(cid)
+            if got is None or canon_hash_obj(got) != expected_hash:
+                fail("NONDETERMINISTIC")
+
+        expected_selection = select_winner(
+            tick_u64=int(state_payload.get("tick_u64", 0)),
+            observation_report_hash=str(snapshot.get("observation_report_hash")),
+            market_state=market_state_payload,
+            market_state_hash=str(snap_state_hash),
+            config_hash=bid_market_cfg_hash,
+            registry_hash=registry_hash,
+            bid_set_hash=str(snap_bid_set_hash),
+            bids=expected_bids,
+            prev_state=prev_state_payload,
+        )
+        if canon_hash_obj(expected_selection) != canon_hash_obj(selection_payload):
+            fail("NONDETERMINISTIC")
+
+        expected_decision = build_decision_plan_from_selection(
+            tick_u64=int(state_payload.get("tick_u64", 0)),
+            observation_report_hash=str(snapshot.get("observation_report_hash")),
+            issue_bundle_hash=str(snapshot.get("issue_bundle_hash")),
+            policy_hash=policy_hash,
+            registry_hash=registry_hash,
+            budgets_hash=budgets_hash,
+            registry=registry,
+            selection_receipt=selection_payload,
+        )
+        if canon_hash_obj(expected_decision) != canon_hash_obj(decision_payload):
+            fail("NONDETERMINISTIC")
+        # Downstream verifier checks (e.g. runaway env bindings) refer to the
+        # recomputed decision plan in both market/non-market modes.
+        recomputed_decision = expected_decision
 
     if runaway_enabled(runaway_cfg):
         if current_runaway_payload is None or prev_runaway_payload is None:

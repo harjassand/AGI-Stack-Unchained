@@ -1,0 +1,105 @@
+{
+  "$id": "https://genesis.engine/specs/v18_0/bid_market_state_v1",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "campaign_states": {
+      "items": {
+        "additionalProperties": false,
+        "properties": {
+          "bankroll_q32": {
+            "additionalProperties": false,
+            "properties": {
+              "q": {
+                "minimum": 0,
+                "type": "integer"
+              }
+            },
+            "required": [
+              "q"
+            ],
+            "type": "object"
+          },
+          "bankruptcy_streak_u64": {
+            "minimum": 0,
+            "type": "integer"
+          },
+          "campaign_id": {
+            "type": "string"
+          },
+          "credibility_q32": {
+            "additionalProperties": false,
+            "properties": {
+              "q": {
+                "maximum": 4294967296,
+                "minimum": 0,
+                "type": "integer"
+              }
+            },
+            "required": [
+              "q"
+            ],
+            "type": "object"
+          },
+          "disabled_b": {
+            "type": "boolean"
+          },
+          "disabled_reason": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "campaign_id",
+          "bankroll_q32",
+          "credibility_q32",
+          "bankruptcy_streak_u64",
+          "disabled_b",
+          "disabled_reason"
+        ],
+        "type": "object"
+      },
+      "type": "array"
+    },
+    "config_hash": {
+      "pattern": "^sha256:[0-9a-f]{64}$",
+      "type": "string"
+    },
+    "prev_state_id": {
+      "anyOf": [
+        {
+          "pattern": "^sha256:[0-9a-f]{64}$",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "registry_hash": {
+      "pattern": "^sha256:[0-9a-f]{64}$",
+      "type": "string"
+    },
+    "schema_version": {
+      "const": "bid_market_state_v1"
+    },
+    "state_id": {
+      "pattern": "^sha256:[0-9a-f]{64}$",
+      "type": "string"
+    },
+    "tick_u64": {
+      "minimum": 0,
+      "type": "integer"
+    }
+  },
+  "required": [
+    "schema_version",
+    "state_id",
+    "tick_u64",
+    "prev_state_id",
+    "config_hash",
+    "registry_hash",
+    "campaign_states"
+  ],
+  "title": "Bid market state v1",
+  "type": "object"
+}

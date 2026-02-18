@@ -1,0 +1,348 @@
+{
+  "$id": "https://genesis.engine/specs/v18_0/bid_settlement_receipt_v1",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "J_cur_q32": {
+      "additionalProperties": false,
+      "properties": {
+        "q": {
+          "type": "integer"
+        }
+      },
+      "required": [
+        "q"
+      ],
+      "type": "object"
+    },
+    "J_prev_q32": {
+      "anyOf": [
+        {
+          "additionalProperties": false,
+          "properties": {
+            "q": {
+              "type": "integer"
+            }
+          },
+          "required": [
+            "q"
+          ],
+          "type": "object"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "cur_observation_report_hash": {
+      "pattern": "^sha256:[0-9a-f]{64}$",
+      "type": "string"
+    },
+    "market_state_after_hash": {
+      "pattern": "^sha256:[0-9a-f]{64}$",
+      "type": "string"
+    },
+    "market_state_before_hash": {
+      "anyOf": [
+        {
+          "pattern": "^sha256:[0-9a-f]{64}$",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "outcome": {
+      "enum": [
+        "OK",
+        "GENESIS"
+      ],
+      "type": "string"
+    },
+    "prev_observation_report_hash": {
+      "anyOf": [
+        {
+          "pattern": "^sha256:[0-9a-f]{64}$",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "realized_delta_J_q32": {
+      "anyOf": [
+        {
+          "additionalProperties": false,
+          "properties": {
+            "q": {
+              "type": "integer"
+            }
+          },
+          "required": [
+            "q"
+          ],
+          "type": "object"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "receipt_id": {
+      "pattern": "^sha256:[0-9a-f]{64}$",
+      "type": "string"
+    },
+    "schema_version": {
+      "const": "bid_settlement_receipt_v1"
+    },
+    "selection_receipt_hash": {
+      "anyOf": [
+        {
+          "pattern": "^sha256:[0-9a-f]{64}$",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "settled_tick_u64": {
+      "anyOf": [
+        {
+          "minimum": 0,
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "tick_u64": {
+      "minimum": 0,
+      "type": "integer"
+    },
+    "updates": {
+      "additionalProperties": false,
+      "properties": {
+        "disabled_campaign_ids": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "winner_bankroll_after_q32": {
+          "additionalProperties": false,
+          "properties": {
+            "q": {
+              "minimum": 0,
+              "type": "integer"
+            }
+          },
+          "required": [
+            "q"
+          ],
+          "type": "object"
+        },
+        "winner_bankroll_before_q32": {
+          "additionalProperties": false,
+          "properties": {
+            "q": {
+              "minimum": 0,
+              "type": "integer"
+            }
+          },
+          "required": [
+            "q"
+          ],
+          "type": "object"
+        },
+        "winner_credibility_after_q32": {
+          "additionalProperties": false,
+          "properties": {
+            "q": {
+              "maximum": 4294967296,
+              "minimum": 0,
+              "type": "integer"
+            }
+          },
+          "required": [
+            "q"
+          ],
+          "type": "object"
+        },
+        "winner_credibility_before_q32": {
+          "additionalProperties": false,
+          "properties": {
+            "q": {
+              "maximum": 4294967296,
+              "minimum": 0,
+              "type": "integer"
+            }
+          },
+          "required": [
+            "q"
+          ],
+          "type": "object"
+        }
+      },
+      "required": [
+        "winner_bankroll_before_q32",
+        "winner_bankroll_after_q32",
+        "winner_credibility_before_q32",
+        "winner_credibility_after_q32",
+        "disabled_campaign_ids"
+      ],
+      "type": "object"
+    },
+    "winner_bid": {
+      "anyOf": [
+        {
+          "type": "null"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "bid_hash": {
+              "pattern": "^sha256:[0-9a-f]{64}$",
+              "type": "string"
+            },
+            "campaign_id": {
+              "type": "string"
+            },
+            "confidence_q32": {
+              "additionalProperties": false,
+              "properties": {
+                "q": {
+                  "maximum": 4294967296,
+                  "minimum": 0,
+                  "type": "integer"
+                }
+              },
+              "required": [
+                "q"
+              ],
+              "type": "object"
+            },
+            "credibility_q32": {
+              "additionalProperties": false,
+              "properties": {
+                "q": {
+                  "maximum": 4294967296,
+                  "minimum": 0,
+                  "type": "integer"
+                }
+              },
+              "required": [
+                "q"
+              ],
+              "type": "object"
+            },
+            "evidence_hash": {
+              "pattern": "^sha256:[0-9a-f]{64}$",
+              "type": "string"
+            },
+            "horizon_ticks_u64": {
+              "minimum": 1,
+              "type": "integer"
+            },
+            "predicted_cost_q32": {
+              "additionalProperties": false,
+              "properties": {
+                "q": {
+                  "minimum": 1,
+                  "type": "integer"
+                }
+              },
+              "required": [
+                "q"
+              ],
+              "type": "object"
+            },
+            "predicted_delta_J_q32": {
+              "additionalProperties": false,
+              "properties": {
+                "q": {
+                  "minimum": 0,
+                  "type": "integer"
+                }
+              },
+              "required": [
+                "q"
+              ],
+              "type": "object"
+            },
+            "roi_q32": {
+              "additionalProperties": false,
+              "properties": {
+                "q": {
+                  "type": "integer"
+                }
+              },
+              "required": [
+                "q"
+              ],
+              "type": "object"
+            },
+            "score_q32": {
+              "additionalProperties": false,
+              "properties": {
+                "q": {
+                  "type": "integer"
+                }
+              },
+              "required": [
+                "q"
+              ],
+              "type": "object"
+            }
+          },
+          "required": [
+            "campaign_id",
+            "bid_hash",
+            "score_q32",
+            "roi_q32",
+            "credibility_q32",
+            "confidence_q32",
+            "predicted_delta_J_q32",
+            "predicted_cost_q32",
+            "horizon_ticks_u64",
+            "evidence_hash"
+          ],
+          "type": "object"
+        }
+      ]
+    },
+    "winner_campaign_id": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    }
+  },
+  "required": [
+    "schema_version",
+    "receipt_id",
+    "tick_u64",
+    "settled_tick_u64",
+    "selection_receipt_hash",
+    "prev_observation_report_hash",
+    "cur_observation_report_hash",
+    "J_prev_q32",
+    "J_cur_q32",
+    "realized_delta_J_q32",
+    "winner_campaign_id",
+    "winner_bid",
+    "market_state_before_hash",
+    "market_state_after_hash",
+    "updates",
+    "outcome"
+  ],
+  "title": "Bid settlement receipt v1",
+  "type": "object"
+}

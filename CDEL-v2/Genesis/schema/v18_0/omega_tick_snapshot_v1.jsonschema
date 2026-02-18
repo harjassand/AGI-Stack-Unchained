@@ -1,9 +1,221 @@
 {
-  "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://genesis.engine/specs/v18_0/omega_tick_snapshot_v1",
-  "title": "Omega tick snapshot v1",
-  "type": "object",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
   "additionalProperties": false,
+  "properties": {
+    "activation_receipt_hash": {
+      "anyOf": [
+        {
+          "pattern": "^sha256:[0-9a-f]{64}$",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "bid_market_state_hash": {
+      "anyOf": [
+        {
+          "pattern": "^sha256:[0-9a-f]{64}$",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "bid_selection_receipt_hash": {
+      "anyOf": [
+        {
+          "pattern": "^sha256:[0-9a-f]{64}$",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "bid_set_hash": {
+      "anyOf": [
+        {
+          "pattern": "^sha256:[0-9a-f]{64}$",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "bid_settlement_receipt_hash": {
+      "anyOf": [
+        {
+          "pattern": "^sha256:[0-9a-f]{64}$",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "budget_remaining": {
+      "additionalProperties": false,
+      "properties": {
+        "build_cost_q32": {
+          "additionalProperties": false,
+          "properties": {
+            "q": {
+              "minimum": 0,
+              "type": "integer"
+            }
+          },
+          "required": [
+            "q"
+          ],
+          "type": "object"
+        },
+        "cpu_cost_q32": {
+          "additionalProperties": false,
+          "properties": {
+            "q": {
+              "minimum": 0,
+              "type": "integer"
+            }
+          },
+          "required": [
+            "q"
+          ],
+          "type": "object"
+        },
+        "disk_bytes_u64": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "verifier_cost_q32": {
+          "additionalProperties": false,
+          "properties": {
+            "q": {
+              "minimum": 0,
+              "type": "integer"
+            }
+          },
+          "required": [
+            "q"
+          ],
+          "type": "object"
+        }
+      },
+      "required": [
+        "cpu_cost_q32",
+        "build_cost_q32",
+        "verifier_cost_q32",
+        "disk_bytes_u64"
+      ],
+      "type": "object"
+    },
+    "cooldowns": {
+      "additionalProperties": {
+        "additionalProperties": false,
+        "properties": {
+          "next_tick_allowed_u64": {
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "next_tick_allowed_u64"
+        ],
+        "type": "object"
+      },
+      "type": "object"
+    },
+    "decision_plan_hash": {
+      "pattern": "^sha256:[0-9a-f]{64}$",
+      "type": "string"
+    },
+    "dispatch_receipt_hash": {
+      "anyOf": [
+        {
+          "pattern": "^sha256:[0-9a-f]{64}$",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "execution_mode": {
+      "enum": [
+        "STRICT",
+        "BLACKBOX"
+      ],
+      "type": "string"
+    },
+    "goal_queue_hash": {
+      "pattern": "^sha256:[0-9a-f]{64}$",
+      "type": "string"
+    },
+    "issue_bundle_hash": {
+      "pattern": "^sha256:[0-9a-f]{64}$",
+      "type": "string"
+    },
+    "observation_report_hash": {
+      "pattern": "^sha256:[0-9a-f]{64}$",
+      "type": "string"
+    },
+    "promotion_receipt_hash": {
+      "anyOf": [
+        {
+          "pattern": "^sha256:[0-9a-f]{64}$",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "rollback_receipt_hash": {
+      "anyOf": [
+        {
+          "pattern": "^sha256:[0-9a-f]{64}$",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "schema_version": {
+      "const": "omega_tick_snapshot_v1"
+    },
+    "snapshot_id": {
+      "pattern": "^sha256:[0-9a-f]{64}$",
+      "type": "string"
+    },
+    "state_hash": {
+      "pattern": "^sha256:[0-9a-f]{64}$",
+      "type": "string"
+    },
+    "subverifier_receipt_hash": {
+      "anyOf": [
+        {
+          "pattern": "^sha256:[0-9a-f]{64}$",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "tick_u64": {
+      "minimum": 0,
+      "type": "integer"
+    },
+    "trace_hash_chain_hash": {
+      "pattern": "^sha256:[0-9a-f]{64}$",
+      "type": "string"
+    }
+  },
   "required": [
     "schema_version",
     "snapshot_id",
@@ -22,83 +234,6 @@
     "cooldowns",
     "goal_queue_hash"
   ],
-  "properties": {
-    "schema_version": {"const": "omega_tick_snapshot_v1"},
-    "snapshot_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
-    "tick_u64": {"type": "integer", "minimum": 0},
-    "state_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
-    "observation_report_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
-    "issue_bundle_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
-    "decision_plan_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
-    "dispatch_receipt_hash": {
-      "anyOf": [
-        {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
-        {"type": "null"}
-      ]
-    },
-    "subverifier_receipt_hash": {
-      "anyOf": [
-        {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
-        {"type": "null"}
-      ]
-    },
-    "promotion_receipt_hash": {
-      "anyOf": [
-        {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
-        {"type": "null"}
-      ]
-    },
-    "activation_receipt_hash": {
-      "anyOf": [
-        {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
-        {"type": "null"}
-      ]
-    },
-    "rollback_receipt_hash": {
-      "anyOf": [
-        {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
-        {"type": "null"}
-      ]
-    },
-    "trace_hash_chain_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
-    "budget_remaining": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": ["cpu_cost_q32", "build_cost_q32", "verifier_cost_q32", "disk_bytes_u64"],
-      "properties": {
-        "cpu_cost_q32": {
-          "type": "object",
-          "additionalProperties": false,
-          "required": ["q"],
-          "properties": {"q": {"type": "integer", "minimum": 0}}
-        },
-        "build_cost_q32": {
-          "type": "object",
-          "additionalProperties": false,
-          "required": ["q"],
-          "properties": {"q": {"type": "integer", "minimum": 0}}
-        },
-        "verifier_cost_q32": {
-          "type": "object",
-          "additionalProperties": false,
-          "required": ["q"],
-          "properties": {"q": {"type": "integer", "minimum": 0}}
-        },
-        "disk_bytes_u64": {"type": "integer", "minimum": 0}
-      }
-    },
-    "cooldowns": {
-      "type": "object",
-      "additionalProperties": {
-        "type": "object",
-        "additionalProperties": false,
-        "required": ["next_tick_allowed_u64"],
-        "properties": {
-          "next_tick_allowed_u64": {"type": "integer", "minimum": 0}
-        }
-      }
-    },
-    "goal_queue_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
-    "execution_mode": {"type": "string", "enum": ["STRICT", "BLACKBOX"]}
-  }
+  "title": "Omega tick snapshot v1",
+  "type": "object"
 }

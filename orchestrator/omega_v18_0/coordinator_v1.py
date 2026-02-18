@@ -11,6 +11,22 @@ from typing import Any
 
 from cdel.v18_0.omega_allowlists_v1 import load_allowlists
 from cdel.v18_0.omega_budgets_v1 import debit_budget, load_budgets
+from cdel.v18_0.omega_bid_market_v1 import (
+    bid_market_enabled,
+    build_bid_set_v1,
+    build_bid_v1,
+    build_decision_plan_from_selection,
+    load_latest_bid_market_state,
+    load_optional_bid_market_config,
+    resolve_bidder_params,
+    select_winner,
+    settle_and_advance_market_state,
+    write_bid_market_state,
+    write_bid_selection_receipt,
+    write_bid_set_v1,
+    write_bid_settlement_receipt,
+    write_bid_v1,
+)
 from cdel.v18_0.omega_common_v1 import (
     canon_hash_obj,
     fail,
@@ -167,6 +183,51 @@ def _load_prev_runaway_state(prev_state_dir: Path | None) -> dict[str, Any] | No
     if (prev_state_dir / "state" / "runaway").is_dir():
         return load_latest_runaway_state(prev_state_dir / "state" / "runaway")
     return None
+
+
+def _load_prev_market_state(prev_state_dir: Path | None) -> dict[str, Any] | None:
+    if prev_state_dir is None:
+        return None
+    candidates = [
+        prev_state_dir / "market" / "state",
+        prev_state_dir / "state" / "market" / "state",
+    ]
+    for state_dir in candidates:
+        if state_dir.is_dir():
+            payload = load_latest_bid_market_state(state_dir)
+            if payload is not None:
+                return payload
+    return None
+
+
+def _load_prev_selection_receipt(prev_state_dir: Path | None) -> tuple[dict[str, Any] | None, str | None]:
+    if prev_state_dir is None:
+        return None, None
+    candidates = [
+        prev_state_dir / "market" / "selection",
+        prev_state_dir / "state" / "market" / "selection",
+    ]
+    for sel_dir in candidates:
+        if not sel_dir.is_dir():
+            continue
+        rows = sorted(sel_dir.glob("sha256_*.bid_selection_receipt_v1.json"), key=lambda p: p.as_posix())
+        if not rows:
+            continue
+        best: dict[str, Any] | None = None
+        best_tick = -1
+        for path in rows:
+            payload = load_canon_dict(path)
+            if payload.get("schema_version") != "bid_selection_receipt_v1":
+                continue
+            tick = int(payload.get("tick_u64", -1))
+            if tick > best_tick:
+                best_tick = tick
+                best = payload
+        if best is None:
+            continue
+        validate_schema(best, "bid_selection_receipt_v1")
+        return best, canon_hash_obj(best)
+    return None, None
 
 
 def _run_id_from_state_dir(path: Path) -> str | None:
@@ -522,6 +583,11 @@ def run_tick(
     for rel in [
         "state",
         "runaway",
+        "market/state",
+        "market/bids",
+        "market/bid_sets",
+        "market/selection",
+        "market/settlement",
         "observations",
         "issues",
         "decisions",
@@ -578,6 +644,9 @@ def run_tick(
         healthcheck_suite_hash = canon_hash_obj(healthcheck_suite)
 
         goal_queue, goal_queue_hash = load_goal_queue(config_dir)
+
+        bid_market_cfg, bid_market_cfg_hash = load_optional_bid_market_config(config_dir)
+        market_enabled = bid_market_enabled(bid_market_cfg)
 
         prev_state = _load_prev_state(prev_state_dir)
         if prev_state is None:
@@ -729,29 +798,161 @@ def run_tick(
             _, prev_runaway_state, _ = write_runaway_state(state_root / "runaway", prev_runaway_state)
 
         decide_start_ns = time.monotonic_ns()
-        decision_plan, decision_hash = decide(
-            tick_u64=tick_u64,
-            state=prev_state,
-            observation_report_hash=observation_hash,
-            issue_bundle_hash=issue_hash,
-            observation_report=observation_report,
-            issue_bundle=issue_bundle,
-            policy=policy,
-            policy_hash=policy_hash,
-            registry=registry,
-            registry_hash=registry_hash,
-            budgets_hash=budgets_hash,
-            goal_queue=goal_queue,
-            objectives=objectives,
-            runaway_cfg=runaway_cfg,
-            runaway_state=prev_runaway_state,
-        )
-        _mark("decide", decide_start_ns)
-        _, decision_plan, decision_hash = _write_payload(
-            state_root / "decisions",
-            "omega_decision_plan_v1.json",
-            decision_plan,
-        )
+        bid_market_state_hash = None
+        bid_settlement_receipt_hash = None
+        bid_set_hash = None
+        bid_selection_receipt_hash = None
+        if not market_enabled:
+            decision_plan, decision_hash = decide(
+                tick_u64=tick_u64,
+                state=prev_state,
+                observation_report_hash=observation_hash,
+                issue_bundle_hash=issue_hash,
+                observation_report=observation_report,
+                issue_bundle=issue_bundle,
+                policy=policy,
+                policy_hash=policy_hash,
+                registry=registry,
+                registry_hash=registry_hash,
+                budgets_hash=budgets_hash,
+                goal_queue=goal_queue,
+                objectives=objectives,
+                runaway_cfg=runaway_cfg,
+                runaway_state=prev_runaway_state,
+            )
+            _mark("decide", decide_start_ns)
+            _, decision_plan, decision_hash = _write_payload(
+                state_root / "decisions",
+                "omega_decision_plan_v1.json",
+                decision_plan,
+            )
+        else:
+            if bid_market_cfg is None or bid_market_cfg_hash is None:
+                fail("MISSING_STATE_INPUT")
+            prev_market_state = _load_prev_market_state(prev_state_dir)
+            prev_market_state_hash = None
+            if prev_market_state is not None:
+                _, prev_market_state, prev_market_state_hash = write_bid_market_state(state_root / "market" / "state", prev_market_state)
+
+            prev_selection_receipt, prev_selection_hash = _load_prev_selection_receipt(prev_state_dir)
+            if prev_selection_receipt is not None:
+                _, prev_selection_receipt, prev_selection_hash = write_bid_selection_receipt(state_root / "market" / "selection", prev_selection_receipt)
+
+            prev_obs_hash = None
+            if isinstance(prev_observation_report, dict):
+                # Carry-forward previous observation so settlement can compute J(t-1)
+                # over objective metrics that are not carried in metric_series.
+                _, prev_observation_report, prev_obs_hash = _write_payload(
+                    state_root / "observations",
+                    "omega_observation_report_v1.json",
+                    prev_observation_report,
+                )
+
+            settlement_receipt, market_state_after = settle_and_advance_market_state(
+                tick_u64=tick_u64,
+                config_hash=bid_market_cfg_hash,
+                registry_hash=registry_hash,
+                cfg=bid_market_cfg,
+                registry=registry,
+                objectives=objectives,
+                prev_market_state=prev_market_state,
+                prev_market_state_hash=prev_market_state_hash,
+                prev_selection_receipt=prev_selection_receipt,
+                prev_selection_hash=prev_selection_hash,
+                prev_observation_report=prev_observation_report if isinstance(prev_observation_report, dict) else None,
+                prev_observation_hash=prev_obs_hash,
+                cur_observation_report=observation_report,
+                cur_observation_hash=observation_hash,
+            )
+            _, settlement_receipt, bid_settlement_receipt_hash = write_bid_settlement_receipt(
+                state_root / "market" / "settlement",
+                settlement_receipt,
+            )
+            _, market_state_after, bid_market_state_hash = write_bid_market_state(
+                state_root / "market" / "state",
+                market_state_after,
+            )
+            if str(settlement_receipt.get("market_state_after_hash")) != str(bid_market_state_hash):
+                fail("NONDETERMINISTIC")
+
+            # Emit bids for effectively-enabled capabilities.
+            market_state_map = {
+                str(row.get("campaign_id")): row
+                for row in (market_state_after.get("campaign_states") or [])
+                if isinstance(row, dict) and str(row.get("campaign_id", "")).strip()
+            }
+            caps = registry.get("capabilities")
+            if not isinstance(caps, list):
+                fail("SCHEMA_FAIL")
+            bids_by_campaign: dict[str, dict[str, Any]] = {}
+            bid_hash_by_campaign: dict[str, str] = {}
+            for cap in sorted([row for row in caps if isinstance(row, dict)], key=lambda r: str(r.get("campaign_id"))):
+                campaign_id = str(cap.get("campaign_id", "")).strip()
+                if not campaign_id or not bool(cap.get("enabled", False)):
+                    continue
+                st = market_state_map.get(campaign_id)
+                if st is None or bool(st.get("disabled_b", False)):
+                    continue
+                roi_q32, conf_q32, horizon_u64 = resolve_bidder_params(bid_market_cfg, campaign_id)
+                cost_q32 = int(((cap.get("budget_cost_hint_q32") or {}).get("q", 0)))
+                cost_q32 = max(1, int(cost_q32))
+                bid = build_bid_v1(
+                    tick_u64=tick_u64,
+                    campaign_id=campaign_id,
+                    capability_id=str(cap.get("capability_id", "")).strip(),
+                    observation_report_hash=observation_hash,
+                    market_state_hash=str(bid_market_state_hash),
+                    config_hash=bid_market_cfg_hash,
+                    registry_hash=registry_hash,
+                    roi_q32=roi_q32,
+                    confidence_q32=conf_q32,
+                    horizon_ticks_u64=horizon_u64,
+                    predicted_cost_q32=cost_q32,
+                )
+                _, bid, bid_hash = write_bid_v1(state_root / "market" / "bids", bid)
+                bids_by_campaign[campaign_id] = bid
+                bid_hash_by_campaign[campaign_id] = bid_hash
+
+            bid_set = build_bid_set_v1(
+                tick_u64=tick_u64,
+                observation_report_hash=observation_hash,
+                market_state_hash=str(bid_market_state_hash),
+                config_hash=bid_market_cfg_hash,
+                registry_hash=registry_hash,
+                bids_by_campaign=bid_hash_by_campaign,
+            )
+            _, bid_set, bid_set_hash = write_bid_set_v1(state_root / "market" / "bid_sets", bid_set)
+            bid_selection = select_winner(
+                tick_u64=tick_u64,
+                observation_report_hash=observation_hash,
+                market_state=market_state_after,
+                market_state_hash=str(bid_market_state_hash),
+                config_hash=bid_market_cfg_hash,
+                registry_hash=registry_hash,
+                bid_set_hash=bid_set_hash,
+                bids=bids_by_campaign,
+                prev_state=prev_state,
+            )
+            _, bid_selection, bid_selection_receipt_hash = write_bid_selection_receipt(
+                state_root / "market" / "selection",
+                bid_selection,
+            )
+            decision_plan = build_decision_plan_from_selection(
+                tick_u64=tick_u64,
+                observation_report_hash=observation_hash,
+                issue_bundle_hash=issue_hash,
+                policy_hash=policy_hash,
+                registry_hash=registry_hash,
+                budgets_hash=budgets_hash,
+                registry=registry,
+                selection_receipt=bid_selection,
+            )
+            _mark("decide", decide_start_ns)
+            _, decision_plan, decision_hash = _write_payload(
+                state_root / "decisions",
+                "omega_decision_plan_v1.json",
+                decision_plan,
+            )
 
         run_seed_u64 = int(os.environ.get("OMEGA_RUN_SEED_U64", int(pack.get("seed_u64", 0))))
 
@@ -937,6 +1138,13 @@ def run_tick(
         _emit("STATE", state_hash)
         _emit("OBSERVATION", observation_hash)
         _emit("ISSUE", issue_hash)
+        if market_enabled:
+            if bid_settlement_receipt_hash is None or bid_market_state_hash is None or bid_set_hash is None or bid_selection_receipt_hash is None:
+                fail("MISSING_STATE_INPUT")
+            _emit("BID_SETTLEMENT", bid_settlement_receipt_hash)
+            _emit("BID_MARKET_STATE", bid_market_state_hash)
+            _emit("BID_SET", bid_set_hash)
+            _emit("BID_SELECTION", bid_selection_receipt_hash)
         _emit("DECISION", decision_hash)
         if dispatch_hash is not None:
             _emit("DISPATCH", dispatch_hash)
@@ -1020,6 +1228,10 @@ def run_tick(
                 "budget_remaining": budget_remaining,
                 "cooldowns": cooldowns,
                 "goal_queue_hash": goal_queue_hash,
+                "bid_market_state_hash": bid_market_state_hash if market_enabled else None,
+                "bid_settlement_receipt_hash": bid_settlement_receipt_hash if market_enabled else None,
+                "bid_set_hash": bid_set_hash if market_enabled else None,
+                "bid_selection_receipt_hash": bid_selection_receipt_hash if market_enabled else None,
             }
         )
         _, snapshot, snapshot_hash = write_snapshot(state_root / "snapshot", snapshot)

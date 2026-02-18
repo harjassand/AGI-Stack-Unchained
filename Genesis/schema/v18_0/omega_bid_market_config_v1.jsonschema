@@ -1,0 +1,209 @@
+{
+  "$id": "https://genesis.engine/specs/v18_0/omega_bid_market_config_v1",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "bankroll_disable_threshold_q32": {
+      "additionalProperties": false,
+      "properties": {
+        "q": {
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "q"
+      ],
+      "type": "object"
+    },
+    "bankroll_penalty_rate_q32": {
+      "additionalProperties": false,
+      "properties": {
+        "q": {
+          "maximum": 4294967296,
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "q"
+      ],
+      "type": "object"
+    },
+    "bankroll_reward_rate_q32": {
+      "additionalProperties": false,
+      "properties": {
+        "q": {
+          "maximum": 4294967296,
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "q"
+      ],
+      "type": "object"
+    },
+    "campaign_overrides": {
+      "items": {
+        "additionalProperties": false,
+        "properties": {
+          "campaign_id": {
+            "type": "string"
+          },
+          "confidence_q32": {
+            "additionalProperties": false,
+            "properties": {
+              "q": {
+                "maximum": 4294967296,
+                "minimum": 0,
+                "type": "integer"
+              }
+            },
+            "required": [
+              "q"
+            ],
+            "type": "object"
+          },
+          "horizon_ticks_u64": {
+            "minimum": 1,
+            "type": "integer"
+          },
+          "predicted_roi_q32": {
+            "additionalProperties": false,
+            "properties": {
+              "q": {
+                "minimum": 0,
+                "type": "integer"
+              }
+            },
+            "required": [
+              "q"
+            ],
+            "type": "object"
+          }
+        },
+        "required": [
+          "campaign_id"
+        ],
+        "type": "object"
+      },
+      "type": "array"
+    },
+    "credibility_lr_q32": {
+      "additionalProperties": false,
+      "properties": {
+        "q": {
+          "maximum": 4294967296,
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "q"
+      ],
+      "type": "object"
+    },
+    "default_confidence_q32": {
+      "additionalProperties": false,
+      "properties": {
+        "q": {
+          "maximum": 4294967296,
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "q"
+      ],
+      "type": "object"
+    },
+    "default_horizon_ticks_u64": {
+      "minimum": 1,
+      "type": "integer"
+    },
+    "default_predicted_roi_q32": {
+      "additionalProperties": false,
+      "properties": {
+        "q": {
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "q"
+      ],
+      "type": "object"
+    },
+    "disable_after_ticks_u64": {
+      "minimum": 1,
+      "type": "integer"
+    },
+    "enabled": {
+      "type": "boolean"
+    },
+    "error_cap_q32": {
+      "additionalProperties": false,
+      "properties": {
+        "q": {
+          "minimum": 1,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "q"
+      ],
+      "type": "object"
+    },
+    "initial_bankroll_q32": {
+      "additionalProperties": false,
+      "properties": {
+        "q": {
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "q"
+      ],
+      "type": "object"
+    },
+    "initial_credibility_q32": {
+      "additionalProperties": false,
+      "properties": {
+        "q": {
+          "maximum": 4294967296,
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "q"
+      ],
+      "type": "object"
+    },
+    "min_credibility_q32": {
+      "additionalProperties": false,
+      "properties": {
+        "q": {
+          "maximum": 4294967296,
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "q"
+      ],
+      "type": "object"
+    },
+    "schema_version": {
+      "const": "omega_bid_market_config_v1"
+    }
+  },
+  "required": [
+    "schema_version",
+    "enabled"
+  ],
+  "title": "Omega bid market config v1",
+  "type": "object"
+}

@@ -21,6 +21,9 @@ _REQUIRED_FILES = [
     "baselines/baseline_metrics_v1.json",
     "goals/omega_goal_queue_v1.json",
 ]
+_OPTIONAL_FILES = [
+    "omega_bid_market_config_v1.json",
+]
 _GOAL_QUEUE_BASE_PATH_REL = Path("goals") / "omega_goal_queue_v1.json"
 _GOAL_QUEUE_EFFECTIVE_PATH_REL = Path("goals") / "omega_goal_queue_effective_v1.json"
 
@@ -37,6 +40,20 @@ def freeze_pack_config(*, campaign_pack: Path, config_dir: Path) -> tuple[dict[s
         if not src.exists() or not src.is_file():
             fail("MISSING_STATE_INPUT")
         payload = load_canon_dict(src)
+        write_canon_json(config_dir / rel, payload)
+
+    for rel in _OPTIONAL_FILES:
+        src = source_root / rel
+        if not src.exists():
+            continue
+        if not src.is_file():
+            fail("SCHEMA_FAIL")
+        payload = load_canon_dict(src)
+        # Optional files are still schema-validated when present to keep
+        # downstream hashing deterministic and fail-closed.
+        schema_version = str(payload.get("schema_version", "")).strip()
+        if schema_version:
+            validate_schema(payload, schema_version)
         write_canon_json(config_dir / rel, payload)
 
     write_canon_json(config_dir / "rsi_omega_daemon_pack_v1.json", pack)

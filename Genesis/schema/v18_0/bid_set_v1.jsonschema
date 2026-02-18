@@ -1,0 +1,66 @@
+{
+  "$id": "https://genesis.engine/specs/v18_0/bid_set_v1",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "bid_set_id": {
+      "pattern": "^sha256:[0-9a-f]{64}$",
+      "type": "string"
+    },
+    "bids": {
+      "items": {
+        "additionalProperties": false,
+        "properties": {
+          "bid_hash": {
+            "pattern": "^sha256:[0-9a-f]{64}$",
+            "type": "string"
+          },
+          "campaign_id": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "campaign_id",
+          "bid_hash"
+        ],
+        "type": "object"
+      },
+      "type": "array"
+    },
+    "config_hash": {
+      "pattern": "^sha256:[0-9a-f]{64}$",
+      "type": "string"
+    },
+    "market_state_hash": {
+      "pattern": "^sha256:[0-9a-f]{64}$",
+      "type": "string"
+    },
+    "observation_report_hash": {
+      "pattern": "^sha256:[0-9a-f]{64}$",
+      "type": "string"
+    },
+    "registry_hash": {
+      "pattern": "^sha256:[0-9a-f]{64}$",
+      "type": "string"
+    },
+    "schema_version": {
+      "const": "bid_set_v1"
+    },
+    "tick_u64": {
+      "minimum": 0,
+      "type": "integer"
+    }
+  },
+  "required": [
+    "schema_version",
+    "bid_set_id",
+    "tick_u64",
+    "observation_report_hash",
+    "market_state_hash",
+    "config_hash",
+    "registry_hash",
+    "bids"
+  ],
+  "title": "Bid set v1",
+  "type": "object"
+}

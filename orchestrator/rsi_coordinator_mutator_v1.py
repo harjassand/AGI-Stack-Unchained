@@ -203,10 +203,25 @@ def _extract_patch_from_llm(response: str) -> bytes:
 def _ensure_patch_headers(patch_bytes: bytes, *, target_relpath: str) -> bytes:
     """If the LLM emitted only hunk fragments, synthesize minimal file headers."""
     text = patch_bytes.decode("utf-8", errors="replace").lstrip("\ufeff")
-    if ("--- a/" not in text and "+++ b/" not in text) and "@@" in text:
-        # Minimal unified-diff headers that git apply accepts.
+    if ("--- " not in text and "+++ " not in text) and "@@" in text:
         header = f"--- a/{target_relpath}\n+++ b/{target_relpath}\n"
         text = header + text.lstrip("\n")
+    # Normalize headers to the a/<path>, b/<path> form (required for -p1 and for axis-gate parsing).
+    lines = text.splitlines()
+    saw_minus = False
+    saw_plus = False
+    for idx, line in enumerate(lines):
+        if line.startswith("--- ") and line != "--- /dev/null" and not saw_minus:
+            if not line.startswith("--- a/"):
+                lines[idx] = f"--- a/{target_relpath}"
+            saw_minus = True
+        elif line.startswith("+++ ") and line != "+++ /dev/null" and not saw_plus:
+            if not line.startswith("+++ b/"):
+                lines[idx] = f"+++ b/{target_relpath}"
+            saw_plus = True
+        if saw_minus and saw_plus:
+            break
+    text = "\n".join(lines) + ("\n" if text.endswith("\n") else "")
     if not text.endswith("\n"):
         text += "\n"
     return text.encode("utf-8")

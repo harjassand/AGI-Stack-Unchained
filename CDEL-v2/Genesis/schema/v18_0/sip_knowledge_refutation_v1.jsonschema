@@ -1,0 +1,104 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v18_0/sip_knowledge_refutation_v1",
+  "title": "SIP knowledge refutation v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "dataset_name",
+    "reason_code",
+    "producer_run_id",
+    "tick_u64",
+    "inputs_relpaths",
+    "input_content_ids",
+    "raw_bytes_content_id",
+    "canonical_jsonl_content_id",
+    "sip_manifest_id",
+    "sip_seal_receipt_id"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "sip_knowledge_refutation_v1"
+    },
+    "dataset_name": {
+      "type": "string",
+      "minLength": 1
+    },
+    "reason_code": {
+      "type": "string",
+      "enum": [
+        "INPUT_HASH_MISMATCH",
+        "CANON_JSONL_PARSE_FAIL",
+        "SIP_REJECTED",
+        "SIP_SAFE_HALT",
+        "BUDGET_EXHAUSTED"
+      ]
+    },
+    "producer_run_id": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "tick_u64": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "inputs_relpaths": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
+    },
+    "input_content_ids": {
+      "type": "object",
+      "minProperties": 1,
+      "additionalProperties": {
+        "type": "string",
+        "pattern": "^sha256:[0-9a-f]{64}$"
+      }
+    },
+    "raw_bytes_content_id": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "canonical_jsonl_content_id": {
+      "anyOf": [
+        {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "sip_manifest_id": {
+      "anyOf": [
+        {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "sip_seal_receipt_id": {
+      "anyOf": [
+        {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "detail": {
+      "type": "string"
+    }
+  }
+}

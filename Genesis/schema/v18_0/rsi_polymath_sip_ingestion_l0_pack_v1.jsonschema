@@ -1,0 +1,144 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v18_0/rsi_polymath_sip_ingestion_l0_pack_v1",
+  "title": "RSI Polymath SIP ingestion L0 pack v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "dataset_name",
+    "inputs_relpaths",
+    "input_content_ids",
+    "sip_profile",
+    "sip_budget_spec",
+    "canonical_jsonl_policy"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "rsi_polymath_sip_ingestion_l0_pack_v1"
+    },
+    "dataset_name": {
+      "type": "string",
+      "minLength": 1
+    },
+    "inputs_relpaths": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
+    },
+    "input_content_ids": {
+      "type": "object",
+      "minProperties": 1,
+      "additionalProperties": {
+        "type": "string",
+        "pattern": "^sha256:[0-9a-f]{64}$"
+      }
+    },
+    "sip_profile": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "sip_profile_id",
+        "canonicalization_profile_ids",
+        "leakage_policy"
+      ],
+      "properties": {
+        "sip_profile_id": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "canonicalization_profile_ids": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "string",
+            "pattern": "^sha256:[0-9a-f]{64}$"
+          }
+        },
+        "leakage_policy": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "on_detect"
+          ],
+          "properties": {
+            "forbidden_patterns": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "max_entropy_q16": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "on_detect": {
+              "type": "string",
+              "enum": [
+                "REJECT",
+                "SAFE_HALT"
+              ]
+            }
+          }
+        }
+      }
+    },
+    "sip_budget_spec": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema_name",
+        "schema_version",
+        "max_steps",
+        "max_bytes_read",
+        "max_bytes_write",
+        "max_items",
+        "seed",
+        "policy"
+      ],
+      "properties": {
+        "schema_name": {
+          "const": "budget_spec_v1"
+        },
+        "schema_version": {
+          "const": "v19_0"
+        },
+        "max_steps": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "max_bytes_read": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "max_bytes_write": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "max_items": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "seed": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "policy": {
+          "type": "string",
+          "enum": [
+            "HARD_FAIL",
+            "SAFE_HALT",
+            "SAFE_SPLIT"
+          ]
+        }
+      }
+    },
+    "canonical_jsonl_policy": {
+      "const": "CANON_JSONL_DETERMINISTIC_V1"
+    }
+  }
+}

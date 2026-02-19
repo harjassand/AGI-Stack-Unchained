@@ -49,12 +49,6 @@ case "${ORCH_LLM_BACKEND}" in
       exit 1
     fi
     ;;
-  google|gemini|gemini_harvest)
-    if [[ -z "${GOOGLE_API_KEY:-}" ]]; then
-      echo "missing GOOGLE_API_KEY for ORCH_LLM_BACKEND=${ORCH_LLM_BACKEND}" >&2
-      exit 1
-    fi
-    ;;
   *)
     :
     ;;

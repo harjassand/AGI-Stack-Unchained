@@ -97,9 +97,11 @@ def _build_env(*, allowlist: list[str], out_dir: Path) -> dict[str, str]:
     }
     allowed = {str(row).strip() for row in allowlist if str(row).strip()}
     for key in sorted(allowed):
+        if key == "PYTHONPATH":
+            continue
         if key in os.environ:
             env[key] = str(os.environ[key])
-    if "PYTHONPATH" in allowed and "PYTHONPATH" not in env:
+    if "PYTHONPATH" in allowed:
         env["PYTHONPATH"] = "CDEL-v2:."
     return env
 

@@ -159,13 +159,6 @@ def _validate_anthropic_model(model_id: str) -> str:
     return value
 
 
-def _validate_gemini_model(model_id: str) -> str:
-    value = str(model_id).strip()
-    if not value.startswith("gemini-"):
-        raise RuntimeError("SCHEMA_FAIL")
-    return value
-
-
 def _http_post_json(*, url: str, headers: dict[str, str], payload: dict[str, Any]) -> dict[str, Any]:
     req = Request(url=url, data=json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8"), method="POST")
     req.add_header("Content-Type", "application/json")
@@ -225,30 +218,6 @@ def _extract_anthropic_response_text(payload: dict[str, Any]) -> str:
         text = block.get("text")
         if isinstance(text, str) and text:
             chunks.append(text)
-    response = "".join(chunks).strip()
-    if not response:
-        raise RuntimeError("LLM_RESPONSE_EMPTY")
-    return response
-
-
-def _extract_gemini_response_text(payload: dict[str, Any]) -> str:
-    candidates = payload.get("candidates")
-    if not isinstance(candidates, list):
-        raise RuntimeError("LLM_RESPONSE_EMPTY")
-    chunks: list[str] = []
-    for candidate in candidates:
-        if not isinstance(candidate, dict):
-            continue
-        content = candidate.get("content")
-        parts = content.get("parts") if isinstance(content, dict) else None
-        if not isinstance(parts, list):
-            continue
-        for part in parts:
-            if not isinstance(part, dict):
-                continue
-            text = part.get("text")
-            if isinstance(text, str) and text:
-                chunks.append(text)
     response = "".join(chunks).strip()
     if not response:
         raise RuntimeError("LLM_RESPONSE_EMPTY")
@@ -315,11 +284,11 @@ def _lookup_replay_response_any(*, replay_path: Path, prompt: str) -> tuple[str,
 
 def _router_backend_response(*, backend: str, prompt: str) -> tuple[str, str, str, str, dict[str, Any]]:
     backend_key_raw = str(backend).strip()
+    if backend_key_raw in {"google", "gemini", "gemini_replay", "gemini_harvest"}:
+        raise RuntimeError("GEMINI_BACKEND_REMOVED_USE_MLX")
     backend_aliases = {
         "openai": "openai_harvest",
         "anthropic": "anthropic_harvest",
-        "google": "gemini_harvest",
-        "gemini": "gemini_harvest",
     }
     backend_key = backend_aliases.get(backend_key_raw, backend_key_raw)
     generation_knobs = _llm_generation_knobs()
@@ -361,9 +330,6 @@ def _router_backend_response(*, backend: str, prompt: str) -> tuple[str, str, st
     elif backend_key in {"anthropic_replay", "anthropic_harvest"}:
         provider = "anthropic"
         model = _validate_anthropic_model(str(os.environ.get("ORCH_ANTHROPIC_MODEL", "claude-3-5-sonnet-latest")))
-    elif backend_key in {"gemini_replay", "gemini_harvest"}:
-        provider = "gemini"
-        model = _validate_gemini_model(str(os.environ.get("ORCH_GEMINI_MODEL", "gemini-2.0-flash")))
     else:
         raise RuntimeError("LLM_BACKEND_UNSUPPORTED")
 
@@ -417,30 +383,7 @@ def _router_backend_response(*, backend: str, prompt: str) -> tuple[str, str, st
         )
         response = _extract_anthropic_response_text(raw_payload)
     else:
-        api_key = str(os.environ.get("GOOGLE_API_KEY", "")).strip()
-        if not api_key:
-            raise RuntimeError("GOOGLE_API_KEY_MISSING")
-        generation_config = {
-            "temperature": float(generation_knobs.get("temperature_f64", _DEFAULT_TEMPERATURE_STRICT_F64)),
-            "maxOutputTokens": int(generation_knobs.get("max_tokens_u64", _DEFAULT_MAX_TOKENS_U64)),
-        }
-        top_p = generation_knobs.get("top_p_f64")
-        if top_p is not None:
-            generation_config["topP"] = float(top_p)
-        raw_payload = _http_post_json(
-            url=f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={api_key}",
-            headers={},
-            payload={
-                "generationConfig": generation_config,
-                "contents": [
-                    {
-                        "role": "user",
-                        "parts": [{"text": prompt}],
-                    }
-                ],
-            },
-        )
-        response = _extract_gemini_response_text(raw_payload)
+        raise RuntimeError("LLM_BACKEND_UNSUPPORTED")
 
     replay_row = {
         "schema_version": _LLM_REPLAY_SCHEMA_VERSION,
@@ -589,7 +532,7 @@ def _normalize_plan(
     allowed_capability_ids: set[str],
 ) -> dict[str, Any]:
     def _strip_outer_code_fence(text: str) -> str:
-        # Deterministic: Gemini frequently wraps JSON in ```json ... ``` fences.
+        # Deterministic: some providers wrap JSON in ```json ... ``` fences.
         s = str(text or "").strip()
         if not s.startswith("```"):
             return s

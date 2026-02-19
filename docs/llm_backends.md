@@ -17,10 +17,11 @@ Never commit API keys.
   - `replay`
   - `openai_harvest` | `openai_replay`
   - `anthropic_harvest` | `anthropic_replay`
-  - `gemini_harvest` | `gemini_replay`
+  - `mlx`
 - `ORCH_LLM_REPLAY_PATH`: path to a JSONL replay file.
   - Required for all `*_harvest` and `*_replay` backends.
   - Required for the generic `replay` backend.
+  - Optional for `mlx` (when set, calls append replay rows).
 - `ORCH_LLM_LIVE_OK=1`: required for all `*_harvest` backends (fail-closed guardrail).
 - `ORCH_LLM_CACHE_DIR` (optional): prompt cache directory.
 
@@ -41,11 +42,14 @@ Never commit API keys.
 - `ORCH_LLM_REPLAY_PATH=...`
 - `ORCH_LLM_LIVE_OK=1` (harvest only)
 
-## Gemini (Google)
+## MLX (Local)
 
-- `ORCH_LLM_BACKEND=gemini_harvest|gemini_replay`
-- `ORCH_GEMINI_MODEL=...` (must start with `gemini-`)
-- `GOOGLE_API_KEY=...` (harvest only)
-- `ORCH_LLM_REPLAY_PATH=...`
-- `ORCH_LLM_LIVE_OK=1` (harvest only)
+- `ORCH_LLM_BACKEND=mlx`
+- `ORCH_MLX_MODEL` (default: `mlx-community/Qwen2.5-Coder-14B-Instruct-4bit`)
+- `ORCH_MLX_REVISION` (optional; pin for replay stability)
+- `ORCH_MLX_ADAPTER_PATH` (optional)
+- `ORCH_MLX_TRUST_REMOTE_CODE=0|1` (default `0`)
+- `ORCH_LLM_SEED_U64` (optional; fallback is `OMEGA_RUN_SEED_U64`)
+- `ORCH_LLM_TEMPERATURE`, `ORCH_LLM_TOP_P`, `ORCH_LLM_MAX_TOKENS`
 
+Gemini backends are removed. Legacy `gemini_*` / `google` backend values fail closed.

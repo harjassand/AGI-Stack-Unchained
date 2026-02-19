@@ -9,6 +9,7 @@ promotion bundle.
 from __future__ import annotations
 
 import argparse
+import ast
 import difflib
 import hashlib
 import json
@@ -31,6 +32,7 @@ from orchestrator.llm_backend import get_backend
 
 _PACK_SCHEMA = "rsi_coordinator_mutator_pack_v1"
 _BENCH_PACK_DEFAULT = "campaigns/rsi_omega_daemon_v19_0_phase3_bench/rsi_omega_daemon_pack_v1.json"
+_LOCKED_TARGET_RELPATH = "orchestrator/omega_v19_0/coordinator_v1.py"
 
 
 def _sha256_prefixed(data: bytes) -> str:
@@ -61,6 +63,64 @@ def _parse_patch_touched_paths(patch_bytes: bytes) -> list[str]:
             touched.append(rel)
             seen.add(rel)
     return touched
+
+
+def _repair_patch_prefix_that_applies(*, worktree: Path, patch_bytes: bytes) -> bytes | None:
+    """Best-effort salvage for truncated LLM patches by trimming trailing lines."""
+    def _check(candidate_bytes: bytes, *, tolerant_b: bool) -> bool:
+        tmp_path = worktree / ".omega_patch_repair_tmp.patch"
+        tmp_path.write_bytes(candidate_bytes)
+        try:
+            args = ["apply", "--check", "-p1", str(tmp_path)]
+            if tolerant_b:
+                args = ["apply", "--check", "--recount", "--ignore-whitespace", "-p1", str(tmp_path)]
+            _git(worktree, args)
+            return True
+        except Exception:
+            return False
+
+    lines = patch_bytes.decode("utf-8", errors="replace").splitlines()
+    if not lines:
+        return None
+    max_trim = min(len(lines) - 1, 4096)
+    for trim_u64 in range(1, max_trim + 1):
+        candidate_lines = lines[:-trim_u64]
+        if len(candidate_lines) < 4:
+            break
+        candidate_text = "\n".join(candidate_lines).rstrip("\n") + "\n"
+        candidate_bytes = candidate_text.encode("utf-8")
+        if _check(candidate_bytes, tolerant_b=False) or _check(candidate_bytes, tolerant_b=True):
+            return candidate_bytes
+
+    # Last-resort salvage: keep only individual hunks that can apply.
+    header_lines: list[str] = []
+    hunk_blocks: list[list[str]] = []
+    current_hunk: list[str] | None = None
+    saw_hunk = False
+    for line in lines:
+        if line.startswith("@@ "):
+            saw_hunk = True
+            if current_hunk is not None:
+                hunk_blocks.append(current_hunk)
+            current_hunk = [line]
+            continue
+        if not saw_hunk:
+            header_lines.append(line)
+            continue
+        if current_hunk is None:
+            current_hunk = []
+        current_hunk.append(line)
+    if current_hunk is not None:
+        hunk_blocks.append(current_hunk)
+
+    for hunk in hunk_blocks:
+        if not hunk:
+            continue
+        candidate_text = "\n".join([*header_lines, *hunk]).rstrip("\n") + "\n"
+        candidate_bytes = candidate_text.encode("utf-8")
+        if _check(candidate_bytes, tolerant_b=True):
+            return candidate_bytes
+    return None
 
 
 def _median(xs: list[float]) -> float:
@@ -101,6 +161,28 @@ def _git_out(repo_root: Path, args: list[str]) -> str:
         msg = (run.stderr or run.stdout or "").strip()
         raise RuntimeError(msg or "git failed")
     return (run.stdout or "").strip()
+
+
+def _git_out_bytes(repo_root: Path, args: list[str]) -> bytes:
+    run = subprocess.run(["git", "-C", str(repo_root), *args], capture_output=True, text=False, check=False)
+    if run.returncode != 0:
+        stderr = (run.stderr or b"").decode("utf-8", errors="replace").strip()
+        stdout = (run.stdout or b"").decode("utf-8", errors="replace").strip()
+        msg = stderr or stdout
+        raise RuntimeError(msg or "git failed")
+    return bytes(run.stdout or b"")
+
+
+def _canonical_patch_from_worktree(*, worktree: Path, target_relpath: str) -> bytes:
+    patch_bytes = _git_out_bytes(
+        worktree,
+        ["-c", "core.quotepath=false", "diff", "--no-color", "--no-ext-diff", "--binary", "--", str(target_relpath)],
+    )
+    if not patch_bytes:
+        raise RuntimeError("EMPTY_PATCH_AFTER_APPLY")
+    if not patch_bytes.endswith(b"\n"):
+        patch_bytes += b"\n"
+    return patch_bytes
 
 
 def _first_build_recipe_id(repo_root: Path) -> str:
@@ -153,6 +235,24 @@ def _llm_diff_prompt(*, target_relpath: str, target_text: str, pack: dict[str, A
             "target_file_text": target_text,
         }
     )
+
+
+def _template_patch_for_target(*, target_relpath: str, target_text: str, tick_u64: int) -> bytes:
+    marker = f"# OMEGA_PHASE3_COORDINATOR_TEMPLATE_MARKER tick={int(tick_u64)}"
+    before = str(target_text)
+    after = before.rstrip("\n") + "\n" + marker + "\n"
+    lines = list(
+        difflib.unified_diff(
+            before.splitlines(),
+            after.splitlines(),
+            fromfile=f"a/{target_relpath}",
+            tofile=f"b/{target_relpath}",
+            lineterm="",
+        )
+    )
+    if not lines:
+        raise RuntimeError("TEMPLATE_PATCH_EMPTY")
+    return ("\n".join(lines) + "\n").encode("utf-8")
 
 
 def _extract_patch_from_llm(response: str) -> bytes:
@@ -362,7 +462,31 @@ def _ensure_patch_headers(patch_bytes: bytes, *, target_relpath: str) -> bytes:
             saw_plus = True
         if saw_minus and saw_plus:
             break
-    text = "\n".join(lines) + ("\n" if text.endswith("\n") else "")
+    # Repair common LLM hunk formatting bug: context lines inside hunks missing
+    # the required leading space prefix.
+    repaired_lines: list[str] = []
+    in_hunk = False
+    for line in lines:
+        stripped = line.lstrip()
+        if stripped.startswith("@@ "):
+            in_hunk = True
+            repaired_lines.append(stripped)
+            continue
+        if stripped.startswith("diff --git ") or stripped.startswith("--- ") or stripped.startswith("+++ "):
+            in_hunk = False
+            repaired_lines.append(stripped)
+            continue
+        if in_hunk and not (
+            line.startswith(" ")
+            or line.startswith("+")
+            or line.startswith("-")
+            or line.startswith("\\ No newline at end of file")
+        ):
+            repaired_lines.append(" " + line)
+            continue
+        repaired_lines.append(line)
+
+    text = "\n".join(repaired_lines) + ("\n" if text.endswith("\n") else "")
     if not text.endswith("\n"):
         text += "\n"
     return text.encode("utf-8")
@@ -372,6 +496,226 @@ def _write_verify_failure(out_dir: Path, payload: dict[str, Any]) -> None:
     row["schema_version"] = "coordinator_mutator_verify_failure_v1"
     row["failure_id"] = canon_hash_obj({k: v for k, v in row.items() if k != "failure_id"})
     write_canon_json(out_dir / "coordinator_mutator_verify_failure_v1.json", row)
+
+
+class _StripLiteralValues(ast.NodeTransformer):
+    def visit_Constant(self, node: ast.Constant) -> ast.AST:  # noqa: N802
+        value = node.value
+        if isinstance(value, bool):
+            replacement: Any = False
+        elif isinstance(value, (int, float, complex)):
+            replacement = 0
+        elif isinstance(value, str):
+            replacement = ""
+        elif isinstance(value, bytes):
+            replacement = b""
+        elif value is None:
+            replacement = None
+        else:
+            replacement = None
+        return ast.copy_location(ast.Constant(value=replacement), node)
+
+
+def _ast_signature(text: str, *, strip_literals: bool) -> str | None:
+    try:
+        tree = ast.parse(text)
+    except Exception:
+        return None
+    if strip_literals:
+        tree = _StripLiteralValues().visit(tree)  # type: ignore[assignment]
+        ast.fix_missing_locations(tree)
+    return ast.dump(tree, include_attributes=False)
+
+
+def _patch_nontrivial_reason(*, before_text: str, after_text: str, patch_bytes: bytes) -> str | None:
+    meaningful_lines: list[str] = []
+    for row in patch_bytes.decode("utf-8", errors="replace").splitlines():
+        if row.startswith(("diff --git ", "index ", "--- ", "+++ ", "@@ ")):
+            continue
+        if not row or row[0] not in {"+", "-"}:
+            continue
+        stripped = row[1:].strip()
+        if not stripped:
+            continue
+        if stripped.startswith("#"):
+            continue
+        meaningful_lines.append(stripped)
+    if not meaningful_lines:
+        return "TRIVIAL_PATCH"
+
+    sig_before = _ast_signature(before_text, strip_literals=False)
+    sig_after = _ast_signature(after_text, strip_literals=False)
+    if sig_before is not None and sig_after is not None and sig_before == sig_after:
+        return "TRIVIAL_PATCH"
+
+    sig_before_no_literals = _ast_signature(before_text, strip_literals=True)
+    sig_after_no_literals = _ast_signature(after_text, strip_literals=True)
+    if (
+        sig_before_no_literals is not None
+        and sig_after_no_literals is not None
+        and sig_before_no_literals == sig_after_no_literals
+    ):
+        return "CONSTANTS_ONLY_PATCH"
+    return None
+
+
+def _python_gate_env() -> dict[str, str]:
+    env = dict(os.environ)
+    host_root = str(env.get("OMEGA_HOST_REPO_ROOT", "") or "").strip()
+    host_ext = str(Path(host_root) / "agi-orchestrator") if host_root else "agi-orchestrator"
+    env["PYTHONPATH"] = env.get("PYTHONPATH", "") or f".:CDEL-v2:{host_ext}"
+    return env
+
+
+def _run_python_gate(*, repo_root: Path, args: list[str]) -> None:
+    run = subprocess.run(
+        [sys.executable, *args],
+        cwd=str(repo_root),
+        env=_python_gate_env(),
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if run.returncode != 0:
+        detail = (run.stderr or run.stdout or "").strip()
+        raise RuntimeError(detail[:4000] or "PYTHON_GATE_FAILED")
+
+
+def _hash_from_hashed_filename(path: Path, *, suffix: str) -> str:
+    name = path.name
+    if not name.endswith(suffix):
+        raise RuntimeError("UNEXPECTED_HASHED_FILENAME")
+    stem = name[: -len(suffix)]
+    if not stem.startswith("sha256_"):
+        raise RuntimeError("UNEXPECTED_HASHED_FILENAME")
+    digest = stem[len("sha256_") :]
+    if len(digest) != 64:
+        raise RuntimeError("UNEXPECTED_HASHED_FILENAME")
+    return "sha256:" + digest
+
+
+def _verify_divergence_artifact_chain(*, state_dir: Path) -> dict[str, Any]:
+    native_rows = sorted((state_dir / "ledger" / "native").glob("sha256_*.omega_native_runtime_stats_v1.json"), key=lambda p: p.as_posix())
+    if not native_rows:
+        raise RuntimeError("DIVERGENCE_NATIVE_ARTIFACT_MISSING")
+    native_path = native_rows[-1]
+    native_hash = _hash_from_hashed_filename(native_path, suffix=".omega_native_runtime_stats_v1.json")
+    native_payload = _load_json(native_path)
+    if native_payload.get("schema_version") != "omega_native_runtime_stats_v1":
+        raise RuntimeError("DIVERGENCE_NATIVE_SCHEMA_FAIL")
+    ops = native_payload.get("ops")
+    if not isinstance(ops, list):
+        raise RuntimeError("DIVERGENCE_NATIVE_SCHEMA_FAIL")
+    phase3_op_id = None
+    for row in ops:
+        if not isinstance(row, dict):
+            continue
+        op_id = str(row.get("op_id", "")).strip()
+        if op_id.startswith("phase3_coord_goal_queue_fastpath_v1:"):
+            phase3_op_id = op_id
+            break
+    if phase3_op_id is None:
+        raise RuntimeError("DIVERGENCE_PHASE3_OP_MISSING")
+
+    ledger_path = state_dir / "ledger" / "omega_ledger_v1.jsonl"
+    if not ledger_path.is_file():
+        raise RuntimeError("DIVERGENCE_LEDGER_MISSING")
+    ledger_linked = False
+    for line in ledger_path.read_text(encoding="utf-8").splitlines():
+        raw = line.strip()
+        if not raw:
+            continue
+        try:
+            row = json.loads(raw)
+        except Exception as exc:  # noqa: BLE001
+            raise RuntimeError("DIVERGENCE_LEDGER_PARSE_FAIL") from exc
+        if not isinstance(row, dict):
+            continue
+        if str(row.get("event_type", "")).strip() != "NATIVE_RUNTIME_STATS":
+            continue
+        if str(row.get("artifact_hash", "")).strip() == native_hash:
+            ledger_linked = True
+            break
+    if not ledger_linked:
+        raise RuntimeError("DIVERGENCE_LEDGER_LINK_MISSING")
+
+    trace_rows = sorted((state_dir / "ledger").glob("sha256_*.omega_trace_hash_chain_v1.json"), key=lambda p: p.as_posix())
+    if not trace_rows:
+        raise RuntimeError("DIVERGENCE_TRACE_MISSING")
+    trace_path = trace_rows[-1]
+    trace_hash = _hash_from_hashed_filename(trace_path, suffix=".omega_trace_hash_chain_v1.json")
+    trace_payload = _load_json(trace_path)
+    artifact_hashes = trace_payload.get("artifact_hashes")
+    if not isinstance(artifact_hashes, list) or native_hash not in [str(row) for row in artifact_hashes]:
+        raise RuntimeError("DIVERGENCE_TRACE_LINK_MISSING")
+
+    snapshot_rows = sorted((state_dir / "snapshot").glob("sha256_*.omega_tick_snapshot_v1.json"), key=lambda p: p.as_posix())
+    if not snapshot_rows:
+        raise RuntimeError("DIVERGENCE_SNAPSHOT_MISSING")
+    snapshot_path = snapshot_rows[-1]
+    snapshot_hash = _hash_from_hashed_filename(snapshot_path, suffix=".omega_tick_snapshot_v1.json")
+    snapshot_payload = _load_json(snapshot_path)
+    if str(snapshot_payload.get("trace_hash_chain_hash", "")).strip() != trace_hash:
+        raise RuntimeError("DIVERGENCE_SNAPSHOT_LINK_MISSING")
+
+    return {
+        "schema_version": "phase3_divergence_artifact_receipt_v1",
+        "state_dir": str(state_dir),
+        "native_runtime_stats": {"path": str(native_path), "hash": native_hash, "phase3_op_id": phase3_op_id},
+        "ledger_binding": {"path": str(ledger_path), "event_type": "NATIVE_RUNTIME_STATS", "artifact_hash": native_hash},
+        "trace_binding": {"path": str(trace_path), "hash": trace_hash},
+        "snapshot_binding": {"path": str(snapshot_path), "hash": snapshot_hash, "trace_hash_chain_hash": trace_hash},
+    }
+
+
+def _micro_bench_gate(
+    *,
+    baseline_worktree: Path,
+    candidate_worktree: Path,
+    bench_pack_rel: str,
+    seed_u64: int,
+    deterministic_timing_b: bool,
+    out_dir: Path,
+    wall_ms_max_u64: int,
+) -> dict[str, Any]:
+    started_ns = time.monotonic_ns()
+    baseline_state_dir = _run_daemon_loop(
+        repo_root=baseline_worktree,
+        campaign_pack_rel=bench_pack_rel,
+        out_root=out_dir / "micro_bench" / "baseline",
+        tick_start_u64=1,
+        ticks_u64=2,
+        run_seed_u64=int(seed_u64),
+        deterministic_timing=bool(deterministic_timing_b),
+    )
+    candidate_state_dir = _run_daemon_loop(
+        repo_root=candidate_worktree,
+        campaign_pack_rel=bench_pack_rel,
+        out_root=out_dir / "micro_bench" / "candidate",
+        tick_start_u64=1,
+        ticks_u64=2,
+        run_seed_u64=int(seed_u64),
+        deterministic_timing=bool(deterministic_timing_b),
+    )
+    baseline_verdict = str(v19_replay_verifier.verify(baseline_state_dir, mode="full")).strip()
+    candidate_verdict = str(v19_replay_verifier.verify(candidate_state_dir, mode="full")).strip()
+    if baseline_verdict != "VALID" or candidate_verdict != "VALID":
+        raise RuntimeError(f"MICRO_BENCH_REPLAY_INVALID:{baseline_verdict}:{candidate_verdict}")
+    elapsed_ms = int((time.monotonic_ns() - started_ns) // 1_000_000)
+    if int(wall_ms_max_u64) > 0 and elapsed_ms > int(wall_ms_max_u64):
+        raise RuntimeError("MICRO_BENCH_WALL_CAP_EXCEEDED")
+    return {
+        "schema_version": "coordinator_mutator_micro_bench_receipt_v1",
+        "ticks_u64": 2,
+        "seed_u64": int(seed_u64),
+        "deterministic_timing_b": bool(deterministic_timing_b),
+        "elapsed_ms_u64": int(elapsed_ms),
+        "wall_ms_max_u64": int(wall_ms_max_u64),
+        "baseline_state_dir": str(baseline_state_dir),
+        "candidate_state_dir": str(candidate_state_dir),
+        "baseline_verdict": baseline_verdict,
+        "candidate_verdict": candidate_verdict,
+    }
 
 
 def _run_daemon_loop(
@@ -573,6 +917,7 @@ def _bench_median_of_5(
     seed_base_u64: int,
     metric: str,
     alternate_order_b: bool,
+    deterministic_timing_b: bool,
     out_dir: Path,
 ) -> tuple[list[_BenchTrial], float]:
     trials: list[_BenchTrial] = []
@@ -594,7 +939,7 @@ def _bench_median_of_5(
                 tick_start_u64=1,
                 ticks_u64=ticks_per_trial_u64,
                 run_seed_u64=seed,
-                deterministic_timing=False,
+                deterministic_timing=bool(deterministic_timing_b),
             )
             cand_score = _score_metric_q32(cand_state, metric=metric)
             base_state = _run_daemon_loop(
@@ -604,7 +949,7 @@ def _bench_median_of_5(
                 tick_start_u64=1,
                 ticks_u64=ticks_per_trial_u64,
                 run_seed_u64=seed,
-                deterministic_timing=False,
+                deterministic_timing=bool(deterministic_timing_b),
             )
             base_score = _score_metric_q32(base_state, metric=metric)
         else:
@@ -615,7 +960,7 @@ def _bench_median_of_5(
                 tick_start_u64=1,
                 ticks_u64=ticks_per_trial_u64,
                 run_seed_u64=seed,
-                deterministic_timing=False,
+                deterministic_timing=bool(deterministic_timing_b),
             )
             base_score = _score_metric_q32(base_state, metric=metric)
             cand_state = _run_daemon_loop(
@@ -625,7 +970,7 @@ def _bench_median_of_5(
                 tick_start_u64=1,
                 ticks_u64=ticks_per_trial_u64,
                 run_seed_u64=seed,
-                deterministic_timing=False,
+                deterministic_timing=bool(deterministic_timing_b),
             )
             cand_score = _score_metric_q32(cand_state, metric=metric)
         base = float(base_score)
@@ -808,13 +1153,50 @@ def _emit_ccap(
 
 
 def run(*, campaign_pack: Path, out_dir: Path) -> None:
+    out_dir = out_dir.resolve()
+    out_dir.mkdir(parents=True, exist_ok=True)
     pack = load_canon_dict(campaign_pack, reason="SCHEMA_FAIL")
     if str(pack.get("schema_version", "")).strip() != _PACK_SCHEMA:
         fail("SCHEMA_FAIL")
     target_relpath = str(pack.get("target_relpath", "")).strip().replace("\\", "/").lstrip("./")
     if not target_relpath or Path(target_relpath).is_absolute() or ".." in Path(target_relpath).parts:
         fail("SCHEMA_FAIL")
+    if target_relpath != _LOCKED_TARGET_RELPATH:
+        _write_verify_failure(
+            out_dir,
+            {
+                "tick_u64": max(0, int(os.environ.get("OMEGA_TICK_U64", "0") or "0")),
+                "target_relpath": target_relpath,
+                "reason": "LANDING_REJECTED",
+                "allowed_target_relpath": _LOCKED_TARGET_RELPATH,
+            },
+        )
+        return
     repo_root = Path.cwd().resolve()
+    try:
+        git_status_rows = _git_out(repo_root, ["status", "--porcelain"])
+    except Exception as exc:  # noqa: BLE001
+        _write_verify_failure(
+            out_dir,
+            {
+                "tick_u64": max(0, int(os.environ.get("OMEGA_TICK_U64", "0") or "0")),
+                "target_relpath": target_relpath,
+                "reason": "REPO_STATUS_CHECK_FAILED",
+                "detail": str(exc)[:4000],
+            },
+        )
+        return
+    if git_status_rows.strip():
+        _write_verify_failure(
+            out_dir,
+            {
+                "tick_u64": max(0, int(os.environ.get("OMEGA_TICK_U64", "0") or "0")),
+                "target_relpath": target_relpath,
+                "reason": "REPO_NOT_CLEAN",
+                "dirty_rows_preview": git_status_rows.splitlines()[:20],
+            },
+        )
+        return
     target_path = (repo_root / target_relpath).resolve()
     if not target_path.exists() or not target_path.is_file():
         fail("MISSING_STATE_INPUT")
@@ -827,6 +1209,7 @@ def run(*, campaign_pack: Path, out_dir: Path) -> None:
     max_patch_bytes_u64 = max(1, int(resource_caps.get("max_patch_bytes_u64", 200_000)))
     max_prompt_chars_u64 = int(resource_caps.get("max_prompt_chars_u64", 200_000) or 200_000)
     max_response_chars_u64 = int(resource_caps.get("max_response_chars_u64", 400_000) or 400_000)
+    wall_ms_max_u64 = max(1, int(resource_caps.get("wall_ms_max_u64", 600_000)))
 
     benchmark = pack.get("benchmark") if isinstance(pack.get("benchmark"), dict) else {}
     ticks_per_trial_u64 = max(1, int(benchmark.get("ticks_per_trial_u64", 15)))
@@ -836,6 +1219,7 @@ def run(*, campaign_pack: Path, out_dir: Path) -> None:
     hard_reject_median = float(benchmark.get("hard_reject_median_improvement_frac_f64", -0.02))
     metric = str(benchmark.get("metric", "median_stps_non_noop_q32")).strip() or "median_stps_non_noop_q32"
     alternate_order_b = bool(benchmark.get("alternate_order_b", True))
+    benchmark_deterministic_timing_b = bool(benchmark.get("deterministic_timing_b", True))
 
     structural = pack.get("structural_validator") if isinstance(pack.get("structural_validator"), dict) else {}
     structural_enabled = bool(structural.get("enabled_b", True))
@@ -846,65 +1230,155 @@ def run(*, campaign_pack: Path, out_dir: Path) -> None:
     max_rss_delta_bytes_u64 = max(0, int(structural.get("max_rss_delta_bytes_u64", 268435456)))
 
     bench_pack_rel = str(pack.get("bench_pack_rel", _BENCH_PACK_DEFAULT)).strip() or _BENCH_PACK_DEFAULT
+    bench_pack_path = (repo_root / bench_pack_rel).resolve()
+    if not bench_pack_path.is_file():
+        _write_verify_failure(
+            out_dir,
+            {
+                "tick_u64": int(tick_u64),
+                "target_relpath": target_relpath,
+                "reason": "BENCH_PACK_MISSING",
+                "bench_pack_rel": bench_pack_rel,
+            },
+        )
+        return
+    try:
+        _ = load_canon_dict(bench_pack_path, reason="SCHEMA_FAIL")
+    except Exception as exc:  # noqa: BLE001
+        _write_verify_failure(
+            out_dir,
+            {
+                "tick_u64": int(tick_u64),
+                "target_relpath": target_relpath,
+                "reason": "BENCH_PACK_INVALID",
+                "detail": str(exc)[:4000],
+                "bench_pack_rel": bench_pack_rel,
+            },
+        )
+        return
+    try:
+        _run_python_gate(repo_root=repo_root, args=["-c", "import cdel; import sys; print(sys.version)"])
+        _run_python_gate(repo_root=repo_root, args=["-m", "py_compile", target_relpath])
+        _run_python_gate(repo_root=repo_root, args=["-c", "import orchestrator.omega_v19_0.coordinator_v1 as _m; print('OK')"])
+    except Exception as exc:  # noqa: BLE001
+        _write_verify_failure(
+            out_dir,
+            {
+                "tick_u64": int(tick_u64),
+                "target_relpath": target_relpath,
+                "reason": "TOOLCHAIN_SANITY_FAIL",
+                "detail": str(exc)[:4000],
+            },
+        )
+        return
 
-    backend = get_backend()
-    prompt = _llm_diff_prompt(
-        target_relpath=target_relpath,
-        target_text=target_text,
-        pack=pack,
-        tick_u64=tick_u64,
-        run_seed_u64=run_seed_u64,
-    )
-    if len(prompt) > max_prompt_chars_u64:
-        prompt = prompt[: max_prompt_chars_u64]
-    try:
-        response = backend.generate(prompt)
-    except Exception as exc:  # noqa: BLE001
-        detail = str(exc)[:4000]
-        failure = {
-            "schema_version": "coordinator_mutator_llm_failure_v1",
-            "tick_u64": int(tick_u64),
-            "target_relpath": target_relpath,
-            "detail": detail,
-        }
-        failure["failure_id"] = canon_hash_obj({k: v for k, v in failure.items() if k != "failure_id"})
-        write_canon_json(out_dir / "coordinator_mutator_llm_failure_v1.json", failure)
-        if "HTTP 429" in detail or "RESOURCE_EXHAUSTED" in detail:
-            time.sleep(60.0)
-        return
-    if len(response) > max_response_chars_u64:
-        response = response[: max_response_chars_u64]
-    try:
-        obj = _maybe_parse_llm_json_dict(response)
-        updated = (obj or {}).get("updated_file_text") if isinstance(obj, dict) else None
-        if isinstance(updated, str) and updated.strip():
-            # Guard against partial-file outputs (common when the model doesn't have full context).
-            if len(updated) < int(0.80 * len(target_text)) or "def run_tick(" not in updated:
-                _write_verify_failure(
-                    out_dir,
-                    {
-                        "tick_u64": int(tick_u64),
-                        "target_relpath": target_relpath,
-                        "reason": "UPDATED_FILE_TEXT_INVARIANT_FAIL",
-                        "detail": "missing run_tick or too short",
-                        "updated_chars_u64": int(len(updated)),
-                        "target_chars_u64": int(len(target_text)),
-                    },
-                )
-                return
-            patch_bytes = _diff_from_updated_text(target_relpath=target_relpath, before=target_text, after=updated)
-        else:
-            patch_bytes = _extract_patch_from_llm(response)
-    except Exception as exc:  # noqa: BLE001
-        failure = {
-            "schema_version": "coordinator_mutator_llm_failure_v1",
-            "tick_u64": int(tick_u64),
-            "target_relpath": target_relpath,
-            "detail": str(exc)[:4000],
-        }
-        failure["failure_id"] = canon_hash_obj({k: v for k, v in failure.items() if k != "failure_id"})
-        write_canon_json(out_dir / "coordinator_mutator_llm_failure_v1.json", failure)
-        return
+    os.environ.setdefault("ORCH_LLM_BACKEND", "mlx")
+    os.environ["ORCH_LLM_MAX_PROMPT_CHARS"] = str(int(max_prompt_chars_u64))
+    os.environ["ORCH_LLM_MAX_RESPONSE_CHARS"] = str(int(max_response_chars_u64))
+    os.environ["ORCH_LLM_MAX_CALLS"] = "1"
+    os.environ["ORCH_LLM_SEED_U64"] = str(int(run_seed_u64))
+    # Deterministic-by-construction mutator policy: greedy decode.
+    os.environ["ORCH_LLM_TEMPERATURE"] = "0"
+    os.environ["ORCH_LLM_TOP_P"] = "1.0"
+    template_only_b = str(os.environ.get("ORCH_MUTATOR_TEMPLATE_ONLY", "0")).strip().lower() in {"1", "true", "yes", "on"}
+    if template_only_b:
+        try:
+            patch_bytes = _template_patch_for_target(
+                target_relpath=target_relpath,
+                target_text=target_text,
+                tick_u64=int(tick_u64),
+            )
+        except Exception as exc:  # noqa: BLE001
+            failure = {
+                "schema_version": "coordinator_mutator_llm_failure_v1",
+                "tick_u64": int(tick_u64),
+                "target_relpath": target_relpath,
+                "detail": f"TEMPLATE_PATCH_FAILED:{str(exc)[:3900]}",
+            }
+            failure["failure_id"] = canon_hash_obj({k: v for k, v in failure.items() if k != "failure_id"})
+            write_canon_json(out_dir / "coordinator_mutator_llm_failure_v1.json", failure)
+            return
+    else:
+        try:
+            backend = get_backend()
+        except Exception as exc:  # noqa: BLE001
+            failure = {
+                "schema_version": "coordinator_mutator_llm_failure_v1",
+                "tick_u64": int(tick_u64),
+                "target_relpath": target_relpath,
+                "detail": f"BACKEND_INIT_FAILED:{str(exc)[:3900]}",
+            }
+            failure["failure_id"] = canon_hash_obj({k: v for k, v in failure.items() if k != "failure_id"})
+            write_canon_json(out_dir / "coordinator_mutator_llm_failure_v1.json", failure)
+            return
+        prompt = _llm_diff_prompt(
+            target_relpath=target_relpath,
+            target_text=target_text,
+            pack=pack,
+            tick_u64=tick_u64,
+            run_seed_u64=run_seed_u64,
+        )
+        if len(prompt) > max_prompt_chars_u64:
+            prompt = prompt[: max_prompt_chars_u64]
+        try:
+            response = backend.generate(prompt)
+        except Exception as exc:  # noqa: BLE001
+            detail = str(exc)[:4000]
+            failure = {
+                "schema_version": "coordinator_mutator_llm_failure_v1",
+                "tick_u64": int(tick_u64),
+                "target_relpath": target_relpath,
+                "detail": detail,
+            }
+            failure["failure_id"] = canon_hash_obj({k: v for k, v in failure.items() if k != "failure_id"})
+            write_canon_json(out_dir / "coordinator_mutator_llm_failure_v1.json", failure)
+            return
+        if len(response) > max_response_chars_u64:
+            response = response[: max_response_chars_u64]
+        try:
+            obj = _maybe_parse_llm_json_dict(response)
+            patch_bytes = None
+            if isinstance(obj, dict):
+                for key in ("unified_diff", "patch", "diff"):
+                    value = obj.get(key)
+                    if isinstance(value, str) and value.strip():
+                        patch_bytes = value.encode("utf-8")
+                        break
+            updated = (obj or {}).get("updated_file_text") if isinstance(obj, dict) else None
+            if patch_bytes is None and isinstance(updated, str) and updated.strip():
+                # Guard against partial-file outputs. If this fails, still try parsing an explicit diff.
+                if len(updated) >= int(0.80 * len(target_text)) and "def run_tick(" in updated:
+                    patch_bytes = _diff_from_updated_text(target_relpath=target_relpath, before=target_text, after=updated)
+                else:
+                    try:
+                        patch_bytes = _extract_patch_from_llm(response)
+                    except Exception:  # noqa: BLE001
+                        patch_bytes = None
+                    if patch_bytes is None:
+                        _write_verify_failure(
+                            out_dir,
+                            {
+                                "tick_u64": int(tick_u64),
+                                "target_relpath": target_relpath,
+                                "reason": "UPDATED_FILE_TEXT_INVARIANT_FAIL",
+                                "detail": "missing run_tick or too short",
+                                "updated_chars_u64": int(len(updated)),
+                                "target_chars_u64": int(len(target_text)),
+                            },
+                        )
+                        return
+            if patch_bytes is None:
+                patch_bytes = _extract_patch_from_llm(response)
+        except Exception as exc:  # noqa: BLE001
+            failure = {
+                "schema_version": "coordinator_mutator_llm_failure_v1",
+                "tick_u64": int(tick_u64),
+                "target_relpath": target_relpath,
+                "detail": str(exc)[:4000],
+            }
+            failure["failure_id"] = canon_hash_obj({k: v for k, v in failure.items() if k != "failure_id"})
+            write_canon_json(out_dir / "coordinator_mutator_llm_failure_v1.json", failure)
+            return
     patch_bytes = _ensure_patch_headers(patch_bytes, target_relpath=target_relpath)
     if len(patch_bytes) > max_patch_bytes_u64:
         _write_verify_failure(
@@ -944,7 +1418,6 @@ def run(*, campaign_pack: Path, out_dir: Path) -> None:
         )
         return
 
-    out_dir = out_dir.resolve()
     reports_dir = out_dir / "daemon" / "rsi_coordinator_mutator_v1" / "state" / "reports"
     reports_dir.mkdir(parents=True, exist_ok=True)
 
@@ -962,15 +1435,146 @@ def run(*, campaign_pack: Path, out_dir: Path) -> None:
                 _git(candidate_wt, ["apply", "--check", "-p1", str(patch_path)])
                 _git(candidate_wt, ["apply", "-p1", str(patch_path)])
             except Exception as exc:  # noqa: BLE001
-                failure = {
-                    "schema_version": "coordinator_mutator_patch_apply_failure_v1",
-                    "tick_u64": int(tick_u64),
-                    "target_relpath": target_relpath,
-                    "detail": str(exc)[:4000],
-                }
-                failure["failure_id"] = canon_hash_obj({k: v for k, v in failure.items() if k != "failure_id"})
-                write_canon_json(out_dir / "coordinator_mutator_patch_apply_failure_v1.json", failure)
+                recovered = False
+                try:
+                    _git(candidate_wt, ["apply", "--check", "--recount", "--ignore-whitespace", "-p1", str(patch_path)])
+                    _git(candidate_wt, ["apply", "--recount", "--ignore-whitespace", "-p1", str(patch_path)])
+                    recovered = True
+                except Exception:
+                    recovered = False
+                if not recovered:
+                    repaired = _repair_patch_prefix_that_applies(worktree=candidate_wt, patch_bytes=patch_bytes)
+                    if repaired is None:
+                        failure = {
+                            "schema_version": "coordinator_mutator_patch_apply_failure_v1",
+                            "tick_u64": int(tick_u64),
+                            "target_relpath": target_relpath,
+                            "detail": str(exc)[:4000],
+                        }
+                        failure["failure_id"] = canon_hash_obj({k: v for k, v in failure.items() if k != "failure_id"})
+                        write_canon_json(out_dir / "coordinator_mutator_patch_apply_failure_v1.json", failure)
+                        return
+                    patch_bytes = repaired
+                    touched = _parse_patch_touched_paths(patch_bytes)
+                    if set(touched) != {target_relpath}:
+                        _write_verify_failure(
+                            out_dir,
+                            {
+                                "tick_u64": int(tick_u64),
+                                "target_relpath": target_relpath,
+                                "reason": "TOUCHED_PATHS_MISMATCH",
+                                "touched_paths": touched,
+                            },
+                        )
+                        return
+                    patch_path.write_bytes(patch_bytes)
+                    _git(candidate_wt, ["apply", "--check", "--recount", "--ignore-whitespace", "-p1", str(patch_path)])
+                    _git(candidate_wt, ["apply", "--recount", "--ignore-whitespace", "-p1", str(patch_path)])
+
+            try:
+                patch_bytes = _canonical_patch_from_worktree(worktree=candidate_wt, target_relpath=target_relpath)
+            except Exception as exc:  # noqa: BLE001
+                _write_verify_failure(
+                    out_dir,
+                    {
+                        "tick_u64": int(tick_u64),
+                        "target_relpath": target_relpath,
+                        "reason": "CANONICAL_PATCH_REBUILD_FAILED",
+                        "detail": str(exc)[:4000],
+                    },
+                )
                 return
+            touched = _parse_patch_touched_paths(patch_bytes)
+            if set(touched) != {target_relpath}:
+                _write_verify_failure(
+                    out_dir,
+                    {
+                        "tick_u64": int(tick_u64),
+                        "target_relpath": target_relpath,
+                        "reason": "TOUCHED_PATHS_MISMATCH",
+                        "touched_paths": touched,
+                    },
+                )
+                return
+            if not death_allowed and b"OMEGA_DEV_DEATH_INJECTION_OK" in patch_bytes:
+                _write_verify_failure(
+                    out_dir,
+                    {
+                        "tick_u64": int(tick_u64),
+                        "target_relpath": target_relpath,
+                        "reason": "DEATH_INJECTION_TOKEN_FORBIDDEN",
+                    },
+                )
+                return
+
+            candidate_target = (candidate_wt / target_relpath).resolve()
+            baseline_target = (baseline_wt / target_relpath).resolve()
+            try:
+                candidate_text = candidate_target.read_text(encoding="utf-8")
+                baseline_text = baseline_target.read_text(encoding="utf-8")
+            except Exception as exc:  # noqa: BLE001
+                _write_verify_failure(
+                    out_dir,
+                    {
+                        "tick_u64": int(tick_u64),
+                        "target_relpath": target_relpath,
+                        "reason": "CANDIDATE_READ_FAILED",
+                        "detail": str(exc)[:4000],
+                    },
+                )
+                return
+            nontrivial_reason = _patch_nontrivial_reason(
+                before_text=baseline_text,
+                after_text=candidate_text,
+                patch_bytes=patch_bytes,
+            )
+            if nontrivial_reason is not None:
+                _write_verify_failure(
+                    out_dir,
+                    {
+                        "tick_u64": int(tick_u64),
+                        "target_relpath": target_relpath,
+                        "reason": str(nontrivial_reason),
+                    },
+                )
+                return
+            try:
+                _run_python_gate(repo_root=candidate_wt, args=["-m", "py_compile", target_relpath])
+                _run_python_gate(repo_root=candidate_wt, args=["-c", "import orchestrator.omega_v19_0.coordinator_v1 as _m; print('OK')"])
+            except Exception as exc:  # noqa: BLE001
+                _write_verify_failure(
+                    out_dir,
+                    {
+                        "tick_u64": int(tick_u64),
+                        "target_relpath": target_relpath,
+                        "reason": "CANDIDATE_IMPORT_ERROR",
+                        "detail": str(exc)[:4000],
+                    },
+                )
+                return
+            try:
+                micro_receipt = _micro_bench_gate(
+                    baseline_worktree=baseline_wt,
+                    candidate_worktree=candidate_wt,
+                    bench_pack_rel=bench_pack_rel,
+                    seed_u64=int(seed_base_u64),
+                    deterministic_timing_b=benchmark_deterministic_timing_b,
+                    out_dir=out_dir,
+                    wall_ms_max_u64=wall_ms_max_u64,
+                )
+            except Exception as exc:  # noqa: BLE001
+                _write_verify_failure(
+                    out_dir,
+                    {
+                        "tick_u64": int(tick_u64),
+                        "target_relpath": target_relpath,
+                        "reason": "MICRO_BENCH_GATE_FAIL",
+                        "detail": str(exc)[:4000],
+                    },
+                )
+                return
+            micro_receipt["receipt_id"] = canon_hash_obj({k: v for k, v in micro_receipt.items() if k != "receipt_id"})
+            write_canon_json(out_dir / "coordinator_mutator_micro_bench_receipt_v1.json", micro_receipt)
 
             try:
                 bench_trials, median_improve = _bench_median_of_5(
@@ -983,6 +1587,7 @@ def run(*, campaign_pack: Path, out_dir: Path) -> None:
                     seed_base_u64=seed_base_u64,
                     metric=metric,
                     alternate_order_b=alternate_order_b,
+                    deterministic_timing_b=benchmark_deterministic_timing_b,
                     out_dir=out_dir,
                 )
             except Exception as exc:  # noqa: BLE001
@@ -1004,6 +1609,7 @@ def run(*, campaign_pack: Path, out_dir: Path) -> None:
                 "trials_u64": int(trials_u64),
                 "seed_base_u64": int(seed_base_u64),
                 "alternate_order_b": bool(alternate_order_b),
+                "deterministic_timing_b": bool(benchmark_deterministic_timing_b),
                 "trials": [
                     {
                         "trial_u64": int(t.trial_u64),
@@ -1084,6 +1690,24 @@ def run(*, campaign_pack: Path, out_dir: Path) -> None:
                 return
             if str(verdict).strip() != "VALID":
                 return
+
+            try:
+                divergence_receipt = _verify_divergence_artifact_chain(state_dir=_state_dir_for_replay)
+            except Exception as exc:  # noqa: BLE001
+                _write_verify_failure(
+                    out_dir,
+                    {
+                        "tick_u64": int(tick_u64),
+                        "target_relpath": target_relpath,
+                        "reason": "DIVERGENCE_ARTIFACT_CHAIN_FAIL",
+                        "detail": str(exc)[:4000],
+                    },
+                )
+                return
+            divergence_receipt["tick_u64"] = int(tick_u64)
+            divergence_receipt["target_relpath"] = target_relpath
+            divergence_receipt["receipt_id"] = canon_hash_obj({k: v for k, v in divergence_receipt.items() if k != "receipt_id"})
+            write_canon_json(out_dir / "phase3_divergence_artifact_receipt_v1.json", divergence_receipt)
 
             ccap_id, ccap_relpath, patch_relpath, bundle_hash = _emit_ccap(
                 repo_root=repo_root,

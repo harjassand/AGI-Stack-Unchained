@@ -355,7 +355,7 @@ EUDRS-U mentions "untrusted tool-use / router" patterns. This repo contains a de
 ### 8.1 Backend Contract
 
 - `docs/llm_backends.md`
-  - `ORCH_LLM_BACKEND`: `mock`, `replay`, `openai_harvest|openai_replay`, `anthropic_*`, `gemini_*`
+  - `ORCH_LLM_BACKEND`: `mock`, `replay`, `openai_harvest|openai_replay`, `anthropic_*`, `mlx`
   - `ORCH_LLM_REPLAY_PATH`: required for harvest and replay modes
   - `ORCH_LLM_LIVE_OK=1`: required for harvest backends (fail-closed guardrail)
 

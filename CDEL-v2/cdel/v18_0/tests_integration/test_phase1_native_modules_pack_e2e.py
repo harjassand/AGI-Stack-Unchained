@@ -4,6 +4,8 @@ import json
 import os
 from pathlib import Path
 
+import pytest
+
 from cdel.v18_0.tests_omega_daemon.utils import latest_file, repo_root, run_tick_with_pack
 
 
@@ -14,6 +16,8 @@ def _load(path: Path) -> dict:
 def test_phase1_native_modules_pack_tick_smoke(tmp_path: Path) -> None:
     pack = repo_root() / "campaigns" / "rsi_omega_daemon_v18_0_phase1_native_modules_v1" / "rsi_omega_daemon_pack_v1.json"
     assert pack.exists() and pack.is_file()
+    if str(os.environ.get("OMEGA_OUT_DIR", "")).strip():
+        pytest.skip("native module e2e is skipped in hermetic repo-harness eval")
 
     prev_native = os.environ.get("OMEGA_NATIVE_CANON_BYTES")
     os.environ["OMEGA_NATIVE_CANON_BYTES"] = "1"

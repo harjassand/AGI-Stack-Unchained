@@ -149,15 +149,14 @@ def test_llm_router_failsoft_invalid_json(tmp_path: Path, monkeypatch: pytest.Mo
     assert "LLM_ROUTER_INVALID_JSON" in str(diagnostics.get("error_reason", ""))
 
 
-def test_llm_router_backend_alias_google_maps_to_gemini_harvest(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    run_dir = tmp_path / "run_alias"
+def test_llm_router_backend_gemini_removed(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    run_dir = tmp_path / "run_gemini_removed"
     run_dir.mkdir(parents=True, exist_ok=True)
     _write_registry(run_dir / "_overnight_pack" / "omega_capability_registry_v2.json")
 
     monkeypatch.setenv("ORCH_LLM_BACKEND", "google")
-    monkeypatch.setenv("ORCH_GEMINI_MODEL", "gemini-2.0-flash")
     monkeypatch.setenv("ORCH_LLM_REPLAY_PATH", (run_dir / "missing_replay.jsonl").as_posix())
 
     result = router_v1.run_failsoft(run_dir=run_dir, tick_u64=0, store_root=run_dir / "polymath" / "store")
     assert str(result.get("status", "")) == "ERROR"
-    assert "LLM_LIVE_DISABLED" in str(result.get("error_reason", ""))
+    assert "GEMINI_BACKEND_REMOVED_USE_MLX" in str(result.get("error_reason", ""))

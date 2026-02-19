@@ -27,6 +27,8 @@ _SANITIZED_ENV_KEYS = (
     "OMEGA_AUTHORITY_PINS_REL",
     "OMEGA_CCAP_PATCH_ALLOWLISTS_REL",
     "OMEGA_SURVIVAL_DRILL",
+    "OMEGA_DEV_DEATH_INJECTION_OK",
+    "OMEGA_DEATH_INJECT_TICK_U64",
     "ORCH_LLM_BACKEND",
     "ORCH_LLM_REPLAY_PATH",
     "ORCH_LLM_MAX_CALLS",
@@ -35,16 +37,28 @@ _SANITIZED_ENV_KEYS = (
     "ORCH_LLM_TEMPERATURE",
     "ORCH_LLM_MAX_TOKENS",
     "ORCH_LLM_TOP_P",
+    "ORCH_LLM_SEED_U64",
     "ORCH_LLM_MOCK_RESPONSE",
     "ORCH_LLM_MOCK_MODE",
+    "ORCH_MLX_MODEL",
+    "ORCH_MLX_REVISION",
+    "ORCH_MLX_ADAPTER_PATH",
+    "ORCH_MLX_TRUST_REMOTE_CODE",
     "ORCH_OPENAI_MODEL",
-    "ORCH_GEMINI_MODEL",
     "ORCH_ANTHROPIC_MODEL",
     "ORCH_ANTHROPIC_VERSION",
     "ORCH_LLM_LIVE_OK",
     "ORCH_LLM_RETRY_429_MAX_ATTEMPTS",
     "ORCH_LLM_RETRY_429_BASE_DELAY_S",
+    "ORCH_MUTATOR_TEMPLATE_ONLY",
     "OMEGA_WILD_MODE",
+    "HF_TOKEN",
+    "HUGGINGFACE_HUB_TOKEN",
+    "HF_HUB_ENABLE_HF_TRANSFER",
+    "HF_HUB_DOWNLOAD_TIMEOUT",
+    "HF_HUB_ETAG_TIMEOUT",
+    "HF_HUB_OFFLINE",
+    "TRANSFORMERS_OFFLINE",
 )
 
 
@@ -54,7 +68,15 @@ def _env_fingerprint(env_map: dict[str, str]) -> str:
 
 
 def _build_env(extra: dict[str, str] | None = None) -> dict[str, str]:
-    env = {key: os.environ.get(key, "") for key in _SANITIZED_ENV_KEYS}
+    env: dict[str, str] = {}
+    for key in _SANITIZED_ENV_KEYS:
+        value = os.environ.get(key)
+        if value is None:
+            continue
+        text = str(value)
+        if text == "":
+            continue
+        env[key] = text
     env["PYTHONHASHSEED"] = "0"
     if extra:
         for key, value in extra.items():

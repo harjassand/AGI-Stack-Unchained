@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import subprocess
@@ -161,6 +162,54 @@ def _enforce_survival_drill_git_guard(*, run_root: Path, tick_u64: int) -> None:
     bad = sorted({row.strip() for row in log if row.strip() and row.strip() not in allowed_authors})
     if bad:
         raise RuntimeError(f"SURVIVAL_DRILL_FORBIDDEN_COMMIT_AUTHORS:{','.join(bad)}")
+
+
+def _resolve_campaign_target_relpath(*, campaign_id: str, registry: dict[str, Any]) -> str:
+    cid = str(campaign_id).strip()
+    if not cid:
+        return ""
+    caps = registry.get("capabilities")
+    if not isinstance(caps, list):
+        fail("SCHEMA_FAIL")
+    campaign_pack_rel = ""
+    for row in caps:
+        if not isinstance(row, dict):
+            continue
+        if str(row.get("campaign_id", "")).strip() != cid:
+            continue
+        campaign_pack_rel = str(row.get("campaign_pack_rel", "")).strip()
+        break
+    if not campaign_pack_rel:
+        return ""
+    pack_path = (Path.cwd().resolve() / campaign_pack_rel).resolve()
+    if not pack_path.exists() or not pack_path.is_file():
+        return ""
+    pack_obj = load_canon_dict(pack_path)
+    if not isinstance(pack_obj, dict):
+        fail("SCHEMA_FAIL")
+    target_relpath = pack_obj.get("target_relpath")
+    if not isinstance(target_relpath, str):
+        return ""
+    return str(target_relpath).strip()
+
+
+def _derive_dispatch_seed_u64(
+    *,
+    prev_state_id: str,
+    tick_u64: int,
+    campaign_id: str,
+    target_relpath: str,
+) -> int:
+    payload = {
+        "schema_id": "omega_dispatch_seed_v1",
+        "prev_state_id": str(prev_state_id),
+        "tick_u64": int(tick_u64),
+        "campaign_id": str(campaign_id),
+        "target_relpath": str(target_relpath),
+    }
+    canon = json.dumps(payload, sort_keys=True, separators=(",", ":"), ensure_ascii=True).encode("utf-8")
+    digest = hashlib.sha256(canon).digest()
+    return int.from_bytes(digest[-8:], "big", signed=False)
 
 
 def _write_payload(dir_path: Path, suffix: str, payload: dict[str, Any], id_field: str | None = None) -> tuple[Path, dict[str, Any], str]:
@@ -954,7 +1003,24 @@ def run_tick(
                 decision_plan,
             )
 
-        run_seed_u64 = int(os.environ.get("OMEGA_RUN_SEED_U64", int(pack.get("seed_u64", 0))))
+        run_seed_override_raw = str(os.environ.get("OMEGA_RUN_SEED_U64", "")).strip()
+        if run_seed_override_raw:
+            run_seed_u64 = int(run_seed_override_raw)
+        else:
+            prev_state_id = str(prev_state.get("state_id", "")).strip()
+            if not prev_state_id:
+                fail("SCHEMA_FAIL")
+            dispatch_campaign_id = str(decision_plan.get("campaign_id", "")).strip()
+            dispatch_target_relpath = _resolve_campaign_target_relpath(
+                campaign_id=dispatch_campaign_id,
+                registry=registry,
+            )
+            run_seed_u64 = _derive_dispatch_seed_u64(
+                prev_state_id=prev_state_id,
+                tick_u64=tick_u64,
+                campaign_id=dispatch_campaign_id,
+                target_relpath=dispatch_target_relpath,
+            )
 
         dispatch_receipt = None
         dispatch_hash = None

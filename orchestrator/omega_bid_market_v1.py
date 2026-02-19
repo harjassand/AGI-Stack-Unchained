@@ -596,10 +596,19 @@ def select_winner(
         pred_cost = max(1, q32_int(bid.get("predicted_cost_q32")))
 
         roi_q32 = int((int(pred_delta) << 32) // max(1, int(pred_cost)))
-        score_q32 = int(q32_mul(int(roi_q32), int(credibility_q32)))
+        confidence_penalty_q32 = int(confidence_q32)
+        score_q32 = int(
+            q32_mul(
+                int(q32_mul(int(roi_q32), int(credibility_q32))),
+                int(confidence_penalty_q32),
+            )
+        )
 
         cooldown_next = int(((cooldowns.get(campaign_id) or {}).get("next_tick_allowed_u64", 0)))
-        if cooldown_next > int(tick_u64):
+        if bool(cstate.get("disabled_b", False)):
+            eligible_b = False
+            skip_reason = "DISABLED"
+        elif cooldown_next > int(tick_u64):
             eligible_b = False
             skip_reason = "COOLDOWN"
         elif not has_budget(budget_remaining, cost_q32=int(pred_cost)):

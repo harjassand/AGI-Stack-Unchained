@@ -13,8 +13,6 @@ ACTIVATION_MODE="${OMEGA_META_CORE_ACTIVATION_MODE:-simulate}"
 ALLOW_SIMULATE="${OMEGA_ALLOW_SIMULATE_ACTIVATION:-1}"
 WORKTREE_DIR="${OMEGA_IGNITE_WORKTREE_DIR:-${OUT_ROOT}/_worktree}"
 APPLY_TARGETS_CSV="${OMEGA_IGNITE_APPLY_TARGETS:-orchestrator/omega_v19_0/coordinator_v1.py,orchestrator/omega_bid_market_v1.py}"
-GOOGLE_API_KEY_FILE_DEFAULT="${HOME}/.config/omega/google_api_key"
-GOOGLE_API_KEY_FILE="${OMEGA_GOOGLE_API_KEY_FILE:-${GOOGLE_API_KEY_FILE_DEFAULT}}"
 
 if ! [[ "$START_TICK" =~ ^[0-9]+$ ]]; then
   echo "OMEGA_IGNITE_START_TICK must be an unsigned integer" >&2

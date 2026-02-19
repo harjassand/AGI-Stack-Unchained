@@ -1063,6 +1063,24 @@ def run_subverifier(
             if pythonpath:
                 subverifier_pythonpath = f"{subverifier_pythonpath}:{pythonpath}"
 
+    repo_root_for_ccap = repo_root()
+    if verifier_module == _CCAP_VERIFIER_MODULE:
+        # Always pin verifier imports to the dispatch repo root; otherwise a
+        # globally installed `cdel` package can cause nondeterministic EK outcomes.
+        repo_root_for_ccap = _resolve_repo_root_for_dispatch(dispatch_ctx)
+        ccap_py_parts = [str((repo_root_for_ccap / "CDEL-v2").resolve()), str(repo_root_for_ccap.resolve())]
+        if subverifier_pythonpath:
+            ccap_py_parts.extend(chunk for chunk in str(subverifier_pythonpath).split(os.pathsep) if chunk)
+        deduped: list[str] = []
+        seen_py_parts: set[str] = set()
+        for chunk in ccap_py_parts:
+            key = str(chunk).strip()
+            if not key or key in seen_py_parts:
+                continue
+            seen_py_parts.add(key)
+            deduped.append(key)
+        subverifier_pythonpath = os.pathsep.join(deduped)
+
     subverifier_env: dict[str, str] = dict(invocation_env_overrides)
     if subverifier_pythonpath:
         subverifier_env["PYTHONPATH"] = subverifier_pythonpath
@@ -1072,7 +1090,6 @@ def run_subverifier(
     ccap_subrun_root_abs: Path | None = None
     ccap_rel: str | None = None
     if verifier_module == _CCAP_VERIFIER_MODULE:
-        repo_root_for_ccap = _resolve_repo_root_for_dispatch(dispatch_ctx)
         subrun_root_rel = require_relpath(dispatch_ctx.get("subrun_root_rel_state"))
         ccap_subrun_root_abs = state_root / subrun_root_rel
         declared_ccap_rel = str(cap.get("ccap_relpath", "")).strip()

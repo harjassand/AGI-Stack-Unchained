@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 from contextlib import contextmanager
+import hashlib
+import json
 import os
 import time
 from pathlib import Path
@@ -581,6 +583,54 @@ def _axis_gate_promotion_reason_code(axis_gate_failure: dict[str, Any] | None) -
     return None
 
 
+def _resolve_campaign_target_relpath(*, campaign_id: str, registry: dict[str, Any]) -> str:
+    cid = str(campaign_id).strip()
+    if not cid:
+        return ""
+    caps = registry.get("capabilities")
+    if not isinstance(caps, list):
+        fail("SCHEMA_FAIL")
+    campaign_pack_rel = ""
+    for row in caps:
+        if not isinstance(row, dict):
+            continue
+        if str(row.get("campaign_id", "")).strip() != cid:
+            continue
+        campaign_pack_rel = str(row.get("campaign_pack_rel", "")).strip()
+        break
+    if not campaign_pack_rel:
+        return ""
+    pack_path = (Path.cwd().resolve() / campaign_pack_rel).resolve()
+    if not pack_path.exists() or not pack_path.is_file():
+        return ""
+    pack_obj = load_canon_dict(pack_path)
+    if not isinstance(pack_obj, dict):
+        fail("SCHEMA_FAIL")
+    target_relpath = pack_obj.get("target_relpath")
+    if not isinstance(target_relpath, str):
+        return ""
+    return str(target_relpath).strip()
+
+
+def _derive_dispatch_seed_u64(
+    *,
+    prev_state_id: str,
+    tick_u64: int,
+    campaign_id: str,
+    target_relpath: str,
+) -> int:
+    payload = {
+        "schema_id": "omega_dispatch_seed_v1",
+        "prev_state_id": str(prev_state_id),
+        "tick_u64": int(tick_u64),
+        "campaign_id": str(campaign_id),
+        "target_relpath": str(target_relpath),
+    }
+    canon = json.dumps(payload, sort_keys=True, separators=(",", ":"), ensure_ascii=True).encode("utf-8")
+    digest = hashlib.sha256(canon).digest()
+    return int.from_bytes(digest[-8:], "big", signed=False)
+
+
 def run_tick(
     *,
     campaign_pack: Path,
@@ -628,6 +678,7 @@ def run_tick(
             print("SIGNAL=PHASE3_MUTATED_COORDINATOR v=1")
         tick_start_ns = time.monotonic_ns()
         stage_timings_ns: dict[str, int] = {stage: 0 for stage in _TIMING_STAGES}
+        goal_queue_fastpath_outcome = "WRITE"
 
         def _mark(stage: str, stage_start_ns: int) -> None:
             if deterministic_timing:
@@ -787,7 +838,11 @@ def run_tick(
             hotspots=prev_hotspots,
             episodic_memory=prev_episodic_memory,
         )
-        _, goal_queue, goal_queue_hash = write_goal_queue_effective(config_dir, goal_queue_effective)
+        synthesized_goal_queue_hash = canon_hash_obj(goal_queue_effective)
+        if synthesized_goal_queue_hash == str(goal_queue_hash).strip():
+            goal_queue_fastpath_outcome = "SKIP"
+        else:
+            _, goal_queue, goal_queue_hash = write_goal_queue_effective(config_dir, goal_queue_effective)
         prev_state = dict(prev_state)
         prev_state["goals"] = _merge_goals(prev_state.get("goals") or {}, goal_queue)
 
@@ -959,7 +1014,24 @@ def run_tick(
                 decision_plan,
             )
 
-        run_seed_u64 = int(os.environ.get("OMEGA_RUN_SEED_U64", int(pack.get("seed_u64", 0))))
+        run_seed_override_raw = str(os.environ.get("OMEGA_RUN_SEED_U64", "")).strip()
+        if run_seed_override_raw:
+            run_seed_u64 = int(run_seed_override_raw)
+        else:
+            prev_state_id = str(prev_state.get("state_id", "")).strip()
+            if not prev_state_id:
+                fail("SCHEMA_FAIL")
+            dispatch_campaign_id = str(decision_plan.get("campaign_id", "")).strip()
+            dispatch_target_relpath = _resolve_campaign_target_relpath(
+                campaign_id=dispatch_campaign_id,
+                registry=registry,
+            )
+            run_seed_u64 = _derive_dispatch_seed_u64(
+                prev_state_id=prev_state_id,
+                tick_u64=tick_u64,
+                campaign_id=dispatch_campaign_id,
+                target_relpath=dispatch_target_relpath,
+            )
 
         dispatch_receipt = None
         dispatch_hash = None
@@ -1023,22 +1095,26 @@ def run_tick(
                         allowlists=allowlists,
                     )
                     _mark("run_promotion", promotion_start_ns)
-            activation_start_ns = time.monotonic_ns()
-            (
-                activation_receipt,
-                activation_hash,
-                rollback_receipt,
-                rollback_hash,
-                active_manifest_after,
-            ) = run_activation(
-                tick_u64=tick_u64,
-                dispatch_ctx=dispatch_ctx,
-                promotion_receipt=promotion_receipt,
-                healthcheck_suitepack=healthcheck_suite,
-                healthcheck_suite_hash=healthcheck_suite_hash,
-                active_manifest_hash_before=active_manifest_before,
-            )
-            _mark("run_activation", activation_start_ns)
+            promotion_status_raw = str((promotion_receipt or {}).get("result", {}).get("status", "")).strip()
+            if promotion_status_raw == "PROMOTED":
+                activation_start_ns = time.monotonic_ns()
+                (
+                    activation_receipt,
+                    activation_hash,
+                    rollback_receipt,
+                    rollback_hash,
+                    active_manifest_after,
+                ) = run_activation(
+                    tick_u64=tick_u64,
+                    dispatch_ctx=dispatch_ctx,
+                    promotion_receipt=promotion_receipt,
+                    healthcheck_suitepack=healthcheck_suite,
+                    healthcheck_suite_hash=healthcheck_suite_hash,
+                    active_manifest_hash_before=active_manifest_before,
+                )
+                _mark("run_activation", activation_start_ns)
+            else:
+                active_manifest_after = active_manifest_before
             axis_gate_failure = _load_axis_gate_failure(dispatch_ctx)
             if _axis_gate_applies_safe_halt(axis_gate_failure):
                 safe_halt = True
@@ -1197,34 +1273,48 @@ def run_tick(
             native_ops = drain_runtime_stats()
         except Exception:
             native_ops = []
-        if native_ops:
-            stats_payload = {
-                "schema_version": "omega_native_runtime_stats_v1",
-                "stats_id": "sha256:" + ("0" * 64),
-                "tick_u64": int(tick_u64),
-                "ops": native_ops,
+        native_ops_rows = [dict(row) for row in native_ops if isinstance(row, dict)]
+        native_ops_rows.append(
+            {
+                "op_id": f"phase3_coord_goal_queue_fastpath_v1:{goal_queue_fastpath_outcome}",
+                "calls_u64": 1,
+                "native_returned_u64": 0,
+                "py_returned_u64": 1,
+                "bytes_in_u64": 0,
+                "bytes_out_u64": 0,
+                "active_binary_sha256": "",
+                "native_load_fail_u64": 0,
+                "native_invoke_fail_u64": 0,
+                "shadow_mismatch_u64": 0,
             }
-            validate_schema(stats_payload, "omega_native_runtime_stats_v1")
-            try:
-                from cdel.v1_7r.canon import native_canon_disabled
-            except Exception:
-                native_canon_disabled = None
-            if native_canon_disabled is None:
+        )
+        stats_payload = {
+            "schema_version": "omega_native_runtime_stats_v1",
+            "stats_id": "sha256:" + ("0" * 64),
+            "tick_u64": int(tick_u64),
+            "ops": native_ops_rows,
+        }
+        validate_schema(stats_payload, "omega_native_runtime_stats_v1")
+        try:
+            from cdel.v1_7r.canon import native_canon_disabled
+        except Exception:
+            native_canon_disabled = None
+        if native_canon_disabled is None:
+            _, _stats_obj, stats_hash = _write_payload(
+                state_root / "ledger" / "native",
+                "omega_native_runtime_stats_v1.json",
+                stats_payload,
+                id_field="stats_id",
+            )
+        else:
+            with native_canon_disabled():
                 _, _stats_obj, stats_hash = _write_payload(
                     state_root / "ledger" / "native",
                     "omega_native_runtime_stats_v1.json",
                     stats_payload,
                     id_field="stats_id",
                 )
-            else:
-                with native_canon_disabled():
-                    _, _stats_obj, stats_hash = _write_payload(
-                        state_root / "ledger" / "native",
-                        "omega_native_runtime_stats_v1.json",
-                        stats_payload,
-                        id_field="stats_id",
-                    )
-            _emit("NATIVE_RUNTIME_STATS", stats_hash)
+        _emit("NATIVE_RUNTIME_STATS", stats_hash)
 
         prev_state_hash = canon_hash_obj(prev_state)
         h0 = compute_h0(

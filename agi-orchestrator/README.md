@@ -140,17 +140,20 @@ If `--domain` is used, concept/oracle/baseline/config defaults are loaded from t
   - `replay`
   - `openai_replay`
   - `anthropic_replay`
-  - `gemini_replay`
   - `openai_harvest`
   - `anthropic_harvest`
-  - `gemini_harvest`
+  - `mlx`
 - `ORCH_LLM_REPLAY_PATH` (required for replay/harvest modes)
 - `ORCH_LLM_CACHE_DIR` (optional prompt/response cache directory)
 - `ORCH_LLM_MOCK_RESPONSE` and `ORCH_LLM_MOCK_MODE`
-- `ORCH_OPENAI_MODEL`, `ORCH_ANTHROPIC_MODEL`, `ORCH_GEMINI_MODEL`
-- `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, `GOOGLE_API_KEY`
+- `ORCH_OPENAI_MODEL`, `ORCH_ANTHROPIC_MODEL`
+- `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`
+- `ORCH_MLX_MODEL`, `ORCH_MLX_REVISION`, `ORCH_MLX_ADAPTER_PATH`, `ORCH_MLX_TRUST_REMOTE_CODE`
+- `ORCH_LLM_SEED_U64`
 - `ORCH_LLM_MAX_PROMPT_CHARS`, `ORCH_LLM_MAX_RESPONSE_CHARS`, `ORCH_LLM_MAX_CALLS`
 - Harvest backends require `ORCH_LLM_LIVE_OK=1`.
+
+Gemini backends are removed. Legacy `gemini_*` backend selection fails closed.
 
 A per-run backend log is emitted under manifest `llm.calls` as hashes (`prompt_hash`, `response_hash`, cache hit, index).
 
@@ -272,4 +275,3 @@ python scripts/check_suite_integrity.py
 - Python `>=3.11`
 - dependency on pinned `cdel[sealed]`
 - extra `dev` dependency `pytest`
-

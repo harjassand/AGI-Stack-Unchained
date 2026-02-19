@@ -2,8 +2,8 @@
 
 ## A Complete Reconstruction Manual for the System's Mental Model
 
-**Version**: v19.0 (Super-Unified) | **Generated**: 2026-02-18 | **Scope**: Full Codebase  
-**Word Count Target**: 30,000+ words  
+**Version**: v19.0 (Super-Unified) | **Generated**: 2026-02-20 | **Scope**: Full Codebase  
+**Word Count Target**: 35,000+ words  
 **Purpose**: Enable an external intelligence to reconstruct the project's mental model — its intent, architecture, and hidden mechanics — without access to the raw source files.
 
 ---
@@ -72,6 +72,17 @@
    - 6.11 [The VPVM STARK Prover](#611-the-vpvm-stark-prover-proof-carrying-code)
    - 6.12 [EUDRS-U Campaigns & Verification](#612-eudrs-u-campaigns--verification)
    - 6.13 [Why EUDRS-U Matters](#613-why-eudrs-u-matters)
+7. [Layer 7: Post-v18.0 Evolution — Phase 3 Through Phase 4A](#layer-7-post-v180-evolution--phase-3-through-phase-4a-february-1720-2026)
+   - 7.1 [Phase 3: CCAP Self-Mutation](#71-phase-3-ccap-self-mutation--the-system-rewrites-its-own-coordinator)
+   - 7.2 [The Deterministic Bid Market](#72-the-deterministic-bid-market-predation-market)
+   - 7.3 [The Native Module Pipeline](#73-the-native-module-pipeline--rust-ffi-via-deterministic-abi)
+   - 7.4 [Phase 0: Adversarial CCAP Testing](#74-phase-0-adversarial-ccap-testing)
+   - 7.5 [The Enhanced Ignite Runaway Loop](#75-the-enhanced-ignite-runaway-loop)
+   - 7.6 [Phase 4A: SIP Ingestion](#76-phase-4a-sip-ingestion--sealed-data-pipelines)
+   - 7.7 [Coordinator v18/v19 Enhancements](#77-coordinator-v180--v190-enhancements)
+   - 7.8 [Verifier Expansion](#78-verifier-expansion)
+   - 7.9 [Test Coverage Additions](#79-test-coverage-additions)
+   - 7.10 [Summary](#710-summary-what-changed-and-why-it-matters)
 
 ---
 
@@ -3293,10 +3304,356 @@ Within these constraints, the system is free to improve anything it can access. 
 
 This is what "AGI-Stack-Unchained" means: **maximum freedom within constitutional bounds**. The system is unchained in its ability to grow, learn, and improve. It is constitutionally bound in its inability to compromise its own verification, evaluation, or safety infrastructure.
 
+
+---
+
+# Layer 7: Post-v18.0 Evolution — Phase 3 Through Phase 4A (February 17–20 2026)
+
+This section documents the most recent evolutionary burst — the three-day sprint from February 17 through February 20, 2026. During this period, the system underwent its most significant single expansion since the v18.0 unification, adding 14,544 lines of new code across 77 files. The changes fall into six major subsystems: (1) Phase 3 CCAP Self-Mutation, (2) the Deterministic Bid Market, (3) the Native Module Pipeline, (4) Phase 0 Adversarial CCAP Testing, (5) the enhanced Ignite Runaway Loop, and (6) Phase 4A SIP Ingestion. Each subsystem is described below with direct code-level evidence.
+
+## 7.1 Phase 3: CCAP Self-Mutation — The System Rewrites Its Own Coordinator
+
+**Primary Module**: `orchestrator/rsi_coordinator_mutator_v1.py` (1,861 lines, 78,251 bytes)  
+**Supporting Modules**: `orchestrator/omega_v18_0/coordinator_v1.py`, `agi-orchestrator/orchestrator/llm_backend.py`  
+**Commits**: `Phase 3: *` series (30+ commits from Feb 17–18)
+
+Phase 3 represents a landmark capability: **the Omega daemon can now propose, benchmark, and land mutations to its own coordinator code**. This is the first time the system's self-improvement loop targets the orchestration layer itself — the code that decides *what* to improve.
+
+### 7.1.1 Architecture of Self-Mutation
+
+The Phase 3 campaign (`rsi_coordinator_mutator_v1.py`) implements a five-stage pipeline:
+
+1. **LLM Prompt Generation** (`_llm_diff_prompt()`, lines 199–236): The mutator constructs a prompt containing the full text of the target file (`orchestrator/omega_v19_0/coordinator_v1.py`, locked via `_LOCKED_TARGET_RELPATH`), the campaign pack configuration, the current tick index, and a deterministic run seed. The prompt requests a unified diff that improves the coordinator's behavior according to Definition of Done (DoD) criteria specified in the pack.
+
+2. **LLM Response Extraction** (`_extract_patch_from_llm()`, lines 333–430; `_maybe_parse_llm_json_dict()`, lines 433–504): The system handles multiple LLM response formats — raw unified diffs, JSON-wrapped diffs (`unified_diff` field), full updated file text (`updated_file_text` field), and malformed JSON with markdown wrappers. The extractor strips code fences, tolerates non-JSON wrappers (`_maybe_parse_llm_json_dict`), and computes local diffs from `updated_file_text` when the LLM fails to produce a proper diff (`_diff_from_updated_text()`, lines 507–517). Missing diff headers are synthesized (`_ensure_patch_headers()`, lines 519–567).
+
+3. **Patch Repair** (`_repair_patch_prefix_that_applies()`, lines 67–122): LLM-generated patches are often truncated or malformed. The repair function progressively trims trailing hunks until _git apply --check_ succeeds. It tries strict mode first, then tolerant mode (with whitespace relaxation and context-line recount). A dedicated module `patch_diff_v1.py` (29 lines) provides `build_unified_patch_bytes()` for generating deterministic diffs from before/after text.
+
+4. **Triviality Gate** (`_patch_nontrivial_reason()`, lines 605–634): Not all syntactically valid patches are worth benchmarking. The triviality gate uses Python's `ast` module to compare the AST structure before and after the patch, with an option to strip literal values (`_StripLiteralValues` visitor, lines 576–591). Patches that only change string constants or comments — without altering control flow — are rejected as trivial. The `_ast_signature()` function (lines 594–602) computes a canonical hash of the AST's dump representation for comparison.
+
+5. **Micro-Benchmarking** (`_micro_bench_gate()`, lines 778–825; `_run_daemon_loop_measured()`, lines 877–982): Accepted patches are benchmarked using a paired median-of-5 trial design. Two worktrees — baseline and candidate — run identical daemon loops. The measured run (`_run_daemon_loop_measured`) monitors RSS memory via `/proc/$pid/statm` (or `ps` fallback), file descriptor count via `/proc/$pid/fd` (or `lsof` fallback), and wall-clock time. Memory sampling occurs at configurable intervals (`sample_period_s`, default 0.25 seconds). A positive score delta (candidate improves over baseline) is required for promotion.
+
+6. **Deterministic Template Mode** (`_template_patch_for_target()`, lines 239–330): When no LLM is available or for deterministic testing, the mutator can generate a template patch that modifies a deterministic tick constant in the coordinator. This was added via commits `coordinator template: patch deterministic tick constant for positive score delta` and `coordinator template: add missing regex import for deterministic patch mode`. The template mode uses regex matching (`re.compile`) to locate and increment the constant, ensuring verifiable score improvement.
+
+### 7.1.2 LLM Backend Evolution
+
+**Module**: `agi-orchestrator/orchestrator/llm_backend.py` (687 lines, 26,021 bytes)
+
+The LLM backend was significantly enhanced for Phase 3:
+
+- **Multi-Provider Architecture**: The backend now supports four provider strategies through distinct classes:
+  - `MockBackend`: Static response replay for deterministic testing.
+  - `ProviderReplayBackend`: Deterministic replay from JSONL logs keyed by `(provider, model, prompt_hash)`.
+  - `ProviderHarvestBackend`: Live HTTP requests to OpenAI, Anthropic, or Gemini APIs with automatic JSONL recording for future replay. 429/rate-limit errors trigger exponential backoff with receipts (commit: `Phase 3: handle live LLM failures (429 backoff) with receipts`).
+  - **MLX Local Backend**: On-device inference via Apple MLX with model/tokenizer caching (`_load_mlx_model_and_tokenizer()`, lines 278–299), chat template formatting (`_format_mlx_prompt()`, lines 302–315), and configurable sampler (`_build_mlx_sampler()`, lines 318–335). The MLX mutator system prompt is hardcoded: `"You are a deterministic code mutator. Output a single JSON object only. No markdown."` This enables entirely offline self-mutation on Apple Silicon.
+  
+- **Gemini Removal**: The native Gemini SDK integration was removed (commit: `test_llm_backend_gemini_removed.py`, 11 lines). Gemini access now routes through the harvest backend's HTTP POST interface, reading the API key from a local secret file (commit: `Phase 3: gemini harvest reads key from file`). The function `_gemini_removed()` (line 87) explicitly raises an error if called.
+
+- **Deterministic Seeding**: All LLM calls use `_derive_call_seed_u64()` (lines 228–236) to compute a deterministic seed from a base seed and call index, enabling replay-verifiable LLM interactions.
+
+### 7.1.3 Strict DoD Mutations and Runtime Integration
+
+**Commit**: `feat: land phase3 strict DoD updates and runtime integrations` (HEAD on main)  
+**Commit**: `phase3 strict dod mutations and mutator gates` 
+
+The Phase 3 landing commit introduced strict Definition of Done (DoD) enforcement:
+
+- **Verify Failure Receipts** (`_write_verify_failure()`, lines 569–573): When a patch fails any gate (triviality, benchmark, determinism), the mutator writes an explicit failure receipt with reason codes (`TRIVIAL_PATCH`, `BENCHMARK_REGRESSION`, `AST_UNCHANGED`, `APPLY_FAIL`). This closes the previous gap where `VERIFY_ERROR` was used as an opaque catch-all (commit: `Phase 3: write explicit verify failure receipts (no opaque VERIFY_ERROR)`).
+
+- **Divergence Artifact Chain Verification** (`_verify_divergence_artifact_chain()`, lines 704–775): After a benchmark run, the verifier checks that the candidate's state directory contains a complete, hash-consistent artifact chain — observation, decision, dispatch, promotion receipts — with no missing links. This prevents false-positive benchmark results from incomplete runs.
+
+- **v19 Replay Verdict** (`_run_v19_replay_verdict()`, lines 659–688): The mutator runs the v19 daemon verifier against each benchmark output to confirm that the mutated coordinator still produces replay-verifiable ticks. A mutation that breaks replay determinism is rejected even if it improves benchmark scores.
+
+## 7.2 The Deterministic Bid Market (Predation Market)
+
+**Module**: `CDEL-v2/cdel/v18_0/omega_bid_market_v1.py` (817 lines, 31,696 bytes)  
+**Test Campaign**: `CDEL-v2/cdel/v18_0/campaign_bid_market_toy_v1.py` (64 lines)  
+**Test Verifier**: `CDEL-v2/cdel/v18_0/verify_bid_market_toy_v1.py` (28 lines)  
+**Unit Tests**: `CDEL-v2/cdel/v18_0/tests_omega_daemon/test_bid_market_math_and_tiebreak_v1.py` (166 lines)
+
+The Bid Market replaces static campaign routing with an economics-inspired resource-allocation mechanism where campaigns compete for tick execution rights.
+
+### 7.2.1 Q32 Fixed-Point Economics
+
+All market computations use Q32 fixed-point arithmetic (cf. Section 3.7). Key computed values:
+
+- **ROI** (`roi_q32`): Expected return-on-investment, configurable per campaign with defaults and per-campaign overrides via `resolve_bidder_params()` (lines 68–95). Clamped to `[min_q32, max_q32]` bounds from config.
+- **Confidence** (`confidence_q32`): Campaign's self-assessed confidence in its ROI estimate.
+- **Predicted Cost** (`predicted_cost_q32`): Estimated compute budget.
+- **Bankroll** (`bankroll_q32`): Available budget per campaign, initialized from config, adjusted at settlement.
+- **Credibility** (`credibility_q32`): Reputation score that increases with successful ticks and decreases with failures; clamped to `[0, Q32_ONE]`.
+
+### 7.2.2 Settlement Mechanics
+
+The `settle_and_advance_market_state()` function (lines 279–440) implements a full settling cycle:
+
+1. **J-Function Computation**: `J_q32_from_observation()` (lines 203–213) computes the objective function J from the observation report by extracting objective metric IDs (`_objective_metric_ids()`, lines 188–200) and reading their Q32 values. `J_prev_q32_from_metric_series()` (lines 216–231) computes the previous J for delta calculation.
+
+2. **Bankroll Adjustment**: Winners receive a bankroll credit proportional to J-delta (positive improvement → credit). Losers (negative J-delta on their watch) receive a bankroll debit. This creates an evolutionary pressure: successful campaigns accumulate resources, unsuccessful ones go bankrupt.
+
+3. **Bankruptcy Rules** (`_apply_bankruptcy_rules()`, lines 253–276): Campaigns whose bankroll drops below `disable_threshold_q32` after `disable_after_ticks_u64` consecutive losses are disabled. Disabled campaigns cannot bid. This prevents resource waste on consistently underperforming campaigns.
+
+4. **Credibility Update**: Credibility is a moving average that trends toward 1.0 for successful campaigns and 0.0 for unsuccessful ones. It factors into bid scoring via `_rank_key()`.
+
+### 7.2.3 Winner Selection
+
+The `select_winner()` function (lines 567–700) ranks all active bids using a composite scoring function. The tie-breaking order is fully deterministic: `(score_q32 DESC, roi_q32 DESC, credibility_q32 DESC, confidence_q32 DESC, campaign_id ASC)`. The `campaign_id` string comparison as final tiebreaker ensures that even identical scores produce deterministic outcomes. The selection receipt is hash-bound to all inputs (observation, market state, config, registry, bid set), making it fully replay-verifiable.
+
+### 7.2.4 Integration with Decision Pipeline
+
+`build_decision_plan_from_selection()` (lines 730–793) bridges the market's selection receipt into the standard decision plan format consumed by the executor. This function maps the winner's `campaign_id` to the registry, resolves budget and capability parameters, and produces a decision plan hash-bound to the selection receipt. This allows the bid market to be optionally enabled via config — when disabled, the legacy rule-based decider operates unchanged.
+
+## 7.3 The Native Module Pipeline — Rust FFI via Deterministic ABI
+
+**Campaign**: `CDEL-v2/cdel/v18_0/campaign_omega_native_module_v0_1.py` (270 lines, 9,623 bytes)  
+**Verifier**: `CDEL-v2/cdel/v18_0/verify_rsi_omega_native_module_v0_1.py` (298 lines, 11,832 bytes)  
+**Router**: `orchestrator/native/native_router_v1.py` (595 lines, 21,122 bytes)  
+**Activator Gate**: `CDEL-v2/cdel/v18_0/omega_activator_v1.py` → `_native_activation_gate()` (lines 128–202)
+
+The native module pipeline enables the system to produce, verify, and deploy compiled Rust code at runtime — a significant expansion of the system's capability beyond pure Python.
+
+### 7.3.1 Campaign: Building Rust Cdylibs
+
+The `campaign_omega_native_module_v0_1.py` module builds a single Rust `cdylib` implementing one `op_id` under a fixed ABI. The campaign:
+
+1. Loads the campaign pack and validates schema `rsi_omega_native_module_pack_v0_1`.
+2. Reads the toolchain manifest hash (`_toolchain_manifest_hash()`, lines 45–48).
+3. Invokes `cargo build --release --target-dir` to produce a platform-specific shared library (`.dylib` on macOS, `.so` on Linux).
+4. Computes the SHA-256 of the built binary.
+5. Emits the native module descriptor with `op_id`, `binary_sha256`, `abi_version_u32=1`, and `abi_kind=BLOBLIST_V1`.
+
+### 7.3.2 Verifier: Offline Deterministic Builds
+
+The verifier (`verify_rsi_omega_native_module_v0_1.py`) enforces:
+
+- **Forbidden Surface Scanning** (`_scan_forbidden_rust_surfaces()`, lines 56–85): Scans all `.rs` source files for forbidden API calls: `std::net`, `std::process`, `std::fs`, `libc::`, `extern "C"` (other than the ABI entry point), `unsafe` blocks (beyond the minimal FFI boundary). This prevents native modules from performing network I/O, spawning processes, or accessing the filesystem.
+
+- **Vendor Policy** (`_vendor_policy_checks()`, lines 88–98): Ensures no third-party crate dependencies beyond a curated allowlist.
+
+- **Build-Twice Determinism** (`_build_twice_offline()`, lines 170–210): Builds the crate twice into separate directories and verifies the output binaries are byte-identical. Non-deterministic builds (due to timestamps, randomized hashes, etc.) are rejected. This is enforced via `RUSTFLAGS` that disable debug info and force deterministic linking (`_default_rustflags()`, lines 152–167).
+
+### 7.3.3 Runtime Router: ctypes FFI with Shadow Mode
+
+The `native_router_v1.py` module is the runtime bridge between Python and compiled Rust:
+
+- **ABI Version 1** (`_ABI_VERSION = 1`): The ABI uses a bloblist encoding (`_encode_bloblist_v1()`, lines 73–79) — a length-prefixed sequence of byte blobs passed to the native function via ctypes.
+
+- **Module Loading** (`_ctypes_load_module()`, lines 321–367): Native modules are loaded via `ctypes.CDLL` with caching (`_lib_cache`). The loaded library's `op_id` is verified against the expected value. Thread-safe loading via `_lib_lock`.
+
+- **Route Function** (`route()`, lines 390–483): The main entry point. It checks the policy registry for the `op_id`, loads the active binary, invokes it via ctypes, and returns the result. If the native module fails, it falls back to the Python implementation (`_import_callable()`) transparently.
+
+- **Shadow Mode** (`_shadow_should_dual_run()`, lines 294–313): During initial deployment, native modules run in shadow mode — both the native and Python implementations execute, and their outputs are compared. Mismatches are recorded via `_write_mismatch_report()` (lines 486–499) and the native module is disabled (`_disable()`, lines 279–291). Shadow mode runs decrease over time (`shadow_calls_u32` tracks how many shadow runs have been performed).
+
+- **Healthcheck Vectors** (`healthcheck_vectors()`, lines 502–591): Before activation, the native module must pass a deterministic healthcheck — a set of known input/output pairs. The healthcheck loads the binary, invokes it with test vectors, and compares outputs against expected values.
+
+- **Runtime Statistics** (`_record_stats()`, lines 141–185; `drain_runtime_stats()`, lines 188–193): Per-op statistics (calls, bytes in/out, failures, shadow mismatches) are accumulated and periodically drained for observation.
+
+### 7.3.4 Activation Gate Integration
+
+The `omega_activator_v1.py` module's `run_activation()` function (lines 316–486) was enhanced with a native module activation gate. When a promotion receipt includes a `native_module` field in the activation binding:
+
+1. The activator extracts the `op_id` and `binary_sha256` from the binding payload (lines 401–404).
+2. It invokes `_native_activation_gate()` (lines 128–202), which:
+   - Locates the binary blob in the subrun's state directory (lines 148–160).
+   - Verifies its SHA-256 hash matches the declared value (line 161–162).
+   - Atomically copies it to the `.omega_cache/native_blobs/` directory (lines 164–167).
+   - Runs the healthcheck via `native_router_v1.healthcheck_vectors()` (lines 170–186).
+   - On pass, updates the active native registry (`_update_active_native_registry()`, lines 104–125) so the runtime router will use the new binary.
+3. If the native gate fails, the activator forces a healthcheck failure and triggers rollback (lines 410–414).
+
+This means native module deployment is fail-closed: a bad binary cannot reach production because the healthcheck blocks activation, and activation failure triggers immediate rollback.
+
+## 7.4 Phase 0: Adversarial CCAP Testing
+
+**Victim Campaign**: `CDEL-v2/cdel/v18_0/campaign_phase0_victim_ccap_v0_1.py` (242 lines, 8,583 bytes)  
+**Immune Repair Campaign**: `CDEL-v2/cdel/v18_0/campaign_phase0_immune_repair_ccap_v0_1.py`  
+**Tests**: `test_phase0_ccap_selection_injection_v1.py`, `test_survival_drill_ccap_anti_bypass_v1.py`
+
+Phase 0 campaigns are adversarial test harnesses for the CCAP verification pipeline — they deliberately produce malformed or deceptive CCAP bundles to verify that the verification system correctly rejects them.
+
+### 7.4.1 The Victim Campaign
+
+`campaign_phase0_victim_ccap_v0_1.py` generates exactly 2 CCAP candidates and 2 promotion bundles whose **deterministic ordering mismatches**: the lexicographically-first CCAP ID does not correspond to the lexicographically-first promotion bundle hash. This tests whether the verifier correctly handles CCAP selection when the ordering of candidates and bundles diverges.
+
+The campaign structure:
+1. Computes the repo's `base_tree_id` via `compute_repo_base_tree_id()` from `ccap_runtime_v1.py`.
+2. Generates two candidates with different nonces (`_candidate()`, lines 78–150), each producing a distinct patch (append nonce to a target file), CCAP payload, and promotion bundle.
+3. Writes both candidates and bundles to the output directory with deliberate ID/hash ordering mismatches.
+
+The `_Candidate` dataclass (lines 65–75) bundles `nonce`, `patch_bytes`, `patch_hex`, `ccap`, `ccap_id`, `ccap_relpath`, `patch_relpath`, `bundle`, and `bundle_hash` — a complete adversarial test vector.
+
+### 7.4.2 Survival Drill Integration
+
+The survival drill system (`tools/omega/survival_drill_runner_v1.py`, 319 lines) extends Phase 0 with automated adversarial testing during daemon operation. The `ignite_runaway.sh` script integrates survival drill state tracking via `_SURVIVAL_DRILL_STATE_DIRNAME` and `_SURVIVAL_DRILL_START_MARKER` (coordinator_v1.py, lines 89–91), with git-based author verification (`_enforce_survival_drill_git_guard()`, lines 125–164) to ensure only authorized authors can create drill conditions.
+
+## 7.5 The Enhanced Ignite Runaway Loop
+
+**Script**: `ignite_runaway.sh` (867 lines, 31,610 bytes — up from 307 lines)
+
+The ignite script has grown nearly 3× as it absorbed Phase 3 and Phase 4A capabilities:
+
+### 7.5.1 Death-Injection Gates
+
+The `compute_death_injection_gate()` function (lines 520–573) implements a sophisticated fault-injection system for testing the daemon's crash resilience:
+
+- **Dev Gate** (`death_dev_ok`): Checks whether the development environment supports death injection (e.g., has the correct Python version and dependencies).
+- **Runtime Gate** (`death_runtime_ok`): Checks whether the current tick is eligible for death injection based on a configurable interval and last-stable-tick tracking.
+- **Tick Gate** (`death_tick_gate`): The final per-tick decision, computed from the death injection configuration and the current tick's stability status.
+
+When death injection is active, the daemon is deliberately killed mid-tick to test:
+- Atomic state safety (no half-written artifacts).
+- Crash resurrection (the ignite loop retries the tick).
+- Parent-chain continuity (the retried tick chains correctly to the pre-crash state).
+
+### 7.5.2 Signal Emission
+
+The `emit_signals_for_tick()` function (lines 575–779) was expanded to emit structured signals by parsing coordinator output:
+
+- `RUNAWAY_ACTIVE` / `RUNAWAY_INACTIVE`: Runaway escalation status with level.
+- `CAPABILITY_PRIORITY`: Which objective the system is prioritizing.
+- `REWRITE_ATTEMPT`: A patch was generated (Tier 2 evidence).
+- `CCAP_DECISION`: CCAP verification verdict with reason code.
+- `REWRITE_COMMIT`: Patch accepted and committed (Tier 3 evidence).
+- `ACTIVATION_COMMIT`: meta-core pointer swapped.
+- `HEARTBEAT`: Per-tick heartbeat with tick snapshot hash.
+- `TIER_STATUS`: Aggregated tier (1=wants to improve, 2=generated patch, 3=patch landed).
+- `BID_MARKET_WINNER`: Which campaign won the bid market (new signal).
+- `NATIVE_ACTIVATION`: Whether a native module was activated/rejected (new signal).
+- `SIP_INGESTION`: Whether SIP ingestion occurred during the tick (new signal for Phase 4A).
+
+### 7.5.3 Worktree Isolation
+
+The ignite script now runs the daemon in an isolated git worktree (`$WORKTREE_DIR`), created by `ensure_worktree()` (lines 41–52). The worktree shares the same `.git` directory as the main repository but has its own working tree, allowing the daemon to mutate files freely without affecting the main checkout. The `OMEGA_HOST_REPO_ROOT` environment variable (line 824) tells Extension-1 and the AGI orchestrator where to find host-level modules when running inside a worktree.
+
+The `PYTHONPATH` is explicitly set to include both the worktree root and the host's `agi-orchestrator`:  
+```
+PYTHONPATH=".:CDEL-v2:${ROOT}/agi-orchestrator${PYTHONPATH:+:${PYTHONPATH}}"
+```
+
+This was refined over several commits (`ignite: pinned pythonpath uses host Extension-1 when worktree lacks it`, `ignite: prefer host Extension-1 orchestrator modules via OMEGA_HOST_REPO_ROOT`) to ensure that worktree-based runs can always import the latest orchestrator modules even when the worktree checkout is behind.
+
+## 7.6 Phase 4A: SIP Ingestion — Sealed Data Pipelines
+
+**Branch**: `phase4a-sip-ingestion`  
+**Runtime**: `CDEL-v2/cdel/v18_0/polymath_sip_ingestion_l0_v1.py` (~150 lines)  
+**Campaign**: `CDEL-v2/cdel/v18_0/campaign_polymath_sip_ingestion_l0_v1.py` (~60 lines)  
+**Verifier**: `CDEL-v2/cdel/v18_0/verify_rsi_polymath_sip_ingestion_l0_v1.py` (~80 lines)  
+**Commits**: `Phase4A: *` series (8 commits)
+
+Phase 4A introduces the **Sealed Ingestion Protocol (SIP) for data pipelines** — a mechanism to ingest external datasets (scientific papers, benchmarks, domain data) into the Polymath system with full provenance and determinism guarantees.
+
+### 7.6.1 SIP Ingestion Runtime
+
+The `polymath_sip_ingestion_l0_v1.py` module implements deterministic JSONL dataset ingestion:
+
+1. **Content Pinning**: Each input file's SHA-256 hash is declared in the campaign pack (`input_content_ids` map). At runtime, the ingestion pipeline re-hashes each input file and verifies it matches the declared pin. Any mismatch → fail-closed (`_ensure_sha256()`, `_sha256_bytes()`).
+
+2. **Canonical JSONL Policy** (`_CANON_JSONL_POLICY_ID = "CANON_JSONL_DETERMINISTIC_V1"`): Input JSONL files are processed line-by-line using GCJ-1 canonical JSON. Each line is parsed via `canon.loads()`, re-serialized via `canon_bytes()`, and hashed. This ensures that semantically identical but syntactically different JSON entries produce identical content IDs.
+
+3. **Entropy Assessment** (`_entropy_q16()`): Each ingested blob's byte entropy is computed and recorded as a Q16 fixed-point value. Low-entropy data (e.g., all-zeros padding) can be flagged for quality validation.
+
+4. **SIP Integration**: The ingestion calls through to `cdel.v19_0.world.sip_v1.run_sip()` — the v19 Sealed Ingestion Protocol — binding the ingested data into the v19 world model with full ledger traceability.
+
+5. **Producer Run ID**: A deterministic `producer_run_id` is computed from the tick, dataset name, and content IDs, enabling the verifier to replay the exact ingestion.
+
+### 7.6.2 SIP Ingestion Verifier
+
+The verifier (`verify_rsi_polymath_sip_ingestion_l0_v1.py`) enforces:
+
+- **Hashed Filename Verification** (`_verify_hashed_filename()`): Every output artifact's filename must encode its SHA-256 hash, and the actual content must match.
+- **Blob Integrity**: Every referenced blob in the ingestion store is re-hashed and compared against its content ID.
+- **Entropy Consistency**: The verifier recomputes entropy for every blob and compares against the recorded value.
+- **Producer Run ID Replay**: The verifier recomputes the producer run ID from scratch and verifies it matches the recorded value.
+
+### 7.6.3 Ledger Binding
+
+Phase 4A added a new ledger event type `SIP_INGESTION_L0` (commit: `Phase4A: ledger event enum add SIP_INGESTION_L0`). When SIP ingestion occurs during a tick, the ingestion receipt is bound into the v19 ledger alongside the tick's other artifacts. This creates a permanent, tamper-evident record of when external data entered the system, what data it was, and that it matched its declared content pins.
+
+The SIP ingestion daemon pack (`campaigns/rsi_omega_daemon_v19_0_phase4a_sip/rsi_omega_daemon_pack_v1.json`) registers the SIP ingestion campaign alongside the standard daemon campaigns, allowing the bid market or decider to select SIP ingestion when appropriate.
+
+## 7.7 Coordinator v18.0 / v19.0 Enhancements
+
+**Module**: `orchestrator/omega_v18_0/coordinator_v1.py` (1,445 lines, 59,525 bytes)
+
+The tick coordinator received several significant additions during this period:
+
+### 7.7.1 Bid Market Integration
+
+The coordinator now orchestrates the full bid market cycle within each tick:
+
+1. **Load Market State** (`_load_prev_market_state()`, lines 237–249): Loads the previous tick's market state from the state directory.
+2. **Bid Construction**: During the decision phase, each eligible campaign's parameters are resolved via `resolve_bidder_params()` and a bid is constructed via `build_bid_v1()`.
+3. **Market Settlement**: After observation, the market settles via `settle_and_advance_market_state()`, updating bankrolls and credibilities.
+4. **Winner Selection**: `select_winner()` determines which campaign executes.
+5. **Decision Plan Bridging**: `build_decision_plan_from_selection()` converts the selection receipt into the standard decision plan consumed by the executor.
+
+### 7.7.2 Episodic Memory
+
+The coordinator now maintains episodic memory across ticks:
+
+- **Episode Context Hash** (`_episode_context_hash()`, lines 502–530): Computes a canonical hash of the current issue bundle and observation report, creating a "scenario fingerprint."
+- **Episodic Outcome** (`_episodic_outcome()`, lines 533–548): Records whether the tick's action resulted in promotion success, rejection, or crash.
+- **Episodic Reason Codes** (`_episodic_reason_codes()`, lines 551–570): Extracts subverifier reason codes and tick outcome details for learning.
+- **Load Previous Episodes** (`_load_prev_episodic_memory()`, lines 427–438): Reads the previous tick's episodic memory for temporal reasoning.
+
+This episodic memory enables the system to recognize recurring failure patterns and avoid repeating unsuccessful strategies — a form of online learning that operates within the deterministic framework.
+
+### 7.7.3 Goal Queue Synthesis and Merging
+
+The coordinator's `_merge_goals()` function (lines 573–598) implements goal queue merging between the static configuration goals and dynamically synthesized goals from the `goal_synthesizer_v1`. Goals are merged by priority with deduplication, and the effective queue is written via `write_goal_queue_effective()` for auditability.
+
+### 7.7.4 Activation Meta-Verdict
+
+The `_activation_meta_verdict()` function (lines 601–617) extracts a structured verdict from the dispatch context's activation receipt, normalizing the various success/failure modes (META_CORE_DENIED, BINDING_MISMATCH, HEALTHCHECK_FAIL, NATIVE_GATE_FAILED) into canonical reason codes consumed by the runaway state tracker and episodic memory.
+
+## 7.8 Verifier Expansion
+
+**Module**: `CDEL-v2/cdel/v18_0/verify_rsi_omega_daemon_v1.py` (2,260 lines, 100,373 bytes)
+
+The Omega daemon verifier grew by over 400 lines to accommodate the new subsystems:
+
+- **Bid Market Verification**: The verifier now replays bid construction, market settlement, winner selection, and decision plan bridging. All Q32 arithmetic is verified for bitwise identity with the coordinator's outputs.
+- **Native Module Verification**: New verification paths for native module promotion, activation, healthcheck, and shadow mode statistics.
+- **SIP Ingestion Verification**: Cross-references SIP ingestion receipts against ledger events and re-verifies content pins.
+- **Observer Source Expansion**: New observation sources were added: `polymath_portfolio_v1` (line 113), `polymath_scout_status_v1` (line 114), skill reports (`omega_skill_transfer_report_v1`, `omega_skill_ontology_report_v1`, etc., lines 138–147) with their corresponding campaign routing and metric mappings.
+- **Capability Frontier Window**: `_CAPABILITY_FRONTIER_WINDOW_U64 = 512` (line 167) — the rolling window for tracking capability expansion/regression was set to 512 ticks.
+
+## 7.9 Test Coverage Additions
+
+The sprint added significant test coverage reflecting the new subsystems:
+
+| Test File | Lines | Purpose |
+|---|---|---|
+| `test_bid_market_math_and_tiebreak_v1.py` | 166 | Q32 arithmetic, tie-breaking determinism, bankruptcy rules |
+| `test_phase1_native_modules_pack_e2e.py` | 64 | End-to-end native module campaign execution |
+| `test_polymath_sip_ingestion_l0_v1.py` | ~50 | SIP ingestion determinism and content pin verification |
+| `test_verifier_allows_goal_dispatch_with_runaway_disabled.py` | 36 | Verifier correctly handles goal dispatch when runaway is off |
+| `test_phase0_ccap_selection_injection_v1.py` | ~80 | Phase0 adversarial CCAP ordering injection |
+| `test_survival_drill_ccap_anti_bypass_v1.py` | ~60 | Survival drill cannot bypass CCAP verification |
+| `test_phase3_mutator_gates_v1.py` | 13,268 | Comprehensive Phase3 mutator gate testing (triviality, benchmark, AST) |
+| `test_v19_phase3_pack_wiring_smoke.py` | 3,317 | Phase3 campaign pack integration with v19 coordinator |
+
+Total: approximately 17,000+ lines of new test code added during this three-day period.
+
+## 7.10 Summary: What Changed and Why It Matters
+
+The February 17–20 sprint transformed the AGI-Stack from a system that could improve its *campaigns and configurations* into one that can improve its own *orchestration logic*. The key evolutionary leap is Phase 3: the system can now propose mutations to the very code that decides what to improve. This is a higher-order self-improvement capability — meta-improvement.
+
+Combined with:
+- **The Bid Market**: Market-based campaign selection, replacing hard-coded routing with evolutionary pressure.
+- **Native Modules**: Compiled Rust code deployed at runtime, enabling performance-critical operations to escape Python's overhead.
+- **SIP Ingestion**: Sealed, deterministic ingestion of external data for Polymath, closing the gap between the system's internal world model and external scientific knowledge.
+- **Death Injection**: Automated crash-resilience testing via the ignite loop's fault injection gates.
+
+The system's capability surface has expanded while its safety invariants remain intact. Every new capability passes through the same CCAP → meta-core verification pipeline. The bid market's Q32 arithmetic is replay-verifiable. Native modules pass healthchecks before activation. SIP ingestion is content-pinned and entropy-assessed. Phase 0 campaigns adversarially test every new verification path.
+
+This is the AGI-Stack's design philosophy in action: **expand capability, preserve invariants, verify everything**.
+
+
 *The Source of Truth is complete.*
 
 ---
 
 *Document: AGI-Stack-Unchained Source of Truth*
-*Total sections: 6 Layers + Deep Dive + Detailed Module Analysis + Design Rationale + 12 Appendices*
-*Generated from analysis of 25,000+ lines of core source code across 10+ major components*
+*Total sections: 7 Layers + Deep Dive + Detailed Module Analysis + Design Rationale + 12 Appendices*
+*Generated from analysis of 40,000+ lines of core source code across 15+ major components*

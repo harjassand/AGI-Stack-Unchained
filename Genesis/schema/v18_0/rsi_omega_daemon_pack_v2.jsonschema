@@ -79,7 +79,16 @@
     "policy_vm_action_kind_enum_rel": {"type": "string"},
     "policy_vm_action_kind_enum_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
     "policy_vm_candidate_campaign_ids_list_rel": {"type": "string"},
-    "policy_vm_candidate_campaign_ids_list_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"}
+    "policy_vm_candidate_campaign_ids_list_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "shadow_regime_proposal_rel": {"type": "string"},
+    "shadow_evaluation_tiers_rel": {"type": "string"},
+    "shadow_protected_roots_profile_rel": {"type": "string"},
+    "shadow_corpus_descriptor_rel": {"type": "string"},
+    "shadow_witnessed_determinism_profile_rel": {"type": "string"},
+    "shadow_j_comparison_profile_rel": {"type": "string"},
+    "shadow_handoff_receipt_rel": {"type": "string"},
+    "shadow_observed_writes_rel": {"type": "string"},
+    "auto_swap_b": {"type": "boolean"}
   },
   "allOf": [
     {
@@ -170,6 +179,37 @@
           "predictor_id",
           "objective_j_profile_rel",
           "objective_j_profile_id"
+        ]
+      }
+    },
+    {
+      "if": {
+        "required": ["shadow_regime_proposal_rel"]
+      },
+      "then": {
+        "required": [
+          "shadow_evaluation_tiers_rel",
+          "shadow_protected_roots_profile_rel",
+          "shadow_corpus_descriptor_rel",
+          "shadow_witnessed_determinism_profile_rel",
+          "shadow_j_comparison_profile_rel"
+        ]
+      }
+    },
+    {
+      "if": {
+        "properties": {"auto_swap_b": {"const": true}},
+        "required": ["auto_swap_b"]
+      },
+      "then": {
+        "required": [
+          "shadow_regime_proposal_rel",
+          "shadow_handoff_receipt_rel",
+          "shadow_evaluation_tiers_rel",
+          "shadow_protected_roots_profile_rel",
+          "shadow_corpus_descriptor_rel",
+          "shadow_witnessed_determinism_profile_rel",
+          "shadow_j_comparison_profile_rel"
         ]
       }
     }

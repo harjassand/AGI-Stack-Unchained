@@ -36,6 +36,12 @@
         "PROMOTION",
         "ACTIVATION",
         "ROLLBACK",
+        "NATIVE_WASM_SHADOW_SOAK_SUMMARY",
+        "NATIVE_WASM_SHADOW_SOAK_RECEIPT",
+        "SHADOW_FS_INTEGRITY",
+        "SHADOW_TIER_A",
+        "SHADOW_TIER_B",
+        "SHADOW_READINESS",
         "SIP_INGESTION_L0",
         "SNAPSHOT",
         "SAFE_HALT"

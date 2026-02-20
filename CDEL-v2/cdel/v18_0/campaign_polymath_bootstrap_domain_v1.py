@@ -183,6 +183,27 @@ def run(*, campaign_pack: Path, out_dir: Path) -> None:
     for path in (reports_dir, promotion_dir):
         path.mkdir(parents=True, exist_ok=True)
 
+    sip_ingestion_pack = _optional_sip_ingestion_pack(pack)
+    sip_ingestion_result: dict[str, Any] | None = None
+    if sip_ingestion_pack is not None:
+        sip_ingestion_result = run_sip_ingestion_l0(
+            config=sip_ingestion_pack,
+            repo_root_path=root,
+            state_root=state_root,
+            tick_u64=_tick_from_env(),
+        )
+        if str(sip_ingestion_result.get("status", "")).strip() != "SUCCESS":
+            report = {
+                "schema_version": "polymath_bootstrap_report_v1",
+                "status": "BLOCKED_SIP_INGESTION",
+                "created_at_utc": datetime.now(UTC).replace(microsecond=0).isoformat(),
+                "reason_code": str(sip_ingestion_result.get("reason_code", "")).strip() or "SIP_SAFE_HALT",
+            }
+            _append_optional_sip_refs(report, sip_ingestion_result)
+            write_canon_json(reports_dir / "polymath_bootstrap_report_v1.json", report)
+            print("OK")
+            return
+
     if not registry_path.exists() or not registry_path.is_file():
         fail("MISSING_STATE_INPUT")
     if not policy_path.exists() or not policy_path.is_file():
@@ -199,6 +220,7 @@ def run(*, campaign_pack: Path, out_dir: Path) -> None:
             "status": "NO_CANDIDATE",
             "created_at_utc": datetime.now(UTC).replace(microsecond=0).isoformat(),
         }
+        _append_optional_sip_refs(report, sip_ingestion_result)
         write_canon_json(reports_dir / "polymath_bootstrap_report_v1.json", report)
         print("OK")
         return
@@ -244,32 +266,10 @@ def run(*, campaign_pack: Path, out_dir: Path) -> None:
             "created_at_utc": datetime.now(UTC).replace(microsecond=0).isoformat(),
             "domain_registry_rel": "polymath/registry/polymath_domain_registry_v1.json",
         }
+        _append_optional_sip_refs(report, sip_ingestion_result)
         write_canon_json(reports_dir / "polymath_bootstrap_report_v1.json", report)
         print("OK")
         return
-
-    sip_ingestion_pack = _optional_sip_ingestion_pack(pack)
-    sip_ingestion_result: dict[str, Any] | None = None
-    if sip_ingestion_pack is not None:
-        sip_ingestion_result = run_sip_ingestion_l0(
-            config=sip_ingestion_pack,
-            repo_root_path=root,
-            state_root=state_root,
-            tick_u64=_tick_from_env(),
-        )
-        if str(sip_ingestion_result.get("status", "")).strip() != "SUCCESS":
-            report = {
-                "schema_version": "polymath_bootstrap_report_v1",
-                "status": "BLOCKED_SIP_INGESTION",
-                "domain_id": candidate_domain_id,
-                "topic_name": candidate_topic_name,
-                "created_at_utc": datetime.now(UTC).replace(microsecond=0).isoformat(),
-                "reason_code": str(sip_ingestion_result.get("reason_code", "")).strip() or "SIP_SAFE_HALT",
-            }
-            _append_optional_sip_refs(report, sip_ingestion_result)
-            write_canon_json(reports_dir / "polymath_bootstrap_report_v1.json", report)
-            print("OK")
-            return
 
     store_root = _canonical_store_root(root)
 
@@ -352,6 +352,7 @@ def run(*, campaign_pack: Path, out_dir: Path) -> None:
             "dataset_total_bytes_u64": int(dataset_total_bytes_u64),
             "dataset_limit_bytes_u64": int(dataset_limit_u64),
         }
+        _append_optional_sip_refs(report, sip_ingestion_result)
         write_canon_json(reports_dir / "polymath_bootstrap_report_v1.json", report)
         print("OK")
         return

@@ -940,22 +940,32 @@ def _find_subrun_payload_by_id(
     subrun_root: Path,
     artifact_id: str,
     suffix: str,
+    id_field: str | None = None,
     expected_schema_version: str | None = None,
     expected_schema_name: str | None = None,
 ) -> tuple[dict[str, Any], str]:
     artifact_id = _ensure_sha256_id(artifact_id)
-    digest_hex = artifact_id.split(":", 1)[1]
-    paths = sorted(subrun_root.glob(f"**/sha256_{digest_hex}.{suffix}"), key=lambda row: row.as_posix())
-    if len(paths) != 1:
+    paths = sorted(subrun_root.glob(f"**/sha256_*.{suffix}"), key=lambda row: row.as_posix())
+    matches: list[tuple[dict[str, Any], str]] = []
+    for path in paths:
+        payload, observed_hash = _load_hashed_payload(
+            path=path,
+            expected_schema_version=expected_schema_version,
+            expected_schema_name=expected_schema_name,
+        )
+        effective_id = observed_hash
+        if id_field is not None:
+            declared_id = _ensure_sha256_id(payload.get(id_field))
+            payload_no_id = dict(payload)
+            payload_no_id.pop(id_field, None)
+            if canon_hash_obj(payload_no_id) != declared_id:
+                fail("NONDETERMINISTIC")
+            effective_id = declared_id
+        if effective_id == artifact_id:
+            matches.append((payload, observed_hash))
+    if len(matches) != 1:
         fail("MISSING_STATE_INPUT")
-    payload, observed_hash = _load_hashed_payload(
-        path=paths[0],
-        expected_schema_version=expected_schema_version,
-        expected_schema_name=expected_schema_name,
-    )
-    if observed_hash != artifact_id:
-        fail("NONDETERMINISTIC")
-    return payload, observed_hash
+    return matches[0]
 
 
 def _import_sip_ingestion_artifacts(
@@ -1022,6 +1032,7 @@ def _import_sip_ingestion_artifacts(
             subrun_root=subrun_root,
             artifact_id=manifest_id,
             suffix="world_snapshot_manifest_v1.json",
+            id_field="manifest_id",
             expected_schema_name="world_snapshot_manifest_v1",
         )
         _, _manifest_obj, imported_manifest_hash = _write_payload(
@@ -1038,8 +1049,11 @@ def _import_sip_ingestion_artifacts(
             subrun_root=subrun_root,
             artifact_id=receipt_id,
             suffix="sealed_ingestion_receipt_v1.json",
+            id_field="receipt_id",
             expected_schema_name="sealed_ingestion_receipt_v1",
         )
+        if _ensure_sha256_id(receipt_payload.get("world_manifest_ref")) != manifest_id:
+            fail("NONDETERMINISTIC")
         _, _receipt_obj, imported_receipt_hash = _write_payload(
             ingestion_root / "receipts",
             "sealed_ingestion_receipt_v1.json",
@@ -1066,12 +1080,14 @@ def _import_sip_ingestion_artifacts(
     out["refutation_hash"] = imported_refutation_hash
 
     manifest_id_raw = refutation_payload.get("sip_manifest_id")
+    manifest_id: str | None = None
     if isinstance(manifest_id_raw, str) and manifest_id_raw.strip():
         manifest_id = _ensure_sha256_id(manifest_id_raw)
         manifest_payload, manifest_hash = _find_subrun_payload_by_id(
             subrun_root=subrun_root,
             artifact_id=manifest_id,
             suffix="world_snapshot_manifest_v1.json",
+            id_field="manifest_id",
             expected_schema_name="world_snapshot_manifest_v1",
         )
         _, _manifest_obj, imported_manifest_hash = _write_payload(
@@ -1091,8 +1107,11 @@ def _import_sip_ingestion_artifacts(
             subrun_root=subrun_root,
             artifact_id=receipt_id,
             suffix="sealed_ingestion_receipt_v1.json",
+            id_field="receipt_id",
             expected_schema_name="sealed_ingestion_receipt_v1",
         )
+        if manifest_id is not None and _ensure_sha256_id(receipt_payload.get("world_manifest_ref")) != manifest_id:
+            fail("NONDETERMINISTIC")
         _, _receipt_obj, imported_receipt_hash = _write_payload(
             ingestion_root / "receipts",
             "sealed_ingestion_receipt_v1.json",

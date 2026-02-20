@@ -151,6 +151,29 @@ def make_rollback_entry(
     return entry
 
 
+def make_regime_upgrade_entry(
+    active_bundle_hash: str,
+    readiness_receipt_hash: str,
+    tier_a_pass: bool,
+    tier_b_pass: bool,
+    runtime_tier_b_pass: bool,
+    prev_seq: int,
+    prev_entry_hash: str,
+) -> Dict[str, Any]:
+    entry: Dict[str, Any] = {
+        "seq": prev_seq + 1,
+        "action": "REGIME_UPGRADE",
+        "active_bundle_hash": active_bundle_hash,
+        "readiness_receipt_hash": readiness_receipt_hash,
+        "tier_a_pass_b": bool(tier_a_pass),
+        "tier_b_pass_b": bool(tier_b_pass),
+        "runtime_tier_b_pass_b": bool(runtime_tier_b_pass),
+        "prev_entry_hash": prev_entry_hash,
+    }
+    entry["entry_hash"] = _compute_entry_hash(entry)
+    return entry
+
+
 def append_entry_crash_safe(log_path: str, entry_dict: Dict[str, Any]) -> None:
     dir_path = os.path.dirname(log_path) or "."
     os.makedirs(dir_path, exist_ok=True)

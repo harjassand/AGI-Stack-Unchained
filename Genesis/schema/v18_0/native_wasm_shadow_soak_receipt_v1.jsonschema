@@ -1,0 +1,87 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v18_0/native_wasm_shadow_soak_receipt_v1",
+  "title": "Native wasm shadow soak receipt v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "receipt_id",
+    "tick_u64",
+    "registry_hash",
+    "rows"
+  ],
+  "properties": {
+    "schema_version": {"const": "native_wasm_shadow_soak_receipt_v1"},
+    "receipt_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "tick_u64": {"type": "integer", "minimum": 0},
+    "registry_hash": {"anyOf": [{"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"}, {"type": "null"}]},
+    "rows": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "op_id",
+          "binary_sha256",
+          "disabled_key",
+          "portability_status",
+          "shadow_route_disabled_b",
+          "shadow_route_disable_reason",
+          "shadow_route_disable_tick_u64",
+          "route_disable_transition_b",
+          "route_disable_reason"
+        ],
+        "properties": {
+          "op_id": {"type": "string", "minLength": 1},
+          "binary_sha256": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+          "disabled_key": {"type": "string", "pattern": "^[^|]+\\|sha256:[0-9a-f]{64}$"},
+          "portability_status": {"type": "string", "enum": ["RUNNABLE", "PORTABILITY_SKIP_RUN"]},
+          "shadow_route_disabled_b": {"type": "boolean"},
+          "shadow_route_disable_reason": {"type": ["string", "null"]},
+          "shadow_route_disable_tick_u64": {"type": ["integer", "null"], "minimum": 0},
+          "route_disable_transition_b": {"type": "boolean"},
+          "route_disable_reason": {"type": ["string", "null"]}
+        },
+        "allOf": [
+          {
+            "if": {"properties": {"shadow_route_disabled_b": {"const": false}}},
+            "then": {
+              "properties": {
+                "shadow_route_disable_reason": {"type": "null"},
+                "shadow_route_disable_tick_u64": {"type": "null"}
+              }
+            }
+          },
+          {
+            "if": {"properties": {"shadow_route_disabled_b": {"const": true}}},
+            "then": {
+              "properties": {
+                "shadow_route_disable_reason": {"type": "string", "minLength": 1},
+                "shadow_route_disable_tick_u64": {"type": "integer", "minimum": 0}
+              }
+            }
+          },
+          {
+            "if": {"properties": {"route_disable_transition_b": {"const": true}}},
+            "then": {
+              "properties": {
+                "shadow_route_disabled_b": {"const": true},
+                "route_disable_reason": {"type": "string", "minLength": 1},
+                "shadow_route_disable_tick_u64": {"type": "integer", "minimum": 0}
+              }
+            }
+          },
+          {
+            "if": {"properties": {"route_disable_transition_b": {"const": false}}},
+            "then": {
+              "properties": {
+                "route_disable_reason": {"type": "null"}
+              }
+            }
+          }
+        ]
+      }
+    }
+  }
+}

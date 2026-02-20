@@ -1,0 +1,95 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v19_0/shadow_evaluation_tiers_v1",
+  "title": "Shadow evaluation tiers profile v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_name",
+    "schema_version",
+    "profile_id",
+    "tier_a",
+    "tier_b"
+  ],
+  "$defs": {
+    "tier_spec": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "n_live_ticks",
+        "n_fuzz_cases",
+        "n_double_runs"
+      ],
+      "properties": {
+        "n_live_ticks": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "n_fuzz_cases": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "n_double_runs": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "corpus_mode": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    }
+  },
+  "properties": {
+    "schema_name": {
+      "const": "shadow_evaluation_tiers_v1"
+    },
+    "schema_version": {
+      "const": "v19_0"
+    },
+    "profile_id": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "tier_a": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/tier_spec"
+        },
+        {
+          "properties": {
+            "n_live_ticks": {
+              "const": 250
+            },
+            "n_fuzz_cases": {
+              "const": 512
+            },
+            "n_double_runs": {
+              "const": 50
+            }
+          }
+        }
+      ]
+    },
+    "tier_b": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/tier_spec"
+        },
+        {
+          "properties": {
+            "n_live_ticks": {
+              "const": 1000
+            },
+            "n_fuzz_cases": {
+              "const": 20000
+            },
+            "n_double_runs": {
+              "const": 1000
+            }
+          }
+        }
+      ]
+    }
+  }
+}

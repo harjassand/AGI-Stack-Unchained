@@ -1,1 +1,115 @@
-{"$id":"https://genesis.engine/specs/v18_0/omega_promotion_receipt_v1","$schema":"https://json-schema.org/draft/2020-12/schema","additionalProperties":false,"properties":{"active_manifest_hash_after":{"anyOf":[{"pattern":"^sha256:[0-9a-f]{64}$","type":"string"},{"type":"null"}]},"meta_core_verifier_fingerprint":{"additionalProperties":false,"properties":{"binary_hash_or_build_id":{"type":"string"},"constitution_meta_hash":{"type":"string"}},"required":["constitution_meta_hash","binary_hash_or_build_id"],"type":"object"},"promotion_bundle_hash":{"pattern":"^sha256:[0-9a-f]{64}$","type":"string"},"execution_mode":{"enum":["STRICT","BLACKBOX"],"type":"string"},"receipt_id":{"pattern":"^sha256:[0-9a-f]{64}$","type":"string"},"native_module":{"type":["object","null"],"additionalProperties":false,"required":["op_id","abi_version_u32","abi_kind","language","platform","binary_sha256","source_manifest_hash","vendor_manifest_hash","build_receipt_hash","hotspot_report_hash","toolchain_manifest_hash","healthcheck_receipt_hash","bench_report_hash"],"properties":{"op_id":{"type":"string","minLength":1},"abi_version_u32":{"const":1},"abi_kind":{"const":"BLOBLIST_V1"},"language":{"const":"RUST"},"platform":{"type":"string","minLength":1},"binary_sha256":{"type":"string","pattern":"^sha256:[0-9a-f]{64}$"},"source_manifest_hash":{"type":"string","pattern":"^sha256:[0-9a-f]{64}$"},"vendor_manifest_hash":{"type":"string","pattern":"^sha256:[0-9a-f]{64}$"},"build_receipt_hash":{"type":"string","pattern":"^sha256:[0-9a-f]{64}$"},"hotspot_report_hash":{"type":"string","pattern":"^sha256:[0-9a-f]{64}$"},"toolchain_manifest_hash":{"type":"string","pattern":"^sha256:[0-9a-f]{64}$"},"healthcheck_receipt_hash":{"type":"string","pattern":"^sha256:[0-9a-f]{64}$"},"bench_report_hash":{"type":"string","pattern":"^sha256:[0-9a-f]{64}$"}}},"result":{"additionalProperties":false,"properties":{"reason_code":{"anyOf":[{"type":"null"},{"enum":["NO_PROMOTION_BUNDLE","SUBVERIFIER_INVALID","META_CORE_REJECT","FORBIDDEN_PATH","TEST_PLAN_RECEIPT_MISSING_OR_FAIL","ALREADY_ACTIVE","TOOLCHAIN_MISMATCH","UNKNOWN","CCAP_RECEIPT_MISSING_OR_MISMATCH","CCAP_RECEIPT_REJECTED","CCAP_APPLY_MISMATCH","CCAP_TOUCHED_PATHS_INVALID","EK_META_VERIFY_MISSING_OR_FAIL"],"type":"string"}]},"status":{"enum":["PROMOTED","REJECTED","SKIPPED"],"type":"string"}},"required":["status","reason_code"],"type":"object"},"schema_version":{"const":"omega_promotion_receipt_v1"},"tick_u64":{"minimum":0,"type":"integer"}},"required":["schema_version","receipt_id","tick_u64","promotion_bundle_hash","meta_core_verifier_fingerprint","result","active_manifest_hash_after"],"title":"Omega promotion receipt v1","type":"object"}
+{
+  "$id": "https://genesis.engine/specs/v18_0/omega_promotion_receipt_v1",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Omega promotion receipt v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "receipt_id",
+    "tick_u64",
+    "promotion_bundle_hash",
+    "meta_core_verifier_fingerprint",
+    "result",
+    "active_manifest_hash_after"
+  ],
+  "properties": {
+    "schema_version": {"const": "omega_promotion_receipt_v1"},
+    "receipt_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "tick_u64": {"type": "integer", "minimum": 0},
+    "promotion_bundle_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "execution_mode": {"type": "string", "enum": ["STRICT", "BLACKBOX"]},
+    "meta_core_verifier_fingerprint": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["constitution_meta_hash", "binary_hash_or_build_id"],
+      "properties": {
+        "constitution_meta_hash": {"type": "string"},
+        "binary_hash_or_build_id": {"type": "string"}
+      }
+    },
+    "native_module": {
+      "type": ["object", "null"],
+      "additionalProperties": false,
+      "required": [
+        "op_id",
+        "abi_version_u32",
+        "abi_kind",
+        "language",
+        "platform",
+        "binary_sha256",
+        "source_manifest_hash",
+        "vendor_manifest_hash",
+        "build_receipt_hash",
+        "hotspot_report_hash",
+        "toolchain_manifest_hash",
+        "healthcheck_receipt_hash",
+        "bench_report_hash"
+      ],
+      "properties": {
+        "op_id": {"type": "string", "minLength": 1},
+        "abi_version_u32": {"const": 1},
+        "abi_kind": {"const": "BLOBLIST_V1"},
+        "language": {"const": "RUST"},
+        "platform": {"type": "string", "minLength": 1},
+        "binary_sha256": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+        "source_manifest_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+        "vendor_manifest_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+        "build_receipt_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+        "hotspot_report_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+        "toolchain_manifest_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+        "healthcheck_receipt_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+        "bench_report_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"}
+      }
+    },
+    "native_runtime_contract_hash": {
+      "anyOf": [
+        {"type": "null"},
+        {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"}
+      ]
+    },
+    "native_healthcheck_vectors_hash": {
+      "anyOf": [
+        {"type": "null"},
+        {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"}
+      ]
+    },
+    "result": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["status", "reason_code"],
+      "properties": {
+        "status": {"type": "string", "enum": ["PROMOTED", "REJECTED", "SKIPPED"]},
+        "reason_code": {
+          "anyOf": [
+            {"type": "null"},
+            {
+              "type": "string",
+              "enum": [
+                "NO_PROMOTION_BUNDLE",
+                "SUBVERIFIER_INVALID",
+                "META_CORE_REJECT",
+                "FORBIDDEN_PATH",
+                "TEST_PLAN_RECEIPT_MISSING_OR_FAIL",
+                "ALREADY_ACTIVE",
+                "TOOLCHAIN_MISMATCH",
+                "UNKNOWN",
+                "CCAP_RECEIPT_MISSING_OR_MISMATCH",
+                "CCAP_RECEIPT_REJECTED",
+                "CCAP_APPLY_MISMATCH",
+                "CCAP_TOUCHED_PATHS_INVALID",
+                "EK_META_VERIFY_MISSING_OR_FAIL"
+              ]
+            }
+          ]
+        }
+      }
+    },
+    "active_manifest_hash_after": {
+      "anyOf": [
+        {"type": "null"},
+        {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"}
+      ]
+    }
+  }
+}

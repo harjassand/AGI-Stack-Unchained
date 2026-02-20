@@ -1,0 +1,46 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v18_0/native_wasm_runtime_contract_v1",
+  "title": "Native wasm runtime contract v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "contract_id",
+    "runtime_engine",
+    "runtime_version",
+    "host_triple",
+    "runtime_binary_path",
+    "runtime_binary_sha256",
+    "argv_template",
+    "env_allowlist",
+    "determinism_flags"
+  ],
+  "properties": {
+    "schema_version": {"const": "native_wasm_runtime_contract_v1"},
+    "contract_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "runtime_engine": {"const": "wasmtime"},
+    "runtime_version": {"type": "string", "minLength": 1},
+    "host_triple": {"type": "string", "minLength": 1},
+    "runtime_binary_path": {"type": "string", "minLength": 1},
+    "runtime_binary_sha256": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "argv_template": {"type": "array", "minItems": 1, "items": {"type": "string"}},
+    "env_allowlist": {"type": "array", "items": {"type": "string"}},
+    "determinism_flags": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "disable_cache",
+        "consume_fuel",
+        "epoch_interruption",
+        "canonicalize_nans"
+      ],
+      "properties": {
+        "disable_cache": {"type": "boolean"},
+        "consume_fuel": {"type": "boolean"},
+        "epoch_interruption": {"type": "boolean"},
+        "canonicalize_nans": {"type": "boolean"}
+      }
+    }
+  }
+}

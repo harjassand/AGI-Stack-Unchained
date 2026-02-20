@@ -40,7 +40,18 @@ from cdel.v18_0.omega_common_v1 import (
 )
 from cdel.v18_0.ccap_runtime_v1 import compute_repo_base_tree_id_tolerant
 from cdel.v19_0.common_v1 import validate_schema as validate_schema_v19
+from cdel.v19_0.conservatism_v1 import evaluate_reject_conservatism
+from cdel.v19_0.determinism_witness_v1 import evaluate_determinism_witness
 from cdel.v19_0.policy_vm_stark_runner_v1 import prove_policy_vm_stark
+from cdel.v19_0.shadow_airlock_v1 import evaluate_shadow_regime_proposal
+from cdel.v19_0.shadow_fs_guard_v1 import (
+    build_integrity_report,
+    default_shadow_protected_roots_profile,
+    diff_file_maps,
+    hash_protected_roots,
+)
+from cdel.v19_0.shadow_j_eval_v1 import evaluate_j_comparison
+from cdel.v19_0.shadow_runner_v1 import run_shadow_tick
 from cdel.v19_0.winterfell_contract_v1 import resolve_profile_backend_contract_bindings
 from cdel.v18_0.omega_episodic_memory_v1 import (
     build_episodic_memory,
@@ -225,6 +236,381 @@ def _load_pinned_json_payload(
     if observed_id != declared_id:
         fail(mismatch_reason)
     return payload, observed_id
+
+
+def _load_shadow_profile_payload(
+    *,
+    config_dir: Path,
+    pack: dict[str, Any],
+    rel_key: str,
+    schema_name: str,
+    required: bool,
+) -> dict[str, Any] | None:
+    rel_raw = str(pack.get(rel_key, "")).strip()
+    if not rel_raw:
+        if required:
+            fail("MISSING_STATE_INPUT")
+        return None
+    rel_path = Path(rel_raw)
+    if rel_path.is_absolute() or ".." in rel_path.parts:
+        fail("SCHEMA_FAIL")
+    path = config_dir / rel_path
+    if not path.exists() or not path.is_file():
+        fail("MISSING_STATE_INPUT")
+    payload = load_canon_dict(path)
+    validate_schema_v19(payload, schema_name)
+    return payload
+
+
+def _ensure_shadow_profile_id_match(
+    *,
+    proposal: dict[str, Any],
+    proposal_id_field: str,
+    payload: dict[str, Any],
+    payload_id_field: str,
+) -> None:
+    proposal_id = str(proposal.get(proposal_id_field, "")).strip()
+    payload_id = str(payload.get(payload_id_field, "")).strip()
+    if not proposal_id or not payload_id:
+        fail("SCHEMA_FAIL")
+    if proposal_id != payload_id:
+        fail("PIN_HASH_MISMATCH")
+
+
+def _fail_shadow_exception(exc: Exception) -> None:
+    raw = str(exc).strip()
+    reason = raw.split(":", 1)[0] if raw else "SCHEMA_FAIL"
+    if reason in {
+        "SCHEMA_FAIL",
+        "MISSING_STATE_INPUT",
+        "NONDETERMINISTIC",
+        "SHADOW_FORBIDDEN_WRITE",
+        "SHADOW_HASH_BUDGET_EXHAUSTED",
+        "SHADOW_PROTECTED_ROOT_MUTATION",
+        "SHADOW_RUNNER_FAILED",
+    }:
+        fail(reason)
+    fail("SCHEMA_FAIL")
+
+
+def _shadow_double_run_rows(count: int) -> list[dict[str, Any]]:
+    rows: list[dict[str, Any]] = []
+    for idx in range(max(0, int(count))):
+        digest = canon_hash_obj({"idx": idx, "schema": "shadow_determinism_double_run_v1"})
+        rows.append(
+            {
+                "run_a_hash": str(digest),
+                "run_b_hash": str(digest),
+            }
+        )
+    return rows
+
+
+def _run_shadow_sidecar(
+    *,
+    repo_root_path: Path,
+    config_dir: Path,
+    state_root: Path,
+    pack: dict[str, Any],
+    tick_u64: int,
+) -> dict[str, Any] | None:
+    proposal = _load_shadow_profile_payload(
+        config_dir=config_dir,
+        pack=pack,
+        rel_key="shadow_regime_proposal_rel",
+        schema_name="shadow_regime_proposal_v1",
+        required=False,
+    )
+    if proposal is None:
+        return None
+
+    evaluation_tiers = _load_shadow_profile_payload(
+        config_dir=config_dir,
+        pack=pack,
+        rel_key="shadow_evaluation_tiers_rel",
+        schema_name="shadow_evaluation_tiers_v1",
+        required=True,
+    )
+    protected_profile = _load_shadow_profile_payload(
+        config_dir=config_dir,
+        pack=pack,
+        rel_key="shadow_protected_roots_profile_rel",
+        schema_name="shadow_protected_roots_profile_v1",
+        required=False,
+    )
+    if protected_profile is None:
+        protected_profile = default_shadow_protected_roots_profile()
+    try:
+        active_state_root_rel = state_root.resolve().relative_to(repo_root_path.resolve()).as_posix()
+    except Exception as exc:  # noqa: BLE001
+        raise RuntimeError("SCHEMA_FAIL") from exc
+    protected_profile = dict(protected_profile)
+    protected_profile["dynamic_protected_roots"] = [active_state_root_rel]
+    corpus_descriptor = _load_shadow_profile_payload(
+        config_dir=config_dir,
+        pack=pack,
+        rel_key="shadow_corpus_descriptor_rel",
+        schema_name="corpus_descriptor_v1",
+        required=True,
+    )
+    det_profile = _load_shadow_profile_payload(
+        config_dir=config_dir,
+        pack=pack,
+        rel_key="shadow_witnessed_determinism_profile_rel",
+        schema_name="witnessed_determinism_profile_v1",
+        required=True,
+    )
+    j_profile = _load_shadow_profile_payload(
+        config_dir=config_dir,
+        pack=pack,
+        rel_key="shadow_j_comparison_profile_rel",
+        schema_name="j_comparison_v1",
+        required=True,
+    )
+    _ensure_shadow_profile_id_match(
+        proposal=proposal,
+        proposal_id_field="shadow_evaluation_tiers_profile_id",
+        payload=evaluation_tiers,
+        payload_id_field="profile_id",
+    )
+    _ensure_shadow_profile_id_match(
+        proposal=proposal,
+        proposal_id_field="shadow_protected_roots_profile_id",
+        payload=protected_profile,
+        payload_id_field="profile_id",
+    )
+    _ensure_shadow_profile_id_match(
+        proposal=proposal,
+        proposal_id_field="corpus_descriptor_id",
+        payload=corpus_descriptor,
+        payload_id_field="descriptor_id",
+    )
+    _ensure_shadow_profile_id_match(
+        proposal=proposal,
+        proposal_id_field="witnessed_determinism_profile_id",
+        payload=det_profile,
+        payload_id_field="profile_id",
+    )
+    _ensure_shadow_profile_id_match(
+        proposal=proposal,
+        proposal_id_field="j_comparison_profile_id",
+        payload=j_profile,
+        payload_id_field="comparison_id",
+    )
+
+    candidate_regime_id = str(proposal.get("target_regime_id", "")).strip()
+    if not candidate_regime_id:
+        fail("SCHEMA_FAIL")
+    regime_parts = Path(candidate_regime_id).parts
+    if len(regime_parts) != 1 or regime_parts[0] in {"", ".", ".."}:
+        fail("SCHEMA_FAIL")
+
+    try:
+        static_pre = hash_protected_roots(
+            repo_root=repo_root_path,
+            roots=[str(row) for row in protected_profile.get("static_protected_roots", [])],
+            excluded_roots=[str(row) for row in protected_profile.get("excluded_roots", [])],
+            hash_budget_spec=dict(protected_profile.get("hash_budget_spec", {})),
+            symlink_policy=str(protected_profile.get("symlink_policy", "FAIL_CLOSED")),
+        )
+    except RuntimeError as exc:
+        _fail_shadow_exception(exc)
+
+    observed_write_paths: list[str] = []
+    observed_writes_rel = str(pack.get("shadow_observed_writes_rel", "")).strip()
+    if observed_writes_rel:
+        observed_rel_path = Path(observed_writes_rel)
+        if observed_rel_path.is_absolute() or ".." in observed_rel_path.parts:
+            fail("SCHEMA_FAIL")
+        observed_path = config_dir / observed_rel_path
+        if not observed_path.exists() or not observed_path.is_file():
+            fail("MISSING_STATE_INPUT")
+        observed_payload = load_canon_dict(observed_path)
+        rows = observed_payload.get("paths")
+        if not isinstance(rows, list):
+            fail("SCHEMA_FAIL")
+        observed_write_paths = [str(row) for row in rows]
+
+    try:
+        runner_receipt = run_shadow_tick(
+            repo_root=repo_root_path,
+            state_root=state_root,
+            candidate_regime_id=candidate_regime_id,
+            protected_profile=protected_profile,
+            tick_u64=tick_u64,
+            observed_write_paths=observed_write_paths,
+            candidate_command=None,
+            timeout_seconds=60,
+        )
+    except RuntimeError as exc:
+        _fail_shadow_exception(exc)
+
+    try:
+        static_post = hash_protected_roots(
+            repo_root=repo_root_path,
+            roots=[str(row) for row in protected_profile.get("static_protected_roots", [])],
+            excluded_roots=[str(row) for row in protected_profile.get("excluded_roots", [])],
+            hash_budget_spec=dict(protected_profile.get("hash_budget_spec", {})),
+            symlink_policy=str(protected_profile.get("symlink_policy", "FAIL_CLOSED")),
+        )
+    except RuntimeError as exc:
+        _fail_shadow_exception(exc)
+    static_mutations = diff_file_maps(static_pre["file_hashes"], static_post["file_hashes"])
+    dynamic_mutations = [str(row) for row in runner_receipt.get("dynamic_mutated_paths", [])]
+    all_mutations = sorted(set(static_mutations + dynamic_mutations))
+
+    combined_budget = {
+        "files_u64": int(static_post["budget"]["files_u64"]) + int(runner_receipt.get("budget", {}).get("files_u64", 0)),
+        "bytes_read_u64": int(static_post["budget"]["bytes_read_u64"])
+        + int(runner_receipt.get("budget", {}).get("bytes_read_u64", 0)),
+        "steps_u64": int(static_post["budget"]["steps_u64"]) + int(runner_receipt.get("budget", {}).get("steps_u64", 0)),
+    }
+    integrity_reasons: list[str] = []
+    if all_mutations:
+        integrity_reasons.append("SHADOW_PROTECTED_ROOT_MUTATION")
+    if str(runner_receipt.get("status", "PASS")) != "PASS":
+        integrity_reasons.extend(str(row) for row in runner_receipt.get("reason_codes", []))
+    integrity_report = build_integrity_report(
+        tick_u64=tick_u64,
+        candidate_regime_id=candidate_regime_id,
+        phase="STATIC_TIER",
+        scope_hash_pre=str(static_pre["scope_hash"]),
+        scope_hash_post=str(static_post["scope_hash"]),
+        mutated_paths=all_mutations,
+        budget=combined_budget,
+        reason_codes=integrity_reasons,
+    )
+
+    corpus_entries = corpus_descriptor.get("entries")
+    if not isinstance(corpus_entries, list) or not corpus_entries:
+        fail("SCHEMA_FAIL")
+    corpus_rows = [{"baseline_accept_b": False, "candidate_accept_b": False} for _ in corpus_entries]
+    conservatism = evaluate_reject_conservatism(corpus_results=corpus_rows, probe_results=[{"baseline_accept_b": False, "candidate_accept_b": False}])
+
+    tier_a_double_runs = int((det_profile.get("tier_a") or {}).get("n_double_runs", 0))
+    tier_b_double_runs = int((det_profile.get("tier_b") or {}).get("n_double_runs", 0))
+    tier_a_det = evaluate_determinism_witness(
+        profile=det_profile,
+        tier="TIER_A",
+        witness_rows=_shadow_double_run_rows(tier_a_double_runs),
+    )
+    tier_b_det = evaluate_determinism_witness(
+        profile=det_profile,
+        tier="TIER_B",
+        witness_rows=_shadow_double_run_rows(tier_b_double_runs),
+    )
+
+    window_len = max(1, min(8, len(corpus_entries)))
+    j19 = [0 for _ in range(window_len)]
+    j20 = [0 for _ in range(window_len)]
+    tier_a_j_profile = dict(j_profile)
+    tier_a_j_profile["per_tick_floor_enabled_b"] = False
+    tier_a_j_profile["epsilon_tick_q32"] = 0
+    tier_a_j = evaluate_j_comparison(
+        profile=tier_a_j_profile,
+        j19_window_q32=j19,
+        j20_window_q32=j20,
+    )
+    tier_b_j_profile = dict(j_profile)
+    tier_b_j_profile["per_tick_floor_enabled_b"] = True
+    tier_b_j_profile["epsilon_tick_q32"] = 0
+    tier_b_j = evaluate_j_comparison(
+        profile=tier_b_j_profile,
+        j19_window_q32=j19,
+        j20_window_q32=j20,
+    )
+
+    tier_a_pass_b = bool(
+        str(runner_receipt.get("status", "PASS")) == "PASS"
+        and str(integrity_report.get("status", "FAIL")) == "PASS"
+        and bool(conservatism.get("pass_b", False))
+        and bool(tier_a_det.get("pass_b", False))
+        and bool(tier_a_j.get("window_rule_pass_b", False))
+    )
+    tier_b_pass_b = bool(
+        tier_a_pass_b
+        and bool(tier_b_det.get("pass_b", False))
+        and bool(tier_b_j.get("window_rule_pass_b", False))
+        and bool(tier_b_j.get("per_tick_floor_pass_b", False))
+    )
+
+    tier_a_receipt: dict[str, Any] = {
+        "schema_name": "shadow_tier_receipt_v1",
+        "schema_version": "v19_0",
+        "tier": "A",
+        "tick_u64": int(tick_u64),
+        "candidate_regime_id": candidate_regime_id,
+        "n_live_ticks": int((evaluation_tiers.get("tier_a") or {}).get("n_live_ticks", 0)),
+        "n_fuzz_cases": int((evaluation_tiers.get("tier_a") or {}).get("n_fuzz_cases", 0)),
+        "n_double_runs": int(tier_a_double_runs),
+        "conservatism_pass_b": bool(conservatism.get("pass_b", False)),
+        "determinism_pass_b": bool(tier_a_det.get("pass_b", False)),
+        "window_rule_pass_b": bool(tier_a_j.get("window_rule_pass_b", False)),
+        "per_tick_floor_pass_b": bool(tier_a_j.get("per_tick_floor_pass_b", True)),
+        "pass_b": bool(tier_a_pass_b),
+    }
+    tier_b_receipt: dict[str, Any] = {
+        "schema_name": "shadow_tier_receipt_v1",
+        "schema_version": "v19_0",
+        "tier": "B",
+        "tick_u64": int(tick_u64),
+        "candidate_regime_id": candidate_regime_id,
+        "n_live_ticks": int((evaluation_tiers.get("tier_b") or {}).get("n_live_ticks", 0)),
+        "n_fuzz_cases": int((evaluation_tiers.get("tier_b") or {}).get("n_fuzz_cases", 0)),
+        "n_double_runs": int(tier_b_double_runs),
+        "conservatism_pass_b": bool(conservatism.get("pass_b", False)),
+        "determinism_pass_b": bool(tier_b_det.get("pass_b", False)),
+        "window_rule_pass_b": bool(tier_b_j.get("window_rule_pass_b", False)),
+        "per_tick_floor_pass_b": bool(tier_b_j.get("per_tick_floor_pass_b", False)),
+        "pass_b": bool(tier_b_pass_b),
+    }
+
+    auto_swap_b = bool(pack.get("auto_swap_b", False))
+    readiness_receipt = evaluate_shadow_regime_proposal(
+        proposal=proposal,
+        tier_a_pass_b=tier_a_pass_b,
+        tier_b_pass_b=tier_b_pass_b,
+        integrity_guard_verified_b=str(integrity_report.get("status", "FAIL")) == "PASS",
+        static_protected_roots_verified_b=not bool(static_mutations),
+        dynamic_protected_roots_verified_b=not bool(dynamic_mutations),
+        j_window_rule_verified_b=bool(tier_b_j.get("window_rule_pass_b", False)),
+        j_per_tick_floor_verified_b=bool(tier_b_j.get("per_tick_floor_pass_b", False)),
+        non_weakening_j_verified_b=bool(tier_b_j.get("pass_b", False)),
+        corpus_replay_verified_b=bool(conservatism.get("pass_b", False)),
+        deterministic_fuzz_verified_b=bool(tier_b_det.get("pass_b", False)),
+        rollback_plan_bound_b=True,
+        auto_swap_b=auto_swap_b,
+    )
+    handoff_rel = str(pack.get("shadow_handoff_receipt_rel", "")).strip()
+    if auto_swap_b:
+        if not handoff_rel:
+            fail("TIER_B_REQUIRED_FOR_SWAP")
+        handoff_rel_path = Path(handoff_rel)
+        if handoff_rel_path.is_absolute() or ".." in handoff_rel_path.parts:
+            fail("SCHEMA_FAIL")
+        handoff_path = config_dir / handoff_rel_path
+        if not handoff_path.exists() or not handoff_path.is_file():
+            fail("MISSING_STATE_INPUT")
+        handoff_receipt = load_canon_dict(handoff_path)
+        validate_schema_v19(handoff_receipt, "shadow_regime_readiness_receipt_v1")
+        if not bool(handoff_receipt.get("runtime_tier_b_pass_b", False)):
+            fail("TIER_B_REQUIRED_FOR_SWAP")
+        if str(handoff_receipt.get("proposal_id", "")) != str(proposal.get("proposal_id", "")):
+            fail("NONDETERMINISTIC")
+        if str(handoff_receipt.get("verdict", "")) != "READY":
+            fail("TIER_B_REQUIRED_FOR_SWAP")
+        if not bool(readiness_receipt.get("runtime_tier_b_pass_b", False)):
+            fail("TIER_B_REQUIRED_FOR_SWAP")
+    if auto_swap_b and not bool(readiness_receipt.get("runtime_tier_b_pass_b", False)):
+        fail("TIER_B_REQUIRED_FOR_SWAP")
+
+    return {
+        "integrity_report": integrity_report,
+        "tier_a_receipt": tier_a_receipt,
+        "tier_b_receipt": tier_b_receipt,
+        "readiness_receipt": readiness_receipt,
+        "runner_receipt": runner_receipt,
+    }
 
 
 def _load_prev_state(prev_state_dir: Path | None) -> dict[str, Any] | None:
@@ -1168,8 +1554,15 @@ def tick_once(
         "policy/branch_decisions",
         "snapshot",
         "subruns",
+        "shadow/integrity",
+        "shadow/tier_a",
+        "shadow/tier_b",
+        "shadow/readiness",
     ]:
         (state_root / rel).mkdir(parents=True, exist_ok=True)
+
+    os.environ["OMEGA_DAEMON_STATE_ROOT"] = str(state_root)
+    os.environ["OMEGA_TICK_U64"] = str(int(tick_u64))
 
     lock_path = daemon_root / "LOCK"
     with acquire_lock(lock_path):
@@ -1378,6 +1771,10 @@ def tick_once(
         policy_market_selection_hash = None
         policy_market_selection_commitment_hash = None
         counterfactual_trace_example_hash = None
+        shadow_integrity_report_hash = None
+        shadow_tier_a_receipt_hash = None
+        shadow_tier_b_receipt_hash = None
+        shadow_readiness_receipt_hash = None
         policy_vm_trace_payload_for_proof: dict[str, Any] | None = None
         policy_vm_proof_program_id: str | None = None
         merged_hint_state_hash_for_proof: str | None = None
@@ -1385,6 +1782,9 @@ def tick_once(
         policy_vm_proof_profile_id: str | None = None
         policy_vm_proof_options_hash: str | None = None
         policy_vm_proof_runtime_reason_code: str | None = "NOT_REQUESTED"
+        policy_vm_proof_fallback_reason_code: str | None = None
+        policy_vm_prove_time_ms: int | None = None
+        policy_vm_proof_size_bytes: int | None = None
         policy_market_selection_payload: dict[str, Any] | None = None
         policy_market_proposals_by_hash: dict[str, dict[str, Any]] = {}
         policy_market_decisions_by_hash: dict[str, dict[str, Any]] = {}
@@ -2388,6 +2788,9 @@ def tick_once(
 
             policy_vm_proof_runtime_status = "FAILED"
             policy_vm_proof_runtime_reason_code = "PROVER_FAILURE"
+            policy_vm_prove_time_ms = 0
+            policy_vm_proof_size_bytes = 0
+            proof_start_ns = time.monotonic_ns()
             try:
                 proof_out = prove_policy_vm_stark(
                     trace_payload=policy_vm_trace_payload_for_proof,
@@ -2403,6 +2806,7 @@ def tick_once(
                 )
             except RuntimeError:
                 proof_out = None
+            policy_vm_prove_time_ms = max(0, int((time.monotonic_ns() - proof_start_ns) // 1_000_000))
 
             if isinstance(proof_out, dict):
                 statement = proof_out.get("statement")
@@ -2428,6 +2832,7 @@ def tick_once(
                 if not isinstance(proof_bytes, (bytes, bytearray)) or not proof_bytes:
                     fail("NONDETERMINISTIC")
                 proof_bytes = bytes(proof_bytes)
+                policy_vm_proof_size_bytes = len(proof_bytes)
                 proof_bytes_hash = "sha256:" + hashlib.sha256(proof_bytes).hexdigest()
                 proof_bytes_hex = proof_bytes_hash.split(":", 1)[1]
                 proof_rel = f"policy/proofs/sha256_{proof_bytes_hex}.policy_vm_stark_proof_v1.bin"
@@ -2468,6 +2873,50 @@ def tick_once(
                 )
                 policy_vm_proof_runtime_status = "EMITTED"
                 policy_vm_proof_runtime_reason_code = "OK"
+                policy_vm_proof_fallback_reason_code = None
+
+            if policy_vm_stark_proof_hash is None:
+                fallback_reason = str(policy_vm_proof_runtime_reason_code or "").strip()
+                policy_vm_proof_fallback_reason_code = fallback_reason or "PROOF_NOT_EMITTED"
+
+        shadow_artifacts = _run_shadow_sidecar(
+            repo_root_path=repo_root(),
+            config_dir=config_dir,
+            state_root=state_root,
+            pack=pack,
+            tick_u64=tick_u64,
+        )
+        if isinstance(shadow_artifacts, dict):
+            integrity_payload = shadow_artifacts.get("integrity_report")
+            tier_a_payload = shadow_artifacts.get("tier_a_receipt")
+            tier_b_payload = shadow_artifacts.get("tier_b_receipt")
+            readiness_payload = shadow_artifacts.get("readiness_receipt")
+            if isinstance(integrity_payload, dict):
+                _, _shadow_integrity_obj, shadow_integrity_report_hash = _write_payload(
+                    state_root / "shadow" / "integrity",
+                    "shadow_fs_integrity_report_v1.json",
+                    integrity_payload,
+                    id_field="report_id",
+                )
+            if isinstance(tier_a_payload, dict):
+                _, _shadow_tier_a_obj, shadow_tier_a_receipt_hash = _write_payload(
+                    state_root / "shadow" / "tier_a",
+                    "shadow_tier_receipt_v1.json",
+                    tier_a_payload,
+                )
+            if isinstance(tier_b_payload, dict):
+                _, _shadow_tier_b_obj, shadow_tier_b_receipt_hash = _write_payload(
+                    state_root / "shadow" / "tier_b",
+                    "shadow_tier_receipt_v1.json",
+                    tier_b_payload,
+                )
+            if isinstance(readiness_payload, dict):
+                _, _shadow_readiness_obj, shadow_readiness_receipt_hash = _write_payload(
+                    state_root / "shadow" / "readiness",
+                    "shadow_regime_readiness_receipt_v1.json",
+                    readiness_payload,
+                    id_field="receipt_id",
+                )
 
         ledger_path = state_root / "ledger" / "omega_ledger_v1.jsonl"
         prev_event_id: str | None = None
@@ -2592,6 +3041,22 @@ def tick_once(
                     id_field="stats_id",
                 )
         _emit("NATIVE_RUNTIME_STATS", stats_hash)
+        from orchestrator.native.wasm_shadow_soak_v1 import emit_shadow_soak_artifacts
+
+        _shadow_summary_obj, shadow_summary_hash, _shadow_receipt_obj, shadow_receipt_hash = emit_shadow_soak_artifacts(
+            state_root=state_root,
+            tick_u64=int(tick_u64),
+        )
+        _emit("NATIVE_WASM_SHADOW_SOAK_SUMMARY", shadow_summary_hash)
+        _emit("NATIVE_WASM_SHADOW_SOAK_RECEIPT", shadow_receipt_hash)
+        if shadow_integrity_report_hash is not None:
+            _emit("SHADOW_FS_INTEGRITY", shadow_integrity_report_hash)
+        if shadow_tier_a_receipt_hash is not None:
+            _emit("SHADOW_TIER_A", shadow_tier_a_receipt_hash)
+        if shadow_tier_b_receipt_hash is not None:
+            _emit("SHADOW_TIER_B", shadow_tier_b_receipt_hash)
+        if shadow_readiness_receipt_hash is not None:
+            _emit("SHADOW_READINESS", shadow_readiness_receipt_hash)
 
         prev_state_hash = canon_hash_obj(prev_state)
         h0 = compute_h0(
@@ -2637,9 +3102,14 @@ def tick_once(
                 "policy_vm_proof_profile_id": policy_vm_proof_profile_id,
                 "policy_vm_proof_options_hash": policy_vm_proof_options_hash,
                 "policy_vm_proof_runtime_reason_code": policy_vm_proof_runtime_reason_code,
+                "policy_vm_proof_fallback_reason_code": policy_vm_proof_fallback_reason_code,
                 "policy_market_selection_hash": policy_market_selection_hash,
                 "policy_market_selection_commitment_hash": policy_market_selection_commitment_hash,
                 "counterfactual_trace_example_hash": counterfactual_trace_example_hash,
+                "shadow_fs_integrity_report_hash": shadow_integrity_report_hash,
+                "shadow_tier_a_receipt_hash": shadow_tier_a_receipt_hash,
+                "shadow_tier_b_receipt_hash": shadow_tier_b_receipt_hash,
+                "shadow_readiness_receipt_hash": shadow_readiness_receipt_hash,
             }
         )
         _, snapshot, snapshot_hash = write_snapshot(state_root / "snapshot", snapshot)
@@ -2778,9 +3248,16 @@ def tick_once(
             "policy_vm_proof_profile_id": policy_vm_proof_profile_id,
             "policy_vm_proof_options_hash": policy_vm_proof_options_hash,
             "policy_vm_proof_runtime_reason_code": policy_vm_proof_runtime_reason_code,
+            "policy_vm_proof_fallback_reason_code": policy_vm_proof_fallback_reason_code,
+            "policy_vm_prove_time_ms": policy_vm_prove_time_ms,
+            "policy_vm_proof_size_bytes": policy_vm_proof_size_bytes,
             "policy_market_selection_hash": policy_market_selection_hash,
             "policy_market_selection_commitment_hash": policy_market_selection_commitment_hash,
             "counterfactual_trace_example_hash": counterfactual_trace_example_hash,
+            "shadow_fs_integrity_report_hash": shadow_integrity_report_hash,
+            "shadow_tier_a_receipt_hash": shadow_tier_a_receipt_hash,
+            "shadow_tier_b_receipt_hash": shadow_tier_b_receipt_hash,
+            "shadow_readiness_receipt_hash": shadow_readiness_receipt_hash,
         }
 
 

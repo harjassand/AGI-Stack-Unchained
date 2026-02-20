@@ -1,0 +1,104 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v19_0/shadow_fs_integrity_report_v1",
+  "title": "Shadow filesystem integrity report v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_name",
+    "schema_version",
+    "report_id",
+    "tick_u64",
+    "candidate_regime_id",
+    "phase",
+    "scope_hash_pre",
+    "scope_hash_post",
+    "budget",
+    "mutated_paths",
+    "reason_codes",
+    "status"
+  ],
+  "properties": {
+    "schema_name": {
+      "const": "shadow_fs_integrity_report_v1"
+    },
+    "schema_version": {
+      "const": "v19_0"
+    },
+    "report_id": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "tick_u64": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "candidate_regime_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "phase": {
+      "type": "string",
+      "enum": [
+        "STATIC_PRE",
+        "STATIC_POST",
+        "DYNAMIC_PRE",
+        "DYNAMIC_POST",
+        "STATIC_TIER",
+        "DYNAMIC_TICK"
+      ]
+    },
+    "scope_hash_pre": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "scope_hash_post": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "budget": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "files_u64",
+        "bytes_read_u64",
+        "steps_u64"
+      ],
+      "properties": {
+        "files_u64": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "bytes_read_u64": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "steps_u64": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    },
+    "mutated_paths": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
+    },
+    "reason_codes": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "PASS",
+        "FAIL"
+      ]
+    }
+  }
+}

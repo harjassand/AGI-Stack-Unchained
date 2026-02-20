@@ -1,0 +1,71 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v18_0/native_shadow_registry_v1",
+  "title": "Native shadow registry v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "registry_id",
+    "daemon_id",
+    "tick_u64",
+    "modules"
+  ],
+  "properties": {
+    "schema_version": {"const": "native_shadow_registry_v1"},
+    "registry_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "daemon_id": {"type": "string", "minLength": 1},
+    "tick_u64": {"type": "integer", "minimum": 0},
+    "modules": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "op_id",
+          "binary_sha256",
+          "runtime_contract_hash",
+          "status",
+          "campaign_id",
+          "portability_status",
+          "shadow_route_disabled_b",
+          "shadow_route_disable_reason",
+          "shadow_route_disable_tick_u64",
+          "disabled_key"
+        ],
+        "properties": {
+          "op_id": {"type": "string", "minLength": 1},
+          "binary_sha256": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+          "runtime_contract_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+          "status": {"const": "STATUS_SHADOW"},
+          "campaign_id": {"type": "string", "minLength": 1},
+          "portability_status": {"type": "string", "enum": ["RUNNABLE", "PORTABILITY_SKIP_RUN"]},
+          "shadow_route_disabled_b": {"type": "boolean"},
+          "shadow_route_disable_reason": {"type": ["string", "null"]},
+          "shadow_route_disable_tick_u64": {"type": ["integer", "null"], "minimum": 0},
+          "disabled_key": {"type": "string", "pattern": "^[^|]+\\|sha256:[0-9a-f]{64}$"}
+        },
+        "allOf": [
+          {
+            "if": {"properties": {"shadow_route_disabled_b": {"const": false}}},
+            "then": {
+              "properties": {
+                "shadow_route_disable_reason": {"type": "null"},
+                "shadow_route_disable_tick_u64": {"type": "null"}
+              }
+            }
+          },
+          {
+            "if": {"properties": {"shadow_route_disabled_b": {"const": true}}},
+            "then": {
+              "properties": {
+                "shadow_route_disable_reason": {"type": "string", "minLength": 1},
+                "shadow_route_disable_tick_u64": {"type": "integer", "minimum": 0}
+              }
+            }
+          }
+        ]
+      }
+    }
+  }
+}

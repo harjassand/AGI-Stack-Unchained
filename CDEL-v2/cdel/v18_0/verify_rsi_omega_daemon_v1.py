@@ -165,6 +165,16 @@ _OBS_NON_CARRY_SERIES_KEYS = {
 }
 _GE_CAMPAIGN_ID = "rsi_ge_symbiotic_optimizer_sh1_v0_1"
 _CAPABILITY_FRONTIER_WINDOW_U64 = 512
+_HEX64 = set("0123456789abcdef")
+
+
+def _is_sha256_prefixed(value: Any) -> bool:
+    if not isinstance(value, str):
+        return False
+    if not value.startswith("sha256:"):
+        return False
+    hex64 = value.split(":", 1)[1]
+    return len(hex64) == 64 and all(ch in _HEX64 for ch in hex64)
 
 
 def _state_arg_for_verifier(verifier_module: str) -> str:
@@ -2298,6 +2308,239 @@ def verify(state_dir: Path, *, mode: str = "full") -> str:
             fail("BINDING_MISSING_OR_MISMATCH")
         if canon_hash_obj(active_binding_payload) != canon_hash_obj(tick_binding_payload):
             fail("BINDING_MISSING_OR_MISMATCH")
+
+        if str(tick_binding_payload.get("campaign_id", "")).strip() == "rsi_knowledge_transpiler_v1":
+            native_module = tick_binding_payload.get("native_module")
+            if not isinstance(native_module, dict):
+                fail("BINDING_MISSING_OR_MISMATCH")
+            op_id = str(native_module.get("op_id", "")).strip()
+            binary_sha256 = str(native_module.get("binary_sha256", "")).strip()
+            runtime_contract_hash = str(tick_binding_payload.get("native_runtime_contract_hash", "")).strip()
+            vectors_hash = str(tick_binding_payload.get("native_healthcheck_vectors_hash", "")).strip()
+            restricted_ir_hash = str(tick_binding_payload.get("native_restricted_ir_hash", "")).strip()
+            src_merkle_hash = str(tick_binding_payload.get("native_src_merkle_hash", "")).strip()
+            build_proof_hash = str(tick_binding_payload.get("native_build_proof_hash", "")).strip()
+            for value in (
+                binary_sha256,
+                runtime_contract_hash,
+                vectors_hash,
+                restricted_ir_hash,
+                src_merkle_hash,
+                build_proof_hash,
+            ):
+                if not _is_sha256_prefixed(value):
+                    fail("SCHEMA_FAIL")
+
+            if str((promotion_payload or {}).get("native_runtime_contract_hash", "")) != runtime_contract_hash:
+                fail("NONDETERMINISTIC")
+            if str((promotion_payload or {}).get("native_healthcheck_vectors_hash", "")) != vectors_hash:
+                fail("NONDETERMINISTIC")
+            if str((activation_payload or {}).get("native_runtime_contract_hash", "")) != runtime_contract_hash:
+                fail("NONDETERMINISTIC")
+            if str((activation_payload or {}).get("native_healthcheck_vectors_hash", "")) != vectors_hash:
+                fail("NONDETERMINISTIC")
+            if str((activation_payload or {}).get("native_restricted_ir_hash", "")) != restricted_ir_hash:
+                fail("NONDETERMINISTIC")
+            if str((activation_payload or {}).get("native_src_merkle_hash", "")) != src_merkle_hash:
+                fail("NONDETERMINISTIC")
+            if str((activation_payload or {}).get("native_build_proof_hash", "")) != build_proof_hash:
+                fail("NONDETERMINISTIC")
+
+            shadow_registry_hash = str((activation_payload or {}).get("native_shadow_registry_hash", "")).strip()
+            if not _is_sha256_prefixed(shadow_registry_hash):
+                fail("MISSING_STATE_INPUT")
+            shadow_dir = state_root / "native" / "shadow"
+            pointer_path = shadow_dir / "ACTIVE_SHADOW_REGISTRY"
+            if not pointer_path.exists() or not pointer_path.is_file():
+                fail("MISSING_STATE_INPUT")
+            pointer_hash = pointer_path.read_text(encoding="utf-8").strip()
+            if not _is_sha256_prefixed(pointer_hash):
+                fail("NONDETERMINISTIC")
+            if pointer_hash != shadow_registry_hash:
+                fail("NONDETERMINISTIC")
+            shadow_registry_path = shadow_dir / f"sha256_{shadow_registry_hash.split(':', 1)[1]}.native_shadow_registry_v1.json"
+            if not shadow_registry_path.exists() or not shadow_registry_path.is_file():
+                fail("MISSING_STATE_INPUT")
+            shadow_registry_payload = _verify_hash_binding(
+                shadow_registry_path,
+                shadow_registry_hash,
+                "native_shadow_registry_v1",
+            )
+            modules = shadow_registry_payload.get("modules")
+            if not isinstance(modules, list):
+                fail("SCHEMA_FAIL")
+            matches = [
+                row
+                for row in modules
+                if isinstance(row, dict)
+                and str(row.get("op_id", "")).strip() == op_id
+                and str(row.get("binary_sha256", "")).strip() == binary_sha256
+                and str(row.get("runtime_contract_hash", "")).strip() == runtime_contract_hash
+                and str(row.get("status", "")).strip() == "STATUS_SHADOW"
+                and str(row.get("campaign_id", "")).strip() == "rsi_knowledge_transpiler_v1"
+            ]
+            if len(matches) != 1:
+                fail("NONDETERMINISTIC")
+            match_row = matches[0]
+            disabled_key = str(match_row.get("disabled_key", "")).strip()
+            if disabled_key != f"{op_id}|{binary_sha256}":
+                fail("NONDETERMINISTIC")
+            portability_status = str(match_row.get("portability_status", "")).strip()
+            if portability_status not in {"RUNNABLE", "PORTABILITY_SKIP_RUN"}:
+                fail("SCHEMA_FAIL")
+            shadow_route_disabled_b = bool(match_row.get("shadow_route_disabled_b", False))
+            disable_reason_raw = match_row.get("shadow_route_disable_reason")
+            disable_reason = str(disable_reason_raw).strip() if isinstance(disable_reason_raw, str) and str(disable_reason_raw).strip() else None
+            disable_tick_raw = match_row.get("shadow_route_disable_tick_u64")
+            disable_tick = int(disable_tick_raw) if isinstance(disable_tick_raw, int) and disable_tick_raw >= 0 else None
+            if shadow_route_disabled_b and (disable_reason is None or disable_tick is None):
+                fail("NONDETERMINISTIC")
+            if (not shadow_route_disabled_b) and (disable_reason is not None or disable_tick is not None):
+                fail("NONDETERMINISTIC")
+
+            soak_dir = shadow_dir / "soak"
+            summary_path = collect_single(
+                soak_dir,
+                "sha256_*.native_wasm_shadow_soak_summary_v1.json",
+                reason="MISSING_STATE_INPUT",
+            )
+            summary_hash = _hash_from_hashed_filename(summary_path)
+            summary_payload = _verify_hash_binding(
+                summary_path,
+                summary_hash,
+                "native_wasm_shadow_soak_summary_v1",
+            )
+            receipt_path = collect_single(
+                soak_dir,
+                "sha256_*.native_wasm_shadow_soak_receipt_v1.json",
+                reason="MISSING_STATE_INPUT",
+            )
+            receipt_hash = _hash_from_hashed_filename(receipt_path)
+            receipt_payload = _verify_hash_binding(
+                receipt_path,
+                receipt_hash,
+                "native_wasm_shadow_soak_receipt_v1",
+            )
+            state_tick_u64 = int(state_payload.get("tick_u64", -1))
+            if int(summary_payload.get("tick_u64", -1)) != state_tick_u64:
+                fail("NONDETERMINISTIC")
+            if int(receipt_payload.get("tick_u64", -1)) != state_tick_u64:
+                fail("NONDETERMINISTIC")
+            if str(summary_payload.get("registry_hash", "")) != shadow_registry_hash:
+                fail("NONDETERMINISTIC")
+            if str(receipt_payload.get("registry_hash", "")) != shadow_registry_hash:
+                fail("NONDETERMINISTIC")
+
+            receipt_rows = receipt_payload.get("rows")
+            if not isinstance(receipt_rows, list):
+                fail("SCHEMA_FAIL")
+            by_key: dict[str, dict[str, Any]] = {}
+            for row in receipt_rows:
+                if not isinstance(row, dict):
+                    fail("SCHEMA_FAIL")
+                row_key = str(row.get("disabled_key", "")).strip()
+                if not row_key:
+                    fail("SCHEMA_FAIL")
+                by_key[row_key] = row
+            if disabled_key not in by_key:
+                fail("NONDETERMINISTIC")
+
+            route_disabled_count = 0
+            has_non_runnable_portability = False
+            for row in receipt_rows:
+                row_op = str(row.get("op_id", "")).strip()
+                row_bin = str(row.get("binary_sha256", "")).strip()
+                row_key = str(row.get("disabled_key", "")).strip()
+                row_portability = str(row.get("portability_status", "")).strip()
+                if row_portability not in {"RUNNABLE", "PORTABILITY_SKIP_RUN"}:
+                    fail("SCHEMA_FAIL")
+                if row_portability != "RUNNABLE":
+                    has_non_runnable_portability = True
+                row_matches = [
+                    mod
+                    for mod in modules
+                    if isinstance(mod, dict)
+                    and str(mod.get("disabled_key", "")).strip() == row_key
+                    and str(mod.get("op_id", "")).strip() == row_op
+                    and str(mod.get("binary_sha256", "")).strip() == row_bin
+                ]
+                if len(row_matches) != 1:
+                    fail("NONDETERMINISTIC")
+                mod_row = row_matches[0]
+                if str(mod_row.get("portability_status", "")).strip() != row_portability:
+                    fail("NONDETERMINISTIC")
+                row_disabled = bool(row.get("shadow_route_disabled_b", False))
+                mod_disabled = bool(mod_row.get("shadow_route_disabled_b", False))
+                if row_disabled != mod_disabled:
+                    fail("NONDETERMINISTIC")
+                row_disable_reason_raw = row.get("shadow_route_disable_reason")
+                row_disable_reason = (
+                    str(row_disable_reason_raw).strip() if isinstance(row_disable_reason_raw, str) and str(row_disable_reason_raw).strip() else None
+                )
+                mod_disable_reason_raw = mod_row.get("shadow_route_disable_reason")
+                mod_disable_reason = (
+                    str(mod_disable_reason_raw).strip() if isinstance(mod_disable_reason_raw, str) and str(mod_disable_reason_raw).strip() else None
+                )
+                row_disable_tick_raw = row.get("shadow_route_disable_tick_u64")
+                row_disable_tick = int(row_disable_tick_raw) if isinstance(row_disable_tick_raw, int) and row_disable_tick_raw >= 0 else None
+                mod_disable_tick_raw = mod_row.get("shadow_route_disable_tick_u64")
+                mod_disable_tick = int(mod_disable_tick_raw) if isinstance(mod_disable_tick_raw, int) and mod_disable_tick_raw >= 0 else None
+                if row_disable_reason != mod_disable_reason:
+                    fail("NONDETERMINISTIC")
+                if row_disable_tick != mod_disable_tick:
+                    fail("NONDETERMINISTIC")
+                transition_b = bool(row.get("route_disable_transition_b", False))
+                transition_reason_raw = row.get("route_disable_reason")
+                transition_reason = (
+                    str(transition_reason_raw).strip() if isinstance(transition_reason_raw, str) and str(transition_reason_raw).strip() else None
+                )
+                if row_disabled:
+                    route_disabled_count += 1
+                    if row_disable_tick is None or row_disable_reason is None:
+                        fail("NONDETERMINISTIC")
+                    if row_disable_tick > state_tick_u64:
+                        fail("NONDETERMINISTIC")
+                    expected_transition = row_disable_tick == state_tick_u64
+                    if transition_b != expected_transition:
+                        fail("NONDETERMINISTIC")
+                    if expected_transition and transition_reason != row_disable_reason:
+                        fail("NONDETERMINISTIC")
+                    if (not expected_transition) and transition_reason is not None:
+                        fail("NONDETERMINISTIC")
+                else:
+                    if row_disable_tick is not None or row_disable_reason is not None:
+                        fail("NONDETERMINISTIC")
+                    if transition_b or transition_reason is not None:
+                        fail("NONDETERMINISTIC")
+
+            expected_portability_snapshot = "PORTABILITY_SKIP_RUN" if (len(receipt_rows) == 0 or has_non_runnable_portability) else "RUNNABLE"
+            summary_portability_snapshot = str(summary_payload.get("portability_status_snapshot", "")).strip()
+            if summary_portability_snapshot != expected_portability_snapshot:
+                fail("NONDETERMINISTIC")
+            expected_reasons: set[str] = set()
+            if len(receipt_rows) == 0:
+                expected_reasons.add("NO_SHADOW_MODULE")
+            if expected_portability_snapshot != "RUNNABLE":
+                expected_reasons.add("PORTABILITY_SKIP_RUN")
+            if route_disabled_count > 0:
+                expected_reasons.add("SHADOW_ROUTE_DISABLED")
+            summary_ready = bool(summary_payload.get("shadow_ready_b", False))
+            expected_ready = len(expected_reasons) == 0
+            if summary_ready != expected_ready:
+                fail("NONDETERMINISTIC")
+            expected_gate_result = "PASS" if expected_ready else "FAIL"
+            if str(summary_payload.get("readiness_gate_result", "")).strip() != expected_gate_result:
+                fail("NONDETERMINISTIC")
+            summary_reasons_raw = summary_payload.get("readiness_reasons")
+            if not isinstance(summary_reasons_raw, list):
+                fail("SCHEMA_FAIL")
+            summary_reasons = {str(row).strip() for row in summary_reasons_raw if str(row).strip()}
+            if summary_reasons != expected_reasons:
+                fail("NONDETERMINISTIC")
+            if int(summary_payload.get("module_count_u64", -1)) != len(receipt_rows):
+                fail("NONDETERMINISTIC")
+            if int(summary_payload.get("route_disabled_modules_u64", -1)) != route_disabled_count:
+                fail("NONDETERMINISTIC")
 
     if promotion_payload is not None and promotion_status in {"REJECTED", "SKIPPED"}:
         if activation_payload is not None:

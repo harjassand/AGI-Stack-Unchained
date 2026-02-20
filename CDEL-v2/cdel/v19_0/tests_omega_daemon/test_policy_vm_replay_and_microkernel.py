@@ -1,10 +1,12 @@
 from __future__ import annotations
 
 import json
+import math
 import os
 import subprocess
 import shutil
 import sys
+import time
 from pathlib import Path
 
 import pytest
@@ -45,6 +47,19 @@ _WINTERFELL_PROOF_OPTIONS_KEYS = [
     "num_partitions",
     "hash_rate",
 ]
+_PHASE4_CANARY_SEEDS: tuple[int, ...] = tuple(range(19_000_001, 19_000_011))
+_PHASE4_CANARY_SLO_BY_PROFILE: dict[str, dict[str, int]] = {
+    "POLICY_VM_AIR_PROFILE_96_V1": {
+        "p95_prove_time_ms": 3000,
+        "p95_verify_time_ms": 250,
+        "max_proof_size_bytes": 1_500_000,
+    },
+    "POLICY_VM_AIR_PROFILE_128_V1": {
+        "p95_prove_time_ms": 4500,
+        "p95_verify_time_ms": 350,
+        "max_proof_size_bytes": 2_200_000,
+    },
+}
 
 
 def _default_winterfell_backend_contract() -> dict[str, object]:
@@ -169,6 +184,7 @@ def _write_proof_profile_contract_to_dir(
     pack_path: Path | None = None,
     backend_contract: dict[str, object] | None = None,
     air_profile: dict[str, object] | None = None,
+    profile_kind: str = "POLICY_VM_AIR_PROFILE_96_V1",
 ) -> tuple[dict[str, object], dict[str, object], dict[str, object], dict[str, object]]:
     backend = dict(backend_contract) if isinstance(backend_contract, dict) else _default_winterfell_backend_contract()
     action_kind_enum = _build_action_kind_enum()
@@ -180,7 +196,7 @@ def _write_proof_profile_contract_to_dir(
             backend_contract=backend,
             action_kind_enum_id=str(action_kind_enum["action_kind_enum_id"]),
             candidate_campaign_ids_list_id=str(candidate_campaign_ids["candidate_campaign_ids_list_id"]),
-            profile_kind="POLICY_VM_AIR_PROFILE_96_V1",
+            profile_kind=profile_kind,
         )
     )
     write_canon_json(target_dir / "policy_vm_winterfell_backend_contract_v1.json", backend)
@@ -354,7 +370,7 @@ def _build_minimal_semantic_proof_payload(
     return proof_payload, proof_bin_path, statement, backend, profile
 
 
-def _prepare_v19_noop_pack(dst_root: Path) -> Path:
+def _prepare_v19_noop_pack(dst_root: Path, *, max_steps_u64: int = 64) -> Path:
     src = REPO_ROOT / "campaigns" / "rsi_omega_daemon_v19_0_super_unified"
     dst = dst_root / "campaign_pack"
     shutil.copytree(src, dst)
@@ -367,7 +383,7 @@ def _prepare_v19_noop_pack(dst_root: Path) -> Path:
         "constants": {},
         "instructions": [{"op": "EMIT_PLAN", "args": {"plan_kind": "DECISION_PLAN_V1"}}],
         "declared_limits": {
-            "max_steps_u64": 64,
+            "max_steps_u64": int(max_steps_u64),
             "max_stack_items_u32": 32,
             "max_trace_bytes_u64": 1_048_576,
         },
@@ -474,8 +490,16 @@ def _prepare_v19_opcode_pack(
     return dst / "rsi_omega_daemon_pack_v1.json"
 
 
-def _enable_policy_vm_proof(pack_path: Path) -> None:
-    _write_proof_profile_contract_to_dir(target_dir=pack_path.parent, pack_path=pack_path)
+def _enable_policy_vm_proof(
+    pack_path: Path,
+    *,
+    profile_kind: str = "POLICY_VM_AIR_PROFILE_96_V1",
+) -> None:
+    _write_proof_profile_contract_to_dir(
+        target_dir=pack_path.parent,
+        pack_path=pack_path,
+        profile_kind=profile_kind,
+    )
 
 
 def _sha_obj(payload: dict) -> str:
@@ -668,6 +692,7 @@ def _run_v19_tick(
     campaign_pack: Path,
     tick_u64: int,
     prev_state_dir: Path | None = None,
+    run_seed_u64: int = 424242,
 ) -> tuple[dict, Path]:
     prev_mode = os.environ.get("OMEGA_META_CORE_ACTIVATION_MODE")
     prev_allow = os.environ.get("OMEGA_ALLOW_SIMULATE_ACTIVATION")
@@ -675,7 +700,7 @@ def _run_v19_tick(
     prev_det = os.environ.get("OMEGA_V19_DETERMINISTIC_TIMING")
     os.environ["OMEGA_META_CORE_ACTIVATION_MODE"] = "simulate"
     os.environ["OMEGA_ALLOW_SIMULATE_ACTIVATION"] = "1"
-    os.environ["OMEGA_RUN_SEED_U64"] = "424242"
+    os.environ["OMEGA_RUN_SEED_U64"] = str(int(run_seed_u64))
     os.environ["OMEGA_V19_DETERMINISTIC_TIMING"] = "1"
     try:
         result = coordinator_v19.run_tick(
@@ -763,6 +788,120 @@ def _ledger_event_types(state_dir: Path) -> list[str]:
         if isinstance(row, dict):
             out.append(str(row.get("event_type", "")))
     return out
+
+
+def _p95_ms(values: list[int]) -> int:
+    if not values:
+        return 0
+    rows = sorted(max(0, int(row)) for row in values)
+    if len(rows) == 1:
+        return int(rows[0])
+    pos = 0.95 * float(len(rows) - 1)
+    lo = int(math.floor(pos))
+    hi = int(math.ceil(pos))
+    if lo == hi:
+        return int(rows[lo])
+    frac = pos - float(lo)
+    value = float(rows[lo]) + frac * float(rows[hi] - rows[lo])
+    return int(round(value))
+
+
+def _collect_phase4_canary_metrics(
+    *,
+    base_dir: Path,
+    profile_kind: str,
+) -> dict[str, object]:
+    pack = _prepare_v19_noop_pack(base_dir / "pack_src", max_steps_u64=256)
+    _enable_policy_vm_proof(pack, profile_kind=profile_kind)
+
+    program_payload = load_canon_json(pack.parent / "coordinator_isa_program_v1.json")
+    declared_limits = program_payload.get("declared_limits")
+    assert isinstance(declared_limits, dict)
+    assert int(declared_limits.get("max_steps_u64", 0)) == 256
+
+    profile_payload = load_canon_json(pack.parent / "policy_vm_air_profile_v1.json")
+    assert str(profile_payload.get("profile_kind", "")) == profile_kind
+
+    prev_state_dir: Path | None = None
+    steps_by_tick: list[int] = []
+    emitted_prove_ms: list[int] = []
+    emitted_verify_ms: list[int] = []
+    emitted_proof_sizes: list[int] = []
+    eligible_ticks_u32 = 0
+    fast_path_ticks_u32 = 0
+    fallback_ticks_u32 = 0
+    for idx, seed in enumerate(_PHASE4_CANARY_SEEDS, start=1):
+        run_dir = base_dir / f"run_{idx:02d}"
+        result, state_dir = _run_v19_tick(
+            out_dir=run_dir,
+            campaign_pack=pack,
+            tick_u64=idx,
+            prev_state_dir=prev_state_dir,
+            run_seed_u64=int(seed),
+        )
+        prev_state_dir = state_dir
+
+        trace_path = _latest_single(state_dir / "policy" / "traces", "sha256_*.policy_vm_trace_v1.json")
+        trace_payload = load_canon_json(trace_path)
+        steps_executed_u64 = int(trace_payload.get("steps_executed_u64", 0))
+        steps_by_tick.append(steps_executed_u64)
+        assert steps_executed_u64 <= 256
+
+        snapshot_path = _latest_single(state_dir / "snapshot", "sha256_*.omega_tick_snapshot_v1.json")
+        snapshot_payload = load_canon_json(snapshot_path)
+        runtime_status = str(snapshot_payload.get("policy_vm_proof_runtime_status", "")).strip().upper()
+        assert runtime_status in {"ABSENT", "FAILED", "EMITTED"}
+        proof_hash = str(snapshot_payload.get("policy_vm_stark_proof_hash") or "").strip()
+        fallback_reason = str(snapshot_payload.get("policy_vm_proof_fallback_reason_code") or "").strip()
+        events = _ledger_event_types(state_dir)
+
+        eligible_ticks_u32 += 1
+
+        if runtime_status == "EMITTED" and proof_hash.startswith("sha256:"):
+            assert "POLICY_VM_PROOF" in events
+            fast_path_ticks_u32 += 1
+            prove_ms = int(result.get("policy_vm_prove_time_ms", 0))
+            assert prove_ms >= 0
+            emitted_prove_ms.append(prove_ms)
+
+            proof_path = _latest_single(state_dir / "policy" / "proofs", "sha256_*.policy_vm_stark_proof_v1.json")
+            proof_payload = load_canon_json(proof_path)
+            # Warm one verify call to reduce process startup jitter for p95 gate collection.
+            assert verify_policy_vm_stark_proof(proof_payload, state_root=state_dir) == "VALID"
+            verify_samples_ms: list[int] = []
+            for _ in range(5):
+                verify_start_ns = time.perf_counter_ns()
+                assert verify_policy_vm_stark_proof(proof_payload, state_root=state_dir) == "VALID"
+                verify_samples_ms.append(int((time.perf_counter_ns() - verify_start_ns) // 1_000_000))
+            verify_ms = min(verify_samples_ms)
+            emitted_verify_ms.append(verify_ms)
+            proof_bin = state_dir / str(proof_payload["proof_bytes_rel"])
+            emitted_proof_sizes.append(int(proof_bin.stat().st_size))
+        else:
+            fallback_ticks_u32 += 1
+            assert "POLICY_VM_PROOF_FALLBACK" in events
+            assert fallback_reason
+
+        daemon_verdict = verify_v19(state_dir, mode="full")
+        assert daemon_verdict == "VALID"
+
+    fast_path_rate = float(fast_path_ticks_u32) / float(eligible_ticks_u32) if eligible_ticks_u32 else 0.0
+    fallback_rate = float(fallback_ticks_u32) / float(eligible_ticks_u32) if eligible_ticks_u32 else 0.0
+    max_steps_u64 = max(steps_by_tick) if steps_by_tick else 0
+
+    return {
+        "profile_kind": profile_kind,
+        "eligible_ticks_u32": int(eligible_ticks_u32),
+        "fast_path_ticks_u32": int(fast_path_ticks_u32),
+        "fallback_ticks_u32": int(fallback_ticks_u32),
+        "fast_path_rate": float(fast_path_rate),
+        "fallback_rate": float(fallback_rate),
+        "seeds": list(_PHASE4_CANARY_SEEDS),
+        "max_steps_u64": int(max_steps_u64),
+        "p95_prove_time_ms": _p95_ms(emitted_prove_ms),
+        "p95_verify_time_ms": _p95_ms(emitted_verify_ms),
+        "max_proof_size_bytes": max(emitted_proof_sizes) if emitted_proof_sizes else 0,
+    }
 
 
 def test_v19_microkernel_policy_vm_tick_is_deterministic(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -1311,4 +1450,60 @@ def test_v19_verifier_falls_back_when_policy_vm_stark_proof_invalid(
         verify_policy_vm_stark_proof(proof_payload, state_root=state_dir)
 
     # Selected rollout policy is fallback replay on invalid proof.
+    assert verify_v19(state_dir, mode="full") == "VALID"
+
+
+def test_phase4_canary_step_budget_pinned_n10(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _patch_v19_stable_hooks(monkeypatch)
+    metrics = _collect_phase4_canary_metrics(
+        base_dir=tmp_path / "policy_vm_air_profile_96_v1",
+        profile_kind="POLICY_VM_AIR_PROFILE_96_V1",
+    )
+    assert metrics["seeds"] == list(_PHASE4_CANARY_SEEDS)
+    assert int(metrics["eligible_ticks_u32"]) == len(_PHASE4_CANARY_SEEDS)
+    assert int(metrics["max_steps_u64"]) <= 256
+
+
+def test_phase4_ci_gate_fast_path_fallback_rates(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _patch_v19_stable_hooks(monkeypatch)
+    for profile_kind, slo in _PHASE4_CANARY_SLO_BY_PROFILE.items():
+        metrics = _collect_phase4_canary_metrics(
+            base_dir=tmp_path / f"gate_{profile_kind.lower()}",
+            profile_kind=profile_kind,
+        )
+        assert int(metrics["eligible_ticks_u32"]) == len(_PHASE4_CANARY_SEEDS)
+        assert float(metrics["fast_path_rate"]) >= 0.80
+        assert float(metrics["fallback_rate"]) <= 0.20
+        assert int(metrics["p95_prove_time_ms"]) <= int(slo["p95_prove_time_ms"])
+        assert int(metrics["p95_verify_time_ms"]) <= int(slo["p95_verify_time_ms"])
+        assert int(metrics["max_proof_size_bytes"]) <= int(slo["max_proof_size_bytes"])
+
+
+def test_phase4_fallback_reason_code_integrity(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _patch_v19_stable_hooks(monkeypatch)
+    pack = _prepare_v19_noop_pack(tmp_path / "pack_src")
+    _enable_policy_vm_proof(pack)
+
+    def _forced_prover_failure(**_: object) -> dict[str, object]:
+        raise RuntimeError("forced-prover-failure")
+
+    monkeypatch.setattr(microkernel_v1, "prove_policy_vm_stark", _forced_prover_failure)
+    _, state_dir = _run_v19_tick(out_dir=tmp_path / "run", campaign_pack=pack, tick_u64=1)
+    snapshot_path = _latest_single(state_dir / "snapshot", "sha256_*.omega_tick_snapshot_v1.json")
+    snapshot_payload = load_canon_json(snapshot_path)
+    assert str(snapshot_payload.get("policy_vm_proof_runtime_status", "")) == "FAILED"
+    fallback_reason = str(snapshot_payload.get("policy_vm_proof_fallback_reason_code", "")).strip()
+    assert fallback_reason
+    events = _ledger_event_types(state_dir)
+    assert "POLICY_VM_PROOF_FALLBACK" in events
+    assert "POLICY_VM_PROOF" not in events
     assert verify_v19(state_dir, mode="full") == "VALID"

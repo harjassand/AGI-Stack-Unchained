@@ -28,6 +28,12 @@
     "activation_method": {"const": "ATOMIC_POINTER_SWAP"},
     "activation_success": {"type": "boolean"},
     "pass": {"type": "boolean"},
+    "native_runtime_contract_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "native_healthcheck_vectors_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "native_restricted_ir_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "native_src_merkle_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "native_build_proof_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "native_shadow_registry_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
     "native_module": {
       "type": ["object", "null"],
       "additionalProperties": false,

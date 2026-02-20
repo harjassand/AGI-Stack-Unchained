@@ -1,0 +1,49 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v18_0/phase4_audit_bundle_v1",
+  "title": "Phase 4 audit bundle v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "generated_at_utc",
+    "sip_dataset_hash",
+    "source_merkle_root",
+    "toolchain_root_hash",
+    "runtime_contract_hash",
+    "binary_hash",
+    "build_proof_hash",
+    "sip_empirical_evidence",
+    "reproducible_build_merkle_proof",
+    "native_binary_hash"
+  ],
+  "properties": {
+    "schema_version": {"const": "PHASE4_AUDIT_BUNDLE_v1"},
+    "generated_at_utc": {"type": "string", "minLength": 1},
+    "sip_dataset_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "source_merkle_root": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "toolchain_root_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "runtime_contract_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "binary_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "build_proof_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "native_binary_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "sip_empirical_evidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["sip_knowledge_artifact_hash", "sip_empirical_evidence_hash"],
+      "properties": {
+        "sip_knowledge_artifact_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+        "sip_empirical_evidence_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"}
+      }
+    },
+    "reproducible_build_merkle_proof": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["source_merkle_hash", "build_proof_hash"],
+      "properties": {
+        "source_merkle_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+        "build_proof_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"}
+      }
+    }
+  }
+}

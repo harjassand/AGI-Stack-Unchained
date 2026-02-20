@@ -1,0 +1,72 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v18_0/omega_promotion_bundle_native_transpiler_v1_1",
+  "title": "Omega promotion bundle native transpiler v1.1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "bundle_id",
+    "campaign_id",
+    "native_module",
+    "restricted_ir_hash",
+    "source_merkle_hash",
+    "build_proof_hash",
+    "runtime_contract_hash",
+    "healthcheck_vectors_hash",
+    "healthcheck_receipt_hash",
+    "sip_knowledge_artifact_hash",
+    "sip_empirical_evidence_hash",
+    "native_binary_hash",
+    "install_intent"
+  ],
+  "properties": {
+    "schema_version": {"const": "omega_promotion_bundle_native_transpiler_v1_1"},
+    "bundle_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "campaign_id": {"type": "string", "const": "rsi_knowledge_transpiler_v1"},
+    "native_module": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "op_id",
+        "abi_version_u32",
+        "abi_kind",
+        "language",
+        "platform",
+        "binary_sha256",
+        "source_manifest_hash",
+        "vendor_manifest_hash",
+        "build_receipt_hash",
+        "hotspot_report_hash",
+        "toolchain_manifest_hash",
+        "healthcheck_receipt_hash",
+        "bench_report_hash"
+      ],
+      "properties": {
+        "op_id": {"type": "string", "minLength": 1},
+        "abi_version_u32": {"const": 1},
+        "abi_kind": {"const": "BLOBLIST_V1"},
+        "language": {"const": "RUST"},
+        "platform": {"const": "wasm32-unknown-unknown"},
+        "binary_sha256": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+        "source_manifest_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+        "vendor_manifest_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+        "build_receipt_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+        "hotspot_report_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+        "toolchain_manifest_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+        "healthcheck_receipt_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+        "bench_report_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"}
+      }
+    },
+    "restricted_ir_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "source_merkle_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "build_proof_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "runtime_contract_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "healthcheck_vectors_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "healthcheck_receipt_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "sip_knowledge_artifact_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "sip_empirical_evidence_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "native_binary_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "install_intent": {"const": "STATUS_SHADOW"}
+  }
+}

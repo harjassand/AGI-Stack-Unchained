@@ -481,6 +481,19 @@ def _extract_activation_key(campaign_id: str, promo: dict[str, Any]) -> str:
             if not isinstance(native, dict):
                 raise KeyError("native_module")
             return str(native["binary_sha256"])
+        if campaign_id == "rsi_knowledge_transpiler_v1":
+            bundle_id = promo.get("bundle_id")
+            if isinstance(bundle_id, str) and bundle_id.strip():
+                return bundle_id
+            native_binary_hash = promo.get("native_binary_hash")
+            if isinstance(native_binary_hash, str) and native_binary_hash.strip():
+                return native_binary_hash
+            native = promo.get("native_module")
+            if isinstance(native, dict):
+                binary_sha = native.get("binary_sha256")
+                if isinstance(binary_sha, str) and binary_sha.strip():
+                    return binary_sha
+            return canon_hash_obj(promo)
     except Exception as exc:  # noqa: BLE001
         raise RuntimeError("ACTIVATION_KEY_MISSING") from exc
     raise RuntimeError("ACTIVATION_KEY_MISSING")
@@ -1260,6 +1273,17 @@ def run_promotion(
     promotion_bundle_hash = "sha256:" + "0" * 64
     active_after: str | None = None
     native_module_for_receipt: dict[str, Any] | None = None
+    native_runtime_contract_hash_for_receipt: str | None = None
+    native_healthcheck_vectors_hash_for_receipt: str | None = None
+
+    def _require_sha256_hash(value: Any, *, field: str) -> str:
+        text = str(value).strip()
+        if not text.startswith("sha256:"):
+            raise RuntimeError(f"SCHEMA_FAIL:{field}")
+        hex64 = text.split(":", 1)[1]
+        if not _is_hex64(hex64):
+            raise RuntimeError(f"SCHEMA_FAIL:{field}")
+        return text
 
     def _write_promotion_receipt(*, status: str, reason: str | None, active_after_hash: str | None) -> tuple[dict[str, Any], str]:
         payload = {
@@ -1270,6 +1294,8 @@ def run_promotion(
             "execution_mode": execution_mode,
             "meta_core_verifier_fingerprint": _meta_fingerprint(),
             "native_module": native_module_for_receipt if status == "PROMOTED" else None,
+            "native_runtime_contract_hash": native_runtime_contract_hash_for_receipt if status == "PROMOTED" else None,
+            "native_healthcheck_vectors_hash": native_healthcheck_vectors_hash_for_receipt if status == "PROMOTED" else None,
             "result": {
                 "status": status,
                 "reason_code": reason,
@@ -1530,6 +1556,41 @@ def run_promotion(
                 if isinstance(native_module, dict):
                     binding_without_id["native_module"] = native_module
                     native_module_for_receipt = native_module
+                if campaign_id == "rsi_knowledge_transpiler_v1":
+                    try:
+                        runtime_contract_hash = _require_sha256_hash(
+                            bundle_obj.get("runtime_contract_hash"),
+                            field="runtime_contract_hash",
+                        )
+                        healthcheck_vectors_hash = _require_sha256_hash(
+                            bundle_obj.get("healthcheck_vectors_hash"),
+                            field="healthcheck_vectors_hash",
+                        )
+                        restricted_ir_hash = _require_sha256_hash(
+                            bundle_obj.get("restricted_ir_hash"),
+                            field="restricted_ir_hash",
+                        )
+                        source_merkle_hash = _require_sha256_hash(
+                            bundle_obj.get("source_merkle_hash"),
+                            field="source_merkle_hash",
+                        )
+                        build_proof_hash = _require_sha256_hash(
+                            bundle_obj.get("build_proof_hash"),
+                            field="build_proof_hash",
+                        )
+                    except RuntimeError:
+                        return _write_promotion_receipt(
+                            status="REJECTED",
+                            reason="UNKNOWN",
+                            active_after_hash=None,
+                        )
+                    binding_without_id["native_runtime_contract_hash"] = runtime_contract_hash
+                    binding_without_id["native_healthcheck_vectors_hash"] = healthcheck_vectors_hash
+                    binding_without_id["native_restricted_ir_hash"] = restricted_ir_hash
+                    binding_without_id["native_src_merkle_hash"] = source_merkle_hash
+                    binding_without_id["native_build_proof_hash"] = build_proof_hash
+                    native_runtime_contract_hash_for_receipt = runtime_contract_hash
+                    native_healthcheck_vectors_hash_for_receipt = healthcheck_vectors_hash
                 binding_payload = dict(binding_without_id)
                 binding_payload["binding_id"] = canon_hash_obj(binding_without_id)
                 require_no_absolute_paths(binding_payload)

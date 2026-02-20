@@ -1,0 +1,32 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v18_0/candidate_syntax_error_v1",
+  "title": "Candidate syntax error v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "error_id",
+    "op_id",
+    "stage",
+    "reason_code",
+    "offending_tokens"
+  ],
+  "properties": {
+    "schema_version": {"const": "candidate_syntax_error_v1"},
+    "error_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "op_id": {"type": "string", "minLength": 1},
+    "stage": {"type": "string", "enum": ["IR_SCAN", "RUST_SCAN"]},
+    "reason_code": {
+      "type": "string",
+      "enum": [
+        "FORBIDDEN_FLOAT",
+        "FORBIDDEN_RANDOMNESS",
+        "FORBIDDEN_TIME",
+        "FORBIDDEN_SYSCALL",
+        "FORBIDDEN_NONDETERMINISM"
+      ]
+    },
+    "offending_tokens": {"type": "array", "items": {"type": "string", "minLength": 1}}
+  }
+}

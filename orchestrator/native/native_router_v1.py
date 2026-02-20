@@ -14,6 +14,8 @@ from typing import Any, Callable
 
 
 _ABI_VERSION = 1
+_ENV_DAEMON_STATE_ROOT = "OMEGA_DAEMON_STATE_ROOT"
+_ENV_TICK_U64 = "OMEGA_TICK_U64"
 
 
 def _repo_root() -> Path:
@@ -110,6 +112,7 @@ _json_cache: dict[str, tuple[int | None, Any]] = {}
 
 _stats_lock = threading.Lock()
 _stats_by_op: dict[str, dict[str, Any]] = {}
+_shadow_registry_lock = threading.Lock()
 
 
 def _load_json_cached(path: Path, *, default: Any) -> Any:
@@ -247,6 +250,137 @@ def _disabled_path() -> Path:
 
 def _shadow_state_path() -> Path:
     return _omega_cache_root() / "native_runtime" / "shadow_state_v1.json"
+
+
+def _is_sha256_prefixed(value: str) -> bool:
+    value = str(value).strip()
+    return value.startswith("sha256:") and len(value) == 71
+
+
+def _state_root_from_env() -> Path | None:
+    raw = str(os.environ.get(_ENV_DAEMON_STATE_ROOT, "")).strip()
+    if not raw:
+        return None
+    path = Path(raw)
+    try:
+        resolved = path.resolve()
+    except Exception:
+        return None
+    if not resolved.exists() or not resolved.is_dir():
+        return None
+    return resolved
+
+
+def _tick_u64_from_env() -> int:
+    raw = str(os.environ.get(_ENV_TICK_U64, "")).strip()
+    if not raw:
+        return 0
+    try:
+        value = int(raw)
+    except Exception:
+        return 0
+    return value if value >= 0 else 0
+
+
+def _load_active_shadow_registry_payload(state_root: Path) -> tuple[Path, str, dict[str, Any]]:
+    shadow_dir = state_root / "native" / "shadow"
+    pointer_path = shadow_dir / "ACTIVE_SHADOW_REGISTRY"
+    if not pointer_path.exists() or not pointer_path.is_file():
+        raise RuntimeError("shadow_registry_missing")
+    digest = pointer_path.read_text(encoding="utf-8").strip()
+    if not _is_sha256_prefixed(digest):
+        raise RuntimeError("shadow_registry_pointer_invalid")
+    registry_path = shadow_dir / f"sha256_{digest.split(':', 1)[1]}.native_shadow_registry_v1.json"
+    payload = _load_json(registry_path, default={})
+    if not isinstance(payload, dict):
+        raise RuntimeError("shadow_registry_invalid")
+    if _sha256_prefixed(_canon_bytes(payload)) != digest:
+        raise RuntimeError("shadow_registry_hash_mismatch")
+    return shadow_dir, digest, payload
+
+
+def _write_active_shadow_registry_payload(shadow_dir: Path, payload: dict[str, Any]) -> str:
+    payload = dict(payload)
+    payload["schema_version"] = "native_shadow_registry_v1"
+    without_id = dict(payload)
+    without_id.pop("registry_id", None)
+    payload["registry_id"] = _sha256_prefixed(_canon_bytes(without_id))
+    digest = _sha256_prefixed(_canon_bytes(payload))
+    out_path = shadow_dir / f"sha256_{digest.split(':', 1)[1]}.native_shadow_registry_v1.json"
+    _atomic_write_json(out_path, payload)
+    pointer = shadow_dir / "ACTIVE_SHADOW_REGISTRY"
+    pointer.parent.mkdir(parents=True, exist_ok=True)
+    tmp = pointer.with_name(pointer.name + ".tmp")
+    tmp.write_text(f"{digest}\n", encoding="utf-8")
+    os.replace(tmp, pointer)
+    return digest
+
+
+def _shadow_entry_index(modules: Any, *, op_id: str, binary_sha256: str) -> int | None:
+    if not isinstance(modules, list):
+        return None
+    target_key = f"{op_id}|{binary_sha256}"
+    for idx, row in enumerate(modules):
+        if not isinstance(row, dict):
+            continue
+        row_key = str(row.get("disabled_key", "")).strip()
+        row_op = str(row.get("op_id", "")).strip()
+        row_bin = str(row.get("binary_sha256", "")).strip()
+        if row_key == target_key:
+            return idx
+        if row_op == op_id and row_bin == binary_sha256:
+            return idx
+    return None
+
+
+def _is_shadow_route_disabled(op_id: str, binary_sha256: str) -> bool:
+    state_root = _state_root_from_env()
+    if state_root is None:
+        return False
+    try:
+        _, _, payload = _load_active_shadow_registry_payload(state_root)
+    except Exception:
+        # Fail-closed for SHADOW compare: skip compare if registry integrity is unclear.
+        return True
+    modules = payload.get("modules")
+    idx = _shadow_entry_index(modules, op_id=op_id, binary_sha256=binary_sha256)
+    if idx is None:
+        return False
+    row = modules[idx]
+    if not isinstance(row, dict):
+        return True
+    return bool(row.get("shadow_route_disabled_b", False))
+
+
+def _disable_shadow_route(op_id: str, binary_sha256: str, *, reason: str) -> bool:
+    state_root = _state_root_from_env()
+    if state_root is None:
+        return False
+    try:
+        with _shadow_registry_lock:
+            shadow_dir, _old_digest, payload = _load_active_shadow_registry_payload(state_root)
+            modules = payload.get("modules")
+            idx = _shadow_entry_index(modules, op_id=op_id, binary_sha256=binary_sha256)
+            if idx is None or not isinstance(modules, list):
+                return False
+            row = modules[idx]
+            if not isinstance(row, dict):
+                return False
+            if bool(row.get("shadow_route_disabled_b", False)):
+                return False
+            key = f"{op_id}|{binary_sha256}"
+            tick_u64 = _tick_u64_from_env()
+            row["disabled_key"] = key
+            row["shadow_route_disabled_b"] = True
+            row["shadow_route_disable_reason"] = str(reason)
+            row["shadow_route_disable_tick_u64"] = int(tick_u64)
+            modules[idx] = row
+            payload["modules"] = modules
+            payload["tick_u64"] = int(tick_u64)
+            _write_active_shadow_registry_payload(shadow_dir, payload)
+            return True
+    except Exception:
+        return False
 
 
 def _active_binary_for_op(op_id: str) -> str | None:
@@ -415,6 +549,73 @@ def route(op_id: str, *args: bytes | bytearray | memoryview) -> bytes:
 
     argv = [bytes(a) for a in args]
     bloblist = _encode_bloblist_v1(argv)
+    mode = str(policy.get("verification_mode", "VECTORS")).strip().upper()
+
+    if mode == "SHADOW":
+        py_out = bytes(py_impl(*args))
+        if _is_shadow_route_disabled(op_id, active_bin):
+            _record_stats(
+                op_id=op_id,
+                active_bin=active_bin,
+                returned_native=False,
+                bytes_in=bytes_in,
+                bytes_out=len(py_out),
+            )
+            return py_out
+        shadow_calls = int(policy.get("shadow_calls_u32", 100) or 0)
+        do_shadow = _shadow_should_dual_run(op_id, active_bin, shadow_calls)
+        if do_shadow:
+            try:
+                handle = _ctypes_load_module(op_id, active_bin)
+            except Exception:
+                _disable(op_id, active_bin, reason="load_fail")
+                _disable_shadow_route(op_id, active_bin, reason="load_fail")
+                _record_stats(
+                    op_id=op_id,
+                    active_bin=active_bin,
+                    returned_native=False,
+                    bytes_in=bytes_in,
+                    bytes_out=len(py_out),
+                    load_fail=True,
+                )
+                return py_out
+            try:
+                native_out = _invoke_bloblist(handle, bloblist)
+            except Exception:
+                _disable(op_id, active_bin, reason="invoke_fail")
+                _disable_shadow_route(op_id, active_bin, reason="invoke_fail")
+                _record_stats(
+                    op_id=op_id,
+                    active_bin=active_bin,
+                    returned_native=False,
+                    bytes_in=bytes_in,
+                    bytes_out=len(py_out),
+                    invoke_fail=True,
+                )
+                return py_out
+            if native_out != py_out:
+                transition = _disable_shadow_route(op_id, active_bin, reason="shadow_mismatch")
+                _disable(op_id, active_bin, reason="shadow_mismatch")
+                _write_mismatch_report(
+                    op_id,
+                    active_bin,
+                    argv=argv,
+                    py_out=py_out,
+                    native_out=native_out,
+                    route_disable_transition_b=transition,
+                    route_disable_reason="shadow_mismatch",
+                )
+                _record_stats(
+                    op_id=op_id,
+                    active_bin=active_bin,
+                    returned_native=False,
+                    bytes_in=bytes_in,
+                    bytes_out=len(py_out),
+                    shadow_mismatch=True,
+                )
+                return py_out
+        _record_stats(op_id=op_id, active_bin=active_bin, returned_native=False, bytes_in=bytes_in, bytes_out=len(py_out))
+        return py_out
 
     try:
         handle = _ctypes_load_module(op_id, active_bin)
@@ -430,41 +631,6 @@ def route(op_id: str, *args: bytes | bytearray | memoryview) -> bytes:
             load_fail=True,
         )
         return out
-
-    mode = str(policy.get("verification_mode", "VECTORS")).strip().upper()
-    if mode == "SHADOW":
-        shadow_calls = int(policy.get("shadow_calls_u32", 100) or 0)
-        do_shadow = _shadow_should_dual_run(op_id, active_bin, shadow_calls)
-        if do_shadow:
-            py_out = bytes(py_impl(*args))
-            try:
-                native_out = _invoke_bloblist(handle, bloblist)
-            except Exception:
-                _disable(op_id, active_bin, reason="invoke_fail")
-                _record_stats(
-                    op_id=op_id,
-                    active_bin=active_bin,
-                    returned_native=False,
-                    bytes_in=bytes_in,
-                    bytes_out=len(py_out),
-                    invoke_fail=True,
-                )
-                return py_out
-            if native_out != py_out:
-                _disable(op_id, active_bin, reason="shadow_mismatch")
-                _write_mismatch_report(op_id, active_bin, argv=argv, py_out=py_out, native_out=native_out)
-                _record_stats(
-                    op_id=op_id,
-                    active_bin=active_bin,
-                    returned_native=False,
-                    bytes_in=bytes_in,
-                    bytes_out=len(py_out),
-                    shadow_mismatch=True,
-                )
-                return py_out
-            _record_stats(op_id=op_id, active_bin=active_bin, returned_native=True, bytes_in=bytes_in, bytes_out=len(native_out))
-            return native_out
-
     try:
         native_out = _invoke_bloblist(handle, bloblist)
         _record_stats(op_id=op_id, active_bin=active_bin, returned_native=True, bytes_in=bytes_in, bytes_out=len(native_out))
@@ -483,7 +649,16 @@ def route(op_id: str, *args: bytes | bytearray | memoryview) -> bytes:
         return out
 
 
-def _write_mismatch_report(op_id: str, binary_sha256: str, *, argv: list[bytes], py_out: bytes, native_out: bytes) -> None:
+def _write_mismatch_report(
+    op_id: str,
+    binary_sha256: str,
+    *,
+    argv: list[bytes],
+    py_out: bytes,
+    native_out: bytes,
+    route_disable_transition_b: bool = False,
+    route_disable_reason: str | None = None,
+) -> None:
     root = _omega_cache_root() / "native_runtime" / "mismatch_reports"
     root.mkdir(parents=True, exist_ok=True)
     hex64 = binary_sha256.split(":", 1)[1]
@@ -494,6 +669,8 @@ def _write_mismatch_report(op_id: str, binary_sha256: str, *, argv: list[bytes],
         "argv_sha256s": [_sha256_prefixed(a) for a in argv],
         "py_out_sha256": _sha256_prefixed(py_out),
         "native_out_sha256": _sha256_prefixed(native_out),
+        "route_disable_transition_b": bool(route_disable_transition_b),
+        "route_disable_reason": str(route_disable_reason) if route_disable_reason else None,
     }
     out_path = root / f"sha256_{hex64}.omega_native_mismatch_report_v1.json"
     _atomic_write_json(out_path, report)

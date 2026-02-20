@@ -1,0 +1,57 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v19_0/corpus_descriptor_v1",
+  "title": "Pinned corpus descriptor v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_name",
+    "schema_version",
+    "descriptor_id",
+    "discovery_mode",
+    "entries"
+  ],
+  "properties": {
+    "schema_name": {
+      "const": "corpus_descriptor_v1"
+    },
+    "schema_version": {
+      "const": "v19_0"
+    },
+    "descriptor_id": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "discovery_mode": {
+      "type": "string",
+      "const": "EXPLICIT_ENUMERATION_ONLY"
+    },
+    "entries": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "run_id",
+          "tick_u64",
+          "tick_snapshot_hash"
+        ],
+        "properties": {
+          "run_id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "tick_u64": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "tick_snapshot_hash": {
+            "type": "string",
+            "pattern": "^sha256:[0-9a-f]{64}$"
+          }
+        }
+      }
+    }
+  }
+}

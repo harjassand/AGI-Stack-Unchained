@@ -1,0 +1,46 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v18_0/native_wasm_shadow_soak_summary_v1",
+  "title": "Native wasm shadow soak summary v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "summary_id",
+    "tick_u64",
+    "registry_hash",
+    "portability_status_snapshot",
+    "shadow_ready_b",
+    "readiness_gate_result",
+    "readiness_reasons",
+    "module_count_u64",
+    "route_disabled_modules_u64"
+  ],
+  "properties": {
+    "schema_version": {"const": "native_wasm_shadow_soak_summary_v1"},
+    "summary_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "tick_u64": {"type": "integer", "minimum": 0},
+    "registry_hash": {"anyOf": [{"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"}, {"type": "null"}]},
+    "portability_status_snapshot": {"type": "string", "enum": ["RUNNABLE", "PORTABILITY_SKIP_RUN"]},
+    "shadow_ready_b": {"type": "boolean"},
+    "readiness_gate_result": {"type": "string", "enum": ["PASS", "FAIL"]},
+    "readiness_reasons": {"type": "array", "items": {"type": "string", "minLength": 1}},
+    "module_count_u64": {"type": "integer", "minimum": 0},
+    "route_disabled_modules_u64": {"type": "integer", "minimum": 0}
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "portability_status_snapshot": {"const": "PORTABILITY_SKIP_RUN"}
+        }
+      },
+      "then": {
+        "properties": {
+          "shadow_ready_b": {"const": false},
+          "readiness_gate_result": {"const": "FAIL"}
+        }
+      }
+    }
+  ]
+}

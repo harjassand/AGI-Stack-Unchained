@@ -29,3 +29,13 @@ def test_kernel_activation_key_falls_back_to_bundle_hash() -> None:
         "campaign_id": "rsi_sas_kernel_v15_0",
     }
     assert _extract_activation_key("rsi_sas_kernel_v15_0", promo) == canon_hash_obj(promo)
+
+
+def test_transpiler_activation_key_prefers_bundle_id() -> None:
+    bundle_id = "sha256:" + ("6" * 64)
+    promo = {
+        "schema_version": "omega_promotion_bundle_native_transpiler_v1_1",
+        "bundle_id": bundle_id,
+        "native_binary_hash": "sha256:" + ("7" * 64),
+    }
+    assert _extract_activation_key("rsi_knowledge_transpiler_v1", promo) == bundle_id

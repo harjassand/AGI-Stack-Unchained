@@ -1,0 +1,50 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v18_0/native_wasm_healthcheck_receipt_v1",
+  "title": "Native wasm healthcheck receipt v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "receipt_id",
+    "op_id",
+    "wasm_binary_sha256",
+    "restricted_ir_hash",
+    "vectors_hash",
+    "runtime_contract_hash",
+    "result",
+    "rows"
+  ],
+  "properties": {
+    "schema_version": {"const": "native_wasm_healthcheck_receipt_v1"},
+    "receipt_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "op_id": {"type": "string", "minLength": 1},
+    "wasm_binary_sha256": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "restricted_ir_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "vectors_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "runtime_contract_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "result": {"type": "string", "enum": ["PASS", "FAIL"]},
+    "rows": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "case_index_u64",
+          "vector_id",
+          "expected_output_sha256",
+          "actual_output_sha256",
+          "match_b"
+        ],
+        "properties": {
+          "case_index_u64": {"type": "integer", "minimum": 0},
+          "vector_id": {"type": "string", "minLength": 1},
+          "expected_output_sha256": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+          "actual_output_sha256": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+          "match_b": {"type": "boolean"}
+        }
+      }
+    }
+  }
+}

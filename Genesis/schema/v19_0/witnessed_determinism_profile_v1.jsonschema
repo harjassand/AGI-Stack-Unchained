@@ -1,0 +1,50 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v19_0/witnessed_determinism_profile_v1",
+  "title": "Witnessed determinism profile v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_name",
+    "schema_version",
+    "profile_id",
+    "tier_a",
+    "tier_b"
+  ],
+  "properties": {
+    "schema_name": {
+      "const": "witnessed_determinism_profile_v1"
+    },
+    "schema_version": {
+      "const": "v19_0"
+    },
+    "profile_id": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "tier_a": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "n_double_runs"
+      ],
+      "properties": {
+        "n_double_runs": {
+          "const": 50
+        }
+      }
+    },
+    "tier_b": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "n_double_runs"
+      ],
+      "properties": {
+        "n_double_runs": {
+          "const": 1000
+        }
+      }
+    }
+  }
+}

@@ -7,6 +7,7 @@ import os
 import re
 import sys
 import hashlib
+import platform
 from pathlib import Path
 from typing import Any
 
@@ -14,6 +15,7 @@ from orchestrator.common.run_invoker_v1 import run_command
 
 from .omega_common_v1 import (
     canon_hash_obj,
+    load_canon_dict,
     repo_root,
     require_no_absolute_paths,
     validate_schema,
@@ -99,6 +101,321 @@ def _atomic_copy(src: Path, dst: Path) -> None:
     tmp = dst.with_suffix(dst.suffix + ".tmp")
     tmp.write_bytes(src.read_bytes())
     os.replace(tmp, dst)
+
+
+def _is_sha256_prefixed(value: str) -> bool:
+    if not value.startswith("sha256:"):
+        return False
+    return _HEX64_RE.fullmatch(value.split(":", 1)[1]) is not None
+
+
+def _require_sha256_prefixed(value: Any, *, field: str) -> str:
+    text = str(value).strip()
+    if not _is_sha256_prefixed(text):
+        raise RuntimeError(f"SCHEMA_FAIL:{field}")
+    return text
+
+
+def _verify_hashed_json(path: Path, *, expected_hash: str, schema_name: str) -> dict[str, Any]:
+    payload = load_canon_dict(path)
+    validate_schema(payload, schema_name)
+    if canon_hash_obj(payload) != expected_hash:
+        raise RuntimeError("NONDETERMINISTIC")
+    return payload
+
+
+def _resolve_hashed_artifact_path(*, root: Path, suffix: str, digest: str) -> Path:
+    hex64 = digest.split(":", 1)[1]
+    target = f"sha256_{hex64}.{suffix}"
+    candidate = root / target
+    if candidate.exists() and candidate.is_file():
+        return candidate.resolve()
+    matches = sorted(root.rglob(target), key=lambda p: p.as_posix())
+    if len(matches) != 1:
+        raise RuntimeError("MISSING_STATE_INPUT")
+    return matches[0].resolve()
+
+
+def _resolve_wasm_blob_path(*, root: Path, binary_sha256: str) -> Path:
+    hex64 = binary_sha256.split(":", 1)[1]
+    target = f"sha256_{hex64}.wasm"
+    direct = root / "daemon" / "rsi_knowledge_transpiler_v1" / "state" / "native" / "bin" / target
+    if direct.exists() and direct.is_file():
+        return direct.resolve()
+    matches = sorted(root.rglob(target), key=lambda p: p.as_posix())
+    if len(matches) != 1:
+        raise RuntimeError("MISSING_STATE_INPUT")
+    return matches[0].resolve()
+
+
+def _shadow_state_root(dispatch_ctx: dict[str, Any]) -> Path:
+    state_root_raw = dispatch_ctx.get("state_root")
+    if not isinstance(state_root_raw, (str, Path)):
+        raise RuntimeError("MISSING_STATE_INPUT")
+    state_root = Path(state_root_raw).resolve()
+    return state_root / "native" / "shadow"
+
+
+def _normalize_shadow_module_row(row: dict[str, Any]) -> dict[str, Any]:
+    op_id = str(row.get("op_id", "")).strip()
+    binary_sha256 = str(row.get("binary_sha256", "")).strip()
+    runtime_contract_hash = str(row.get("runtime_contract_hash", "")).strip()
+    campaign_id = str(row.get("campaign_id", "")).strip() or "rsi_knowledge_transpiler_v1"
+    status = "STATUS_SHADOW"
+    disabled_key = str(row.get("disabled_key", "")).strip()
+    if not disabled_key:
+        disabled_key = f"{op_id}|{binary_sha256}"
+    portability_status = str(row.get("portability_status", "")).strip()
+    if portability_status not in {"RUNNABLE", "PORTABILITY_SKIP_RUN"}:
+        portability_status = "PORTABILITY_SKIP_RUN"
+    shadow_route_disabled_b = bool(row.get("shadow_route_disabled_b", False))
+    shadow_route_disable_reason = row.get("shadow_route_disable_reason")
+    if not isinstance(shadow_route_disable_reason, str) or not shadow_route_disable_reason.strip():
+        shadow_route_disable_reason = None
+    shadow_route_disable_tick_u64 = row.get("shadow_route_disable_tick_u64")
+    if isinstance(shadow_route_disable_tick_u64, bool):
+        shadow_route_disable_tick_u64 = None
+    if not isinstance(shadow_route_disable_tick_u64, int) or shadow_route_disable_tick_u64 < 0:
+        shadow_route_disable_tick_u64 = None
+
+    if not shadow_route_disabled_b:
+        shadow_route_disable_reason = None
+        shadow_route_disable_tick_u64 = None
+
+    return {
+        "op_id": op_id,
+        "binary_sha256": binary_sha256,
+        "runtime_contract_hash": runtime_contract_hash,
+        "status": status,
+        "campaign_id": campaign_id,
+        "portability_status": portability_status,
+        "shadow_route_disabled_b": bool(shadow_route_disabled_b),
+        "shadow_route_disable_reason": shadow_route_disable_reason,
+        "shadow_route_disable_tick_u64": shadow_route_disable_tick_u64,
+        "disabled_key": disabled_key,
+    }
+
+
+def _current_host_triple() -> str:
+    machine_raw = platform.machine().strip().lower()
+    system_raw = platform.system().strip().lower()
+    if system_raw == "darwin":
+        if machine_raw in {"arm64", "aarch64"}:
+            arch = "arm64"
+        elif machine_raw in {"x86_64", "amd64"}:
+            arch = "x86_64"
+        else:
+            arch = machine_raw
+        return f"{arch}-apple-darwin"
+    if system_raw == "linux":
+        if machine_raw in {"arm64", "aarch64"}:
+            arch = "aarch64"
+        elif machine_raw in {"x86_64", "amd64"}:
+            arch = "x86_64"
+        else:
+            arch = machine_raw
+        return f"{arch}-unknown-linux-gnu"
+    if system_raw == "windows":
+        if machine_raw in {"x86_64", "amd64"}:
+            arch = "x86_64"
+        elif machine_raw in {"arm64", "aarch64"}:
+            arch = "aarch64"
+        else:
+            arch = machine_raw
+        return f"{arch}-pc-windows-msvc"
+    return f"{machine_raw}-{system_raw}"
+
+
+def _compute_portability_status(runtime_contract_payload: dict[str, Any]) -> str:
+    contract_host = str(runtime_contract_payload.get("host_triple", "")).strip().lower()
+    if not contract_host:
+        return "PORTABILITY_SKIP_RUN"
+    if contract_host == _current_host_triple().lower():
+        return "RUNNABLE"
+    return "PORTABILITY_SKIP_RUN"
+
+
+def _read_active_shadow_registry_modules(shadow_dir: Path) -> list[dict[str, Any]]:
+    pointer = shadow_dir / "ACTIVE_SHADOW_REGISTRY"
+    if not pointer.exists() or not pointer.is_file():
+        return []
+    digest = pointer.read_text(encoding="utf-8").strip()
+    if not _is_sha256_prefixed(digest):
+        raise RuntimeError("NONDETERMINISTIC")
+    artifact = shadow_dir / f"sha256_{digest.split(':', 1)[1]}.native_shadow_registry_v1.json"
+    if not artifact.exists() or not artifact.is_file():
+        raise RuntimeError("MISSING_STATE_INPUT")
+    try:
+        payload = _verify_hashed_json(
+            artifact,
+            expected_hash=digest,
+            schema_name="native_shadow_registry_v1",
+        )
+    except RuntimeError:
+        payload = load_canon_dict(artifact)
+        if canon_hash_obj(payload) != digest:
+            raise RuntimeError("NONDETERMINISTIC")
+    modules = payload.get("modules")
+    if not isinstance(modules, list):
+        raise RuntimeError("SCHEMA_FAIL")
+    out: list[dict[str, Any]] = []
+    for row in modules:
+        if not isinstance(row, dict):
+            continue
+        normalized = _normalize_shadow_module_row(row)
+        if not normalized["op_id"]:
+            continue
+        if not _is_sha256_prefixed(str(normalized["binary_sha256"])):
+            continue
+        if not _is_sha256_prefixed(str(normalized["runtime_contract_hash"])):
+            continue
+        out.append(normalized)
+    return out
+
+
+def _write_shadow_pointer(pointer: Path, digest: str) -> None:
+    pointer.parent.mkdir(parents=True, exist_ok=True)
+    tmp = pointer.with_name(pointer.name + ".tmp")
+    tmp.write_text(f"{digest}\n", encoding="utf-8")
+    os.replace(tmp, pointer)
+
+
+def _install_native_shadow_registry(
+    *,
+    dispatch_ctx: dict[str, Any],
+    tick_u64: int,
+    binding_payload: dict[str, Any],
+) -> str:
+    campaign_id = str(binding_payload.get("campaign_id", "")).strip()
+    if campaign_id != "rsi_knowledge_transpiler_v1":
+        raise RuntimeError("SCHEMA_FAIL")
+
+    native_module = binding_payload.get("native_module")
+    if not isinstance(native_module, dict):
+        raise RuntimeError("SCHEMA_FAIL")
+    op_id = str(native_module.get("op_id", "")).strip()
+    if not op_id:
+        raise RuntimeError("SCHEMA_FAIL")
+    binary_sha256 = _require_sha256_prefixed(native_module.get("binary_sha256"), field="native_module.binary_sha256")
+    runtime_contract_hash = _require_sha256_prefixed(
+        binding_payload.get("native_runtime_contract_hash"),
+        field="native_runtime_contract_hash",
+    )
+    _require_sha256_prefixed(
+        binding_payload.get("native_healthcheck_vectors_hash"),
+        field="native_healthcheck_vectors_hash",
+    )
+    _require_sha256_prefixed(
+        binding_payload.get("native_restricted_ir_hash"),
+        field="native_restricted_ir_hash",
+    )
+    _require_sha256_prefixed(
+        binding_payload.get("native_src_merkle_hash"),
+        field="native_src_merkle_hash",
+    )
+    _require_sha256_prefixed(
+        binding_payload.get("native_build_proof_hash"),
+        field="native_build_proof_hash",
+    )
+
+    subrun_root_raw = dispatch_ctx.get("subrun_root_abs")
+    if not isinstance(subrun_root_raw, (str, Path)) or not str(subrun_root_raw):
+        raise RuntimeError("MISSING_STATE_INPUT")
+    subrun_root = Path(subrun_root_raw).resolve()
+    if not subrun_root.exists() or not subrun_root.is_dir():
+        raise RuntimeError("MISSING_STATE_INPUT")
+
+    wasm_path = _resolve_wasm_blob_path(root=subrun_root, binary_sha256=binary_sha256)
+    if _hash_file_bytes(wasm_path) != binary_sha256:
+        raise RuntimeError("NONDETERMINISTIC")
+    runtime_contract_payload = _verify_hashed_json(
+        _resolve_hashed_artifact_path(
+            root=subrun_root,
+            suffix="native_wasm_runtime_contract_v1.json",
+            digest=runtime_contract_hash,
+        ),
+        expected_hash=runtime_contract_hash,
+        schema_name="native_wasm_runtime_contract_v1",
+    )
+    vectors_hash = _require_sha256_prefixed(
+        binding_payload.get("native_healthcheck_vectors_hash"),
+        field="native_healthcheck_vectors_hash",
+    )
+    _verify_hashed_json(
+        _resolve_hashed_artifact_path(
+            root=subrun_root,
+            suffix="native_wasm_healthcheck_vectors_v1.json",
+            digest=vectors_hash,
+        ),
+        expected_hash=vectors_hash,
+        schema_name="native_wasm_healthcheck_vectors_v1",
+    )
+
+    # Optional cache mirror (never source-of-truth).
+    cache_blob = _omega_cache_root() / "native_blobs" / f"sha256_{binary_sha256.split(':', 1)[1]}.wasm"
+    _atomic_copy(wasm_path, cache_blob)
+    if _hash_file_bytes(cache_blob) != binary_sha256:
+        raise RuntimeError("NONDETERMINISTIC")
+
+    shadow_dir = _shadow_state_root(dispatch_ctx)
+    existing_modules = _read_active_shadow_registry_modules(shadow_dir)
+    merged: dict[str, dict[str, Any]] = {}
+    for row in existing_modules:
+        if isinstance(row, dict):
+            row_op_id = str(row.get("op_id", "")).strip()
+            if row_op_id:
+                merged[row_op_id] = _normalize_shadow_module_row(row)
+    disabled_key = f"{op_id}|{binary_sha256}"
+    prior_same_key = None
+    for row in merged.values():
+        if str(row.get("disabled_key", "")).strip() == disabled_key:
+            prior_same_key = row
+            break
+    preserved_disabled = bool((prior_same_key or {}).get("shadow_route_disabled_b", False))
+    preserved_reason: str | None
+    preserved_tick: int | None
+    if preserved_disabled:
+        reason_raw = (prior_same_key or {}).get("shadow_route_disable_reason")
+        preserved_reason = str(reason_raw).strip() if isinstance(reason_raw, str) and str(reason_raw).strip() else "SHADOW_ROUTE_DISABLED"
+        tick_raw = (prior_same_key or {}).get("shadow_route_disable_tick_u64")
+        preserved_tick = int(tick_raw) if isinstance(tick_raw, int) and tick_raw >= 0 else int(tick_u64)
+    else:
+        preserved_reason = None
+        preserved_tick = None
+    merged[op_id] = {
+        "op_id": op_id,
+        "binary_sha256": binary_sha256,
+        "runtime_contract_hash": runtime_contract_hash,
+        "status": "STATUS_SHADOW",
+        "campaign_id": campaign_id,
+        "portability_status": _compute_portability_status(runtime_contract_payload),
+        "shadow_route_disabled_b": bool(preserved_disabled),
+        "shadow_route_disable_reason": preserved_reason,
+        "shadow_route_disable_tick_u64": preserved_tick,
+        "disabled_key": disabled_key,
+    }
+
+    state_root = Path(dispatch_ctx["state_root"]).resolve()
+    daemon_id = state_root.parent.name if state_root.parent.name else "rsi_omega_daemon_v19_0"
+    registry_payload = {
+        "schema_version": "native_shadow_registry_v1",
+        "registry_id": "sha256:" + ("0" * 64),
+        "daemon_id": daemon_id,
+        "tick_u64": int(tick_u64),
+        "modules": [merged[key] for key in sorted(merged.keys())],
+    }
+    validate_schema(registry_payload, "native_shadow_registry_v1")
+    _, registry_obj, registry_hash = write_hashed_json(
+        shadow_dir,
+        "native_shadow_registry_v1.json",
+        registry_payload,
+        id_field="registry_id",
+    )
+    validate_schema(registry_obj, "native_shadow_registry_v1")
+    if canon_hash_obj(registry_obj) != registry_hash:
+        raise RuntimeError("NONDETERMINISTIC")
+    _write_shadow_pointer(shadow_dir / "ACTIVE_SHADOW_REGISTRY", registry_hash)
+    return registry_hash
 
 
 def _update_active_native_registry(*, op_id: str, native_module: dict[str, Any]) -> None:
@@ -352,6 +669,12 @@ def run_activation(
     native_module: dict[str, Any] | None = None
     native_gate_result: str | None = None
     native_gate_reason: str | None = None
+    native_runtime_contract_hash: str | None = None
+    native_healthcheck_vectors_hash: str | None = None
+    native_restricted_ir_hash: str | None = None
+    native_src_merkle_hash: str | None = None
+    native_build_proof_hash: str | None = None
+    native_shadow_registry_hash: str | None = None
 
     live_mode = mode == "live"
     live_ready = live_mode and "meta_core_activation_bundle_dir" in dispatch_ctx
@@ -402,6 +725,45 @@ def run_activation(
             candidate = binding_payload.get("native_module")
             if isinstance(candidate, dict):
                 native_module = candidate
+            campaign_id = str(binding_payload.get("campaign_id", "")).strip()
+            if not campaign_id:
+                campaign_id = str((dispatch_ctx.get("campaign_entry") or {}).get("campaign_id", "")).strip()
+            if campaign_id == "rsi_knowledge_transpiler_v1":
+                try:
+                    native_runtime_contract_hash = _require_sha256_prefixed(
+                        binding_payload.get("native_runtime_contract_hash"),
+                        field="native_runtime_contract_hash",
+                    )
+                    native_healthcheck_vectors_hash = _require_sha256_prefixed(
+                        binding_payload.get("native_healthcheck_vectors_hash"),
+                        field="native_healthcheck_vectors_hash",
+                    )
+                    native_restricted_ir_hash = _require_sha256_prefixed(
+                        binding_payload.get("native_restricted_ir_hash"),
+                        field="native_restricted_ir_hash",
+                    )
+                    native_src_merkle_hash = _require_sha256_prefixed(
+                        binding_payload.get("native_src_merkle_hash"),
+                        field="native_src_merkle_hash",
+                    )
+                    native_build_proof_hash = _require_sha256_prefixed(
+                        binding_payload.get("native_build_proof_hash"),
+                        field="native_build_proof_hash",
+                    )
+                    native_shadow_registry_hash = _install_native_shadow_registry(
+                        dispatch_ctx=dispatch_ctx,
+                        tick_u64=int(tick_u64),
+                        binding_payload=binding_payload,
+                    )
+                    native_gate_result = "SKIP"
+                    native_gate_reason = None
+                except Exception:
+                    health_ok = False
+                    health_reasons.append("NATIVE_GATE_FAILED")
+                    health_reasons.append("NATIVE_GATE_REQUIRED")
+                    native_gate_result = "FAIL"
+                    native_gate_reason = "NATIVE_GATE_HEALTHCHECK_FAIL"
+            elif isinstance(candidate, dict):
                 native_gate_result, native_gate_reason, _ = _native_activation_gate(
                     dispatch_ctx=dispatch_ctx,
                     native_module=native_module,
@@ -443,6 +805,18 @@ def run_activation(
         "native_gate_reason": native_gate_reason,
         "reasons": reasons,
     }
+    if native_runtime_contract_hash is not None:
+        activation_payload["native_runtime_contract_hash"] = native_runtime_contract_hash
+    if native_healthcheck_vectors_hash is not None:
+        activation_payload["native_healthcheck_vectors_hash"] = native_healthcheck_vectors_hash
+    if native_restricted_ir_hash is not None:
+        activation_payload["native_restricted_ir_hash"] = native_restricted_ir_hash
+    if native_src_merkle_hash is not None:
+        activation_payload["native_src_merkle_hash"] = native_src_merkle_hash
+    if native_build_proof_hash is not None:
+        activation_payload["native_build_proof_hash"] = native_build_proof_hash
+    if native_shadow_registry_hash is not None:
+        activation_payload["native_shadow_registry_hash"] = native_shadow_registry_hash
     require_no_absolute_paths(activation_payload)
     _, activation_receipt, activation_hash = write_hashed_json(
         out_dir,

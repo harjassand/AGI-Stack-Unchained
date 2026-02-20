@@ -148,6 +148,130 @@ def _load_pack(config_dir: Path) -> dict[str, Any]:
     return pack
 
 
+def _verify_shadow_path(*, state_root: Path, config_dir: Path, snapshot: dict[str, Any]) -> None:
+    pack = _load_pack(config_dir)
+    shadow_integrity_hash = snapshot.get("shadow_fs_integrity_report_hash")
+    shadow_tier_a_hash = snapshot.get("shadow_tier_a_receipt_hash")
+    shadow_tier_b_hash = snapshot.get("shadow_tier_b_receipt_hash")
+    shadow_readiness_hash = snapshot.get("shadow_readiness_receipt_hash")
+
+    any_shadow_hash = any(_is_sha256(value) for value in [shadow_integrity_hash, shadow_tier_a_hash, shadow_tier_b_hash, shadow_readiness_hash])
+    if not any_shadow_hash:
+        if bool(pack.get("auto_swap_b", False)):
+            fail_v18("TIER_B_REQUIRED_FOR_SWAP")
+        return
+
+    if _is_sha256(shadow_integrity_hash):
+        integrity_payload = _load_hash_bound_payload(
+            dir_path=state_root / "shadow" / "integrity",
+            digest=str(shadow_integrity_hash),
+            suffix="shadow_fs_integrity_report_v1.json",
+            schema_version="v19_0",
+        )
+        if str(integrity_payload.get("schema_name", "")) != "shadow_fs_integrity_report_v1":
+            fail_v18("SCHEMA_FAIL")
+        validate_schema_v19(integrity_payload, "shadow_fs_integrity_report_v1")
+        if str(integrity_payload.get("status", "")) != "PASS":
+            fail_v18("SHADOW_PROTECTED_ROOT_MUTATION")
+    elif shadow_integrity_hash is not None:
+        fail_v18("SCHEMA_FAIL")
+
+    tier_a_payload = None
+    tier_b_payload = None
+    if _is_sha256(shadow_tier_a_hash):
+        tier_a_payload = _load_hash_bound_payload(
+            dir_path=state_root / "shadow" / "tier_a",
+            digest=str(shadow_tier_a_hash),
+            suffix="shadow_tier_receipt_v1.json",
+            schema_version="v19_0",
+        )
+        if str(tier_a_payload.get("schema_name", "")) != "shadow_tier_receipt_v1":
+            fail_v18("SCHEMA_FAIL")
+        if str(tier_a_payload.get("tier", "")) != "A":
+            fail_v18("SCHEMA_FAIL")
+        if int(tier_a_payload.get("n_live_ticks", 0)) != 250:
+            fail_v18("SCHEMA_FAIL")
+        if int(tier_a_payload.get("n_fuzz_cases", 0)) != 512:
+            fail_v18("SCHEMA_FAIL")
+        if int(tier_a_payload.get("n_double_runs", 0)) != 50:
+            fail_v18("SCHEMA_FAIL")
+    elif shadow_tier_a_hash is not None:
+        fail_v18("SCHEMA_FAIL")
+
+    if _is_sha256(shadow_tier_b_hash):
+        tier_b_payload = _load_hash_bound_payload(
+            dir_path=state_root / "shadow" / "tier_b",
+            digest=str(shadow_tier_b_hash),
+            suffix="shadow_tier_receipt_v1.json",
+            schema_version="v19_0",
+        )
+        if str(tier_b_payload.get("schema_name", "")) != "shadow_tier_receipt_v1":
+            fail_v18("SCHEMA_FAIL")
+        if str(tier_b_payload.get("tier", "")) != "B":
+            fail_v18("SCHEMA_FAIL")
+        if int(tier_b_payload.get("n_live_ticks", 0)) != 1000:
+            fail_v18("SCHEMA_FAIL")
+        if int(tier_b_payload.get("n_fuzz_cases", 0)) != 20000:
+            fail_v18("SCHEMA_FAIL")
+        if int(tier_b_payload.get("n_double_runs", 0)) != 1000:
+            fail_v18("SCHEMA_FAIL")
+    elif shadow_tier_b_hash is not None:
+        fail_v18("SCHEMA_FAIL")
+
+    readiness_payload = None
+    if _is_sha256(shadow_readiness_hash):
+        readiness_payload = _load_hash_bound_payload(
+            dir_path=state_root / "shadow" / "readiness",
+            digest=str(shadow_readiness_hash),
+            suffix="shadow_regime_readiness_receipt_v1.json",
+            schema_version="v19_0",
+        )
+        if str(readiness_payload.get("schema_name", "")) != "shadow_regime_readiness_receipt_v1":
+            fail_v18("SCHEMA_FAIL")
+        validate_schema_v19(readiness_payload, "shadow_regime_readiness_receipt_v1")
+    elif shadow_readiness_hash is not None:
+        fail_v18("SCHEMA_FAIL")
+
+    if isinstance(readiness_payload, dict):
+        if bool(readiness_payload.get("runtime_tier_b_pass_b", False)) != bool(readiness_payload.get("tier_b_pass_b", False)):
+            fail_v18("NONDETERMINISTIC")
+        if isinstance(tier_a_payload, dict) and bool(tier_a_payload.get("pass_b", False)) != bool(readiness_payload.get("tier_a_pass_b", False)):
+            fail_v18("NONDETERMINISTIC")
+        if isinstance(tier_b_payload, dict) and bool(tier_b_payload.get("pass_b", False)) != bool(readiness_payload.get("tier_b_pass_b", False)):
+            fail_v18("NONDETERMINISTIC")
+        if isinstance(tier_b_payload, dict):
+            if bool(tier_b_payload.get("window_rule_pass_b", False)) != bool(readiness_payload.get("j_window_rule_verified_b", False)):
+                fail_v18("NONDETERMINISTIC")
+            if bool(tier_b_payload.get("per_tick_floor_pass_b", False)) != bool(readiness_payload.get("j_per_tick_floor_verified_b", False)):
+                fail_v18("NONDETERMINISTIC")
+            if bool(tier_b_payload.get("determinism_pass_b", False)) != bool(readiness_payload.get("deterministic_fuzz_verified_b", False)):
+                fail_v18("NONDETERMINISTIC")
+            if bool(tier_b_payload.get("conservatism_pass_b", False)) != bool(readiness_payload.get("corpus_replay_verified_b", False)):
+                fail_v18("NONDETERMINISTIC")
+
+    if bool(pack.get("auto_swap_b", False)):
+        if not isinstance(readiness_payload, dict):
+            fail_v18("TIER_B_REQUIRED_FOR_SWAP")
+        if not bool(readiness_payload.get("runtime_tier_b_pass_b", False)):
+            fail_v18("TIER_B_REQUIRED_FOR_SWAP")
+        if str(readiness_payload.get("verdict", "")) != "READY":
+            fail_v18("TIER_B_REQUIRED_FOR_SWAP")
+
+        handoff_rel = str(pack.get("shadow_handoff_receipt_rel", "")).strip()
+        if not handoff_rel:
+            fail_v18("TIER_B_REQUIRED_FOR_SWAP")
+        handoff_rel_path = Path(handoff_rel)
+        if handoff_rel_path.is_absolute() or ".." in handoff_rel_path.parts:
+            fail_v18("SCHEMA_FAIL")
+        handoff_path = config_dir / handoff_rel_path
+        if not handoff_path.exists() or not handoff_path.is_file():
+            fail_v18("MISSING_STATE_INPUT")
+        handoff_payload = _load_canon_json(handoff_path)
+        validate_schema_v19(handoff_payload, "shadow_regime_readiness_receipt_v1")
+        if not bool(handoff_payload.get("runtime_tier_b_pass_b", False)):
+            fail_v18("TIER_B_REQUIRED_FOR_SWAP")
+
+
 def _verify_core_policy_assets(*, config_dir: Path, pack: dict[str, Any], descriptor_payload: dict[str, Any]) -> dict[str, Any]:
     opcode_rel = str(pack.get("coordinator_opcode_table_rel", "")).strip()
     if not opcode_rel:
@@ -519,11 +643,16 @@ def _verify_policy_path(state_root: Path, snapshot: dict[str, Any]) -> None:
     )
     proof_hash = snapshot.get("policy_vm_stark_proof_hash")
     proof_runtime_status = snapshot.get("policy_vm_proof_runtime_status")
+    proof_fallback_reason = snapshot.get("policy_vm_proof_fallback_reason_code")
     if proof_runtime_status is not None:
         runtime_norm = str(proof_runtime_status).strip().upper()
         if runtime_norm not in {"ABSENT", "FAILED", "EMITTED"}:
             fail_v18("SCHEMA_FAIL")
         proof_runtime_status = runtime_norm
+    if proof_fallback_reason is not None:
+        proof_fallback_reason = str(proof_fallback_reason).strip()
+        if not proof_fallback_reason:
+            fail_v18("SCHEMA_FAIL")
     if _is_sha256(proof_hash):
         if proof_runtime_status in {"ABSENT", "FAILED"}:
             fail_v18("NONDETERMINISTIC")
@@ -537,6 +666,10 @@ def _verify_policy_path(state_root: Path, snapshot: dict[str, Any]) -> None:
     if bool(pack.get("policy_vm_stark_proof_enable_b", False)) and proof_runtime_status in {"ABSENT", "FAILED"}:
         if "POLICY_VM_PROOF_FALLBACK" not in ledger_events:
             fail_v18("NONDETERMINISTIC")
+        if not proof_fallback_reason:
+            fail_v18("NONDETERMINISTIC")
+    if proof_runtime_status == "EMITTED" and proof_fallback_reason:
+        fail_v18("NONDETERMINISTIC")
 
     proof_assets: dict[str, Any] = {}
     if bool(pack.get("policy_vm_stark_proof_enable_b", False)):
@@ -689,6 +822,10 @@ def verify(state_dir: Path, *, mode: str = "full") -> str:
     state_root = _resolve_state_dir(state_dir)
     snapshot = _latest_snapshot_or_fail(state_root / "snapshot")
     _verify_policy_path(state_root, snapshot)
+    config_dir = state_root.parent / "config"
+    if not config_dir.exists() or not config_dir.is_dir():
+        fail_v18("MISSING_STATE_INPUT")
+    _verify_shadow_path(state_root=state_root, config_dir=config_dir, snapshot=snapshot)
 
     promo_hash = snapshot.get("promotion_receipt_hash")
     if promo_hash is None:

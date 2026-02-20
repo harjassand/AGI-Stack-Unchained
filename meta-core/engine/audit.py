@@ -6,6 +6,7 @@ from typing import Tuple, Dict, Any
 
 from constants import (
     ACTIVE_DIRNAME,
+    ACTIVE_NEXT_BUNDLE_FILENAME,
     ACTIVE_BUNDLE_FILENAME,
     PREV_ACTIVE_BUNDLE_FILENAME,
     STORE_DIRNAME,
@@ -92,6 +93,16 @@ def audit_active(meta_core_root: str) -> Tuple[int, Dict[str, Any]]:
                 except ValueError:
                     return 2, _invalid_audit()
 
+            active_next_path = os.path.join(active_dir, ACTIVE_NEXT_BUNDLE_FILENAME)
+            active_next_hash = active_hash
+            if os.path.isfile(active_next_path):
+                try:
+                    active_next_hash = _read_active_pointer_required(active_next_path)
+                except ValueError:
+                    return 2, _invalid_audit()
+                if active_next_hash != active_hash:
+                    return 2, _invalid_audit()
+
             store_bundle_dir = os.path.join(
                 meta_core_root, STORE_DIRNAME, STORE_BUNDLES_DIRNAME, active_hash
             )
@@ -163,6 +174,7 @@ def audit_active(meta_core_root: str) -> Tuple[int, Dict[str, Any]]:
                 "verdict": "OK",
                 "active_bundle_hash": active_hash,
                 "prev_active_bundle_hash": "" if prev_hash == NULL_BUNDLE_HASH else prev_hash,
+                "active_next_bundle_hash": active_next_hash,
                 "kernel_hash": kernel_hash,
                 "meta_hash": meta_hash,
                 "ruleset_hash": ruleset_hash,
@@ -186,6 +198,7 @@ def _invalid_audit() -> Dict[str, Any]:
         "verdict": "INVALID",
         "active_bundle_hash": "",
         "prev_active_bundle_hash": "",
+        "active_next_bundle_hash": "",
         "kernel_hash": "",
         "meta_hash": "",
         "ruleset_hash": "",
@@ -199,6 +212,7 @@ def _internal_audit() -> Dict[str, Any]:
         "verdict": "INTERNAL_ERROR",
         "active_bundle_hash": "",
         "prev_active_bundle_hash": "",
+        "active_next_bundle_hash": "",
         "kernel_hash": "",
         "meta_hash": "",
         "ruleset_hash": "",

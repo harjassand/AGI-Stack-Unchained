@@ -1,0 +1,51 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v19_0/j_comparison_v1",
+  "title": "Shadow J comparison profile v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_name",
+    "schema_version",
+    "comparison_id",
+    "window_rule",
+    "per_tick_floor_enabled_b",
+    "epsilon_tick_q32"
+  ],
+  "properties": {
+    "schema_name": {
+      "const": "j_comparison_v1"
+    },
+    "schema_version": {
+      "const": "v19_0"
+    },
+    "comparison_id": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "window_rule": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "kind",
+        "margin_q32"
+      ],
+      "properties": {
+        "kind": {
+          "const": "SUM_WINDOW_NON_WEAKENING"
+        },
+        "margin_q32": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    },
+    "per_tick_floor_enabled_b": {
+      "type": "boolean"
+    },
+    "epsilon_tick_q32": {
+      "type": "integer",
+      "minimum": 0
+    }
+  }
+}

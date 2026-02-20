@@ -2,9 +2,11 @@
 from __future__ import annotations
 
 import json
+import math
 import os
 import shutil
 import sys
+import time
 from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -41,6 +43,19 @@ _WINTERFELL_PROOF_OPTIONS_KEYS = [
     "num_partitions",
     "hash_rate",
 ]
+_PHASE4_CANARY_SEEDS: tuple[int, ...] = tuple(range(19_000_001, 19_000_011))
+_PHASE4_CANARY_SLO_BY_PROFILE: dict[str, dict[str, int]] = {
+    "POLICY_VM_AIR_PROFILE_96_V1": {
+        "p95_prove_time_ms": 3000,
+        "p95_verify_time_ms": 250,
+        "max_proof_size_bytes": 1_500_000,
+    },
+    "POLICY_VM_AIR_PROFILE_128_V1": {
+        "p95_prove_time_ms": 4500,
+        "p95_verify_time_ms": 350,
+        "max_proof_size_bytes": 2_200_000,
+    },
+}
 
 
 def _sha_obj(payload: dict[str, Any]) -> str:
@@ -160,11 +175,12 @@ def _run_v19_tick(
     tick_u64: int,
     prev_state_dir: Path | None = None,
     native_canon_bytes: bool = False,
+    run_seed_u64: int = 424242,
 ) -> TickResult:
     env = {
         "OMEGA_META_CORE_ACTIVATION_MODE": "simulate",
         "OMEGA_ALLOW_SIMULATE_ACTIVATION": "1",
-        "OMEGA_RUN_SEED_U64": "424242",
+        "OMEGA_RUN_SEED_U64": str(int(run_seed_u64)),
         "OMEGA_V19_DETERMINISTIC_TIMING": "1",
     }
     if native_canon_bytes:
@@ -289,7 +305,12 @@ def _prepare_v19_opcode_pack(
     return pack_path
 
 
-def _prepare_v19_proof_pack(dst_root: Path) -> Path:
+def _prepare_v19_proof_pack(
+    dst_root: Path,
+    *,
+    profile_kind: str = "POLICY_VM_AIR_PROFILE_96_V1",
+    max_steps_u64: int = 64,
+) -> Path:
     src = REPO_ROOT / "campaigns" / "rsi_omega_daemon_v19_0_super_unified"
     if dst_root.exists():
         shutil.rmtree(dst_root)
@@ -303,7 +324,7 @@ def _prepare_v19_proof_pack(dst_root: Path) -> Path:
         "constants": {},
         "instructions": [{"op": "EMIT_PLAN", "args": {"plan_kind": "DECISION_PLAN_V1"}}],
         "declared_limits": {
-            "max_steps_u64": 64,
+            "max_steps_u64": int(max_steps_u64),
             "max_stack_items_u32": 32,
             "max_trace_bytes_u64": 1_048_576,
         },
@@ -318,7 +339,6 @@ def _prepare_v19_proof_pack(dst_root: Path) -> Path:
     candidate_campaign_ids_list = _build_candidate_campaign_ids_list()
     write_canon_json(dst_root / "candidate_campaign_ids_list_v1.json", candidate_campaign_ids_list)
 
-    profile_kind = "POLICY_VM_AIR_PROFILE_96_V1"
     proof_options = _default_winterfell_proof_options(profile_kind=profile_kind)
 
     air_profile = {
@@ -375,6 +395,170 @@ def _prepare_v19_proof_pack(dst_root: Path) -> Path:
     pack["policy_vm_candidate_campaign_ids_list_id"] = str(candidate_campaign_ids_list["candidate_campaign_ids_list_id"])
     write_canon_json(pack_path, pack)
     return pack_path
+
+
+def _p95_ms(values: list[int]) -> int:
+    if not values:
+        return 0
+    rows = sorted(max(0, int(row)) for row in values)
+    if len(rows) == 1:
+        return int(rows[0])
+    pos = 0.95 * float(len(rows) - 1)
+    lo = int(math.floor(pos))
+    hi = int(math.ceil(pos))
+    if lo == hi:
+        return int(rows[lo])
+    frac = pos - float(lo)
+    value = float(rows[lo]) + frac * float(rows[hi] - rows[lo])
+    return int(round(value))
+
+
+def _collect_phase4_canary_metrics(
+    *,
+    run_root: Path,
+    packs_root: Path,
+    profile_kind: str,
+) -> dict[str, Any]:
+    profile_slug = profile_kind.lower()
+    pack = _prepare_v19_proof_pack(
+        packs_root / f"phase4_canary_pack_{profile_slug}",
+        profile_kind=profile_kind,
+        max_steps_u64=256,
+    )
+    program_payload = load_canon_json(pack.parent / "coordinator_isa_program_v1.json")
+    declared_limits = program_payload.get("declared_limits")
+    if not isinstance(declared_limits, dict) or int(declared_limits.get("max_steps_u64", 0)) != 256:
+        raise RuntimeError("phase4 canary pack must pin max_steps_u64=256")
+
+    profile_payload = load_canon_json(pack.parent / "policy_vm_air_profile_v1.json")
+    if str(profile_payload.get("profile_kind", "")) != profile_kind:
+        raise RuntimeError("phase4 canary profile kind mismatch")
+
+    per_tick: list[dict[str, Any]] = []
+    prev_state_dir: Path | None = None
+    eligible_ticks_u32 = 0
+    fast_path_ticks_u32 = 0
+    fallback_ticks_u32 = 0
+    emitted_prove_ms: list[int] = []
+    emitted_verify_ms: list[int] = []
+    emitted_proof_sizes: list[int] = []
+    for idx, seed in enumerate(_PHASE4_CANARY_SEEDS, start=1):
+        tick = _run_v19_tick(
+            campaign_pack=pack,
+            out_dir=run_root / f"phase4_canary_{profile_slug}_tick_{idx:02d}",
+            tick_u64=idx,
+            prev_state_dir=prev_state_dir,
+            run_seed_u64=int(seed),
+        )
+        prev_state_dir = tick.state_dir
+        trace_path = _latest_single(tick.state_dir / "policy" / "traces", "sha256_*.policy_vm_trace_v1.json")
+        trace_payload = load_canon_json(trace_path)
+        steps_executed_u64 = int(trace_payload.get("steps_executed_u64", 0))
+        if steps_executed_u64 > 256:
+            raise RuntimeError(f"phase4 canary step budget exceeded: steps_executed_u64={steps_executed_u64}")
+        snapshot_path = _latest_single(tick.state_dir / "snapshot", "sha256_*.omega_tick_snapshot_v1.json")
+        snapshot_payload = load_canon_json(snapshot_path)
+        runtime_status = str(snapshot_payload.get("policy_vm_proof_runtime_status", "")).strip().upper()
+        proof_hash = str(snapshot_payload.get("policy_vm_stark_proof_hash") or "").strip()
+        fallback_reason = str(snapshot_payload.get("policy_vm_proof_fallback_reason_code") or "").strip()
+        proof_runtime_reason = str(snapshot_payload.get("policy_vm_proof_runtime_reason_code") or "").strip()
+        events = _ledger_event_types(tick.state_dir)
+
+        eligible_ticks_u32 += 1
+
+        prove_time_ms = int(tick.result.get("policy_vm_prove_time_ms", 0))
+        verify_time_ms = 0
+        proof_size_bytes = 0
+        if runtime_status == "EMITTED" and proof_hash.startswith("sha256:"):
+            if "POLICY_VM_PROOF" not in events:
+                raise RuntimeError("phase4 canary proof tick missing POLICY_VM_PROOF event")
+            proof_path = _latest_single(tick.state_dir / "policy" / "proofs", "sha256_*.policy_vm_stark_proof_v1.json")
+            proof_payload = load_canon_json(proof_path)
+            if _unit_proof_verdict(proof_payload=proof_payload, state_root=tick.state_dir) != "VALID":
+                raise RuntimeError("phase4 canary proof warmup verify failed")
+            verify_samples_ms: list[int] = []
+            for _ in range(5):
+                verify_start_ns = time.perf_counter_ns()
+                unit_verdict = _unit_proof_verdict(proof_payload=proof_payload, state_root=tick.state_dir)
+                verify_samples_ms.append(int((time.perf_counter_ns() - verify_start_ns) // 1_000_000))
+                if unit_verdict != "VALID":
+                    raise RuntimeError(f"phase4 canary proof verify failed: {unit_verdict}")
+            verify_time_ms = min(verify_samples_ms)
+            proof_bin = tick.state_dir / str(proof_payload["proof_bytes_rel"])
+            proof_size_bytes = int(proof_bin.stat().st_size)
+            fast_path_ticks_u32 += 1
+            emitted_prove_ms.append(prove_time_ms)
+            emitted_verify_ms.append(verify_time_ms)
+            emitted_proof_sizes.append(proof_size_bytes)
+        else:
+            fallback_ticks_u32 += 1
+            if "POLICY_VM_PROOF_FALLBACK" not in events:
+                raise RuntimeError("phase4 canary fallback tick missing POLICY_VM_PROOF_FALLBACK event")
+            if not fallback_reason:
+                raise RuntimeError("phase4 canary fallback tick missing policy_vm_proof_fallback_reason_code")
+
+        daemon_verdict = verify_v19(tick.state_dir, mode="full")
+        if daemon_verdict != "VALID":
+            raise RuntimeError(f"phase4 canary daemon verify failed: {daemon_verdict}")
+
+        per_tick.append(
+            {
+                "tick_u64": idx,
+                "run_seed_u64": int(seed),
+                "state_dir": str(tick.state_dir),
+                "steps_executed_u64": steps_executed_u64,
+                "proof_runtime_status": runtime_status,
+                "proof_runtime_reason_code": proof_runtime_reason,
+                "proof_fallback_reason_code": fallback_reason or None,
+                "proof_hash": proof_hash or None,
+                "proof_valid_b": runtime_status == "EMITTED" and proof_hash.startswith("sha256:"),
+                "fallback_used_b": runtime_status != "EMITTED",
+                "prove_time_ms": int(prove_time_ms),
+                "verify_time_ms": int(verify_time_ms),
+                "proof_size_bytes": int(proof_size_bytes),
+            }
+        )
+
+    fast_path_rate = float(fast_path_ticks_u32) / float(eligible_ticks_u32) if eligible_ticks_u32 else 0.0
+    fallback_rate = float(fallback_ticks_u32) / float(eligible_ticks_u32) if eligible_ticks_u32 else 0.0
+    p95_prove_time_ms = _p95_ms(emitted_prove_ms)
+    p95_verify_time_ms = _p95_ms(emitted_verify_ms)
+    max_proof_size_bytes = max(emitted_proof_sizes) if emitted_proof_sizes else 0
+    slo = _PHASE4_CANARY_SLO_BY_PROFILE[profile_kind]
+
+    gate = {
+        "step_budget_ok_b": all(int(row["steps_executed_u64"]) <= 256 for row in per_tick),
+        "fast_path_rate_ok_b": fast_path_rate >= 0.80,
+        "fallback_rate_ok_b": fallback_rate <= 0.20,
+        "p95_prove_time_ok_b": p95_prove_time_ms <= int(slo["p95_prove_time_ms"]),
+        "p95_verify_time_ok_b": p95_verify_time_ms <= int(slo["p95_verify_time_ms"]),
+        "max_proof_size_ok_b": max_proof_size_bytes <= int(slo["max_proof_size_bytes"]),
+    }
+    gate["pass_b"] = bool(all(bool(v) for v in gate.values()))
+    if not gate["pass_b"]:
+        raise RuntimeError(
+            f"phase4 canary gate failed for {profile_kind}: "
+            f"fast_path_rate={fast_path_rate:.3f} fallback_rate={fallback_rate:.3f} "
+            f"p95_prove_ms={p95_prove_time_ms} p95_verify_ms={p95_verify_time_ms} "
+            f"max_proof_size_bytes={max_proof_size_bytes}"
+        )
+
+    return {
+        "profile_kind": profile_kind,
+        "policy_vm_air_profile_id": str(profile_payload.get("air_profile_id", "")),
+        "eligible_ticks_u32": int(eligible_ticks_u32),
+        "fast_path_ticks_u32": int(fast_path_ticks_u32),
+        "fallback_ticks_u32": int(fallback_ticks_u32),
+        "fast_path_rate": float(fast_path_rate),
+        "fallback_rate": float(fallback_rate),
+        "p95_prove_time_ms": int(p95_prove_time_ms),
+        "p95_verify_time_ms": int(p95_verify_time_ms),
+        "max_proof_size_bytes": int(max_proof_size_bytes),
+        "slo": dict(slo),
+        "gate": gate,
+        "run_seed_range_u64": [int(_PHASE4_CANARY_SEEDS[0]), int(_PHASE4_CANARY_SEEDS[-1])],
+        "ticks": per_tick,
+    }
 
 
 def main() -> None:
@@ -466,6 +650,7 @@ def main() -> None:
     proof_profile_id = str(snapshot_payload.get("policy_vm_proof_profile_id", ""))
     proof_options_hash = str(snapshot_payload.get("policy_vm_proof_options_hash", ""))
     proof_runtime_reason_code = str(snapshot_payload.get("policy_vm_proof_runtime_reason_code", ""))
+    proof_fallback_reason_code = str(snapshot_payload.get("policy_vm_proof_fallback_reason_code", ""))
     proof_payload_path = _latest_single(proof_state / "policy" / "proofs", "sha256_*.policy_vm_stark_proof_v1.json")
     proof_payload = load_canon_json(proof_payload_path)
     proof_representation_kind = str(proof_payload.get("proof_representation_kind", ""))
@@ -478,6 +663,26 @@ def main() -> None:
     except Exception as exc:  # noqa: BLE001
         daemon_verdict_after_tamper = f"INVALID:{exc}"
     proof_events = _ledger_event_types(proof_state)
+
+    canary_96 = _collect_phase4_canary_metrics(
+        run_root=run_root,
+        packs_root=packs_root,
+        profile_kind="POLICY_VM_AIR_PROFILE_96_V1",
+    )
+    canary_128 = _collect_phase4_canary_metrics(
+        run_root=run_root,
+        packs_root=packs_root,
+        profile_kind="POLICY_VM_AIR_PROFILE_128_V1",
+    )
+    aggregate_eligible = int(canary_96["eligible_ticks_u32"]) + int(canary_128["eligible_ticks_u32"])
+    aggregate_fast_path = int(canary_96["fast_path_ticks_u32"]) + int(canary_128["fast_path_ticks_u32"])
+    aggregate_fallback = int(canary_96["fallback_ticks_u32"]) + int(canary_128["fallback_ticks_u32"])
+    aggregate_fast_path_rate = (
+        float(aggregate_fast_path) / float(aggregate_eligible) if aggregate_eligible else 0.0
+    )
+    aggregate_fallback_rate = (
+        float(aggregate_fallback) / float(aggregate_eligible) if aggregate_eligible else 0.0
+    )
 
     bundle = {
         "schema_version": "phase3b_phase4_evidence_v1",
@@ -509,6 +714,7 @@ def main() -> None:
             "proof_options_hash": proof_options_hash,
             "proof_runtime_status": proof_runtime_status,
             "proof_runtime_reason_code": proof_runtime_reason_code,
+            "proof_fallback_reason_code": proof_fallback_reason_code,
             "proof_events": proof_events,
             "daemon_verdict_before_tamper": proof_verdict_before,
             "daemon_verdict_after_tamper": daemon_verdict_after_tamper,
@@ -516,6 +722,23 @@ def main() -> None:
             "proof_unit_verdict_after_tamper": proof_unit_verdict_after_tamper,
             "fallback_triggered_b": str(proof_unit_verdict_after_tamper).startswith("INVALID:"),
             "fallback_accept_b": daemon_verdict_after_tamper == "VALID",
+        },
+        "phase4_canary_gate": {
+            "n_ticks_u32": len(_PHASE4_CANARY_SEEDS),
+            "run_seed_range_u64": [int(_PHASE4_CANARY_SEEDS[0]), int(_PHASE4_CANARY_SEEDS[-1])],
+            "profiles": {
+                "POLICY_VM_AIR_PROFILE_96_V1": canary_96,
+                "POLICY_VM_AIR_PROFILE_128_V1": canary_128,
+            },
+            "aggregate": {
+                "eligible_ticks_u32": int(aggregate_eligible),
+                "fast_path_ticks_u32": int(aggregate_fast_path),
+                "fallback_ticks_u32": int(aggregate_fallback),
+                "fast_path_rate": float(aggregate_fast_path_rate),
+                "fallback_rate": float(aggregate_fallback_rate),
+                "fast_path_rate_gate_ok_b": bool(aggregate_fast_path_rate >= 0.80),
+                "fallback_rate_gate_ok_b": bool(aggregate_fallback_rate <= 0.20),
+            },
         },
     }
     bundle_path = REPO_ROOT / "runs" / "PHASE3B_PHASE4_EVIDENCE_v1.json"

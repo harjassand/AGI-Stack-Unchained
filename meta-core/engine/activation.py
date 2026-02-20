@@ -7,6 +7,7 @@ from typing import Any, Dict, Tuple
 import gcj1_min
 from atomic_fs import atomic_write_text
 from constants import (
+    ACTIVE_NEXT_BUNDLE_FILENAME,
     ACTIVE_BUNDLE_FILENAME,
     ACTIVE_DIRNAME,
     FAILPOINT_AFTER_PREV_WRITE,
@@ -334,6 +335,7 @@ def commit_staged(meta_core_root: str, stage_path: str, receipt_path: str) -> Tu
     os.makedirs(active_dir, exist_ok=True)
     active_path = os.path.join(active_dir, ACTIVE_BUNDLE_FILENAME)
     prev_path = os.path.join(active_dir, PREV_ACTIVE_BUNDLE_FILENAME)
+    active_next_path = os.path.join(active_dir, ACTIVE_NEXT_BUNDLE_FILENAME)
 
     old_hash = _read_pointer(active_path, required=False)
     expected_parent = parent_hash if parent_hash else NULL_BUNDLE_HASH
@@ -345,6 +347,7 @@ def commit_staged(meta_core_root: str, stage_path: str, receipt_path: str) -> Tu
     if os.environ.get(FAILPOINT_ENV) == FAILPOINT_AFTER_PREV_WRITE:
         raise InternalError("failpoint AFTER_PREV_WRITE triggered")
     atomic_write_text(active_path, bundle_hash + "\n")
+    atomic_write_text(active_next_path, bundle_hash + "\n")
 
     ledger_dir = os.path.join(active_dir, LEDGER_DIRNAME)
     ledger_path = os.path.join(ledger_dir, LEDGER_LOG_FILENAME)
@@ -371,6 +374,7 @@ def rollback_active(meta_core_root: str, reason: str | None = None) -> Tuple[int
     active_dir = os.path.join(meta_core_root, ACTIVE_DIRNAME)
     active_path = os.path.join(active_dir, ACTIVE_BUNDLE_FILENAME)
     prev_path = os.path.join(active_dir, PREV_ACTIVE_BUNDLE_FILENAME)
+    active_next_path = os.path.join(active_dir, ACTIVE_NEXT_BUNDLE_FILENAME)
 
     try:
         old_active = _read_pointer(active_path, required=True)
@@ -383,6 +387,7 @@ def rollback_active(meta_core_root: str, reason: str | None = None) -> Tuple[int
 
     atomic_write_text(prev_path, old_active + "\n")
     atomic_write_text(active_path, prev_active + "\n")
+    atomic_write_text(active_next_path, prev_active + "\n")
 
     receipt_path = os.path.join(
         meta_core_root, "store", "bundles", prev_active, RECEIPT_FILENAME

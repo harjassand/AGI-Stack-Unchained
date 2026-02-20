@@ -1,0 +1,65 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v19_0/shadow_regime_proposal_v1",
+  "title": "Shadow regime proposal v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_name",
+    "schema_version",
+    "proposal_id",
+    "proposer_campaign_id",
+    "target_regime_id",
+    "mode",
+    "activation_intent",
+    "candidate_bundle_ref",
+    "safety_invariants",
+    "determinism_contract_hash",
+    "corpus_replay_suite_ref",
+    "deterministic_fuzz_suite_ref",
+    "shadow_evaluation_tiers_profile_id",
+    "shadow_protected_roots_profile_id",
+    "corpus_descriptor_id",
+    "witnessed_determinism_profile_id",
+    "j_comparison_profile_id"
+  ],
+  "properties": {
+    "schema_name": {"const": "shadow_regime_proposal_v1"},
+    "schema_version": {"const": "v19_0"},
+    "proposal_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "proposer_campaign_id": {"type": "string", "minLength": 1},
+    "target_regime_id": {"type": "string", "minLength": 1},
+    "mode": {"const": "OUTBOX_ONLY_SHADOW"},
+    "activation_intent": {"const": "NO_SWAP"},
+    "candidate_bundle_ref": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["bundle_hash", "state_dir_rel"],
+      "properties": {
+        "bundle_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+        "state_dir_rel": {"type": "string", "minLength": 1}
+      }
+    },
+    "safety_invariants": {
+      "type": "array",
+      "minItems": 3,
+      "uniqueItems": true,
+      "items": {
+        "type": "string",
+        "enum": [
+          "NON_WEAKENING_J",
+          "CORPUS_REPLAY",
+          "DETERMINISTIC_FUZZ"
+        ]
+      }
+    },
+    "determinism_contract_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "corpus_replay_suite_ref": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "deterministic_fuzz_suite_ref": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "shadow_evaluation_tiers_profile_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "shadow_protected_roots_profile_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "corpus_descriptor_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "witnessed_determinism_profile_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "j_comparison_profile_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"}
+  }
+}

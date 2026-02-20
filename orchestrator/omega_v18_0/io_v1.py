@@ -56,6 +56,16 @@ _PACK_V2_OPTIONAL_PINNED = [
         "candidate_campaign_ids_list_id",
     ),
 ]
+_PACK_V2_OPTIONAL_COPY_ONLY = [
+    "shadow_regime_proposal_rel",
+    "shadow_evaluation_tiers_rel",
+    "shadow_protected_roots_profile_rel",
+    "shadow_corpus_descriptor_rel",
+    "shadow_witnessed_determinism_profile_rel",
+    "shadow_j_comparison_profile_rel",
+    "shadow_handoff_receipt_rel",
+    "shadow_observed_writes_rel",
+]
 _GOAL_QUEUE_BASE_PATH_REL = Path("goals") / "omega_goal_queue_v1.json"
 _GOAL_QUEUE_EFFECTIVE_PATH_REL = Path("goals") / "omega_goal_queue_effective_v1.json"
 
@@ -148,6 +158,24 @@ def _copy_policy_programs_from_pack(
     return out
 
 
+def _copy_optional_relfile_from_pack(
+    *,
+    source_root: Path,
+    config_dir: Path,
+    pack: dict[str, Any],
+    rel_key: str,
+) -> None:
+    rel_raw = str(pack.get(rel_key, "")).strip()
+    if not rel_raw:
+        return
+    rel = require_relpath(rel_raw)
+    src = source_root / rel
+    if not src.exists() or not src.is_file():
+        fail("MISSING_STATE_INPUT")
+    payload = load_canon_dict(src)
+    write_canon_json(config_dir / rel, payload)
+
+
 def freeze_pack_config(*, campaign_pack: Path, config_dir: Path) -> tuple[dict[str, Any], str]:
     pack = load_canon_dict(campaign_pack)
     pack_schema = str(pack.get("schema_version", "")).strip()
@@ -206,6 +234,13 @@ def freeze_pack_config(*, campaign_pack: Path, config_dir: Path) -> tuple[dict[s
                 source_root=source_root,
                 config_dir=config_dir,
                 pack=pack,
+            )
+        for rel_key in _PACK_V2_OPTIONAL_COPY_ONLY:
+            _copy_optional_relfile_from_pack(
+                source_root=source_root,
+                config_dir=config_dir,
+                pack=pack,
+                rel_key=rel_key,
             )
 
     write_canon_json(config_dir / "rsi_omega_daemon_pack_v1.json", pack)

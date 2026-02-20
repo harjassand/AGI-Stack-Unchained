@@ -1,0 +1,1 @@
+{"alpha_q32":2147483648,"beta_q32":1073741824,"bias_q32":107374182,"healthcheck_vectors":[{"x_q32":0,"y_q32":0},{"x_q32":4294967296,"y_q32":0},{"x_q32":0,"y_q32":4294967296},{"x_q32":-2147483648,"y_q32":3221225472}],"kernel_kind":"Q32_AFFINE","schema_version":"polymath_kernel_spec_v1","theory_id":"q32_affine_kernel_v1"}

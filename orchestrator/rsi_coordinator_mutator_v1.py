@@ -27,7 +27,6 @@ from cdel.v1_7r.canon import write_canon_json
 from cdel.v18_0.authority.authority_hash_v1 import auth_hash, load_authority_pins
 from cdel.v18_0.ccap_runtime_v1 import ccap_payload_id, compute_repo_base_tree_id
 from cdel.v18_0.omega_common_v1 import canon_hash_obj, fail, load_canon_dict, require_no_absolute_paths
-from cdel.v19_0 import verify_rsi_omega_daemon_v1 as v19_replay_verifier
 from orchestrator.llm_backend import get_backend
 
 _PACK_SCHEMA = "rsi_coordinator_mutator_pack_v1"
@@ -238,9 +237,85 @@ def _llm_diff_prompt(*, target_relpath: str, target_text: str, pack: dict[str, A
 
 
 def _template_patch_for_target(*, target_relpath: str, target_text: str, tick_u64: int) -> bytes:
-    marker = f"# OMEGA_PHASE3_COORDINATOR_TEMPLATE_MARKER tick={int(tick_u64)}"
     before = str(target_text)
-    after = before.rstrip("\n") + "\n" + marker + "\n"
+    after = before
+
+    signal_old = '            print("SIGNAL=PHASE3_MUTATED_COORDINATOR v=1")\n'
+    signal_new = '            print("SIGNAL=PHASE3_MUTATED_COORDINATOR v=2")\n'
+    if signal_old in after:
+        after = after.replace(signal_old, signal_new, 1)
+
+    helper_anchor = (
+        "def _phase3_mutation_signal_enabled() -> bool:\n"
+        "    # Phase 3 DoD evidence: allow emitting a stable, greppable log line from the\n"
+        "    # mutated coordinator path. Bench/structural runs force this off.\n"
+        "    return str(os.environ.get(\"OMEGA_PHASE3_MUTATION_SIGNAL\", \"0\")).strip() == \"1\"\n\n"
+    )
+    helper_insert = (
+        "def _phase3_goal_fastpath_mode() -> str:\n"
+        "    raw = str(os.environ.get(\"OMEGA_PHASE3_GOAL_FASTPATH_MODE\", \"\")).strip().upper()\n"
+        "    if raw in {\"PASSTHROUGH\", \"SYNTHESIZE\"}:\n"
+        "        return raw\n"
+        "    return \"SYNTHESIZE\"\n\n\n"
+    )
+    if helper_anchor in after and helper_insert not in after:
+        after = after.replace(helper_anchor, helper_anchor + helper_insert, 1)
+
+    goal_queue_block_old = (
+        "        goal_queue_effective = synthesize_goal_queue(\n"
+        "            tick_u64=tick_u64,\n"
+        "            goal_queue_base=goal_queue,\n"
+        "            state=prev_state,\n"
+        "            issue_bundle=issue_bundle,\n"
+        "            observation_report=observation_report,\n"
+        "            registry=registry,\n"
+        "            runaway_cfg=runaway_cfg,\n"
+        "            run_scorecard=prev_run_scorecard,\n"
+        "            tick_stats=prev_tick_stats,\n"
+        "            tick_outcome=prev_tick_outcome,\n"
+        "            hotspots=prev_hotspots,\n"
+        "            episodic_memory=prev_episodic_memory,\n"
+        "        )\n"
+        "        synthesized_goal_queue_hash = canon_hash_obj(goal_queue_effective)\n"
+        "        if synthesized_goal_queue_hash == str(goal_queue_hash).strip():\n"
+        "            goal_queue_fastpath_outcome = \"SKIP\"\n"
+        "        else:\n"
+        "            _, goal_queue, goal_queue_hash = write_goal_queue_effective(config_dir, goal_queue_effective)\n"
+    )
+    goal_queue_block_new = (
+        "        goal_fastpath_mode = _phase3_goal_fastpath_mode()\n"
+        "        if goal_fastpath_mode == \"PASSTHROUGH\":\n"
+        "            # Topology mutation: skip synthesize_goal_queue entirely and reuse\n"
+        "            # loaded goals as-is for this tick.\n"
+        "            goal_queue_effective = goal_queue\n"
+        "            goal_queue_fastpath_outcome = \"PASSTHROUGH\"\n"
+        "        else:\n"
+        "            goal_queue_effective = synthesize_goal_queue(\n"
+        "                tick_u64=tick_u64,\n"
+        "                goal_queue_base=goal_queue,\n"
+        "                state=prev_state,\n"
+        "                issue_bundle=issue_bundle,\n"
+        "                observation_report=observation_report,\n"
+        "                registry=registry,\n"
+        "                runaway_cfg=runaway_cfg,\n"
+        "                run_scorecard=prev_run_scorecard,\n"
+        "                tick_stats=prev_tick_stats,\n"
+        "                tick_outcome=prev_tick_outcome,\n"
+        "                hotspots=prev_hotspots,\n"
+        "                episodic_memory=prev_episodic_memory,\n"
+        "            )\n"
+        "            synthesized_goal_queue_hash = canon_hash_obj(goal_queue_effective)\n"
+        "            if synthesized_goal_queue_hash == str(goal_queue_hash).strip():\n"
+        "                goal_queue_fastpath_outcome = \"SKIP\"\n"
+        "            else:\n"
+        "                _, goal_queue, goal_queue_hash = write_goal_queue_effective(config_dir, goal_queue_effective)\n"
+    )
+    if goal_queue_block_old in after:
+        after = after.replace(goal_queue_block_old, goal_queue_block_new, 1)
+
+    if after == before:
+        raise RuntimeError(f"TEMPLATE_PATCH_NOOP:{int(tick_u64)}")
+
     lines = list(
         difflib.unified_diff(
             before.splitlines(),
@@ -581,6 +656,38 @@ def _run_python_gate(*, repo_root: Path, args: list[str]) -> None:
         raise RuntimeError(detail[:4000] or "PYTHON_GATE_FAILED")
 
 
+def _run_v19_replay_verdict(*, repo_root: Path, state_dir: Path) -> str:
+    env = dict(os.environ)
+    host_root = str(env.get("OMEGA_HOST_REPO_ROOT", "") or "").strip()
+    host_ext = str(Path(host_root) / "agi-orchestrator") if host_root else "agi-orchestrator"
+    env["PYTHONPATH"] = env.get("PYTHONPATH", "") or f".:CDEL-v2:{host_ext}"
+    cmd = [
+        sys.executable,
+        "-m",
+        "cdel.v19_0.verify_rsi_omega_daemon_v1",
+        "--state_dir",
+        str(state_dir),
+        "--mode",
+        "full",
+    ]
+    run = subprocess.run(
+        cmd,
+        cwd=str(repo_root),
+        env=env,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    stdout = str(run.stdout or "").strip()
+    stderr = str(run.stderr or "").strip()
+    if run.returncode == 0 and stdout == "VALID":
+        return "VALID"
+    detail = stdout or stderr or "INVALID:VERIFY_ERROR"
+    if detail.startswith("INVALID:"):
+        return detail
+    return f"INVALID:{detail[:3900]}"
+
+
 def _hash_from_hashed_filename(path: Path, *, suffix: str) -> str:
     name = path.name
     if not name.endswith(suffix):
@@ -697,8 +804,8 @@ def _micro_bench_gate(
         run_seed_u64=int(seed_u64),
         deterministic_timing=bool(deterministic_timing_b),
     )
-    baseline_verdict = str(v19_replay_verifier.verify(baseline_state_dir, mode="full")).strip()
-    candidate_verdict = str(v19_replay_verifier.verify(candidate_state_dir, mode="full")).strip()
+    baseline_verdict = _run_v19_replay_verdict(repo_root=baseline_worktree, state_dir=baseline_state_dir)
+    candidate_verdict = _run_v19_replay_verdict(repo_root=candidate_worktree, state_dir=candidate_state_dir)
     if baseline_verdict != "VALID" or candidate_verdict != "VALID":
         raise RuntimeError(f"MICRO_BENCH_REPLAY_INVALID:{baseline_verdict}:{candidate_verdict}")
     elapsed_ms = int((time.monotonic_ns() - started_ns) // 1_000_000)
@@ -1084,10 +1191,12 @@ def _emit_ccap(
     repo_root: Path,
     out_dir: Path,
     patch_bytes: bytes,
+    base_tree_repo_root: Path | None = None,
 ) -> tuple[str, str, str, str]:
     out_dir = out_dir.resolve()
     pins = load_authority_pins(repo_root)
-    base_tree_id = compute_repo_base_tree_id(repo_root)
+    base_tree_root = Path(base_tree_repo_root).resolve() if base_tree_repo_root is not None else repo_root
+    base_tree_id = compute_repo_base_tree_id(base_tree_root)
     build_recipe_id = _first_build_recipe_id(repo_root)
 
     patch_hex = hashlib.sha256(patch_bytes).hexdigest()
@@ -1186,7 +1295,8 @@ def run(*, campaign_pack: Path, out_dir: Path) -> None:
             },
         )
         return
-    if git_status_rows.strip():
+    allow_dirty_b = str(os.environ.get("ORCH_MUTATOR_ALLOW_DIRTY", "0")).strip().lower() in {"1", "true", "yes", "on"}
+    if git_status_rows.strip() and not allow_dirty_b:
         _write_verify_failure(
             out_dir,
             {
@@ -1676,19 +1786,16 @@ def run(*, campaign_pack: Path, out_dir: Path) -> None:
                     run_seed_u64=int(seed_base_u64),
                     deterministic_timing=True,
                 )
-            try:
-                verdict = v19_replay_verifier.verify(_state_dir_for_replay, mode="full")
-            except Exception as exc:  # noqa: BLE001
+            verdict = _run_v19_replay_verdict(repo_root=candidate_wt, state_dir=_state_dir_for_replay)
+            if verdict != "VALID":
                 failure = {
                     "schema_version": "coordinator_mutator_replay_failure_v1",
                     "tick_u64": int(tick_u64),
                     "target_relpath": target_relpath,
-                    "detail": str(exc)[:4000],
+                    "detail": str(verdict)[:4000],
                 }
                 failure["failure_id"] = canon_hash_obj({k: v for k, v in failure.items() if k != "failure_id"})
                 write_canon_json(out_dir / "coordinator_mutator_replay_failure_v1.json", failure)
-                return
-            if str(verdict).strip() != "VALID":
                 return
 
             try:

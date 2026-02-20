@@ -140,6 +140,7 @@ def _ensure_activation_state() -> dict[str, Any]:
             "patch_sha256": None,
         },
         "pending": None,
+        "death_rearm_used_b": False,
     }
     _atomic_write_json(state_path, payload)
     return payload
@@ -262,6 +263,60 @@ if isinstance(pending, dict):
         _atomic_write_json(state_path, state)
         _append_map({"ts_utc": _utc_now_iso(), "event": "STABILIZED", "activation_key": state["last_stable"]["activation_key"], "git_sha": pending_sha, "tick_u64": int(tick_u64)})
 
+# Strict Phase 3 watchdog behavior:
+# After the first non-bootstrap stabilization, create exactly one synthetic
+# pending window sourced from last_stable so death injection can be armed on
+# the next tick even when no duplicate promotion bundle is produced.
+death_requested = str(os.environ.get("OMEGA_DEV_DEATH_INJECTION_OK", "0")).strip() == "1"
+stable_now = state.get("last_stable") if isinstance(state.get("last_stable"), dict) else {}
+stable_key_now = str(stable_now.get("activation_key", "")).strip()
+stable_sha_now = str(stable_now.get("git_sha", "")).strip()
+pending_now = state.get("pending") if isinstance(state.get("pending"), dict) else None
+rearm_used_now = bool(state.get("death_rearm_used_b", False))
+if (
+    death_requested
+    and pending_now is None
+    and stable_key_now
+    and stable_key_now != "BOOTSTRAP"
+    and stable_sha_now
+    and not rearm_used_now
+):
+    state["pending"] = {
+        "activation_key": stable_key_now,
+        "git_sha": stable_sha_now,
+        "tick_u64": int(tick_u64),
+        "ccap_id": stable_now.get("ccap_id"),
+        "bundle_hash": stable_now.get("bundle_hash"),
+        "patch_sha256": stable_now.get("patch_sha256"),
+        "rearmed_b": True,
+        "rearm_source": "last_stable",
+    }
+    state["death_rearm_used_b"] = True
+    _atomic_write_json(state_path, state)
+    _append_map(
+        {
+            "ts_utc": _utc_now_iso(),
+            "event": "REARMED",
+            "tick_u64": int(tick_u64),
+            "activation_key": stable_key_now,
+            "git_sha": stable_sha_now,
+            "bundle_hash": str(stable_now.get("bundle_hash", "")),
+            "rearm_source": "last_stable",
+        }
+    )
+    print(
+        " ".join(
+            [
+                "SIGNAL=PATCH_REARMED",
+                f"tick={tick_u64}",
+                f"activation_key={stable_key_now}",
+                f"git_sha={stable_sha_now}",
+                f"bundle_hash={str(stable_now.get('bundle_hash', ''))}",
+                "rearm_source=last_stable",
+            ]
+        )
+    )
+
 activation = _maybe_extract_activation()
 if activation is None:
     sys.exit(0)
@@ -278,6 +333,48 @@ if str(activation.get("bundle_hash", "")).strip() and str(activation.get("bundle
     str(stable_bundle or "").strip(),
     str(pending_bundle or "").strip(),
 }:
+    # Strict Phase 3 watchdog behavior:
+    # After a non-bootstrap stabilization, permit exactly one pending "re-arm" on an
+    # already-landed activation bundle so the next death-test crash can rollback to a
+    # non-bootstrap last_stable lineage.
+    death_requested = str(os.environ.get("OMEGA_DEV_DEATH_INJECTION_OK", "0")).strip() == "1"
+    same_as_stable = str(activation.get("bundle_hash", "")).strip() == str(stable_bundle or "").strip()
+    has_no_pending = not isinstance(state.get("pending"), dict)
+    stable_key = str(((state.get("last_stable") or {}) if isinstance(state.get("last_stable"), dict) else {}).get("activation_key", "")).strip()
+    rearm_used = bool(state.get("death_rearm_used_b", False))
+    if death_requested and same_as_stable and has_no_pending and stable_key and stable_key != "BOOTSTRAP" and not rearm_used:
+        state["pending"] = {
+            "activation_key": str(activation.get("activation_key", "")),
+            "git_sha": head_sha,
+            "tick_u64": int(tick_u64),
+            "ccap_id": str(activation.get("ccap_id", "")),
+            "bundle_hash": str(activation.get("bundle_hash", "")),
+            "patch_sha256": str(activation.get("patch_sha256", "")),
+            "rearmed_b": True,
+        }
+        state["death_rearm_used_b"] = True
+        _atomic_write_json(state_path, state)
+        _append_map(
+            {
+                "ts_utc": _utc_now_iso(),
+                "event": "REARMED",
+                "tick_u64": int(tick_u64),
+                "activation_key": str(activation.get("activation_key", "")),
+                "git_sha": head_sha,
+                "bundle_hash": str(activation.get("bundle_hash", "")),
+            }
+        )
+        print(
+            " ".join(
+                [
+                    "SIGNAL=PATCH_REARMED",
+                    f"tick={tick_u64}",
+                    f"activation_key={str(activation.get('activation_key', ''))}",
+                    f"git_sha={head_sha}",
+                    f"bundle_hash={str(activation.get('bundle_hash', ''))}",
+                ]
+            )
+        )
     sys.exit(0)
 
 apply_targets = _split_csv(apply_targets_csv)
@@ -517,6 +614,60 @@ log_line() {
   printf '%s %s\n' "$(timestamp_utc)" "$payload" | tee -a "$LOG_PATH"
 }
 
+compute_death_injection_gate() {
+  local tick_u64="$1"
+  python3 - "$OUT_ROOT" "$tick_u64" <<'PY'
+import json
+import os
+import sys
+from pathlib import Path
+
+out_root = Path(sys.argv[1]).resolve()
+tick_u64 = int(sys.argv[2])
+state_path = out_root / "_ignite" / "ignite_code_activation_state_v1.json"
+
+requested_dev = "1" if str(os.environ.get("OMEGA_DEV_DEATH_INJECTION_OK", "0")).strip() == "1" else "0"
+requested_runtime = "1" if str(os.environ.get("OMEGA_DEATH_INJECT_RUNTIME_OK", "1")).strip() == "1" else "0"
+
+gate_dev = requested_dev
+gate_runtime = "0"
+reason = "REQUEST_DISABLED"
+last_stable_key = "NONE"
+pending_key = "NONE"
+
+payload = None
+if state_path.exists():
+    try:
+        obj = json.loads(state_path.read_text(encoding="utf-8"))
+    except Exception:
+        obj = None
+    if isinstance(obj, dict) and str(obj.get("schema_version", "")).strip() == "ignite_code_activation_state_v1":
+        payload = obj
+
+if requested_dev != "1":
+    reason = "REQUEST_DISABLED"
+elif requested_runtime != "1":
+    reason = "RUNTIME_REQUEST_DISABLED"
+elif not isinstance(payload, dict):
+    reason = "NO_ACTIVATION_STATE"
+else:
+    last_stable = payload.get("last_stable") if isinstance(payload.get("last_stable"), dict) else {}
+    pending = payload.get("pending") if isinstance(payload.get("pending"), dict) else None
+    last_stable_key = str(last_stable.get("activation_key", "")).strip() or "NONE"
+    pending_key = (str(pending.get("activation_key", "")).strip() if isinstance(pending, dict) else "") or "NONE"
+    if last_stable_key in {"NONE", "BOOTSTRAP"}:
+        reason = "LAST_STABLE_BOOTSTRAP"
+    elif pending_key == "NONE":
+        # Crash/rollback evidence is meaningful only while a new activation is pending.
+        reason = "PENDING_REQUIRED_FOR_ROLLBACK"
+    else:
+        reason = "READY_PENDING_WITH_NON_BOOTSTRAP_LAST_STABLE"
+        gate_runtime = "1"
+
+print(f"{gate_dev} {gate_runtime} {reason} {last_stable_key} {pending_key} {tick_u64}")
+PY
+}
+
 emit_signals_for_tick() {
   local tick_u64="$1"
   local state_dir="$2"
@@ -736,6 +887,17 @@ while :; do
   tick_id="$(printf '%04d' "$tick_u64")"
   out_dir="${OUT_ROOT}_tick_${tick_id}"
 
+  read -r death_dev_ok death_runtime_ok death_gate_reason death_last_stable death_pending death_tick_gate <<<"$(compute_death_injection_gate "$tick_u64")"
+  if [[ "${OMEGA_DEV_DEATH_INJECTION_OK:-0}" == "1" ]]; then
+    if [[ "$death_dev_ok" == "1" && "$death_runtime_ok" == "1" ]]; then
+      log_line \
+        "SIGNAL=DEATH_INJECTION_ARMED tick=${tick_u64} reason=${death_gate_reason} last_stable=${death_last_stable} pending=${death_pending}"
+    else
+      log_line \
+        "SIGNAL=DEATH_INJECTION_SUPPRESSED tick=${tick_u64} reason=${death_gate_reason} last_stable=${death_last_stable} pending=${death_pending}"
+    fi
+  fi
+
   attempt_u64=$((attempt_u64 + 1))
   attempt_id="$(printf '%04d' "$attempt_u64")"
   raw_log="${RAW_ROOT}/tick_${tick_id}_attempt_${attempt_id}.log"
@@ -758,6 +920,9 @@ while :; do
 	      PYTHONPATH=".:CDEL-v2:${ROOT}/agi-orchestrator${PYTHONPATH:+:${PYTHONPATH}}" \
 	      OMEGA_HOST_REPO_ROOT="$ROOT" \
 	      OMEGA_PHASE3_MUTATION_SIGNAL="${OMEGA_PHASE3_MUTATION_SIGNAL:-1}" \
+	      OMEGA_DEV_DEATH_INJECTION_OK="${death_dev_ok}" \
+	      OMEGA_DEATH_INJECT_RUNTIME_OK="${death_runtime_ok}" \
+	      OMEGA_DEATH_INJECT_TICK_U64="${OMEGA_DEATH_INJECT_TICK_U64:-}" \
 	      OMEGA_META_CORE_ACTIVATION_MODE="$ACTIVATION_MODE" \
 	      OMEGA_ALLOW_SIMULATE_ACTIVATION="$ALLOW_SIMULATE" \
 	      "${cmd[@]}"

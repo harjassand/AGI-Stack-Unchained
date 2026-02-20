@@ -27,6 +27,7 @@
         "PROMOTION",
         "ACTIVATION",
         "ROLLBACK",
+        "SIP_INGESTION_L0",
         "SNAPSHOT",
         "SAFE_HALT"
       ],

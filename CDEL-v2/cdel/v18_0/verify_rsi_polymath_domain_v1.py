@@ -6,7 +6,10 @@ import argparse
 from pathlib import Path
 from typing import Any
 
-from .omega_common_v1 import OmegaV18Error, fail, load_canon_dict, validate_schema
+from cdel.v19_0.common_v1 import validate_schema as validate_schema_v19
+from cdel.v19_0.common_v1 import verify_object_id as verify_object_id_v19
+
+from .omega_common_v1 import OmegaV18Error, canon_hash_obj, fail, load_canon_dict, validate_schema
 from .polymath_verifier_kernel_v1 import verify_domain
 
 
@@ -35,9 +38,44 @@ def _subrun_root(state_root: Path) -> Path:
     return state_root.parents[2]
 
 
+def _verify_optional_sip_refs(*, state_root: Path, report: dict[str, Any]) -> None:
+    subrun_root = _subrun_root(state_root)
+
+    artifact_rel = report.get("sip_knowledge_artifact_rel")
+    refutation_rel = report.get("sip_knowledge_refutation_rel")
+    if isinstance(artifact_rel, str) and artifact_rel.strip() and isinstance(refutation_rel, str) and refutation_rel.strip():
+        fail("SCHEMA_FAIL")
+
+    if isinstance(artifact_rel, str) and artifact_rel.strip():
+        artifact_path = (subrun_root / artifact_rel).resolve()
+        artifact = load_canon_dict(artifact_path)
+        validate_schema(artifact, "sip_knowledge_artifact_v1")
+        _ = canon_hash_obj(artifact)
+
+    if isinstance(refutation_rel, str) and refutation_rel.strip():
+        refutation_path = (subrun_root / refutation_rel).resolve()
+        refutation = load_canon_dict(refutation_path)
+        validate_schema(refutation, "sip_knowledge_refutation_v1")
+
+    manifest_rel = report.get("sip_manifest_rel")
+    if isinstance(manifest_rel, str) and manifest_rel.strip():
+        manifest_path = (subrun_root / manifest_rel).resolve()
+        manifest = load_canon_dict(manifest_path)
+        validate_schema_v19(manifest, "world_snapshot_manifest_v1")
+        verify_object_id_v19(manifest, id_field="manifest_id")
+
+    receipt_rel = report.get("sip_receipt_rel")
+    if isinstance(receipt_rel, str) and receipt_rel.strip():
+        receipt_path = (subrun_root / receipt_rel).resolve()
+        receipt = load_canon_dict(receipt_path)
+        validate_schema_v19(receipt, "sealed_ingestion_receipt_v1")
+        verify_object_id_v19(receipt, id_field="receipt_id")
+
+
 def _verify_bootstrap(state_root: Path, report: dict[str, Any]) -> str:
     status = str(report.get("status", "")).strip()
-    if status in {"BLOCKED_POLICY", "BLOCKED_LICENSE", "BLOCKED_SIZE", "NO_CANDIDATE"}:
+    _verify_optional_sip_refs(state_root=state_root, report=report)
+    if status in {"BLOCKED_POLICY", "BLOCKED_LICENSE", "BLOCKED_SIZE", "NO_CANDIDATE", "BLOCKED_SIP_INGESTION"}:
         return "VALID"
 
     domain_pack_rel = str(report.get("domain_pack_rel", "")).strip()

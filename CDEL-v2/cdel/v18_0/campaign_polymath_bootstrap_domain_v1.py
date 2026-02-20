@@ -13,9 +13,11 @@ from ..v1_7r.canon import write_canon_json, write_jsonl_line
 from .omega_common_v1 import Q32_ONE, canon_hash_obj, fail, load_canon_dict, repo_root, validate_schema, write_hashed_json
 from .omega_test_plan_v1 import emit_test_plan_receipt
 from .polymath_portfolio_v1 import bootstrap_entry, load_or_init_portfolio
+from .polymath_sip_ingestion_l0_v1 import run_sip_ingestion_l0
 from .polymath_verifier_kernel_v1 import verify_domain
 
 _DEFAULT_MAX_DATASET_BYTES_U64 = 20 * 1024 * 1024
+_SIP_PACK_SCHEMA = "rsi_polymath_sip_ingestion_l0_pack_v1"
 
 
 def _load_pack(path: Path) -> dict[str, Any]:
@@ -137,6 +139,36 @@ def _tick_from_env(default_u64: int = 0) -> int:
     return int(max(0, value))
 
 
+def _optional_sip_ingestion_pack(pack: dict[str, Any]) -> dict[str, Any] | None:
+    raw = pack.get("sip_ingestion_l0")
+    if raw is None:
+        return None
+    if not isinstance(raw, dict):
+        fail("SCHEMA_FAIL")
+    payload = dict(raw)
+    if "schema_version" not in payload:
+        payload["schema_version"] = _SIP_PACK_SCHEMA
+    if str(payload.get("schema_version", "")).strip() != _SIP_PACK_SCHEMA:
+        fail("SCHEMA_FAIL")
+    validate_schema(payload, _SIP_PACK_SCHEMA)
+    return payload
+
+
+def _append_optional_sip_refs(report: dict[str, Any], sip_result: dict[str, Any] | None) -> None:
+    if not isinstance(sip_result, dict):
+        return
+    mapping = {
+        "sip_knowledge_artifact_rel": "knowledge_artifact_rel",
+        "sip_knowledge_refutation_rel": "refutation_rel",
+        "sip_manifest_rel": "manifest_rel",
+        "sip_receipt_rel": "receipt_rel",
+    }
+    for key_out, key_in in mapping.items():
+        value = sip_result.get(key_in)
+        if isinstance(value, str) and value.strip():
+            report[key_out] = value
+
+
 def run(*, campaign_pack: Path, out_dir: Path) -> None:
     pack = _load_pack(campaign_pack)
     root = repo_root()
@@ -215,6 +247,29 @@ def run(*, campaign_pack: Path, out_dir: Path) -> None:
         write_canon_json(reports_dir / "polymath_bootstrap_report_v1.json", report)
         print("OK")
         return
+
+    sip_ingestion_pack = _optional_sip_ingestion_pack(pack)
+    sip_ingestion_result: dict[str, Any] | None = None
+    if sip_ingestion_pack is not None:
+        sip_ingestion_result = run_sip_ingestion_l0(
+            config=sip_ingestion_pack,
+            repo_root_path=root,
+            state_root=state_root,
+            tick_u64=_tick_from_env(),
+        )
+        if str(sip_ingestion_result.get("status", "")).strip() != "SUCCESS":
+            report = {
+                "schema_version": "polymath_bootstrap_report_v1",
+                "status": "BLOCKED_SIP_INGESTION",
+                "domain_id": candidate_domain_id,
+                "topic_name": candidate_topic_name,
+                "created_at_utc": datetime.now(UTC).replace(microsecond=0).isoformat(),
+                "reason_code": str(sip_ingestion_result.get("reason_code", "")).strip() or "SIP_SAFE_HALT",
+            }
+            _append_optional_sip_refs(report, sip_ingestion_result)
+            write_canon_json(reports_dir / "polymath_bootstrap_report_v1.json", report)
+            print("OK")
+            return
 
     store_root = _canonical_store_root(root)
 
@@ -393,6 +448,7 @@ def run(*, campaign_pack: Path, out_dir: Path) -> None:
         "capability_id": capability_id,
         "void_score_q32": int((candidate.get("void_score_q32") or {}).get("q", 0)),
     }
+    _append_optional_sip_refs(report, sip_ingestion_result)
     write_canon_json(reports_dir / "polymath_bootstrap_report_v1.json", report)
 
     portfolio_rel = "polymath/registry/polymath_portfolio_v1.json"

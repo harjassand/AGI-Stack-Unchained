@@ -631,6 +631,212 @@ def _derive_dispatch_seed_u64(
     return int.from_bytes(digest[-8:], "big", signed=False)
 
 
+def _ensure_sha256_id(value: Any) -> str:
+    text = str(value).strip()
+    if len(text) != 71 or not text.startswith("sha256:"):
+        fail("SCHEMA_FAIL")
+    digest = text.split(":", 1)[1]
+    if len(digest) != 64 or any(ch not in "0123456789abcdef" for ch in digest):
+        fail("SCHEMA_FAIL")
+    return text
+
+
+def _load_hashed_payload(
+    *,
+    path: Path,
+    expected_schema_version: str | None = None,
+    expected_schema_name: str | None = None,
+) -> tuple[dict[str, Any], str]:
+    payload = load_canon_dict(path)
+    if expected_schema_version is not None and str(payload.get("schema_version", "")).strip() != expected_schema_version:
+        fail("SCHEMA_FAIL")
+    if expected_schema_name is not None and str(payload.get("schema_name", "")).strip() != expected_schema_name:
+        fail("SCHEMA_FAIL")
+    observed_hash = canon_hash_obj(payload)
+
+    name = path.name
+    if not name.startswith("sha256_"):
+        fail("NONDETERMINISTIC")
+    digest_hex = name.split(".", 1)[0].split("_", 1)[1]
+    if len(digest_hex) != 64 or any(ch not in "0123456789abcdef" for ch in digest_hex):
+        fail("NONDETERMINISTIC")
+    expected_hash = f"sha256:{digest_hex}"
+    if observed_hash != expected_hash:
+        fail("NONDETERMINISTIC")
+    return payload, observed_hash
+
+
+def _find_subrun_payload_by_id(
+    *,
+    subrun_root: Path,
+    artifact_id: str,
+    suffix: str,
+    expected_schema_version: str | None = None,
+    expected_schema_name: str | None = None,
+) -> tuple[dict[str, Any], str]:
+    artifact_id = _ensure_sha256_id(artifact_id)
+    digest_hex = artifact_id.split(":", 1)[1]
+    paths = sorted(subrun_root.glob(f"**/sha256_{digest_hex}.{suffix}"), key=lambda row: row.as_posix())
+    if len(paths) != 1:
+        fail("MISSING_STATE_INPUT")
+    payload, observed_hash = _load_hashed_payload(
+        path=paths[0],
+        expected_schema_version=expected_schema_version,
+        expected_schema_name=expected_schema_name,
+    )
+    if observed_hash != artifact_id:
+        fail("NONDETERMINISTIC")
+    return payload, observed_hash
+
+
+def _import_sip_ingestion_artifacts(
+    *,
+    dispatch_ctx: dict[str, Any] | None,
+    state_root: Path,
+) -> dict[str, str | None]:
+    out: dict[str, str | None] = {
+        "knowledge_hash": None,
+        "refutation_hash": None,
+        "manifest_hash": None,
+        "receipt_hash": None,
+    }
+    if dispatch_ctx is None:
+        return out
+
+    subrun_root_raw = dispatch_ctx.get("subrun_root_abs")
+    if not isinstance(subrun_root_raw, (str, Path)):
+        return out
+    subrun_root = Path(subrun_root_raw).resolve()
+    if not subrun_root.exists() or not subrun_root.is_dir():
+        return out
+
+    knowledge_paths = sorted(
+        subrun_root.glob("**/sha256_*.sip_knowledge_artifact_v1.json"),
+        key=lambda row: row.as_posix(),
+    )
+    refutation_paths = sorted(
+        subrun_root.glob("**/sha256_*.sip_knowledge_refutation_v1.json"),
+        key=lambda row: row.as_posix(),
+    )
+
+    if not knowledge_paths and not refutation_paths:
+        return out
+    if knowledge_paths and refutation_paths:
+        fail("SCHEMA_FAIL")
+
+    ingestion_root = state_root / "polymath" / "ingestion"
+    (ingestion_root / "knowledge").mkdir(parents=True, exist_ok=True)
+    (ingestion_root / "refutations").mkdir(parents=True, exist_ok=True)
+    (ingestion_root / "manifests").mkdir(parents=True, exist_ok=True)
+    (ingestion_root / "receipts").mkdir(parents=True, exist_ok=True)
+
+    if knowledge_paths:
+        knowledge_payload, knowledge_hash = _load_hashed_payload(
+            path=knowledge_paths[0],
+            expected_schema_version="sip_knowledge_artifact_v1",
+        )
+        validate_schema(knowledge_payload, "sip_knowledge_artifact_v1")
+
+        _, _knowledge_obj, imported_knowledge_hash = _write_payload(
+            ingestion_root / "knowledge",
+            "sip_knowledge_artifact_v1.json",
+            knowledge_payload,
+        )
+        if imported_knowledge_hash != knowledge_hash:
+            fail("NONDETERMINISTIC")
+        out["knowledge_hash"] = imported_knowledge_hash
+
+        manifest_id = _ensure_sha256_id(knowledge_payload.get("sip_manifest_id"))
+        receipt_id = _ensure_sha256_id(knowledge_payload.get("sip_seal_receipt_id"))
+
+        manifest_payload, manifest_hash = _find_subrun_payload_by_id(
+            subrun_root=subrun_root,
+            artifact_id=manifest_id,
+            suffix="world_snapshot_manifest_v1.json",
+            expected_schema_name="world_snapshot_manifest_v1",
+        )
+        _, _manifest_obj, imported_manifest_hash = _write_payload(
+            ingestion_root / "manifests",
+            "world_snapshot_manifest_v1.json",
+            manifest_payload,
+            id_field="manifest_id",
+        )
+        if imported_manifest_hash != manifest_hash:
+            fail("NONDETERMINISTIC")
+        out["manifest_hash"] = imported_manifest_hash
+
+        receipt_payload, receipt_hash = _find_subrun_payload_by_id(
+            subrun_root=subrun_root,
+            artifact_id=receipt_id,
+            suffix="sealed_ingestion_receipt_v1.json",
+            expected_schema_name="sealed_ingestion_receipt_v1",
+        )
+        _, _receipt_obj, imported_receipt_hash = _write_payload(
+            ingestion_root / "receipts",
+            "sealed_ingestion_receipt_v1.json",
+            receipt_payload,
+            id_field="receipt_id",
+        )
+        if imported_receipt_hash != receipt_hash:
+            fail("NONDETERMINISTIC")
+        out["receipt_hash"] = imported_receipt_hash
+        return out
+
+    refutation_payload, refutation_hash = _load_hashed_payload(
+        path=refutation_paths[0],
+        expected_schema_version="sip_knowledge_refutation_v1",
+    )
+    validate_schema(refutation_payload, "sip_knowledge_refutation_v1")
+    _, _ref_obj, imported_refutation_hash = _write_payload(
+        ingestion_root / "refutations",
+        "sip_knowledge_refutation_v1.json",
+        refutation_payload,
+    )
+    if imported_refutation_hash != refutation_hash:
+        fail("NONDETERMINISTIC")
+    out["refutation_hash"] = imported_refutation_hash
+
+    manifest_id_raw = refutation_payload.get("sip_manifest_id")
+    if isinstance(manifest_id_raw, str) and manifest_id_raw.strip():
+        manifest_id = _ensure_sha256_id(manifest_id_raw)
+        manifest_payload, manifest_hash = _find_subrun_payload_by_id(
+            subrun_root=subrun_root,
+            artifact_id=manifest_id,
+            suffix="world_snapshot_manifest_v1.json",
+            expected_schema_name="world_snapshot_manifest_v1",
+        )
+        _, _manifest_obj, imported_manifest_hash = _write_payload(
+            ingestion_root / "manifests",
+            "world_snapshot_manifest_v1.json",
+            manifest_payload,
+            id_field="manifest_id",
+        )
+        if imported_manifest_hash != manifest_hash:
+            fail("NONDETERMINISTIC")
+        out["manifest_hash"] = imported_manifest_hash
+
+    receipt_id_raw = refutation_payload.get("sip_seal_receipt_id")
+    if isinstance(receipt_id_raw, str) and receipt_id_raw.strip():
+        receipt_id = _ensure_sha256_id(receipt_id_raw)
+        receipt_payload, receipt_hash = _find_subrun_payload_by_id(
+            subrun_root=subrun_root,
+            artifact_id=receipt_id,
+            suffix="sealed_ingestion_receipt_v1.json",
+            expected_schema_name="sealed_ingestion_receipt_v1",
+        )
+        _, _receipt_obj, imported_receipt_hash = _write_payload(
+            ingestion_root / "receipts",
+            "sealed_ingestion_receipt_v1.json",
+            receipt_payload,
+            id_field="receipt_id",
+        )
+        if imported_receipt_hash != receipt_hash:
+            fail("NONDETERMINISTIC")
+        out["receipt_hash"] = imported_receipt_hash
+
+    return out
+
+
 def run_tick(
     *,
     campaign_pack: Path,
@@ -1045,6 +1251,12 @@ def run_tick(
         rollback_receipt = None
         rollback_hash = None
         axis_gate_failure = None
+        sip_ingestion_evidence = {
+            "knowledge_hash": None,
+            "refutation_hash": None,
+            "manifest_hash": None,
+            "receipt_hash": None,
+        }
 
         safe_halt = decision_plan.get("action_kind") == "SAFE_HALT"
 
@@ -1167,6 +1379,10 @@ def run_tick(
                 promotion_receipt=promotion_receipt,
                 capability_id=str(decision_plan.get("capability_id", "")).strip() or None,
             )
+        sip_ingestion_evidence = _import_sip_ingestion_artifacts(
+            dispatch_ctx=dispatch_ctx,
+            state_root=state_root,
+        )
         subverifier_reason_code: str | None = None
         reason_code_raw = (subverifier_receipt or {}).get("result", {}).get("reason_code")
         if reason_code_raw is not None:
@@ -1263,6 +1479,9 @@ def run_tick(
             _emit("ACTIVATION", activation_hash)
         if rollback_hash is not None:
             _emit("ROLLBACK", rollback_hash)
+        sip_ingestion_hash = str((sip_ingestion_evidence or {}).get("knowledge_hash") or "").strip()
+        if sip_ingestion_hash:
+            _emit("SIP_INGESTION_L0", sip_ingestion_hash)
 
         # Deterministic evidence that hotpaths actually exercised the runtime
         # router (and, when active, the native backend). We emit this into the
@@ -1484,6 +1703,8 @@ def run_tick(
             "runaway_state": "ACTIVE" if runaway_active else "INACTIVE",
             "runaway_level_u64": int(runaway_level_u64),
             "runaway_reason": str(runaway_reason),
+            "sip_ingestion_artifact_hash": (sip_ingestion_evidence or {}).get("knowledge_hash"),
+            "sip_ingestion_refutation_hash": (sip_ingestion_evidence or {}).get("refutation_hash"),
         }
 
 

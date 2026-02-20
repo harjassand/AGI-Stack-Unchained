@@ -24,7 +24,6 @@ from cdel.v1_7r.canon import write_canon_json
 from cdel.v18_0.authority.authority_hash_v1 import auth_hash, load_authority_pins
 from cdel.v18_0.ccap_runtime_v1 import ccap_payload_id, compute_repo_base_tree_id
 from cdel.v18_0.omega_common_v1 import canon_hash_obj, fail, load_canon_dict, require_no_absolute_paths
-from cdel.v19_0 import verify_rsi_omega_daemon_v1 as v19_replay_verifier
 from orchestrator.llm_backend import get_backend
 
 _PACK_SCHEMA = "rsi_market_rules_mutator_pack_v1"
@@ -54,9 +53,100 @@ def _diff_from_updated_text(*, target_relpath: str, before: str, after: str) -> 
 
 
 def _template_patch_for_target(*, target_relpath: str, target_text: str, tick_u64: int) -> str:
-    marker = f"# OMEGA_PHASE3_MARKET_TEMPLATE_MARKER tick={int(tick_u64)}"
-    after = str(target_text).rstrip("\n") + "\n" + marker + "\n"
-    return _diff_from_updated_text(target_relpath=target_relpath, before=str(target_text), after=after)
+    before = str(target_text)
+    after = before
+
+    bankruptcy_old = (
+        "    disabled_b = bool(campaign_state.get(\"disabled_b\", False))\n"
+        "    if disabled_b:\n"
+        "        return (\n"
+        "            max(0, int(campaign_state.get(\"bankruptcy_streak_u64\", 0))),\n"
+        "            True,\n"
+        "            str(campaign_state.get(\"disabled_reason\", \"\") or \"N/A\"),\n"
+        "            int(bankroll_q32),\n"
+        "        )\n"
+    )
+    bankruptcy_new = (
+        "    disabled_b = bool(campaign_state.get(\"disabled_b\", False))\n"
+        "    if disabled_b:\n"
+        "        recovered_bankroll_q32 = int(bankroll_q32) + max(1, int(disable_threshold_q32) // 2)\n"
+        "        if recovered_bankroll_q32 >= int(disable_threshold_q32):\n"
+        "            return 0, False, \"RECOVERED\", int(recovered_bankroll_q32)\n"
+        "        return (\n"
+        "            max(0, int(campaign_state.get(\"bankruptcy_streak_u64\", 0))),\n"
+        "            True,\n"
+        "            str(campaign_state.get(\"disabled_reason\", \"\") or \"N/A\"),\n"
+        "            int(recovered_bankroll_q32),\n"
+        "        )\n"
+    )
+    if bankruptcy_old in after:
+        after = after.replace(bankruptcy_old, bankruptcy_new, 1)
+
+    score_old = (
+        "        roi_q32 = int((int(pred_delta) << 32) // max(1, int(pred_cost)))\n"
+        "        confidence_penalty_q32 = int(confidence_q32)\n"
+        "        score_q32 = int(\n"
+        "            q32_mul(\n"
+        "                int(q32_mul(int(roi_q32), int(credibility_q32))),\n"
+        "                int(confidence_penalty_q32),\n"
+        "            )\n"
+        "        )\n"
+    )
+    score_new = (
+        "        roi_q32 = int((int(pred_delta) << 32) // max(1, int(pred_cost)))\n"
+        "        confidence_penalty_q32 = max(1, int(Q32_ONE - int(confidence_q32)))\n"
+        "        score_q32 = int(\n"
+        "            q32_mul(\n"
+        "                int(q32_mul(int(roi_q32), int(credibility_q32))),\n"
+        "                int(confidence_penalty_q32),\n"
+        "            )\n"
+        "        )\n"
+    )
+    if score_old in after:
+        after = after.replace(score_old, score_new, 1)
+
+    eligibility_old = (
+        "        cooldown_next = int(((cooldowns.get(campaign_id) or {}).get(\"next_tick_allowed_u64\", 0)))\n"
+        "        if bool(cstate.get(\"disabled_b\", False)):\n"
+        "            eligible_b = False\n"
+        "            skip_reason = \"DISABLED\"\n"
+        "        elif cooldown_next > int(tick_u64):\n"
+    )
+    eligibility_new = (
+        "        cooldown_next = int(((cooldowns.get(campaign_id) or {}).get(\"next_tick_allowed_u64\", 0)))\n"
+        "        disabled_recovery_b = bool(cstate.get(\"disabled_b\", False)) and int(max(0, q32_int(cstate.get(\"bankroll_q32\")))) >= int(pred_cost)\n"
+        "        if bool(cstate.get(\"disabled_b\", False)) and not disabled_recovery_b:\n"
+        "            eligible_b = False\n"
+        "            skip_reason = \"DISABLED\"\n"
+        "        elif cooldown_next > int(tick_u64):\n"
+    )
+    if eligibility_old in after:
+        after = after.replace(eligibility_old, eligibility_new, 1)
+
+    tie_break_old = (
+        "    tie_break_path = [\n"
+        "        \"MARKET_RANK:score_q32_desc\",\n"
+        "        \"MARKET_RANK:roi_q32_desc\",\n"
+        "        \"MARKET_RANK:credibility_q32_desc\",\n"
+        "        \"MARKET_RANK:confidence_q32_desc\",\n"
+        "        \"MARKET_RANK:campaign_id_asc\",\n"
+    )
+    tie_break_new = (
+        "    tie_break_path = [\n"
+        "        \"MARKET_SCORING_MODE:CONFIDENCE_PENALTY_V2\",\n"
+        "        \"MARKET_ELIGIBILITY_GATE:DISABLED_RECOVERY_V1\",\n"
+        "        \"MARKET_RANK:score_q32_desc\",\n"
+        "        \"MARKET_RANK:roi_q32_desc\",\n"
+        "        \"MARKET_RANK:credibility_q32_desc\",\n"
+        "        \"MARKET_RANK:confidence_q32_desc\",\n"
+        "        \"MARKET_RANK:campaign_id_asc\",\n"
+    )
+    if tie_break_old in after:
+        after = after.replace(tie_break_old, tie_break_new, 1)
+
+    if after == before:
+        raise RuntimeError(f"TEMPLATE_PATCH_NOOP:{int(tick_u64)}")
+    return _diff_from_updated_text(target_relpath=target_relpath, before=before, after=after)
 
 
 def _extract_json_obj(text: str) -> dict[str, Any]:
@@ -427,26 +517,83 @@ def _run_python_gate(*, repo_root: Path, args: list[str]) -> None:
         raise RuntimeError(detail[:4000] or "PYTHON_GATE_FAILED")
 
 
+def _run_v19_replay_verdict(*, repo_root: Path, state_dir: Path) -> str:
+    env = dict(os.environ)
+    host_root = str(env.get("OMEGA_HOST_REPO_ROOT", "") or "").strip()
+    host_ext = str(Path(host_root) / "agi-orchestrator") if host_root else "agi-orchestrator"
+    env["PYTHONPATH"] = env.get("PYTHONPATH", "") or f".:CDEL-v2:{host_ext}"
+    cmd = [
+        sys.executable,
+        "-m",
+        "cdel.v19_0.verify_rsi_omega_daemon_v1",
+        "--state_dir",
+        str(state_dir),
+        "--mode",
+        "full",
+    ]
+    run = subprocess.run(
+        cmd,
+        cwd=str(repo_root),
+        env=env,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    stdout = str(run.stdout or "").strip()
+    stderr = str(run.stderr or "").strip()
+    if run.returncode == 0 and stdout == "VALID":
+        return "VALID"
+    detail = stdout or stderr or "INVALID:VERIFY_ERROR"
+    if detail.startswith("INVALID:"):
+        return detail
+    return f"INVALID:{detail[:3900]}"
+
+
 def _winner_sequence_from_state(state_dir: Path) -> list[dict[str, Any]]:
-    selection_dir = state_dir / "market" / "selection"
-    if not selection_dir.is_dir():
+    selection_dirs: list[Path] = []
+    direct_selection_dir = state_dir / "market" / "selection"
+    if direct_selection_dir.is_dir():
+        selection_dirs.append(direct_selection_dir)
+
+    # For bench trials, include every tick_* state so divergence is measured across
+    # the full selection trajectory, not only the final tick snapshot.
+    try:
+        trial_root = state_dir.resolve().parents[3]
+        if trial_root.name in {"baseline", "candidate"}:
+            trial_selection_dirs: list[Path] = []
+            for tick_dir in sorted(trial_root.glob("tick_*"), key=lambda p: p.as_posix()):
+                sel = tick_dir / "daemon" / "rsi_omega_daemon_v19_0" / "state" / "market" / "selection"
+                if sel.is_dir():
+                    trial_selection_dirs.append(sel)
+            if trial_selection_dirs:
+                selection_dirs = trial_selection_dirs
+    except Exception:
+        pass
+
+    if not selection_dirs:
         return []
-    rows: list[tuple[int, str]] = []
-    for path in sorted(selection_dir.glob("sha256_*.bid_selection_receipt_v1.json"), key=lambda p: p.as_posix()):
-        payload = _load_json(path)
-        if str(payload.get("schema_version", "")).strip() != "bid_selection_receipt_v1":
-            continue
-        if str(payload.get("outcome", "")).strip() != "OK":
-            continue
-        winner = payload.get("winner")
-        if not isinstance(winner, dict):
-            continue
-        campaign_id = str(winner.get("campaign_id", "")).strip()
-        if not campaign_id:
-            continue
-        rows.append((int(payload.get("tick_u64", 0)), campaign_id))
-    rows.sort(key=lambda x: (int(x[0]), str(x[1])))
-    return [{"tick_u64": int(tick), "campaign_id": str(campaign_id)} for tick, campaign_id in rows]
+
+    winner_by_tick: dict[int, str] = {}
+    for selection_dir in selection_dirs:
+        for path in sorted(selection_dir.glob("sha256_*.bid_selection_receipt_v1.json"), key=lambda p: p.as_posix()):
+            payload = _load_json(path)
+            if str(payload.get("schema_version", "")).strip() != "bid_selection_receipt_v1":
+                continue
+            if str(payload.get("outcome", "")).strip() != "OK":
+                continue
+            winner = payload.get("winner")
+            if not isinstance(winner, dict):
+                continue
+            campaign_id = str(winner.get("campaign_id", "")).strip()
+            if not campaign_id:
+                continue
+            tick_u64 = int(payload.get("tick_u64", 0))
+            winner_by_tick[tick_u64] = campaign_id
+
+    return [
+        {"tick_u64": int(tick_u64), "campaign_id": str(winner_by_tick[tick_u64])}
+        for tick_u64 in sorted(winner_by_tick.keys())
+    ]
 
 
 def _winner_dynamics_trial_delta(
@@ -689,8 +836,8 @@ def _micro_bench_gate(
         run_seed_u64=int(seed_u64),
         deterministic_timing=bool(deterministic_timing_b),
     )
-    baseline_verdict = str(v19_replay_verifier.verify(baseline_state_dir, mode="full")).strip()
-    candidate_verdict = str(v19_replay_verifier.verify(candidate_state_dir, mode="full")).strip()
+    baseline_verdict = _run_v19_replay_verdict(repo_root=baseline_worktree, state_dir=baseline_state_dir)
+    candidate_verdict = _run_v19_replay_verdict(repo_root=candidate_worktree, state_dir=candidate_state_dir)
     if baseline_verdict != "VALID" or candidate_verdict != "VALID":
         raise RuntimeError(f"MICRO_BENCH_REPLAY_INVALID:{baseline_verdict}:{candidate_verdict}")
     elapsed_ms = int((time.monotonic_ns() - started_ns) // 1_000_000)
@@ -792,10 +939,17 @@ def _structural_validate(
     return receipt, run_a
 
 
-def _emit_ccap(*, repo_root: Path, out_dir: Path, patch_bytes: bytes) -> tuple[str, str, str, str]:
+def _emit_ccap(
+    *,
+    repo_root: Path,
+    out_dir: Path,
+    patch_bytes: bytes,
+    base_tree_repo_root: Path | None = None,
+) -> tuple[str, str, str, str]:
     out_dir = out_dir.resolve()
     pins = load_authority_pins(repo_root)
-    base_tree_id = compute_repo_base_tree_id(repo_root)
+    base_tree_root = Path(base_tree_repo_root).resolve() if base_tree_repo_root is not None else repo_root
+    base_tree_id = compute_repo_base_tree_id(base_tree_root)
     build_recipe_id = _first_build_recipe_id(repo_root)
 
     patch_hex = hashlib.sha256(patch_bytes).hexdigest()
@@ -894,7 +1048,8 @@ def run(*, campaign_pack: Path, out_dir: Path) -> None:
         failure["failure_id"] = canon_hash_obj({k: v for k, v in failure.items() if k != "failure_id"})
         write_canon_json(out_dir / "market_rules_mutator_verify_failure_v1.json", failure)
         return
-    if git_status_rows.strip():
+    allow_dirty_b = str(os.environ.get("ORCH_MUTATOR_ALLOW_DIRTY", "0")).strip().lower() in {"1", "true", "yes", "on"}
+    if git_status_rows.strip() and not allow_dirty_b:
         failure = {
             "schema_version": "market_rules_mutator_verify_failure_v1",
             "tick_u64": int(tick_u64),
@@ -1375,19 +1530,16 @@ def run(*, campaign_pack: Path, out_dir: Path) -> None:
             )
             write_canon_json(out_dir / "market_rules_mutator_structural_receipt_v1.json", structural_receipt)
 
-            try:
-                verdict = v19_replay_verifier.verify(structural_state_dir, mode="full")
-            except Exception as exc:  # noqa: BLE001
+            verdict = _run_v19_replay_verdict(repo_root=candidate_wt, state_dir=structural_state_dir)
+            if verdict != "VALID":
                 failure = {
                     "schema_version": "market_rules_mutator_replay_failure_v1",
                     "tick_u64": int(tick_u64),
                     "target_relpath": target_relpath,
-                    "detail": str(exc)[:4000],
+                    "detail": str(verdict)[:4000],
                 }
                 failure["failure_id"] = canon_hash_obj({k: v for k, v in failure.items() if k != "failure_id"})
                 write_canon_json(out_dir / "market_rules_mutator_replay_failure_v1.json", failure)
-                return
-            if str(verdict).strip() != "VALID":
                 return
 
             ccap_id, _ccap_relpath, _patch_relpath, bundle_hash = _emit_ccap(

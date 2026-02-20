@@ -32,6 +32,20 @@
       },
       "required": ["dot_kind", "div_kind", "invsqrt_kind", "invsqrt_lut_manifest_ref"]
     },
+    "preference_head": {
+      "anyOf": [
+        {"type": "null"},
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "enabled_b": {"const": true},
+            "feature_kind": {"const": "PROPOSAL_HASH_HEAD32_Q32_V1"}
+          },
+          "required": ["enabled_b", "feature_kind"]
+        }
+      ]
+    },
 
     "qre": {
       "anyOf": [

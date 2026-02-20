@@ -1,0 +1,83 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v19_0/policy_vm_trace_v1",
+  "title": "Policy VM trace v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "inputs_descriptor_hash",
+    "policy_program_id",
+    "branch_id",
+    "round_u32",
+    "halt_reason",
+    "steps_executed_u64",
+    "budget_outcome",
+    "trace_hash_chain_hash",
+    "final_stack_commitment_hash"
+  ],
+  "properties": {
+    "schema_version": {"const": "policy_vm_trace_v1"},
+    "inputs_descriptor_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "policy_program_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "branch_id": {"type": "string", "minLength": 1},
+    "round_u32": {"type": "integer", "minimum": 0},
+    "halt_reason": {
+      "type": "string",
+      "enum": ["YIELDED", "PROPOSED", "ERROR", "EMIT_PLAN", "YIELD_HINTS", "HALT_PROPOSE"]
+    },
+    "steps_executed_u64": {"type": "integer", "minimum": 0},
+    "budget_outcome": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["items_used_u64", "bytes_read_u64", "bytes_written_u64"],
+      "properties": {
+        "items_used_u64": {"type": "integer", "minimum": 0},
+        "bytes_read_u64": {"type": "integer", "minimum": 0},
+        "bytes_written_u64": {"type": "integer", "minimum": 0}
+      }
+    },
+    "trace_hash_chain_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "final_stack_commitment_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "step_log": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["pc_u32", "op", "stack_before", "stack_after"],
+        "properties": {
+          "pc_u32": {"type": "integer", "minimum": 0},
+          "op": {"type": "string", "minLength": 1},
+          "args": {"type": "object"},
+          "next_pc_u32": {"type": "integer", "minimum": 0},
+          "stack_before": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+          "stack_after": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+          "stack_before_state": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["kind", "value"],
+              "properties": {
+                "kind": {"type": "string", "minLength": 1},
+                "value": {}
+              }
+            }
+          },
+          "stack_after_state": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["kind", "value"],
+              "properties": {
+                "kind": {"type": "string", "minLength": 1},
+                "value": {}
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

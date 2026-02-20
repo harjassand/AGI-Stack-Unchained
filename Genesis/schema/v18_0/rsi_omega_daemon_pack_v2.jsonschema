@@ -1,0 +1,177 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v18_0/rsi_omega_daemon_pack_v2",
+  "title": "RSI Omega daemon pack v2",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "omega_policy_ir_rel",
+    "omega_capability_registry_rel",
+    "omega_objectives_rel",
+    "omega_runaway_config_rel",
+    "omega_budgets_rel",
+    "omega_allowlists_rel",
+    "healthcheck_suitepack_rel",
+    "baseline_metrics_rel",
+    "goal_queue_rel",
+    "allow_unbound_observer_fallback",
+    "seed_u64",
+    "coordinator_isa_program_rel",
+    "coordinator_isa_program_id",
+    "coordinator_opcode_table_rel",
+    "coordinator_opcode_table_id",
+    "policy_vm_mode"
+  ],
+  "properties": {
+    "schema_version": {"const": "rsi_omega_daemon_pack_v2"},
+    "omega_policy_ir_rel": {"type": "string", "const": "omega_policy_ir_v1.json"},
+    "omega_capability_registry_rel": {"type": "string", "const": "omega_capability_registry_v2.json"},
+    "omega_objectives_rel": {"type": "string", "const": "omega_objectives_v1.json"},
+    "omega_runaway_config_rel": {"type": "string", "const": "omega_runaway_config_v1.json"},
+    "omega_budgets_rel": {"type": "string", "const": "omega_budgets_v1.json"},
+    "omega_allowlists_rel": {"type": "string", "const": "omega_allowlists_v1.json"},
+    "healthcheck_suitepack_rel": {"type": "string", "const": "healthcheck_suitepack_v1.json"},
+    "baseline_metrics_rel": {"type": "string", "const": "baselines/baseline_metrics_v1.json"},
+    "goal_queue_rel": {"type": "string", "const": "goals/omega_goal_queue_v1.json"},
+    "allow_unbound_observer_fallback": {"type": "boolean"},
+    "seed_u64": {"type": "integer", "minimum": 0},
+    "coordinator_isa_program_rel": {"type": "string"},
+    "coordinator_isa_program_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "coordinator_opcode_table_rel": {"type": "string"},
+    "coordinator_opcode_table_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "predictor_weights_rel": {"type": "string"},
+    "predictor_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "objective_j_profile_rel": {"type": "string"},
+    "objective_j_profile_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "policy_vm_mode": {"type": "string", "enum": ["DECISION_ONLY", "DUAL", "PROPOSAL_ONLY"]},
+    "policy_branch_id": {"type": "string"},
+    "policy_round_u32": {"type": "integer", "minimum": 0},
+    "policy_programs": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 100,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["program_rel", "program_id"],
+        "properties": {
+          "program_rel": {"type": "string"},
+          "program_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"}
+        }
+      }
+    },
+    "policy_budget_spec_rel": {"type": "string"},
+    "policy_budget_spec_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "policy_determinism_contract_rel": {"type": "string"},
+    "policy_determinism_contract_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "policy_merge_policy_rel": {"type": "string"},
+    "policy_merge_policy_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "policy_selection_policy_rel": {"type": "string"},
+    "policy_selection_policy_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "policy_parallelism_u32": {"type": "integer", "minimum": 1, "maximum": 100},
+    "policy_hint_rounds_u32": {"type": "integer", "minimum": 1},
+    "policy_vm_stark_proof_enable_b": {"type": "boolean"},
+    "policy_vm_air_profile_rel": {"type": "string"},
+    "policy_vm_air_profile_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "policy_vm_winterfell_backend_contract_rel": {"type": "string"},
+    "policy_vm_winterfell_backend_contract_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "policy_vm_action_kind_enum_rel": {"type": "string"},
+    "policy_vm_action_kind_enum_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "policy_vm_candidate_campaign_ids_list_rel": {"type": "string"},
+    "policy_vm_candidate_campaign_ids_list_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"}
+  },
+  "allOf": [
+    {
+      "if": {"required": ["predictor_weights_rel"]},
+      "then": {"required": ["predictor_id"]}
+    },
+    {
+      "if": {"required": ["predictor_id"]},
+      "then": {"required": ["predictor_weights_rel"]}
+    },
+    {
+      "if": {"required": ["objective_j_profile_rel"]},
+      "then": {"required": ["objective_j_profile_id"]}
+    },
+    {
+      "if": {"required": ["objective_j_profile_id"]},
+      "then": {"required": ["objective_j_profile_rel"]}
+    },
+    {
+      "if": {"required": ["policy_budget_spec_rel"]},
+      "then": {"required": ["policy_budget_spec_id"]}
+    },
+    {
+      "if": {"required": ["policy_budget_spec_id"]},
+      "then": {"required": ["policy_budget_spec_rel"]}
+    },
+    {
+      "if": {"required": ["policy_determinism_contract_rel"]},
+      "then": {"required": ["policy_determinism_contract_id"]}
+    },
+    {
+      "if": {"required": ["policy_determinism_contract_id"]},
+      "then": {"required": ["policy_determinism_contract_rel"]}
+    },
+    {
+      "if": {"required": ["policy_merge_policy_rel"]},
+      "then": {"required": ["policy_merge_policy_id"]}
+    },
+    {
+      "if": {"required": ["policy_merge_policy_id"]},
+      "then": {"required": ["policy_merge_policy_rel"]}
+    },
+    {
+      "if": {"required": ["policy_selection_policy_rel"]},
+      "then": {"required": ["policy_selection_policy_id"]}
+    },
+    {
+      "if": {"required": ["policy_selection_policy_id"]},
+      "then": {"required": ["policy_selection_policy_rel"]}
+    },
+    {
+      "if": {
+        "properties": {"policy_vm_stark_proof_enable_b": {"const": true}},
+        "required": ["policy_vm_stark_proof_enable_b"]
+      },
+      "then": {
+        "required": [
+          "policy_vm_air_profile_rel",
+          "policy_vm_air_profile_id",
+          "policy_vm_winterfell_backend_contract_rel",
+          "policy_vm_winterfell_backend_contract_id",
+          "policy_vm_action_kind_enum_rel",
+          "policy_vm_action_kind_enum_id",
+          "policy_vm_candidate_campaign_ids_list_rel",
+          "policy_vm_candidate_campaign_ids_list_id"
+        ]
+      }
+    },
+    {
+      "if": {
+        "properties": {"policy_vm_mode": {"enum": ["PROPOSAL_ONLY", "DUAL"]}},
+        "required": ["policy_vm_mode"]
+      },
+      "then": {
+        "required": [
+          "policy_programs",
+          "policy_budget_spec_rel",
+          "policy_budget_spec_id",
+          "policy_determinism_contract_rel",
+          "policy_determinism_contract_id",
+          "policy_merge_policy_rel",
+          "policy_merge_policy_id",
+          "policy_selection_policy_rel",
+          "policy_selection_policy_id",
+          "policy_parallelism_u32",
+          "policy_hint_rounds_u32",
+          "predictor_weights_rel",
+          "predictor_id",
+          "objective_j_profile_rel",
+          "objective_j_profile_id"
+        ]
+      }
+    }
+  ]
+}

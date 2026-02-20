@@ -1,0 +1,72 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v19_0/policy_vm_stark_proof_v1",
+  "title": "Policy VM STARK proof v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "proof_id",
+    "inputs_descriptor_hash",
+    "policy_program_id",
+    "opcode_table_id",
+    "air_profile_id",
+    "proof_backend_id",
+    "proof_options_hash",
+    "public_outputs",
+    "decision_plan_hash",
+    "steps_executed_u64",
+    "budget_outcome_hash",
+    "proof_bytes_hash",
+    "proof_bytes_rel"
+  ],
+  "properties": {
+    "schema_version": {"const": "policy_vm_stark_proof_v1"},
+    "proof_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "inputs_descriptor_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "policy_program_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "opcode_table_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "merged_hint_state_id": {
+      "anyOf": [
+        {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+        {"type": "null"}
+      ]
+    },
+    "air_profile_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "proof_backend_id": {"type": "string", "const": "WINTERFELL_STARK_FRI_V1"},
+    "proof_options_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "public_outputs": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "action_kind_code_u8",
+        "campaign_id_index_u16",
+        "priority_q32_i64",
+        "steps_executed_u64",
+        "budget_outcome_hash"
+      ],
+      "properties": {
+        "action_kind_code_u8": {"type": "integer", "minimum": 0, "maximum": 255},
+        "campaign_id_index_u16": {"type": "integer", "minimum": 0, "maximum": 65535},
+        "priority_q32_i64": {"type": "integer"},
+        "steps_executed_u64": {"type": "integer", "minimum": 0},
+        "budget_outcome_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"}
+      }
+    },
+    "decision_plan_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "steps_executed_u64": {"type": "integer", "minimum": 0},
+    "budget_outcome_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "winterfell_backend_id": {"type": "string"},
+    "winterfell_backend_version": {"type": "string"},
+    "winterfell_field_id": {"type": "string"},
+    "winterfell_extension_id": {"type": "string"},
+    "winterfell_merkle_hasher_id": {"type": "string"},
+    "winterfell_random_coin_hasher_id": {"type": "string"},
+    "proof_representation_kind": {
+      "type": "string",
+      "enum": ["STARK_FRI_PROOF_V1", "SEMANTIC_TRACE_WITNESS_V1"]
+    },
+    "proof_bytes_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "proof_bytes_rel": {"type": "string", "minLength": 1}
+  }
+}

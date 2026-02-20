@@ -1,0 +1,55 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v19_0/merged_hint_state_v1",
+  "title": "Merged hint state v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "inputs_descriptor_hash",
+    "round_u32",
+    "contributing_hint_hashes",
+    "merge_policy_id",
+    "merged_hints"
+  ],
+  "properties": {
+    "schema_version": {"const": "merged_hint_state_v1"},
+    "inputs_descriptor_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "round_u32": {"type": "integer", "minimum": 0},
+    "contributing_hint_hashes": {
+      "type": "array",
+      "items": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"}
+    },
+    "merge_policy_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "merged_hints": {
+      "type": "array",
+      "items": {
+        "oneOf": [
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["kind", "key", "q32"],
+            "properties": {
+              "kind": {"const": "Q32_SCORE"},
+              "key": {"type": "string", "minLength": 1},
+              "q32": {"type": "integer"}
+            }
+          },
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["kind", "key", "values"],
+            "properties": {
+              "kind": {"const": "SET"},
+              "key": {"type": "string", "minLength": 1},
+              "values": {
+                "type": "array",
+                "items": {"type": "string", "minLength": 1}
+              }
+            }
+          }
+        ]
+      }
+    }
+  }
+}

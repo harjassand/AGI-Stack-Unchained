@@ -9,12 +9,17 @@ from cdel.v18_0.eudrs_u.qxrl_common_v1 import compute_eval_id_config_hash, compu
 from cdel.v18_0.eudrs_u.qxrl_dataset_v1 import QXRLDatasetExampleV1
 from cdel.v18_0.eudrs_u.qxrl_eval_v1 import compute_qxrl_eval_scorecard_v1
 from cdel.v18_0.eudrs_u.qxrl_forward_qre_v1 import parse_qxrl_model_manifest_v1
+from cdel.v18_0.eudrs_u.qxrl_preference_contrast_v1 import (
+    PREFERENCE_HEAD_WEIGHT_TENSOR_NAME,
+    PREFERENCE_POLYNOMIAL_ID_Q32_LOGSIGMOID_NEG_V1,
+)
 from cdel.v18_0.eudrs_u.qxrl_train_replay_v1 import (
     WeightsBlockDescV1,
     WeightsTensorDescV1,
     load_and_verify_weights_manifest_v1,
     replay_qxrl_training_v1,
 )
+from cdel.v18_0.eudrs_u.eudrs_u_hash_v1 import gcj1_canon_bytes, sha256_prefixed
 
 
 def _find_superproject_root() -> Path | None:
@@ -29,7 +34,7 @@ def _fixture_opset_id() -> str:
     return "opset:eudrs_u_v1:sha256:" + ("0" * 64)
 
 
-def _tensor_specs_qre(*, vocab: int, seq: int, dm: int, dh: int, de: int) -> list[dict]:
+def _tensor_specs_qre(*, vocab: int, seq: int, dm: int, dh: int, de: int, include_pref_head: bool = False) -> list[dict]:
     req = {
         "qxrl/tok_emb": [int(vocab), int(dm)],
         "qxrl/pos_emb": [int(seq), int(dm)],
@@ -47,6 +52,16 @@ def _tensor_specs_qre(*, vocab: int, seq: int, dm: int, dh: int, de: int) -> lis
         specs.append({"name": str(name), "shape_u32": list(shape), "dtype": "Q32_S64_V1", "trainable": True})
         mom = "qxrl/opt/mom/" + str(name)[len("qxrl/") :]
         specs.append({"name": str(mom), "shape_u32": list(shape), "dtype": "Q32_S64_V1", "trainable": False})
+    if include_pref_head:
+        specs.append({"name": str(PREFERENCE_HEAD_WEIGHT_TENSOR_NAME), "shape_u32": [1], "dtype": "Q32_S64_V1", "trainable": True})
+        specs.append(
+            {
+                "name": "qxrl/opt/mom/pref_head/w",
+                "shape_u32": [1],
+                "dtype": "Q32_S64_V1",
+                "trainable": False,
+            }
+        )
     specs.sort(key=lambda row: str(row.get("name", "")))
     return specs
 
@@ -83,7 +98,7 @@ def _tensor_specs_tsae(*, vocab: int, seq: int, dm: int, de: int, n_layers: int,
     return specs
 
 
-def _fixture_model() -> object:
+def _fixture_model(*, include_pref_head: bool = False) -> object:
     opset_id = _fixture_opset_id()
     vocab = 257
     seq = 8
@@ -112,8 +127,10 @@ def _fixture_model() -> object:
             "invsqrt_lut_manifest_ref": lut_manifest_ref,
         },
         "qre": {"d_hidden_u32": dh, "inv_seq_len_q32": {"q": (1 << 32) // seq}},
-        "tensor_specs": _tensor_specs_qre(vocab=vocab, seq=seq, dm=dm, dh=dh, de=de),
+        "tensor_specs": _tensor_specs_qre(vocab=vocab, seq=seq, dm=dm, dh=dh, de=de, include_pref_head=include_pref_head),
     }
+    if include_pref_head:
+        model_obj["preference_head"] = {"enabled_b": True, "feature_kind": "PROPOSAL_HASH_HEAD32_Q32_V1"}
     model_obj["model_id"] = compute_self_hash_id(model_obj, id_field="model_id")
     return parse_qxrl_model_manifest_v1(model_obj)
 
@@ -199,7 +216,7 @@ def _one_block(total: int) -> list[WeightsBlockDescV1]:
     ]
 
 
-def _fixture_initial_weights(opset_id: str) -> tuple[str, object]:
+def _fixture_initial_weights(opset_id: str, *, include_pref_head: bool = False) -> tuple[str, object]:
     Q32_ONE = 1 << 32
     vocab = 257
     seq = 8
@@ -253,6 +270,8 @@ def _fixture_initial_weights(opset_id: str) -> tuple[str, object]:
         "qxrl/out_emb": ([vocab, de], out_emb),
         "qxrl/out_b": ([vocab], out_b),
     }
+    if include_pref_head:
+        names_shapes_data[str(PREFERENCE_HEAD_WEIGHT_TENSOR_NAME)] = ([1], [0])
 
     tensor_descs: list[WeightsTensorDescV1] = []
     for name, (shape, data) in sorted(names_shapes_data.items()):
@@ -361,7 +380,12 @@ def _fixture_initial_weights_tsae(opset_id: str) -> tuple[str, object]:
     return str(manifest_id), weights
 
 
-def _fixture_training_manifest(opset_id: str) -> dict:
+def _fixture_training_manifest(
+    opset_id: str,
+    *,
+    preference_examples_ref: dict[str, str] | None = None,
+    preference_enable_b: bool = False,
+) -> dict:
     tm = {
         "schema_id": "qxrl_training_manifest_v1",
         "training_id": "sha256:" + ("0" * 64),
@@ -392,6 +416,15 @@ def _fixture_training_manifest(opset_id: str) -> dict:
         "lr_q32": {"q": 1 << 30},
         "momentum_q32": {"q": 0},
     }
+    if preference_enable_b:
+        if not isinstance(preference_examples_ref, dict):
+            raise AssertionError("preference_examples_ref is required when preference_enable_b=True")
+        tm["preference_enable_b"] = True
+        tm["preference_examples_ref"] = dict(preference_examples_ref)
+        tm["preference_margin_q32"] = {"q": 1 << 30}
+        tm["preference_temperature_q32"] = {"q": 1 << 32}
+        tm["preference_loss_weight_q32"] = {"q": 1 << 32}
+        tm["preference_polynomial_id"] = str(PREFERENCE_POLYNOMIAL_ID_Q32_LOGSIGMOID_NEG_V1)
     tm["training_id"] = compute_self_hash_id(tm, id_field="training_id")
     return tm
 
@@ -435,6 +468,103 @@ def test_qxrl_one_update_replay_pinned() -> None:
     assert h_train_tail32_1 == h_train_tail32_2
     assert final_id1 == expected_final_wroot_id
     assert h_train_tail32_1.hex() == expected_h_train_tail_hex
+
+
+def test_qxrl_preference_contrast_gate_updates_aux_head_only() -> None:
+    opset_id = _fixture_opset_id()
+    model = _fixture_model(include_pref_head=True)
+    examples, dataset_root_hash32 = _fixture_dataset()
+    init_wroot_id, init_weights = _fixture_initial_weights(opset_id, include_pref_head=True)
+    init_wroot_id2, init_weights2 = _fixture_initial_weights(opset_id, include_pref_head=True)
+    assert init_wroot_id2 == init_wroot_id
+
+    counterfactual_obj = {
+        "schema_version": "counterfactual_trace_example_v1",
+        "inputs_descriptor_hash": "sha256:" + ("1" * 64),
+        "winner": {
+            "proposal_hash": "sha256:" + ("2" * 64),
+            "branch_id": "b00",
+            "decision_plan_hash": "sha256:" + ("3" * 64),
+            "expected_J_new_q32": 0,
+            "realized_delta_J_q32": 0,
+            "outcome_code": "PROMOTED",
+        },
+        "losers": [
+            {
+                "proposal_hash": "sha256:" + ("4" * 64),
+                "branch_id": "b01",
+                "decision_plan_hash": "sha256:" + ("5" * 64),
+                "expected_J_new_q32": 0,
+            }
+        ],
+        "training_target": {
+            "kind": "PREFERENCE_Q32",
+            "temperature_q32": 1 << 32,
+            "margin_q32": 1 << 30,
+        },
+    }
+    counterfactual_bytes = gcj1_canon_bytes(counterfactual_obj)
+    counterfactual_id = sha256_prefixed(counterfactual_bytes)
+    counterfactual_ref = {
+        "artifact_id": str(counterfactual_id),
+        "artifact_relpath": "polymath/registry/eudrs_u/training/sha256_"
+        + str(counterfactual_id).split(":", 1)[1]
+        + ".counterfactual_trace_example_v1.json",
+    }
+
+    tm_pref = _fixture_training_manifest(
+        opset_id,
+        preference_examples_ref=counterfactual_ref,
+        preference_enable_b=True,
+    )
+
+    def _loader(ref: dict[str, str]) -> bytes:
+        if str(ref.get("artifact_id", "")) == str(counterfactual_id):
+            return bytes(counterfactual_bytes)
+        return b""
+
+    out_gate_off = replay_qxrl_training_v1(
+        training_manifest_obj=tm_pref,
+        model=model,
+        dataset_root_hash32=dataset_root_hash32,
+        examples=examples,
+        initial_weights_manifest_id=init_wroot_id,
+        initial_weights_manifest=init_weights,
+        registry_loader=_loader,
+        return_debug=False,
+        preference_runtime_gate_b=False,
+    )
+    out_gate_on = replay_qxrl_training_v1(
+        training_manifest_obj=tm_pref,
+        model=model,
+        dataset_root_hash32=dataset_root_hash32,
+        examples=examples,
+        initial_weights_manifest_id=init_wroot_id,
+        initial_weights_manifest=init_weights2,
+        registry_loader=_loader,
+        return_debug=False,
+        preference_runtime_gate_b=True,
+    )
+
+    _final_bytes_off, final_id_off, final_obj_off, final_blocks_off, _tail_off, _dbg_off = out_gate_off
+    _final_bytes_on, final_id_on, final_obj_on, final_blocks_on, _tail_on, _dbg_on = out_gate_on
+    assert final_id_on != final_id_off
+
+    blocks_by_id_off = {ref["artifact_id"]: b for ref, b in final_blocks_off}
+    blocks_by_id_on = {ref["artifact_id"]: b for ref, b in final_blocks_on}
+
+    final_weights_off = load_and_verify_weights_manifest_v1(
+        weights_manifest_obj=final_obj_off,
+        registry_loader=lambda ref: blocks_by_id_off[ref["artifact_id"]],
+    )
+    final_weights_on = load_and_verify_weights_manifest_v1(
+        weights_manifest_obj=final_obj_on,
+        registry_loader=lambda ref: blocks_by_id_on[ref["artifact_id"]],
+    )
+    tensor_off = {t.name: list(t.data_q32_s64) for t in final_weights_off.tensors}
+    tensor_on = {t.name: list(t.data_q32_s64) for t in final_weights_on.tensors}
+    assert tensor_off["qxrl/enc_w1"] == tensor_on["qxrl/enc_w1"]
+    assert tensor_off[str(PREFERENCE_HEAD_WEIGHT_TENSOR_NAME)] != tensor_on[str(PREFERENCE_HEAD_WEIGHT_TENSOR_NAME)]
 
 
 def test_qxrl_mask_and_negs_pinned() -> None:

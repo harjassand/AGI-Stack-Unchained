@@ -1,0 +1,27 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v19_0/policy_merge_policy_v1",
+  "title": "Policy merge policy v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "merge_policy_id",
+    "q32_score_default_aggregator",
+    "default_set_max_values_u32"
+  ],
+  "properties": {
+    "schema_version": {"const": "policy_merge_policy_v1"},
+    "merge_policy_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "q32_score_default_aggregator": {"type": "string", "enum": ["SUM", "MAX"]},
+    "q32_score_aggregators_by_key": {
+      "type": "object",
+      "additionalProperties": {"type": "string", "enum": ["SUM", "MAX"]}
+    },
+    "default_set_max_values_u32": {"type": "integer", "minimum": 0, "maximum": 4294967295},
+    "set_max_values_by_key_u32": {
+      "type": "object",
+      "additionalProperties": {"type": "integer", "minimum": 0, "maximum": 4294967295}
+    }
+  }
+}

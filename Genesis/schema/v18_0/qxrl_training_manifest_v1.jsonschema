@@ -74,6 +74,27 @@
       "properties": {"q": {"type": "integer", "minimum": 0}},
       "required": ["q"]
     },
+    "preference_enable_b": {"type": "boolean"},
+    "preference_examples_ref": {"$ref": "https://genesis.engine/specs/v18_0/eudrs_u_artifact_ref_v1"},
+    "preference_margin_q32": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {"q": {"type": "integer"}},
+      "required": ["q"]
+    },
+    "preference_temperature_q32": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {"q": {"type": "integer", "minimum": 1}},
+      "required": ["q"]
+    },
+    "preference_loss_weight_q32": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {"q": {"type": "integer", "minimum": 0}},
+      "required": ["q"]
+    },
+    "preference_polynomial_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
 
     "grad_clip_abs_q32": {
       "type": "object",
@@ -105,5 +126,23 @@
     "ctr_loss_weight_q32",
     "lr_q32",
     "momentum_q32"
+  ],
+  "allOf": [
+    {
+      "if": {
+        "required": ["preference_enable_b"],
+        "properties": {"preference_enable_b": {"const": true}}
+      },
+      "then": {
+        "required": [
+          "preference_enable_b",
+          "preference_examples_ref",
+          "preference_margin_q32",
+          "preference_temperature_q32",
+          "preference_loss_weight_q32",
+          "preference_polynomial_id"
+        ]
+      }
+    }
   ]
 }

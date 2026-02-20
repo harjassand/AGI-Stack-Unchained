@@ -1,0 +1,43 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v19_0/policy_selection_policy_v1",
+  "title": "Policy selection policy v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "selection_policy_id",
+    "cost_model"
+  ],
+  "properties": {
+    "schema_version": {"const": "policy_selection_policy_v1"},
+    "selection_policy_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "cost_model": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "base_cost_q32",
+        "per_step_q32",
+        "per_item_q32",
+        "per_byte_read_q32",
+        "per_byte_written_q32"
+      ],
+      "properties": {
+        "base_cost_q32": {"type": "integer", "minimum": 0},
+        "per_step_q32": {"type": "integer", "minimum": 0},
+        "per_item_q32": {"type": "integer", "minimum": 0},
+        "per_byte_read_q32": {"type": "integer", "minimum": 0},
+        "per_byte_written_q32": {"type": "integer", "minimum": 0}
+      }
+    },
+    "counterfactual_target": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["temperature_q32", "margin_q32"],
+      "properties": {
+        "temperature_q32": {"type": "integer", "minimum": 1},
+        "margin_q32": {"type": "integer"}
+      }
+    }
+  }
+}

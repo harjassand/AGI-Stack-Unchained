@@ -1,0 +1,54 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v19_0/hint_bundle_v1",
+  "title": "Hint bundle v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "inputs_descriptor_hash",
+    "policy_program_id",
+    "branch_id",
+    "round_u32",
+    "hint_items",
+    "hint_commitment_hash"
+  ],
+  "properties": {
+    "schema_version": {"const": "hint_bundle_v1"},
+    "inputs_descriptor_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "policy_program_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "branch_id": {"type": "string", "pattern": "^b[0-9]{2}$"},
+    "round_u32": {"type": "integer", "minimum": 0},
+    "hint_items": {
+      "type": "array",
+      "items": {
+        "oneOf": [
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["kind", "key", "q32"],
+            "properties": {
+              "kind": {"const": "Q32_SCORE"},
+              "key": {"type": "string", "minLength": 1},
+              "q32": {"type": "integer"}
+            }
+          },
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["kind", "key", "values"],
+            "properties": {
+              "kind": {"const": "SET"},
+              "key": {"type": "string", "minLength": 1},
+              "values": {
+                "type": "array",
+                "items": {"type": "string", "minLength": 1}
+              }
+            }
+          }
+        ]
+      }
+    },
+    "hint_commitment_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"}
+  }
+}

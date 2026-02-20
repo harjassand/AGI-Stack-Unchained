@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import signal
 import shutil
 from pathlib import Path
 
@@ -59,6 +60,19 @@ def _find_matching_artifact(root: Path, source: dict[str, object], *, run_scope_
     candidates: list[Path] = []
     if run_scope_root is not None:
         scope = run_scope_root.resolve()
+        direct_subdir = verifier._OBS_SOURCE_RUNS_DIRECT_STATE_SUBDIR.get(schema_id)  # noqa: SLF001
+        if direct_subdir and producer_run_id:
+            for daemon_id in ("rsi_omega_daemon_v18_0", "rsi_omega_daemon_v19_0"):
+                candidates.extend(
+                    sorted(
+                        scope.glob(f"**/{producer_run_id}/**/daemon/{daemon_id}/state/{direct_subdir}/{filename}")
+                    )
+                )
+                candidates.extend(
+                    sorted(
+                        scope.glob(f"**/{producer_run_id}/**/state/{direct_subdir}/{filename}")
+                    )
+                )
         if producer_run_id:
             scoped_dir = scope / producer_run_id
             if scoped_dir.is_dir():
@@ -68,16 +82,19 @@ def _find_matching_artifact(root: Path, source: dict[str, object], *, run_scope_
         if not candidates:
             candidates.extend(sorted(scope.glob(f"**/{filename}")))
 
-    if producer_run_id:
-        run_dir = runs_root / producer_run_id
-        if run_dir.is_dir():
-            candidates.extend(sorted(run_dir.glob(f"**/{filename}")))
+    # In integration tests, constrain artifact lookup to the scoped run root to
+    # avoid expensive repo-wide `runs/**` scans that can hang on large trees.
+    if run_scope_root is None:
+        if producer_run_id:
+            run_dir = runs_root / producer_run_id
+            if run_dir.is_dir():
+                candidates.extend(sorted(run_dir.glob(f"**/{filename}")))
+            if not candidates:
+                candidates.extend(sorted(runs_root.glob(f"{producer_run_id}*/**/{filename}")))
+            if not candidates:
+                candidates.extend(sorted(runs_root.glob(f"**/{producer_run_id}/**/{filename}")))
         if not candidates:
-            candidates.extend(sorted(runs_root.glob(f"{producer_run_id}*/**/{filename}")))
-        if not candidates:
-            candidates.extend(sorted(runs_root.glob(f"**/{producer_run_id}/**/{filename}")))
-    if not candidates:
-        candidates.extend(sorted(runs_root.glob(f"**/{filename}")))
+            candidates.extend(sorted(runs_root.glob(f"**/{filename}")))
 
     for candidate in sorted(set(candidates), key=lambda path: path.as_posix()):
         try:
@@ -87,16 +104,17 @@ def _find_matching_artifact(root: Path, source: dict[str, object], *, run_scope_
         if canon_hash_obj(payload) == artifact_hash:
             return candidate
 
-    pattern = f"**/*.{suffix}"
-    for candidate in sorted(runs_root.glob(pattern), key=lambda path: path.as_posix()):
-        if not candidate.is_file():
-            continue
-        try:
-            payload = load_canon_dict(candidate)
-        except OmegaV18Error:
-            continue
-        if canon_hash_obj(payload) == artifact_hash:
-            return candidate
+    if run_scope_root is None:
+        pattern = f"**/*.{suffix}"
+        for candidate in sorted(runs_root.glob(pattern), key=lambda path: path.as_posix()):
+            if not candidate.is_file():
+                continue
+            try:
+                payload = load_canon_dict(candidate)
+            except OmegaV18Error:
+                continue
+            if canon_hash_obj(payload) == artifact_hash:
+                return candidate
 
     raise FileNotFoundError(f"no source artifact found for schema_id={schema_id}")
 
@@ -138,6 +156,10 @@ def test_verifier_recomputes_observation_with_stats_source(tmp_path, monkeypatch
             # in-verifier payloads and do not require index path bindings.
             if str(source.get("producer_run_id", "")) == "observer_fallback":
                 continue
+            # CCAP receipts are located via verifier fast-path candidate search
+            # under dispatch/*/verifier and may not be under the scoped run id.
+            if schema_id == "ccap_receipt_v1":
+                continue
             path = _find_matching_artifact(root, source, run_scope_root=series_root)
             entries[schema_id] = {"path_rel": path.relative_to(root).as_posix()}
 
@@ -148,6 +170,18 @@ def test_verifier_recomputes_observation_with_stats_source(tmp_path, monkeypatch
             raise AssertionError("verifier used Path.rglob fallback")
 
         monkeypatch.setattr(Path, "rglob", _forbid_rglob)
-        assert verify(state_dir_2, mode="full") == "VALID"
+        if hasattr(signal, "SIGALRM"):
+            def _raise_timeout(_signum, _frame) -> None:  # type: ignore[no-untyped-def]
+                raise TimeoutError("verifier source-recompute exceeded timeout")
+
+            prev_handler = signal.signal(signal.SIGALRM, _raise_timeout)
+            signal.alarm(90)
+            try:
+                assert verify(state_dir_2, mode="full") == "VALID"
+            finally:
+                signal.alarm(0)
+                signal.signal(signal.SIGALRM, prev_handler)
+        else:
+            assert verify(state_dir_2, mode="full") == "VALID"
     finally:
         shutil.rmtree(series_root, ignore_errors=True)

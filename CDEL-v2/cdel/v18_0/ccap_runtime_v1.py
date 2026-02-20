@@ -72,6 +72,45 @@ def compute_repo_base_tree_id(repo_root: Path) -> str:
     return canon_hash_obj({"schema_version": "ccap_base_tree_git_index_v1", "head": head_hex, "tree": tree_hex})
 
 
+def compute_repo_base_tree_id_tolerant(repo_root: Path) -> str:
+    """Pinned repo tree id routine that tolerates dirty worktrees.
+
+    Primary path is the strict CCAP routine. If the repo has unstaged changes
+    (strict routine yields VERIFY_ERROR), this falls back to a pinned git-only
+    method that binds index tree + HEAD + unstaged diff hash.
+    """
+
+    try:
+        return compute_repo_base_tree_id(repo_root)
+    except Exception:
+        pass
+
+    tree = _run_git(repo_root, ["write-tree"])
+    if tree.returncode != 0:
+        fail("MISSING_STATE_INPUT")
+    tree_hex = str((tree.stdout or "")).strip()
+    if not tree_hex:
+        fail("MISSING_STATE_INPUT")
+
+    head_run = _run_git(repo_root, ["rev-parse", "--verify", "HEAD"])
+    head_hex = str((head_run.stdout or "")).strip() if head_run.returncode == 0 else ""
+
+    diff_run = _run_git(repo_root, ["diff", "--binary"])
+    if diff_run.returncode != 0:
+        fail("MISSING_STATE_INPUT")
+    diff_raw = (diff_run.stdout or "").encode("utf-8")
+    diff_hash = f"sha256:{hashlib.sha256(diff_raw).hexdigest()}" if diff_raw else "sha256:" + ("0" * 64)
+
+    return canon_hash_obj(
+        {
+            "schema_version": "ccap_base_tree_git_index_v1_tolerant",
+            "head": head_hex,
+            "tree": tree_hex,
+            "unstaged_diff_hash": diff_hash,
+        }
+    )
+
+
 def materialize_repo_snapshot(repo_root: Path, out_dir: Path) -> None:
     # Faster export of the repo snapshot using git plumbing (binds to index).
     if out_dir.exists():
@@ -301,6 +340,7 @@ __all__ = [
     "ccap_payload_id",
     "ccap_blob_path",
     "compute_repo_base_tree_id",
+    "compute_repo_base_tree_id_tolerant",
     "compute_workspace_tree_id",
     "discover_ccap_relpath",
     "materialize_repo_snapshot",

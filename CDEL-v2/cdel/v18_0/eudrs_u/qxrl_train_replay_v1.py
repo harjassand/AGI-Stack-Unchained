@@ -35,6 +35,8 @@ from .qxrl_common_v1 import (
     ENCODER_KIND_TSAE_V1,
     OPTIMIZER_KIND_ADAMW_Q32_V1,
     OPTIMIZER_KIND_SGD_MOMENTUM_Q32_V1,
+    PREFERENCE_FEATURE_KIND_PROPOSAL_HASH_HEAD32_Q32_V1,
+    PREFERENCE_HEAD_WEIGHT_TENSOR_NAME,
     parse_qxrl_invsqrt_lut_manifest_v1,
     PRNG_STREAM_TRAIN_MASKS_V1,
     PRNG_STREAM_TRAIN_NEGS_V1,
@@ -55,6 +57,12 @@ from .qxrl_dataset_v1 import QXRLDatasetExampleV1
 from .qxrl_forward_qre_v1 import QXRLForwardCacheV1, QXRLModelSpecV1, QXRLWeightsViewV1, forward_encoder_qre_v1
 from .qxrl_forward_tsae_v1 import QXRLTSAEForwardCacheV1, QXRLWeightsViewTSAEV1, forward_encoder_tsae_v1
 from .qxrl_opset_math_v1 import parse_invsqrt_lut_bin_v1
+from .qxrl_preference_contrast_v1 import (
+    feature_q32_from_proposal_hash,
+    preference_contrast_loss_and_slope_q32,
+    preference_score_q32,
+    resolve_preference_polynomial_id,
+)
 from .qxrl_optimizer_v1 import sgd_momentum_update_inplace_q32_v1
 from .qxrl_ops_v1 import QXRLStepCountersV1, add_sat, mul_q32, q32_vec_to_bytes
 
@@ -113,6 +121,12 @@ class QXRLTrainStepDebugV1:
     prng_counter_u64: int
 
 
+@dataclass(frozen=True, slots=True)
+class QXRLPreferencePairV1:
+    winner_proposal_hash: str
+    loser_proposal_hash: str
+
+
 def _require_int(value: Any, *, reason: str) -> int:
     if not isinstance(value, int):
         fail(reason)
@@ -142,6 +156,71 @@ def _prod_shape(shape_u32: list[int]) -> int:
         if p < 0:
             fail(REASON_QXRL_SCHEMA_INVALID)
     return int(p)
+
+
+def _is_sha256(value: Any) -> bool:
+    return isinstance(value, str) and value.startswith("sha256:") and len(value.split(":", 1)[1]) == 64
+
+
+def _parse_counterfactual_obj_to_pairs(obj: dict[str, Any]) -> list[QXRLPreferencePairV1]:
+    if not isinstance(obj, dict) or str(obj.get("schema_version", "")).strip() != "counterfactual_trace_example_v1":
+        fail(REASON_QXRL_SCHEMA_INVALID)
+    winner = obj.get("winner")
+    if not isinstance(winner, dict):
+        fail(REASON_QXRL_SCHEMA_INVALID)
+    winner_hash = str(winner.get("proposal_hash", "")).strip()
+    if not _is_sha256(winner_hash):
+        fail(REASON_QXRL_SCHEMA_INVALID)
+    losers = obj.get("losers")
+    if not isinstance(losers, list):
+        fail(REASON_QXRL_SCHEMA_INVALID)
+    loser_hashes: list[str] = []
+    for row in losers:
+        if not isinstance(row, dict):
+            fail(REASON_QXRL_SCHEMA_INVALID)
+        proposal_hash = str(row.get("proposal_hash", "")).strip()
+        if not _is_sha256(proposal_hash):
+            fail(REASON_QXRL_SCHEMA_INVALID)
+        loser_hashes.append(proposal_hash)
+    if loser_hashes != sorted(loser_hashes):
+        fail(REASON_QXRL_SCHEMA_INVALID)
+    pairs: list[QXRLPreferencePairV1] = []
+    for loser_hash in loser_hashes:
+        pairs.append(
+            QXRLPreferencePairV1(
+                winner_proposal_hash=str(winner_hash),
+                loser_proposal_hash=str(loser_hash),
+            )
+        )
+    return pairs
+
+
+def _load_preference_pairs_from_ref(
+    *,
+    examples_ref: dict[str, Any],
+    registry_loader: callable,
+) -> list[QXRLPreferencePairV1]:
+    payload_bytes = bytes(registry_loader(dict(examples_ref)))
+    payload_obj = gcj1_loads_and_verify_canonical(payload_bytes)
+    rows: list[dict[str, Any]]
+    if isinstance(payload_obj, dict):
+        rows = [dict(payload_obj)]
+    elif isinstance(payload_obj, list):
+        rows = []
+        for row in payload_obj:
+            if not isinstance(row, dict):
+                fail(REASON_QXRL_SCHEMA_INVALID)
+            rows.append(dict(row))
+    else:
+        fail(REASON_QXRL_SCHEMA_INVALID)
+        rows = []
+    out: list[QXRLPreferencePairV1] = []
+    for row in rows:
+        out.extend(_parse_counterfactual_obj_to_pairs(dict(row)))
+    if not out:
+        fail(REASON_QXRL_SCHEMA_INVALID)
+    out_sorted = sorted(out, key=lambda r: (str(r.winner_proposal_hash), str(r.loser_proposal_hash)))
+    return out_sorted
 
 
 def _decode_q32_tensor_block_v1(raw: bytes, *, expected_elem_count_u32: int) -> list[int]:
@@ -222,6 +301,19 @@ def parse_and_verify_training_manifest_v1(training_manifest_obj: dict[str, Any])
     optimizer_kind = str(training_manifest_obj.get("optimizer_kind", "")).strip()
     if optimizer_kind not in {OPTIMIZER_KIND_SGD_MOMENTUM_Q32_V1, OPTIMIZER_KIND_ADAMW_Q32_V1}:
         fail(REASON_QXRL_SCHEMA_INVALID)
+
+    preference_enable_b = training_manifest_obj.get("preference_enable_b", False)
+    if not isinstance(preference_enable_b, bool):
+        fail(REASON_QXRL_SCHEMA_INVALID)
+    if bool(preference_enable_b):
+        _ = require_artifact_ref_v1(training_manifest_obj.get("preference_examples_ref"), reason=REASON_QXRL_SCHEMA_INVALID)
+        _ = require_q32_obj(training_manifest_obj.get("preference_margin_q32"), reason=REASON_QXRL_SCHEMA_INVALID)
+        temperature_q32 = require_q32_obj(training_manifest_obj.get("preference_temperature_q32"), reason=REASON_QXRL_SCHEMA_INVALID)
+        if int(temperature_q32) <= 0:
+            fail(REASON_QXRL_SCHEMA_INVALID)
+        _ = require_q32_obj(training_manifest_obj.get("preference_loss_weight_q32"), reason=REASON_QXRL_SCHEMA_INVALID)
+        polynomial_id = str(training_manifest_obj.get("preference_polynomial_id", "")).strip()
+        _ = resolve_preference_polynomial_id(polynomial_id)
 
     return dict(training_manifest_obj)
 
@@ -638,6 +730,7 @@ def replay_qxrl_training_v1(
     initial_weights_manifest: WeightsManifestV1,
     registry_loader: callable,  # ArtifactRefV1 -> bytes (for decoding initial weights blocks already loaded)
     return_debug: bool = False,
+    preference_runtime_gate_b: bool = False,
 ) -> tuple[bytes, str, dict[str, Any], list[tuple[dict[str, str], bytes]] | None, bytes, list[QXRLTrainStepDebugV1] | None]:
     """Replay training and return:
 
@@ -682,6 +775,30 @@ def replay_qxrl_training_v1(
     grad_clip_abs_q32 = None
     if "grad_clip_abs_q32" in tm:
         grad_clip_abs_q32 = require_q32_obj(tm.get("grad_clip_abs_q32"), reason=REASON_QXRL_SCHEMA_INVALID)
+
+    preference_manifest_enabled = bool(tm.get("preference_enable_b", False))
+    if "preference_enable_b" in tm and not isinstance(tm.get("preference_enable_b"), bool):
+        fail(REASON_QXRL_SCHEMA_INVALID)
+    preference_enabled = bool(preference_manifest_enabled and bool(preference_runtime_gate_b))
+    preference_pairs: list[QXRLPreferencePairV1] = []
+    preference_margin_q32 = 0
+    preference_temperature_q32 = int(Q32_ONE)
+    preference_loss_weight_q32 = 0
+    preference_polynomial_id = ""
+    if preference_manifest_enabled:
+        examples_ref = require_artifact_ref_v1(tm.get("preference_examples_ref"), reason=REASON_QXRL_SCHEMA_INVALID)
+        preference_margin_q32 = require_q32_obj(tm.get("preference_margin_q32"), reason=REASON_QXRL_SCHEMA_INVALID)
+        preference_temperature_q32 = require_q32_obj(tm.get("preference_temperature_q32"), reason=REASON_QXRL_SCHEMA_INVALID)
+        if int(preference_temperature_q32) <= 0:
+            fail(REASON_QXRL_SCHEMA_INVALID)
+        preference_loss_weight_q32 = require_q32_obj(tm.get("preference_loss_weight_q32"), reason=REASON_QXRL_SCHEMA_INVALID)
+        preference_polynomial_id = str(tm.get("preference_polynomial_id", "")).strip()
+        _ = resolve_preference_polynomial_id(preference_polynomial_id)
+        if not bool(model.preference_head_enabled_b):
+            fail(REASON_QXRL_SCHEMA_INVALID)
+        if str(model.preference_feature_kind).strip() != PREFERENCE_FEATURE_KIND_PROPOSAL_HASH_HEAD32_Q32_V1:
+            fail(REASON_QXRL_SCHEMA_INVALID)
+        preference_pairs = _load_preference_pairs_from_ref(examples_ref=examples_ref, registry_loader=registry_loader)
 
     if not isinstance(examples, list) or not examples:
         fail(REASON_QXRL_SCHEMA_INVALID)
@@ -983,6 +1100,44 @@ def replay_qxrl_training_v1(
                     ctr=ctr,
                 )
 
+        preference_loss_step_q32 = 0
+        preference_pairs_used_u64 = 0
+        if preference_enabled:
+            pref_grad = grads.get(PREFERENCE_HEAD_WEIGHT_TENSOR_NAME)
+            pref_weight = _tensor_data(PREFERENCE_HEAD_WEIGHT_TENSOR_NAME)
+            if not isinstance(pref_grad, list) or not isinstance(pref_weight, list):
+                fail(REASON_QXRL_SCHEMA_INVALID)
+            if len(pref_grad) != 1 or len(pref_weight) != 1:
+                fail(REASON_QXRL_SCHEMA_INVALID)
+            for pair in preference_pairs:
+                winner_feature_q32 = feature_q32_from_proposal_hash(pair.winner_proposal_hash)
+                loser_feature_q32 = feature_q32_from_proposal_hash(pair.loser_proposal_hash)
+                score_winner_q32 = preference_score_q32(
+                    weight_q32_s64=int(pref_weight[0]),
+                    feature_q32_s64=int(winner_feature_q32),
+                    ctr=ctr,
+                )
+                score_loser_q32 = preference_score_q32(
+                    weight_q32_s64=int(pref_weight[0]),
+                    feature_q32_s64=int(loser_feature_q32),
+                    ctr=ctr,
+                )
+                pair_loss_q32, dloss_ddelta_q32 = preference_contrast_loss_and_slope_q32(
+                    score_winner_q32_s64=int(score_winner_q32),
+                    score_loser_q32_s64=int(score_loser_q32),
+                    margin_q32_s64=int(preference_margin_q32),
+                    temperature_q32_pos_s64=int(preference_temperature_q32),
+                    polynomial_id=str(preference_polynomial_id),
+                    ctr=ctr,
+                )
+                weighted_pair_loss_q32 = mul_q32(int(preference_loss_weight_q32), int(pair_loss_q32), ctr)
+                preference_loss_step_q32 = add_sat(int(preference_loss_step_q32), int(weighted_pair_loss_q32), ctr)
+                feature_delta_q32 = add_sat(int(winner_feature_q32), -int(loser_feature_q32), ctr)
+                grad_contrib_q32 = mul_q32(int(dloss_ddelta_q32), int(feature_delta_q32), ctr)
+                grad_contrib_q32 = mul_q32(int(preference_loss_weight_q32), int(grad_contrib_q32), ctr)
+                pref_grad[0] = add_sat(int(pref_grad[0]), int(grad_contrib_q32), ctr)
+                preference_pairs_used_u64 += 1
+
         # Compute batch_hash32 (selection evidence).
         bb = bytearray()
         bb += b"QXRL_BATCH_V1"
@@ -1015,6 +1170,10 @@ def replay_qxrl_training_v1(
             wm += za_hash32
             wm += zp_hash32
             wm += loss_bytes
+        if preference_enabled:
+            wm += b"QXRL_PREF_CONTRAST_V1"
+            wm += _write_u64_le(int(preference_pairs_used_u64))
+            wm += struct.pack("<q", int(preference_loss_step_q32))
         wm_batch_hash32 = _sha25632(bytes(wm))
 
         # PRNG counter rule (per-step).
@@ -1025,6 +1184,8 @@ def replay_qxrl_training_v1(
         # Apply optimizer updates in-place (params + momentum tensors), producing a new weights manifest.
         # Update each param tensor and its momentum tensor.
         for name in param_names:
+            if str(name) == str(PREFERENCE_HEAD_WEIGHT_TENSOR_NAME) and not preference_enabled:
+                continue
             w_data = _tensor_data(name)
             m_data = _momentum_data_for(name)
             g_data = grads[name]

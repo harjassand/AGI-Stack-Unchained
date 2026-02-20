@@ -1,0 +1,42 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v19_0/policy_trace_proposal_v1",
+  "title": "Policy trace proposal v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "inputs_descriptor_hash",
+    "policy_program_id",
+    "branch_id",
+    "vm_trace_hash",
+    "decision_plan_hash",
+    "plan_summary",
+    "expected_J_new_q32",
+    "expected_delta_J_q32",
+    "compute_cost_q32",
+    "proposal_commitment_hash"
+  ],
+  "properties": {
+    "schema_version": {"const": "policy_trace_proposal_v1"},
+    "inputs_descriptor_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "policy_program_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "branch_id": {"type": "string", "pattern": "^b[0-9]{2}$"},
+    "vm_trace_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "decision_plan_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "plan_summary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["action_kind"],
+      "properties": {
+        "action_kind": {"type": "string", "minLength": 1},
+        "campaign_id": {"type": "string"},
+        "budget_hint_q32": {"type": "integer"}
+      }
+    },
+    "expected_J_new_q32": {"type": "integer"},
+    "expected_delta_J_q32": {"type": "integer"},
+    "compute_cost_q32": {"type": "integer", "minimum": 0},
+    "proposal_commitment_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"}
+  }
+}

@@ -57,6 +57,9 @@ INVSQRT_LUT_ARTIFACT_ID_PHASE5: Final[str] = "sha256:f6b7eac00dae22340aefefc3669
 OPTIMIZER_KIND_SGD_MOMENTUM_Q32_V1: Final[str] = "SGD_MOMENTUM_Q32_V1"
 OPTIMIZER_KIND_ADAMW_Q32_V1: Final[str] = "ADAMW_Q32_V1"
 
+PREFERENCE_FEATURE_KIND_PROPOSAL_HASH_HEAD32_Q32_V1: Final[str] = "PROPOSAL_HASH_HEAD32_Q32_V1"
+PREFERENCE_HEAD_WEIGHT_TENSOR_NAME: Final[str] = "qxrl/pref_head/w"
+
 PRNG_STREAM_TRAIN_MASKS_V1: Final[int] = 1
 PRNG_STREAM_TRAIN_NEGS_V1: Final[int] = 2
 PRNG_STREAM_EVAL_MASKS_V1: Final[int] = 3
@@ -210,6 +213,8 @@ class QXRLModelSpecV1:
     rms_epsilon_q32: int
 
     mask_id_u32: int
+    preference_head_enabled_b: bool
+    preference_feature_kind: str
     tensor_specs: tuple[QXRLTensorSpecV1, ...]  # includes optimizer state tensors
     trainable_names: tuple[str, ...]  # sorted by name asc
 
@@ -368,6 +373,8 @@ def parse_qxrl_model_manifest_v1(model_manifest_obj: dict[str, Any]) -> QXRLMode
     d_ff_u32 = 0
     topk_u32 = 0
     rms_epsilon_q32 = 0
+    preference_head_enabled_b = False
+    preference_feature_kind = ""
 
     expected_inv_seq_len_q32 = _expected_inv_seq_len_q32(seq_len_u32=int(seq_len_u32))
 
@@ -423,6 +430,19 @@ def parse_qxrl_model_manifest_v1(model_manifest_obj: dict[str, Any]) -> QXRLMode
 
     mask_id_u32 = mask_id_for_tokenizer(tokenizer_kind=tokenizer_kind, vocab_size_u32=int(vocab_size_u32))
 
+    preference_head_obj = model_manifest_obj.get("preference_head")
+    if preference_head_obj is not None:
+        if not isinstance(preference_head_obj, dict):
+            fail(REASON_QXRL_SCHEMA_INVALID)
+        enabled_b = preference_head_obj.get("enabled_b")
+        if enabled_b is not True:
+            fail(REASON_QXRL_SCHEMA_INVALID)
+        feature_kind = str(preference_head_obj.get("feature_kind", "")).strip()
+        if feature_kind != PREFERENCE_FEATURE_KIND_PROPOSAL_HASH_HEAD32_Q32_V1:
+            fail(REASON_QXRL_SCHEMA_INVALID)
+        preference_head_enabled_b = True
+        preference_feature_kind = str(feature_kind)
+
     # Tensor specs (Phase 5: exact required set, including momentum tensors).
     tensor_specs_raw = model_manifest_obj.get("tensor_specs")
     if not isinstance(tensor_specs_raw, list):
@@ -464,6 +484,8 @@ def parse_qxrl_model_manifest_v1(model_manifest_obj: dict[str, Any]) -> QXRLMode
         n_layers_u32=int(n_layers_u32),
         d_ff_u32=int(d_ff_u32),
     )
+    if preference_head_enabled_b:
+        required_trainable[PREFERENCE_HEAD_WEIGHT_TENSOR_NAME] = [1]
     required_all: dict[str, tuple[list[int], bool]] = {}
     for name, shape in required_trainable.items():
         required_all[str(name)] = (list(shape), True)
@@ -507,6 +529,8 @@ def parse_qxrl_model_manifest_v1(model_manifest_obj: dict[str, Any]) -> QXRLMode
         topk_u32=int(topk_u32),
         rms_epsilon_q32=int(rms_epsilon_q32),
         mask_id_u32=int(mask_id_u32),
+        preference_head_enabled_b=bool(preference_head_enabled_b),
+        preference_feature_kind=str(preference_feature_kind),
         tensor_specs=tuple(tensor_specs),
         trainable_names=trainable_names,
     )
@@ -620,6 +644,8 @@ __all__ = [
     "LUT_KIND_INVSQRT_Q32_NR_LUT_V1",
     "OPTIMIZER_KIND_ADAMW_Q32_V1",
     "OPTIMIZER_KIND_SGD_MOMENTUM_Q32_V1",
+    "PREFERENCE_FEATURE_KIND_PROPOSAL_HASH_HEAD32_Q32_V1",
+    "PREFERENCE_HEAD_WEIGHT_TENSOR_NAME",
     "PRNG_STREAM_EVAL_MASKS_V1",
     "PRNG_STREAM_EVAL_NEGS_V1",
     "PRNG_STREAM_TRAIN_MASKS_V1",

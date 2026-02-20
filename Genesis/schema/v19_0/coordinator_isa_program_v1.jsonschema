@@ -1,0 +1,53 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v19_0/coordinator_isa_program_v1",
+  "title": "Coordinator ISA program v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "isa_version",
+    "program_id",
+    "entry_pc_u32",
+    "constants",
+    "instructions",
+    "declared_limits"
+  ],
+  "properties": {
+    "schema_version": {"const": "coordinator_isa_program_v1"},
+    "isa_version": {"type": "integer", "const": 1},
+    "program_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "entry_pc_u32": {"type": "integer", "minimum": 0},
+    "constants": {"type": "object"},
+    "instructions": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["op", "args"],
+        "properties": {
+          "op": {"type": "string", "minLength": 1},
+          "args": {"type": "object"},
+          "src": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["line_u32"],
+            "properties": {
+              "line_u32": {"type": "integer", "minimum": 0}
+            }
+          }
+        }
+      }
+    },
+    "declared_limits": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["max_steps_u64", "max_stack_items_u32", "max_trace_bytes_u64"],
+      "properties": {
+        "max_steps_u64": {"type": "integer", "minimum": 1},
+        "max_stack_items_u32": {"type": "integer", "minimum": 1},
+        "max_trace_bytes_u64": {"type": "integer", "minimum": 1}
+      }
+    }
+  }
+}

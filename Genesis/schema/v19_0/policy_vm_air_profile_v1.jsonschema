@@ -1,0 +1,83 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v19_0/policy_vm_air_profile_v1",
+  "title": "Policy VM AIR profile v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "air_profile_id",
+    "isa_version",
+    "constraint_system_version",
+    "proof_system_id",
+    "base_field_id",
+    "extension_degree_u32",
+    "commitment_hash_id",
+    "random_coin_hash_id",
+    "proof_options",
+    "candidate_campaign_ids_list_hash",
+    "action_kind_enum_hash",
+    "action_encoding_kind",
+    "supported_action_kinds",
+    "winterfell_backend_id",
+    "winterfell_backend_version",
+    "winterfell_field_id",
+    "winterfell_extension_id",
+    "winterfell_merkle_hasher_id",
+    "winterfell_random_coin_hasher_id",
+    "winterfell_proof_options",
+    "supported_opcodes",
+    "profile_kind"
+  ],
+  "properties": {
+    "schema_version": {"const": "policy_vm_air_profile_v1"},
+    "air_profile_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "isa_version": {"type": "integer", "minimum": 1},
+    "constraint_system_version": {"type": "integer", "minimum": 1},
+    "proof_system_id": {"type": "string", "const": "WINTERFELL_STARK_FRI_V1"},
+    "base_field_id": {"type": "string", "const": "WINTERFELL_F128"},
+    "extension_degree_u32": {"type": "integer", "const": 1},
+    "commitment_hash_id": {"type": "string", "minLength": 1},
+    "random_coin_hash_id": {"type": "string", "minLength": 1},
+    "proof_options": {
+      "type": "object",
+      "minProperties": 1
+    },
+    "candidate_campaign_ids_list_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "action_kind_enum_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "action_encoding_kind": {"type": "string", "enum": ["CONST_INDEX_TUPLE_V1"]},
+    "supported_action_kinds": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "string",
+        "enum": ["SAFE_HALT", "NOOP", "RUN_CAMPAIGN"]
+      }
+    },
+    "winterfell_backend_id": {"type": "string", "minLength": 1},
+    "winterfell_backend_version": {"type": "string", "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$"},
+    "winterfell_field_id": {"type": "string", "enum": ["WINTERFELL_F128"]},
+    "winterfell_extension_id": {"type": "string", "enum": ["FIELD_EXTENSION_NONE_DEGREE_1"]},
+    "winterfell_merkle_hasher_id": {"type": "string", "minLength": 1},
+    "winterfell_random_coin_hasher_id": {"type": "string", "minLength": 1},
+    "winterfell_proof_options": {
+      "type": "object",
+      "minProperties": 1
+    },
+    "profile_kind": {
+      "type": "string",
+      "enum": [
+        "POLICY_VM_STARK_MVP_V1",
+        "POLICY_VM_SEMANTIC_TRACE_MVP_V1",
+        "POLICY_VM_AIR_PROFILE_96_V1",
+        "POLICY_VM_AIR_PROFILE_128_V1"
+      ]
+    },
+    "supported_opcodes": {
+      "type": "array",
+      "minItems": 1,
+      "items": {"type": "string", "minLength": 1}
+    },
+    "notes": {"type": "string"}
+  }
+}

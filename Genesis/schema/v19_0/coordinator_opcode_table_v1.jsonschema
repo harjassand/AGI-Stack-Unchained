@@ -1,0 +1,112 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v19_0/coordinator_opcode_table_v1",
+  "title": "Coordinator opcode table v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "isa_version", "opcode_table_id"],
+  "properties": {
+    "schema_version": {"const": "coordinator_opcode_table_v1"},
+    "isa_version": {"type": "integer", "const": 1},
+    "opcode_table_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "table_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "opcodes": {
+      "type": "object",
+      "additionalProperties": {
+        "oneOf": [
+          {"type": "boolean"},
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["enabled_b"],
+            "properties": {
+              "enabled_b": {"type": "boolean"},
+              "code_u32": {"type": "integer", "minimum": 0}
+            }
+          }
+        ]
+      }
+    },
+    "entries": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "opcode_u16",
+          "opcode_name",
+          "kind",
+          "active_b",
+          "impl",
+          "introduced_tick_u64",
+          "deprecated_tick_u64"
+        ],
+        "properties": {
+          "opcode_u16": {"type": "integer", "minimum": 0, "maximum": 65535},
+          "opcode_name": {"type": "string", "minLength": 1},
+          "kind": {"type": "string", "enum": ["BUILTIN", "NATIVE"]},
+          "active_b": {"type": "boolean"},
+          "impl": {
+            "type": "object",
+            "additionalProperties": true,
+            "required": ["impl_kind"],
+            "properties": {
+              "impl_kind": {"type": "string", "enum": ["BUILTIN", "NATIVE"]},
+              "module_id": {"type": "string", "minLength": 1},
+              "function_id": {"type": "string", "minLength": 1},
+              "op_id": {"type": "string", "minLength": 1},
+              "binary_sha256": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+              "abi_version_u32": {"type": "integer", "minimum": 0},
+              "healthcheck_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"}
+            }
+          },
+          "introduced_tick_u64": {"type": "integer", "minimum": 0},
+          "deprecated_tick_u64": {"type": "integer", "minimum": 0}
+        },
+        "allOf": [
+          {
+            "if": {
+              "properties": {"kind": {"const": "BUILTIN"}},
+              "required": ["kind"]
+            },
+            "then": {
+              "properties": {
+                "impl": {
+                  "required": ["impl_kind", "module_id", "function_id"],
+                  "properties": {"impl_kind": {"const": "BUILTIN"}}
+                }
+              }
+            }
+          },
+          {
+            "if": {
+              "properties": {"kind": {"const": "NATIVE"}},
+              "required": ["kind"]
+            },
+            "then": {
+              "properties": {
+                "impl": {
+                  "required": ["impl_kind", "op_id", "binary_sha256", "abi_version_u32", "healthcheck_id"],
+                  "properties": {"impl_kind": {"const": "NATIVE"}}
+                }
+              }
+            }
+          }
+        ]
+      }
+    },
+    "forbidden_in_phase1": {
+      "type": "array",
+      "items": {"type": "string", "minLength": 1}
+    }
+  },
+  "oneOf": [
+    {
+      "required": ["opcodes", "forbidden_in_phase1"]
+    },
+    {
+      "required": ["table_id", "entries", "forbidden_in_phase1"]
+    }
+  ]
+}

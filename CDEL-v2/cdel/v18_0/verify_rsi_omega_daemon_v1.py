@@ -12,6 +12,7 @@ from pathlib import Path
 from typing import Any
 
 from .omega_allowlists_v1 import is_path_allowed, is_path_forbidden, load_allowlists
+from .ccap_runtime_v1 import compute_repo_base_tree_id_tolerant
 from .omega_common_v1 import (
     OmegaV18Error,
     canon_hash_obj,
@@ -413,6 +414,101 @@ def _decision_inputs_hash(decision_payload: dict[str, Any]) -> str:
             "runaway_env_overrides": decision_payload.get("runaway_env_overrides"),
         }
     )
+
+
+def _is_sha256(value: Any) -> bool:
+    return isinstance(value, str) and value.startswith("sha256:") and len(value.split(":", 1)[1]) == 64
+
+
+def _verify_inputs_descriptor_binding(
+    *,
+    state_root: Path,
+    decision_payload: dict[str, Any],
+    proof: dict[str, Any],
+    prev_state_payload: dict[str, Any] | None = None,
+) -> bool:
+    inputs_hash = proof.get("inputs_hash")
+    if not _is_sha256(inputs_hash):
+        return False
+
+    inputs_dir = state_root / "policy" / "inputs"
+    if not inputs_dir.is_dir():
+        return False
+    hexd = str(inputs_hash).split(":", 1)[1]
+    path = inputs_dir / f"sha256_{hexd}.inputs_descriptor_v1.json"
+    if not path.exists() or not path.is_file():
+        return False
+
+    payload = load_canon_dict(path)
+    if str(payload.get("schema_version", "")).strip() != "inputs_descriptor_v1":
+        fail("NONDETERMINISTIC")
+    if canon_hash_obj(payload) != str(inputs_hash):
+        fail("NONDETERMINISTIC")
+
+    legacy_shape = "descriptor_id" in payload or "observation_report_hash" in payload or "issue_bundle_hash" in payload
+    if legacy_shape:
+        descriptor_id = payload.get("descriptor_id")
+        if not _is_sha256(descriptor_id):
+            fail("INPUTS_DESCRIPTOR_MISMATCH")
+        no_id = dict(payload)
+        no_id.pop("descriptor_id", None)
+        if canon_hash_obj(no_id) != str(descriptor_id):
+            fail("INPUTS_DESCRIPTOR_MISMATCH")
+
+        expected = {
+            "tick_u64": decision_payload.get("tick_u64"),
+            "observation_report_hash": decision_payload.get("observation_report_hash"),
+            "issue_bundle_hash": decision_payload.get("issue_bundle_hash"),
+            "policy_hash": decision_payload.get("policy_hash"),
+            "registry_hash": decision_payload.get("registry_hash"),
+            "budgets_hash": decision_payload.get("budgets_hash"),
+        }
+        observed = {
+            "tick_u64": payload.get("tick_u64"),
+            "observation_report_hash": payload.get("observation_report_hash"),
+            "issue_bundle_hash": payload.get("issue_bundle_hash"),
+            "policy_hash": payload.get("policy_hash"),
+            "registry_hash": payload.get("registry_hash"),
+            "budgets_hash": payload.get("budgets_hash"),
+        }
+        if observed != expected:
+            fail("INPUTS_DESCRIPTOR_MISMATCH")
+    else:
+        for key in (
+            "state_hash",
+            "repo_tree_id",
+            "observation_hash",
+            "issues_hash",
+            "registry_hash",
+            "predictor_id",
+            "j_profile_id",
+            "opcode_table_id",
+            "budget_spec_id",
+            "determinism_contract_id",
+        ):
+            if not _is_sha256(payload.get(key)):
+                fail("INPUTS_DESCRIPTOR_MISMATCH")
+        program_ids = payload.get("policy_program_ids")
+        if not isinstance(program_ids, list) or not program_ids or len(program_ids) > 100:
+            fail("INPUTS_DESCRIPTOR_MISMATCH")
+        for row in program_ids:
+            if not _is_sha256(row):
+                fail("INPUTS_DESCRIPTOR_MISMATCH")
+        if int(payload.get("tick_u64", -1)) != int(decision_payload.get("tick_u64", -2)):
+            fail("INPUTS_DESCRIPTOR_MISMATCH")
+        if isinstance(prev_state_payload, dict):
+            if str(payload.get("state_hash", "")) != str(canon_hash_obj(prev_state_payload)):
+                fail("INPUTS_DESCRIPTOR_MISMATCH")
+        expected_repo_tree_id = compute_repo_base_tree_id_tolerant(repo_root())
+        if str(payload.get("repo_tree_id", "")) != str(expected_repo_tree_id):
+            fail("INPUTS_DESCRIPTOR_MISMATCH")
+        if str(payload.get("observation_hash", "")) != str(decision_payload.get("observation_report_hash", "")):
+            fail("INPUTS_DESCRIPTOR_MISMATCH")
+        if str(payload.get("issues_hash", "")) != str(decision_payload.get("issue_bundle_hash", "")):
+            fail("INPUTS_DESCRIPTOR_MISMATCH")
+        if str(payload.get("registry_hash", "")) != str(decision_payload.get("registry_hash", "")):
+            fail("INPUTS_DESCRIPTOR_MISMATCH")
+    return True
 
 
 def _binding_id(payload: dict[str, Any]) -> str:
@@ -1663,7 +1759,12 @@ def verify(state_dir: Path, *, mode: str = "full") -> str:
     state_root, daemon_root = _resolve_state_dir(state_dir)
     config_dir = daemon_root / "config"
 
-    pack, pack_hash = _load_and_hash(config_dir / "rsi_omega_daemon_pack_v1.json", "rsi_omega_daemon_pack_v1")
+    pack = load_canon_dict(config_dir / "rsi_omega_daemon_pack_v1.json")
+    pack_schema = str(pack.get("schema_version", "")).strip()
+    if pack_schema not in {"rsi_omega_daemon_pack_v1", "rsi_omega_daemon_pack_v2"}:
+        fail("SCHEMA_FAIL")
+    validate_schema(pack, pack_schema)
+    pack_hash = canon_hash_obj(pack)
     policy, policy_hash = load_policy(config_dir / "omega_policy_ir_v1.json")
     registry, registry_hash = load_registry(config_dir / "omega_capability_registry_v2.json")
     objectives, objectives_hash = load_objectives(config_dir / "omega_objectives_v1.json")
@@ -1838,12 +1939,30 @@ def verify(state_dir: Path, *, mode: str = "full") -> str:
     proof = decision_payload.get("recompute_proof")
     if not isinstance(proof, dict):
         fail("NONDETERMINISTIC")
+    policy_vm_bound = False
     if proof.get("inputs_hash") != recomputed_inputs_hash:
-        fail("NONDETERMINISTIC")
+        policy_vm_bound = _verify_inputs_descriptor_binding(
+            state_root=state_root,
+            decision_payload=decision_payload,
+            proof=proof,
+            prev_state_payload=prev_state_payload,
+        )
+        if not policy_vm_bound:
+            fail("NONDETERMINISTIC")
+    else:
+        policy_vm_bound = _verify_inputs_descriptor_binding(
+            state_root=state_root,
+            decision_payload=decision_payload,
+            proof=proof,
+            prev_state_payload=prev_state_payload,
+        )
     if proof.get("plan_hash") != decision_payload.get("plan_id"):
         fail("NONDETERMINISTIC")
 
-    if not market_enabled:
+    recomputed_decision = decision_payload
+    if policy_vm_bound:
+        pass
+    elif not market_enabled:
         recomputed_decision, _ = decide(
             tick_u64=int(decision_payload.get("tick_u64", 0)),
             state=prev_state_payload,

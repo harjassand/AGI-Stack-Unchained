@@ -4533,3 +4533,2219 @@ From a source-of-truth perspective, the essential facts now true in code are:
 
 These are durable architecture facts reflected in runtime and verifier implementation, not only in configuration or documentation surfaces.
 
+
+---
+
+# Appendix N: 2026-02-20 Delta Ledger, Capability Census, and Final-Run Readiness
+
+This appendix is an evidence-bound extension focused on the latest architectural state as of **February 20, 2026**. It documents what changed today, what those changes mean in control-theoretic and trust-boundary terms, what capability generation mechanisms now exist, what capabilities are active versus latent, and what still blocks truly durable autonomous operation.
+
+The purpose is not to restate prior layers. The purpose is to give a precise closeout ledger for the final stretch: which mechanisms are now real, which are merely designed, which are proven in artifacts, which still rely on assumptions, and which constraints remain hard constitutional boundaries.
+
+This section uses repository evidence from:
+
+- same-day commit history,
+- current tracked code under `meta-core/`, `orchestrator/`, `CDEL-v2/`, `Genesis/schema/`, `tools/`, `campaigns/`, and `polymath/`,
+- generated evidence artifacts in `runs/`.
+
+It is intentionally explicit about concrete file paths, ids, and measured values.
+
+---
+
+## J.1 Evidence Boundary and Method
+
+### J.1.1 Date boundary and commit set
+
+The repository now includes a dense sequence of same-day commits on **2026-02-20**. The key progression, in order, is:
+
+1. `c73b4c7` (08:44): Source-of-truth docs extension.
+2. `d14d946` (10:13): Phase 3 scoring and rollback lineage hardening.
+3. `10ace95` (17:06): deterministic hardening + Phase 3b lifecycle + Phase 4 Winterfell STARK integration.
+4. `dfbe6f4` (18:07): Phase4A bootstrap/microkernel SIP ingestion alignment.
+5. `a62f720` + merge `bceac1e` (18:49): additional source-of-truth append and merge.
+6. `14e32e8` (21:29): Phase4C real swap drill with failpointed regime upgrade.
+7. `9df315f` (21:36): commits the Phase3b/Phase4B/Phase4C worktree delta into tracked history.
+
+This matters because the architecture is no longer in a partially staged local state. The previously uncommitted shadow/transpiler/regime-upgrade surfaces are now first-class tracked code.
+
+### J.1.2 Scope of direct inspection for this appendix
+
+Directly re-inspected for this addendum:
+
+- `meta-core/engine/{constants.py,activation.py,audit.py,ledger.py,regime_upgrade.py}`
+- `scripts/run_phase4c_real_swap_drill_v1.py`
+- `orchestrator/omega_v19_0/{coordinator_v1.py,microkernel_v1.py}`
+- `orchestrator/native/{native_router_v1.py,wasm_shadow_soak_v1.py}`
+- `CDEL-v2/cdel/v18_0/{omega_promoter_v1.py,omega_activator_v1.py,verify_rsi_omega_daemon_v1.py,campaign_rsi_knowledge_transpiler_v1.py,verify_rsi_knowledge_transpiler_v1.py}`
+- `CDEL-v2/cdel/v19_0/{verify_rsi_omega_daemon_v1.py,shadow_airlock_v1.py,shadow_fs_guard_v1.py,shadow_runner_v1.py,shadow_j_eval_v1.py,conservatism_v1.py,determinism_witness_v1.py}`
+- `tools/polymath/polymath_knowledge_transpiler_v1.py`
+- `orchestrator/omega_v18_0/io_v1.py`
+- `scripts/generate_phase3b_phase4_evidence_v1.py`
+- `scripts/generate_phase4_audit_bundle_v1.py`
+- phase4 campaign packs and capability registries.
+
+### J.1.3 Current size/census context (repo-level)
+
+Current filesystem census from the working tree:
+
+- `tools/`: 332 files
+- `polymath/`: 83 files
+- `campaigns/`: 1095 files
+- `orchestrator/`: 130 files
+- `CDEL-v2/`: 12691 files
+- `Genesis/schema/`: 702 schema files
+
+These counts are not rhetorical. They indicate that closeout governance must rely on deterministic contracts, not human memory, because the surface area now exceeds what manual reasoning alone can safely hold.
+
+---
+
+## J.2 What Changed Today: Practical Delta by Layer
+
+### J.2.1 RE1 (`meta-core`) changed from commit-only to regime-upgrade aware
+
+Today introduces a concrete RE1 primitive for controlled regime transitions:
+
+- `meta-core/engine/regime_upgrade.py` adds `commit_staged_regime_upgrade(...)`.
+- `meta-core/engine/constants.py` adds `ACTIVE_NEXT_BUNDLE_FILENAME` and failpoint `FAILPOINT_AFTER_NEXT_WRITE`.
+- `meta-core/engine/activation.py` writes/updates `ACTIVE_NEXT_BUNDLE` in both commit and rollback paths.
+- `meta-core/engine/audit.py` now validates and reports `active_next_bundle_hash` coherence.
+- `meta-core/engine/ledger.py` adds `make_regime_upgrade_entry(...)` with action `REGIME_UPGRADE`.
+
+This is a conceptual shift: RE1 previously adjudicated ordinary bundle activation. It now has explicit, auditable semantics for shadow-gated regime swap transitions.
+
+### J.2.2 RE2 (`CDEL-v2`) gained three connected new verification frontiers
+
+1. **Policy/STARK frontier** (from `10ace95`):
+   - policy VM proof emit/verify path,
+   - Winterfell backend contract integration,
+   - richer v19 verifier surfaces.
+
+2. **Native transpiler frontier** (from `9df315f`):
+   - `verify_rsi_knowledge_transpiler_v1.py` introduced,
+   - v18 daemon verifier expanded for native shadow-registry and shadow-soak integrity checks,
+   - activation/promoter schema contracts expanded.
+
+3. **Shadow regime frontier** (from `9df315f` + `14e32e8`):
+   - new v19 modules: `shadow_airlock_v1.py`, `shadow_fs_guard_v1.py`, `shadow_runner_v1.py`, `shadow_j_eval_v1.py`, `conservatism_v1.py`, `determinism_witness_v1.py`,
+   - v19 daemon verifier hard-checks tier counts and readiness consistency,
+   - v19 pack schema extended for shadow profile plumbing.
+
+### J.2.3 RE3 (`tools/` + campaign executors) gained a deterministic capability generator
+
+`tools/polymath/polymath_knowledge_transpiler_v1.py` and campaign wrapper `campaign_rsi_knowledge_transpiler_v1.py` together create an end-to-end deterministic path:
+
+- knowledge artifact hash + kernel spec -> restricted IR -> deterministic Rust crate -> reproducible wasm build -> runtime contract -> vectorized healthcheck -> promotion bundle.
+
+That is a genuine capability-generation primitive, not a mere static tool.
+
+### J.2.4 RE4 (`Genesis/schema`) significantly widened contractual coverage
+
+New schema families added for:
+
+- native transpiler artifacts,
+- shadow registry and shadow soak receipts,
+- shadow regime proposal/readiness/tier/profile artifacts,
+- phase4 audit bundle.
+
+This matters because these newly added contracts now anchor verifier behavior. Without schema anchoring, these features would remain operational conventions.
+
+---
+
+## J.3 Phase 4A, 4B, 4C: Unified Through-Line
+
+A useful way to understand today’s state is to treat Phase4A, 4B, and 4C as one pipeline, not three unrelated branches.
+
+### J.3.1 Phase4A: deterministic ingestion of external knowledge into hash-bound state
+
+Phase4A introduced SIP ingestion campaign/runtime/verifier surfaces:
+
+- `CDEL-v2/cdel/v18_0/polymath_sip_ingestion_l0_v1.py`
+- `CDEL-v2/cdel/v18_0/campaign_polymath_sip_ingestion_l0_v1.py`
+- `CDEL-v2/cdel/v18_0/verify_rsi_polymath_sip_ingestion_l0_v1.py`
+- pack `campaigns/rsi_omega_daemon_v19_0_phase4a_sip_ingestion/...`
+
+The key effect: knowledge ingress is no longer a side utility; it is a dispatchable capability (`RSI_POLYMATH_SIP_INGESTION_L0`) with deterministic receipts.
+
+### J.3.2 Phase4B: deterministic transpilation of that knowledge into constrained native kernels
+
+Phase4B adds:
+
+- tool: `tools/polymath/polymath_knowledge_transpiler_v1.py`
+- campaign executor: `CDEL-v2/cdel/v18_0/campaign_rsi_knowledge_transpiler_v1.py`
+- verifier: `CDEL-v2/cdel/v18_0/verify_rsi_knowledge_transpiler_v1.py`
+- pack family: `campaigns/rsi_knowledge_transpiler_v1/` and `campaigns/rsi_omega_daemon_v19_0_phase4b_native_transpiler_v1/`
+
+The effect: the system can transform a hash-pinned knowledge artifact into a reproducible wasm kernel candidate with explicit runtime contract and health proofs.
+
+### J.3.3 Phase4C: shadow-gated regime upgrade from observation to potential swap
+
+Phase4C adds:
+
+- shadow tier checks and readiness receipts,
+- RE1 regime-upgrade commit primitive with failpoint coverage,
+- drill script proving stage->verify->canary->failpoint->live commit->rollback cycle.
+
+The effect: there is now an explicit path from generated capability to shadow evidence to RE1-governed swap mechanics.
+
+### J.3.4 Why this sequence matters
+
+This sequence is the minimal full loop for autonomous scaling under constitutional guardrails:
+
+1. ingest new knowledge,
+2. compile constrained capability forms,
+3. test in shadow,
+4. only then bind into active regime transitions.
+
+Without this sequence, autonomous scaling remains mostly text/config mutation. With it, the architecture begins to support deterministic extension of executable capability while preserving fail-closed gates.
+
+---
+
+## J.4 Phase4B Deep Dive: Deterministic Knowledge Transpiler
+
+### J.4.1 Campaign interface and fixed intent
+
+`campaign_rsi_knowledge_transpiler_v1.py` explicitly states its intent: consume SIP-linked knowledge + kernel spec, output deterministic wasm-native promotion bundle for **SHADOW installation**.
+
+The emitted promotion bundle schema is `omega_promotion_bundle_native_transpiler_v1_1`, with `install_intent: "STATUS_SHADOW"`.
+
+This is crucial: installation intent is shadow-first by design, not direct live activation.
+
+### J.4.2 Input contract and pinning
+
+Pack `campaigns/rsi_knowledge_transpiler_v1/rsi_knowledge_transpiler_pack_v1.json` binds:
+
+- `sip_knowledge_artifact_hash`
+- `sip_empirical_evidence_hash`
+- `kernel_spec_rel`
+- `rust_toolchain_manifest_rel`
+- `wasmtime_manifest_rel`
+
+The pack uses concrete, pinned toolchain manifests:
+
+- `toolchain_manifest_rust_v1.json`
+- `toolchain_manifest_wasmtime_v1.json`
+
+Notably, the wasmtime manifest records determinism flags requiring:
+
+- `disable_cache: true`
+- `consume_fuel: true`
+
+and pins runtime identity via `wasmtime_sha256` and version string.
+
+### J.4.3 Restricted IR generation path
+
+`polymath_knowledge_transpiler_v1.py` creates `polymath_restricted_ir_v1` with deterministic content:
+
+- fixed numeric mode: Q32 fixed-point,
+- explicit operation list over ARG/CONST/MUL_Q32/ADD_I64/RET,
+- IR id computed as canonical hash of payload without id field.
+
+This IR is not arbitrary code; it is a constrained representation deliberately limiting expressive surface.
+
+### J.4.4 Forbidden nondeterminism scans
+
+Two scanners enforce fail-closed token policies:
+
+1. IR scan (`_scan_ir_for_forbidden`) checks serialized IR for disallowed tokens such as `f32`, `f64`, `rand`, `clock_gettime`, `getrandom`.
+2. Rust scan (`_scan_rust_for_forbidden`) scans generated crate source for deterministic-policy violations including filesystem/time/net/random APIs.
+
+On violation, the transpiler emits `candidate_syntax_error_v1` and exits without promotion bundle generation.
+
+This pattern matters: it preserves evidence (error artifact) while refusing unsafe progression.
+
+### J.4.5 Source merkle and runtime contract artifacts
+
+Phase4B writes:
+
+- `native_src_merkle_v1` with per-file hashes and `source_merkle_root`,
+- `native_wasm_runtime_contract_v1` derived from runtime manifest,
+- both with hash-based ids.
+
+These are bridge artifacts between code generation and runtime execution semantics. They prevent a silent drift between "what got generated" and "what runtime contract was assumed".
+
+### J.4.6 Reproducible build proof semantics
+
+`_build_twice_repro(...)` performs two independent builds in separate temp trees with path remapping and deterministic flags. It requires binary hash equality.
+
+On mismatch, transpiler emits `nonrepro_build_v1` with both binary hashes and fails closed.
+
+On success, it emits `native_build_proof_v1` binding:
+
+- toolchain hash,
+- source merkle,
+- runtime contract hash,
+- output binary hash,
+- reproducibility booleans.
+
+### J.4.7 Healthcheck vectors and receipt path
+
+The tool builds deterministic vectors in `native_wasm_healthcheck_vectors_v1` and executes the produced wasm using the contract-defined runtime invocation template. It emits `native_wasm_healthcheck_receipt_v1` with per-case expected vs actual hash and overall result.
+
+Only PASS healthcheck results are eligible for promotion bundle emission.
+
+### J.4.8 Campaign output contract
+
+The campaign wrapper emits `omega_promotion_bundle_native_transpiler_v1_1` with required cross-links:
+
+- `restricted_ir_hash`
+- `source_merkle_hash`
+- `build_proof_hash`
+- `runtime_contract_hash`
+- `healthcheck_vectors_hash`
+- `healthcheck_receipt_hash`
+- `native_binary_hash`
+- SIP evidence hashes
+
+This bundle is structured so downstream promoter/activator/verifier can assert full consistency across all intermediate artifacts.
+
+### J.4.9 Verifier obligations
+
+`verify_rsi_knowledge_transpiler_v1.py` re-validates entire chain:
+
+- checks no syntax-error/nonrepro error artifacts are present,
+- verifies hash-bound loading of IR/merkle/build/runtime/vectors/health artifacts,
+- verifies crate source hash rows bind to actual crate files,
+- re-scans forbidden Rust tokens,
+- rebuilds deterministically and requires rebuilt hash equals emitted binary hash,
+- verifies runtime binary pin and determinism flags,
+- re-runs healthcheck vectors via runtime invocation,
+- verifies bundle `native_module` hash cross-links.
+
+This is a strong replay posture for generated native capability.
+
+### J.4.10 Promoter + activator integration
+
+Today’s v18 promoter/activator changes thread new hashes through activation binding and receipt, and install/maintain `native_shadow_registry_v1` in daemon state. These hashes are later checked in the v18 daemon verifier path.
+
+The path from candidate generation to activation evidence is now continuous and hash-bound.
+
+---
+
+## J.5 Native Shadow Runtime: Router Behavior and Route-Disable Semantics
+
+### J.5.1 Router now consumes daemon context from environment
+
+`orchestrator/native/native_router_v1.py` introduces:
+
+- `OMEGA_DAEMON_STATE_ROOT`
+- `OMEGA_TICK_U64`
+
+This is nontrivial: it lets runtime routing decisions and disable transitions be bound to current daemon state and tick chronology.
+
+### J.5.2 Active shadow registry pointer model
+
+Router reads `native/shadow/ACTIVE_SHADOW_REGISTRY`, resolves hash-named `native_shadow_registry_v1` payload, verifies canonical hash match, and fails closed on integrity mismatch.
+
+This parallels meta-core pointer semantics at a native-route level.
+
+### J.5.3 SHADOW mode semantics are conservative
+
+In `verification_mode == SHADOW`:
+
+- Python implementation remains authoritative return value,
+- native call is dual-run comparison path only,
+- load/invoke/mismatch errors disable both normal native path and shadow route,
+- mismatch reports are persisted with route-disable transition metadata.
+
+This ensures that native acceleration does not silently become decision-authoritative before parity is demonstrated.
+
+### J.5.4 Per-route disable is explicit state
+
+Registry rows now maintain:
+
+- `disabled_key`
+- `shadow_route_disabled_b`
+- `shadow_route_disable_reason`
+- `shadow_route_disable_tick_u64`
+
+Verifier logic requires these fields be coherent (disabled implies non-null reason/tick; enabled implies null reason/tick).
+
+### J.5.5 Shadow soak artifacts added to tick ledger
+
+`orchestrator/native/wasm_shadow_soak_v1.py` emits:
+
+- `native_wasm_shadow_soak_summary_v1`
+- `native_wasm_shadow_soak_receipt_v1`
+
+Microkernel emits corresponding ledger events:
+
+- `NATIVE_WASM_SHADOW_SOAK_SUMMARY`
+- `NATIVE_WASM_SHADOW_SOAK_RECEIPT`
+
+The summary computes readiness from module count, portability status, and route-disabled count, with reasons such as `NO_SHADOW_MODULE`, `PORTABILITY_SKIP_RUN`, `SHADOW_ROUTE_DISABLED`.
+
+---
+
+## J.6 Phase4C Shadow-Airlock and RE1 Regime Upgrade
+
+### J.6.1 Shadow profile loading and pin matching in microkernel
+
+`microkernel_v1.py` now loads shadow profile payloads referenced by pack relpaths:
+
+- proposal,
+- evaluation tiers,
+- protected roots profile,
+- corpus descriptor,
+- determinism witness profile,
+- J-comparison profile.
+
+It enforces id matching between proposal fields and loaded profile ids using fail-closed `PIN_HASH_MISMATCH` semantics.
+
+This prevents silent profile substitution.
+
+### J.6.2 Integrity guard model
+
+`shadow_fs_guard_v1.py` hashes protected roots with:
+
+- scoped include roots,
+- exclude roots,
+- symlink policy (`FAIL_CLOSED`),
+- explicit hash budgets (`max_files`, `max_bytes_read`, `max_steps`).
+
+Exhausting any budget yields `SHADOW_HASH_BUDGET_EXHAUSTED`.
+
+It generates `shadow_fs_integrity_report_v1` status PASS/FAIL based on mutation and reason codes.
+
+### J.6.3 Runner model and outbox-only write discipline
+
+`shadow_runner_v1.py` enforces outbox-only writes and explicitly forbids writes under `.omega_cache` in shadow mode. It compares dynamic protected-root hashes pre/post and yields reason codes including:
+
+- `SHADOW_RUNNER_FAILED`
+- `SHADOW_PROTECTED_ROOT_MUTATION`
+
+### J.6.4 Tier evaluation model
+
+Microkernel synthesizes tier receipts using:
+
+- reject-conservatism check (`conservatism_v1.py`),
+- determinism witness (`determinism_witness_v1.py`),
+- J window/per-tick checks (`shadow_j_eval_v1.py`).
+
+Generated artifacts:
+
+- `shadow/tier_a/*.shadow_tier_receipt_v1.json`
+- `shadow/tier_b/*.shadow_tier_receipt_v1.json`
+- `shadow/readiness/*.shadow_regime_readiness_receipt_v1.json`
+
+### J.6.5 Readiness receipt semantics
+
+`shadow_airlock_v1.py` returns verdict READY/NOT_READY and reason set. It encodes a comprehensive boolean matrix including:
+
+- outbox-only verification,
+- integrity and protected-root verification,
+- J-window/J-floor/non-weakening checks,
+- corpus replay,
+- deterministic fuzz,
+- tier A/B pass,
+- rollback-plan bound,
+- auto-swap state.
+
+### J.6.6 Auto-swap gating semantics
+
+When `auto_swap_b` is true, microkernel requires:
+
+- handoff receipt relpath present,
+- handoff receipt validates as readiness schema,
+- handoff `runtime_tier_b_pass_b == true`,
+- handoff verdict READY,
+- proposal id matches,
+- runtime tier-B pass in current readiness.
+
+Otherwise fail with `TIER_B_REQUIRED_FOR_SWAP`.
+
+### J.6.7 RE1 upgrade primitive behavior
+
+`commit_staged_regime_upgrade(...)` in RE1:
+
+- loads readiness receipt,
+- validates schema name/version,
+- enforces tier booleans,
+- writes `ACTIVE_NEXT_BUNDLE`,
+- optionally triggers failpoint `AFTER_NEXT_WRITE`,
+- calls normal `commit_staged(...)`,
+- appends `REGIME_UPGRADE` ledger entry with readiness hash and tier booleans,
+- returns commit out + `regime_upgrade_b: true` + `reason_code: READY`.
+
+This is the first explicit RE1 primitive tied to shadow readiness semantics.
+
+### J.6.8 Drill evidence
+
+`runs/phase4c_real_swap_drill_v1/drill_20260220T112240Z/PHASE4C_REAL_SWAP_DRILL_SUMMARY_v1.json` shows:
+
+- shadow tier A pass: true,
+- shadow tier B pass: true,
+- readiness verdict: READY,
+- integrity status: PASS,
+- failpoint-after-next-write path returns internal error and audit INVALID,
+- live commit path returns committed with `regime_upgrade_b: true`,
+- post-swap self-check tick returncode: 0,
+- rollback returns success,
+- post-rollback self-check tick returncode: 0.
+
+This artifact is significant because it demonstrates both failure-path and success-path behavior under controlled exercise.
+
+---
+
+## J.7 Microkernel Centerline: Policy, Proof, Native, Shadow in One Tick
+
+### J.7.1 Coordinator wrapper migration
+
+`orchestrator/omega_v19_0/coordinator_v1.py` is now a compatibility wrapper that delegates to `microkernel_v1.tick_once(...)`.
+
+Architecturally, this formalizes microkernel as runtime centerline while preserving import compatibility.
+
+### J.7.2 Policy artifact chain remains hash-bound
+
+Microkernel emits and chains policy artifacts (`inputs`, `traces`, `hints`, `merged_hints`, `proposals`, `selection`, `counterfactual`, `proofs`) and records them in ledger events.
+
+This preserves replay verification despite expanded policy complexity.
+
+### J.7.3 Proof telemetry expansion
+
+Snapshot fields now include:
+
+- `policy_vm_proof_runtime_status`
+- `policy_vm_proof_runtime_reason_code`
+- `policy_vm_proof_fallback_reason_code`
+- `policy_vm_prove_time_ms`
+- `policy_vm_proof_size_bytes`
+
+This is operationally useful: it gives the observation layer and external diagnostics first-class visibility into proof runtime behavior, not only pass/fail.
+
+### J.7.4 Shadow signals become first-class ledger events
+
+Microkernel now emits:
+
+- `SHADOW_FS_INTEGRITY`
+- `SHADOW_TIER_A`
+- `SHADOW_TIER_B`
+- `SHADOW_READINESS`
+
+and includes corresponding hashes in snapshot payload. This is critical for replay-based governance; shadow status is no longer side-channel data.
+
+### J.7.5 v19 verifier hard checks for tier counts
+
+`CDEL-v2/cdel/v19_0/verify_rsi_omega_daemon_v1.py` currently hard-checks tier counters:
+
+- Tier A: `n_live_ticks == 250`, `n_fuzz_cases == 512`, `n_double_runs == 50`
+- Tier B: `n_live_ticks == 1000`, `n_fuzz_cases == 20000`, `n_double_runs == 1000`
+
+This is strict and conservative. It also means profile evolution requires coordinated verifier/schema strategy.
+
+### J.7.6 Proof-fallback consistency got stricter
+
+Verifier now rejects inconsistent combinations such as:
+
+- proof hash present while runtime status ABSENT/FAILED,
+- runtime status EMITTED with no proof hash,
+- fallback reason populated when runtime status EMITTED,
+- proof fallback path missing ledger event when proof enabled and runtime failed/absent.
+
+This closes loopholes where runtime proof behavior might have been ambiguously represented.
+
+---
+
+## J.8 Capability Census: Active, Latent, and Experimental
+
+### J.8.1 Capability registry spread
+
+Across all daemon capability registries (`campaigns/**/omega_capability_registry*.json`):
+
+- registry files: 16
+- unique capability ids observed: 34
+- campaign ids in capability registries: 34
+- distinct verifier modules referenced: 17
+- distinct orchestrator modules referenced: 33
+
+### J.8.2 Capability id universe (observed)
+
+Representative unique capability ids include:
+
+- core SAS line: `RSI_SAS_CODE`, `RSI_SAS_METASEARCH`, `RSI_SAS_VAL`, `RSI_SAS_SCIENCE`, `RSI_SAS_SYSTEM`, `RSI_SAS_KERNEL`
+- polymath line: `RSI_POLYMATH_SCOUT`, `RSI_POLYMATH_BOOTSTRAP_DOMAIN`, `RSI_POLYMATH_CONQUER_DOMAIN`, `RSI_POLYMATH_SIP_INGESTION_L0`
+- self-improvement line: `RSI_GE_SH1_OPTIMIZER`, `RSI_OMEGA_SELF_OPTIMIZE_CORE`, mutators
+- native line: `RSI_OMEGA_NATIVE_MODULE`, `RSI_KNOWLEDGE_TRANSPILER`
+- skill line: multiple `RSI_OMEGA_SKILL_*`
+- EUDRS-U line: `RSI_EUDRS_U_TRAIN`, `RSI_EUDRS_U_ONTOLOGY_UPDATE`, `RSI_EUDRS_U_INDEX_REBUILD`, `RSI_EUDRS_U_EVAL_CAC`
+
+### J.8.3 Super-unified pack stance
+
+In `campaigns/rsi_omega_daemon_v19_0_super_unified/omega_capability_registry_v2.json`:
+
+- total capabilities: 25
+- enabled capabilities: 9
+
+Enabled set (observed) includes:
+
+- `RSI_POLYMATH_BOOTSTRAP_DOMAIN`
+- `RSI_POLYMATH_CONQUER_DOMAIN`
+- `RSI_POLYMATH_SCOUT`
+- `RSI_SAS_CODE`
+- `RSI_SAS_METASEARCH`
+- `RSI_SAS_VAL`
+- `RSI_GE_SH1_OPTIMIZER`
+- `RSI_EUDRS_U_TRAIN`
+- `RSI_SAS_SCIENCE`
+
+Risk-class distribution in this registry is balanced by count:
+
+- LOW: 12
+- MED: 12
+- HIGH: 1
+
+### J.8.4 Phase4B native-transpiler pack stance
+
+In `campaigns/rsi_omega_daemon_v19_0_phase4b_native_transpiler_v1/omega_capability_registry_v2.json`:
+
+- total capabilities: 25
+- enabled capabilities: 4
+
+Enabled set:
+
+- `RSI_KNOWLEDGE_TRANSPILER`
+- `RSI_SAS_CODE`
+- `RSI_SAS_METASEARCH`
+- `RSI_SAS_VAL`
+
+Goal queue in same pack seeds:
+
+- `goal_native_transpiler_shadow_001` with capability `RSI_KNOWLEDGE_TRANSPILER`.
+
+This indicates a deliberately narrowed operational profile for native-transpiler shakedown.
+
+### J.8.5 Goal queue coverage across packs
+
+`campaigns/**/goals/omega_goal_queue_v1.json` files observed: 17.
+
+Unique capability ids referenced by goals: 15.
+
+That list includes the new ingestion/transpiler/native lines and legacy SAS lines. It demonstrates that the goal system already treats these capabilities as dispatchable objectives, not just optional scripts.
+
+### J.8.6 Practical interpretation
+
+Capabilities are not one monolith. There are at least three capability bands:
+
+1. **always-useful baseline** (SAS code/search/val),
+2. **frontier expansion** (SH1, polymath conquest, EUDRS-U),
+3. **infrastructure transition** (native module + knowledge transpiler + shadow regime).
+
+The closeout challenge is managing transitions between these bands without violating deterministic replay or constitutional invariants.
+
+---
+
+## J.9 Tooling Census: What Exists Today and Why It Matters
+
+### J.9.1 Top-level tool distribution
+
+`tools/` top-level file counts show concentration in these domains:
+
+- `tools/omega`: largest operational tooling surface,
+- `tools/genesis_engine`: proposer and learning heuristics,
+- `tools/polymath`: domain/knowledge tooling,
+- `tools/mission_control` + `tools/omega_mission_control`: operational UIs/control plane,
+- `tools/v19_runs` and `tools/v19_smoke`: orchestrated evidence/smoke workflows,
+- `tools/vision`: perception utility layer,
+- `tools/authority`: trust anchor tooling.
+
+### J.9.2 `tools/omega` role in the final stretch
+
+Representative modules include:
+
+- benchmark suites (`omega_benchmark_suite_v1.py`, `omega_benchmark_suite_v19_v1.py`),
+- native tooling (`native_benchmark_v1.py`, `native_healthcheck_v1.py`, `rust_codegen_v1.py`, `rust_build_repro_v1.py`),
+- replay/verification helpers (`omega_replay_bundle_v1.py`, `omega_verifier_client_v1.py`),
+- run aggregation (`omega_timings_aggregate_v1.py`),
+- survival/hardening runners.
+
+This tool family is the bridge between raw runtime and operational confidence. It is where day-2 observability and evidence extraction live.
+
+### J.9.3 `tools/genesis_engine` remains primary text/config proposer engine
+
+Key scripts:
+
+- `ge_symbiotic_optimizer_v0_3.py` (active SH-1),
+- `sh1_pd_v1.py`, `sh1_xs_v1.py`, `sh1_behavior_sig_v1.py` (receipt analytics),
+- auditing/tests enforcing deterministic and anti-novelty-laundering behavior.
+
+Even with native-transpiler additions, SH-1 remains core for broad config/code evolution in allowed paths.
+
+### J.9.4 `tools/polymath` is now both discovery and capability-compilation layer
+
+Current scripts include:
+
+- scouting/bootstrap/conquest lifecycle (`polymath_scout_v1.py`, `polymath_domain_bootstrap_v1.py`, `polymath_domain_corpus_v1.py`),
+- source and websearch connectors (`polymath_sources_v1.py`, `polymath_websearch_v1.py`),
+- goal conversion (`polymath_void_to_goals_v1.py`),
+- refinement/proposal utilities (`polymath_refinery_proposer_v1.py`),
+- new transpiler (`polymath_knowledge_transpiler_v1.py`).
+
+This is important: Polymath is no longer purely epistemic/discovery. It now directly participates in executable capability synthesis.
+
+### J.9.5 `tools/v19_runs` and `scripts/` provide evidence production pipelines
+
+Recent same-day evidence scripts:
+
+- `scripts/generate_phase3b_phase4_evidence_v1.py`
+- `scripts/generate_phase4_audit_bundle_v1.py`
+- `scripts/run_phase4c_real_swap_drill_v1.py`
+
+These scripts convert system behavior into structured artifacts suitable for replay governance and promotion review.
+
+---
+
+## J.10 Polymath State and Capability Generation Readiness
+
+### J.10.1 Current local registry state
+
+`polymath/registry/polymath_domain_registry_v1.json` currently indicates a minimal local seeded state:
+
+- schema: `polymath_domain_registry_v1`
+- total domains: 1
+- ready-for-conquer: 1
+- conquered: 0
+- sample domain id: `pubchem_weight300`
+
+`polymath_void_report_v1.jsonl` is empty in this snapshot.
+
+This means local registry content in this repository is a seed/fixture baseline, not proof of broad in-repo conquered-domain inventory.
+
+### J.10.2 EUDRS-U polymath registry footprint
+
+`polymath/registry/eudrs_u/` contains many content-addressed artifacts:
+
+- capsules,
+- certs,
+- manifests,
+- memory pages/tables,
+- vision sessions/frames/reports/tracks,
+- qxwmr states.
+
+This demonstrates that even if top-level polymath domain registry is sparse locally, deeper subsystem artifact stores are populated and hash-addressed.
+
+### J.10.3 Phase4A SIP ingestion capability status
+
+`campaigns/rsi_omega_daemon_v19_0_phase4a_sip_ingestion/omega_capability_registry_v2.json` enables:
+
+- `RSI_POLYMATH_SIP_INGESTION_L0` -> campaign `rsi_polymath_sip_ingestion_l0_v1`
+
+Goal queue for that pack has pending ingestion goal.
+
+This makes SIP ingestion a first-class capability stage in the daemon objective pipeline.
+
+### J.10.4 Polymath-to-native synthesis bridge
+
+With Phase4B, Polymath now links into native generation via:
+
+- SIP knowledge hash input,
+- kernel spec -> restricted IR,
+- deterministic transpilation and reproducible build,
+- runtime contract and healthcheck receipts,
+- promotion bundle with shadow install intent.
+
+This is effectively a new synthesis arc:
+
+`Knowledge Artifact -> Deterministic IR -> Native Candidate -> Shadow Registry -> Shadow Soak -> Regime Readiness`.
+
+### J.10.5 What still needs to mature in polymath closeout terms
+
+For full autonomous scale, polymath needs sustained high-volume dataflow beyond seed fixtures, with strict retention of:
+
+- provenance hashes,
+- leakage controls,
+- deterministic transforms,
+- quality gates from conquest metrics back to decider/objectives.
+
+The architecture now supports this, but proof of long-horizon stability depends on running campaigns, not only code presence.
+
+---
+
+## J.11 Policy VM + STARK Integration State
+
+### J.11.1 New policy proof infrastructure
+
+From `10ace95`, v19 includes:
+
+- `policy_vm_stark_runner_v1.py`
+- Winterfell backend contract artifacts under `CDEL-v2/cdel/v19_0/rust/`
+- verifier modules for program/opcode/trace/proposal/selection/proof assets.
+
+### J.11.2 Evidence artifact metrics
+
+`runs/PHASE3B_PHASE4_EVIDENCE_v1.json` reports:
+
+- canary aggregate: eligible ticks 20, fast-path ticks 20, fallback ticks 0,
+- fast-path rate: 1.0,
+- fallback rate: 0.0.
+
+Profile specifics:
+
+- `POLICY_VM_AIR_PROFILE_96_V1`: p95 prove 272ms, p95 verify 236ms, max proof size 13071 bytes.
+- `POLICY_VM_AIR_PROFILE_128_V1`: p95 prove 273ms, p95 verify 243ms, max proof size 15507 bytes.
+
+All listed gates in these profile summaries are marked pass.
+
+### J.11.3 Tamper behavior observed in evidence
+
+The same evidence file includes a proof tamper experiment where proof bytes are modified and unit verdict changes to invalid while daemon verdict remains valid under fallback acceptance path.
+
+This confirms fallback path design intent, but also indicates the importance of strict fallback reason/reporting consistency for interpretability.
+
+### J.11.4 Known detail to watch
+
+In that evidence artifact, `phase4_proof_fallback.proof_fallback_reason_code` appears as string `"None"` while runtime status is `EMITTED`. Current stricter verifier semantics reject emitted+fallback-reason combinations. This likely reflects artifact/version timing mismatch and is a concrete audit item to normalize.
+
+---
+
+## J.12 RE1 Audit/Pointer Semantics After Phase4C
+
+### J.12.1 ACTIVE_NEXT_BUNDLE as explicit second pointer
+
+Previously, active/prev pointers carried commit lineage. With today’s changes, `ACTIVE_NEXT_BUNDLE` is now written in commit and rollback paths and validated in audit.
+
+Net effect:
+
+- explicit indication of currently intended next active state,
+- improved crash/failpoint introspection in regime-upgrade flows,
+- tighter audit consistency checks.
+
+### J.12.2 Regime-upgrade ledger entry semantics
+
+`make_regime_upgrade_entry(...)` records:
+
+- active bundle hash,
+- readiness receipt hash,
+- `tier_a_pass_b`, `tier_b_pass_b`, `runtime_tier_b_pass_b`,
+- chain link via `prev_entry_hash`.
+
+This is critical for postmortem traceability: swap-relevant governance evidence is now permanently encoded in RE1 ledger, not only in daemon-side artifacts.
+
+### J.12.3 Drill confirms failpoint behavior under audit
+
+Phase4C drill explicitly injects failpoint `AFTER_NEXT_WRITE` and captures:
+
+- commit output internal error,
+- audit invalid state,
+- then successful live commit and valid audit,
+- then successful rollback and valid audit.
+
+This is high-value because it validates that failure-paths are observable and recoverable, not silent corruption.
+
+---
+
+## J.13 Schema Surface Expansion and Contract Maturity
+
+### J.13.1 New v18 schema families (native transpiler/shadow soak)
+
+Now present in `Genesis/schema/v18_0/`:
+
+- `polymath_restricted_ir_v1`
+- `native_src_merkle_v1`
+- `native_build_proof_v1`
+- `native_wasm_runtime_contract_v1`
+- `native_wasm_healthcheck_vectors_v1`
+- `native_wasm_healthcheck_receipt_v1`
+- `candidate_syntax_error_v1`
+- `nonrepro_build_v1`
+- `native_shadow_registry_v1`
+- `native_wasm_shadow_soak_summary_v1`
+- `native_wasm_shadow_soak_receipt_v1`
+- `omega_promotion_bundle_native_transpiler_v1_1`
+- `phase4_audit_bundle_v1`
+
+### J.13.2 v18 existing schema updates
+
+Updated contracts include:
+
+- `omega_activation_binding_v1`
+- `omega_activation_receipt_v1`
+- `omega_promotion_receipt_v1`
+- `omega_tick_snapshot_v1`
+
+These updates thread new native/shadow/proof identifiers into canonical tick evidence.
+
+### J.13.3 New v19 shadow schema families
+
+Now present in `Genesis/schema/v19_0/`:
+
+- `shadow_regime_proposal_v1`
+- `shadow_regime_readiness_receipt_v1`
+- `shadow_evaluation_tiers_v1`
+- `shadow_protected_roots_profile_v1`
+- `shadow_fs_integrity_report_v1`
+- `corpus_descriptor_v1`
+- `j_comparison_v1`
+- `witnessed_determinism_profile_v1`
+
+### J.13.4 Pack schema v2 now carries shadow+auto-swap contract
+
+`Genesis/schema/v19_0/rsi_omega_daemon_pack_v2.jsonschema` and its v18 counterpart now include shadow relpath fields and `auto_swap_b`, with conditional requirements:
+
+- if shadow proposal used, tier/profile relpaths are required,
+- if `auto_swap_b == true`, additional handoff/tier artifacts become required.
+
+This is major: shadow governance has moved from convention into formal campaign-pack contract.
+
+---
+
+## J.14 Capability Generation vs Capability Activation: Exact Current Position
+
+A recurring confusion in autonomous-system discussions is conflating generation with activation. The repository now clearly separates these layers.
+
+### J.14.1 Generation mechanisms now present
+
+- Text/config generation: SH-1, mutators, SAS line.
+- Knowledge ingestion generation: SIP ingestion.
+- Executable kernel generation: knowledge transpiler to wasm.
+- Policy/proof generation: policy VM trace/proof path.
+
+### J.14.2 Activation mechanisms now present
+
+- Standard promotion/activation (existing Omega path).
+- Native shadow registry install for transpiler outputs.
+- RE1 regime-upgrade commit primitive tied to readiness receipts.
+
+### J.14.3 Why this separation is healthy
+
+Generation can be aggressive if activation remains conservative. This codebase now reflects that doctrine structurally:
+
+- transpiler outputs default to shadow status,
+- shadow mismatch disables native route,
+- auto swap requires tier-B runtime pass and handoff receipts,
+- RE1 checks readiness before regime upgrade commit.
+
+This is exactly the pattern needed for long-run autonomous expansion under strict safety constraints.
+
+---
+
+## J.15 Legacy and Older Surfaces That Still Matter in the Final Stretch
+
+The request was explicit about old/legacy coverage. Several older surfaces remain strategically relevant.
+
+### J.15.1 SAS line remains execution backbone
+
+Even with v19 policy microkernel and native additions, the enabled production baseline in multiple packs still centers on:
+
+- SAS code,
+- SAS metasearch,
+- SAS val,
+- optionally SAS science/system/kernel.
+
+These are proven operationally and serve as capability floor when frontier experiments are disabled or gated.
+
+### J.15.2 SH-1 remains meta-learning proposer backbone
+
+SH-1 is still the only mature receipt-driven code/config mutation engine with hard-avoid and PD/XS feedback. It remains essential for continuous adaptation across broad allowed surfaces.
+
+### J.15.3 Bid-market and market-mutator lines are still useful stress tools
+
+Even toy/phase campaign lines (`bid market toy`, mutators, death tests) remain valuable for adversarial and governance stress, particularly while integrating new proof/native/shadow pathways.
+
+### J.15.4 Phase0 survival/immune lines remain necessary
+
+As architecture nears autonomous operation, retaining explicit adversarial and survival drill campaigns is not optional; it is part of preserving immune competence under evolving runtime complexity.
+
+### J.15.5 Older verifier versions remain constitutional memory
+
+The v1..v19 accumulator remains critical for replay legitimacy across history. Legacy verifiers are not dead weight; they are required for historical chain auditability.
+
+---
+
+## J.16 Tool and Folder Audit Through the "Final Stretch" Lens
+
+This subsection reframes folders by closeout role, rather than by implementation ownership.
+
+### J.16.1 `authority/`: immutability anchor and benchmark sovereignty
+
+Still the highest-leverage safety directory.
+
+Closeout priority:
+
+- keep evaluation kernels and allowlists pinned and auditable,
+- avoid proposal pathways that can indirectly erode benchmark integrity,
+- ensure campaign additions do not bypass authority pin checks.
+
+### J.16.2 `meta-core/`: state lineage and swap legality
+
+Now with regime-upgrade support, RE1 closeout must focus on:
+
+- crash consistency under failpoints,
+- ledger integrity under mixed commit/rollback/upgrade actions,
+- audit tooling usability for operators.
+
+### J.16.3 `CDEL-v2/`: verification debt management
+
+With accelerated feature additions, CDEL-v2 can become bottleneck if verification debt accumulates. Closeout should emphasize:
+
+- cross-version invariants,
+- explicit mismatch reason coding,
+- tests for every new schema+artifact edge.
+
+### J.16.4 `orchestrator/`: runtime composition correctness
+
+The microkernel now composes many subsystems in one tick. Closeout must ensure:
+
+- deterministic ordering remains stable,
+- optional paths cannot create hidden nondeterministic branches,
+- snapshot/ledger always capture all branch outputs and fallback reasons.
+
+### J.16.5 `tools/`: operational leverage and risk of drift
+
+Tools provide observability and acceleration, but also potential contract drift if not pinned. Closeout should identify which tool outputs are promoted into canonical artifacts and ensure those are schema-locked.
+
+### J.16.6 `polymath/` and `domains/`: external knowledge frontier
+
+This is where open-world uncertainty enters. Closeout must keep strict:
+
+- provenance,
+- leakage scanning,
+- deterministic transform contracts,
+- replayability of all derived artifacts.
+
+### J.16.7 `campaigns/`: policy-controlled capability expression layer
+
+Campaign pack discipline is now central. The pack layer controls what runtime even sees. Closeout should enforce:
+
+- minimal enabled set in production packs,
+- explicit transition packs for experiments,
+- no hidden environment coupling outside pack contract.
+
+---
+
+## J.17 Autonomy Ambition vs Constitutional Reality
+
+The request frames end-goal ambition as autonomous operation at planetary scope and exponential intelligence scaling. That ambition can only remain coherent inside this architecture if constitutional boundaries stay primary.
+
+### J.17.1 What this architecture can now credibly claim
+
+It can credibly claim:
+
+- deterministic replay governance across broad self-modification paths,
+- strict fail-closed behavior for many critical transitions,
+- growing support for generated native kernels under shadow-first gating,
+- explicit readiness and tier evidence before swap-related transitions,
+- hash-bound linkage from ingestion to promotion to activation artifacts.
+
+### J.17.2 What it cannot claim yet (from code evidence alone)
+
+From repository evidence alone, it cannot yet claim:
+
+- indefinite no-regression operation over very long autonomous horizons,
+- complete closure of all fallback/reporting inconsistencies,
+- globally robust open-world ingestion quality under adversarial internet conditions,
+- automatic safe generalization from local benchmarks to all external domains.
+
+### J.17.3 Why this is still a major milestone
+
+The architecture moved from "self-editing codebase" toward "constitutionally gated capability compiler". That is a meaningful qualitative shift.
+
+---
+
+## J.18 Risk Register for Immediate Closeout
+
+### J.18.1 Risk: strict constants embedded in verifier tier checks
+
+`verify_rsi_omega_daemon_v1.py` currently hard-codes specific tier counts (250/512/50 and 1000/20000/1000). This prevents silent lowering, which is good, but increases migration friction.
+
+Mitigation path:
+
+- keep pinned profile ids and verifier checks aligned,
+- if evolving counts, perform explicit versioned verifier/schema transitions.
+
+### J.18.2 Risk: fallback reason code normalization drift
+
+Evidence artifacts show at least one string-form fallback reason inconsistency (`"None"` textual). Current verifier strictness may surface this as invalid in newer contexts.
+
+Mitigation path:
+
+- normalize generation scripts to `null` for absent reason,
+- add tests asserting emitted status/reason consistency.
+
+### J.18.3 Risk: toolchain/environment pin brittleness
+
+Transpiler relies on absolute local toolchain paths and exact binary hashes. This is deterministic but deployment-fragile across hosts.
+
+Mitigation path:
+
+- include host-target manifests and reproducible bootstrap tooling,
+- keep environment contract explicit in pack/runtime docs.
+
+### J.18.4 Risk: expansion of optional branches in microkernel
+
+As more optional features are added, deterministic branch control becomes harder.
+
+Mitigation path:
+
+- ensure each optional branch has explicit snapshot fields and ledger events,
+- fail when expected fields are missing instead of silently skipping.
+
+### J.18.5 Risk: schema growth without pruning strategy
+
+Schema count is now high and rising. Versioning is necessary, but uncontrolled growth can increase maintenance complexity.
+
+Mitigation path:
+
+- formal schema lifecycle policy (active, historical, deprecated-but-required-for-replay),
+- tooling that maps artifact frequency to schema maintenance priority.
+
+---
+
+## J.19 Final-Stretch Operational Pattern (Concrete)
+
+This section is intentionally prescriptive and concrete.
+
+### J.19.1 Promotion lanes
+
+Use three operational lanes:
+
+1. **Baseline lane**: stable SAS + polymath scout/bootstrap/conquer + SH-1 where proven.
+2. **Frontier lane**: native transpiler, policy proof profile experiments, shadow tier drills.
+3. **Swap lane**: shadow-ready + RE1 regime-upgrade exercises only when all tier/readiness conditions hold.
+
+Do not mix all three lanes in one pack unless for controlled integration rehearsals.
+
+### J.19.2 Evidence lane contract
+
+For every frontier/swap push, require fresh artifacts:
+
+- phase3b/phase4 canary evidence,
+- phase4 audit bundle,
+- phase4c swap drill summary,
+- relevant verifier pass outputs.
+
+Treat these as preconditions, not optional reports.
+
+### J.19.3 Capability enablement discipline
+
+Enable capabilities by deliberate campaign pack variants:
+
+- keep super-unified for integrated operations,
+- keep phase-specific packs for constrained testing (`phase4a`, `phase4b`, `phase3 bench`, etc.),
+- use explicit goal queue entries to stage activation intention.
+
+### J.19.4 Rollback-first doctrine for swap rehearsals
+
+Any auto-swap rehearsal should include explicit post-swap and post-rollback self-check ticks, as Phase4C drill now does.
+
+### J.19.5 Native route governance discipline
+
+Treat `shadow_route_disabled_*` fields as high-signal health metrics. Route disable transitions should trigger immediate diagnostic workflow rather than silent continued operation.
+
+---
+
+## J.20 Capability Generation Matrix (As Implemented)
+
+The matrix below summarizes generation-to-activation maturity for major capability families.
+
+| Capability Family | Generation Mechanism | Verification Mechanism | Activation Mode | Current Maturity |
+|---|---|---|---|---|
+| SAS code/search/val/science/system/kernel | campaign scripts + policy routing + SH-1 feedback | versioned SAS verifiers + omega daemon replay | standard promotion/activation | mature baseline |
+| Polymath scout/bootstrap/conquer | domain lifecycle tools | polymath verifiers + schema gates | standard promotion/activation | mature baseline |
+| SIP ingestion L0 | phase4a ingestion runtime | `verify_rsi_polymath_sip_ingestion_l0_v1` | standard promotion | new but integrated |
+| Knowledge transpiler | restricted IR -> Rust -> reproducible wasm build | `verify_rsi_knowledge_transpiler_v1` + v18 daemon checks | STATUS_SHADOW install intent | frontier but substantive |
+| Native route acceleration | native router + shadow dual-run | mismatch/disable semantics + healthcheck vectors | shadow-first; native return only outside SHADOW mode | guarded |
+| Shadow regime proposal/readiness | shadow sidecar (integrity + conservatism + determinism + J) | v19 daemon verifier + readiness schema checks | auto-swap only if tier B runtime pass and handoff | frontier governance |
+| RE1 regime upgrade | `commit_staged_regime_upgrade` | readiness gating + RE1 audit + ledger entry | explicit upgrade commit path | newly real |
+
+---
+
+## J.21 Detailed Notes on Selected Critical Files
+
+### J.21.1 `orchestrator/omega_v19_0/microkernel_v1.py`
+
+Key closeout implications:
+
+- Centralized orchestration of policy, proof, native stats, shadow sidecar, and snapshot emission.
+- New shadow artifact hash fields in snapshot guarantee replay visibility.
+- Emits both proof and proof-fallback events, reducing ambiguity.
+- Integrates native shadow soak emission into normal tick flow.
+
+Risk/benefit profile:
+
+- Benefit: unified deterministic centerline.
+- Risk: high complexity concentration; requires rigorous tests on branch interactions.
+
+### J.21.2 `orchestrator/native/native_router_v1.py`
+
+Key closeout implications:
+
+- SHADOW mode does not return native output; this is conservative by design.
+- Route disable transitions are persisted in hash-bound registry payloads.
+- Environment-coupled state root/tick usage increases contextual correctness but adds dependency on invoker environment hygiene.
+
+### J.21.3 `meta-core/engine/regime_upgrade.py`
+
+Key closeout implications:
+
+- RE1 now reads v19 readiness receipts directly.
+- Fails closed on schema/version mismatch.
+- Supports failpoint to validate crash behavior around next-pointer write.
+
+### J.21.4 `tools/polymath/polymath_knowledge_transpiler_v1.py`
+
+Key closeout implications:
+
+- Converts external knowledge into constrained executable capability candidates with deterministic checkpoints.
+- Emits failure artifacts (`candidate_syntax_error`, `nonrepro_build`) instead of silent drop.
+- Strongly ties runtime contract to toolchain and binary identity.
+
+### J.21.5 `CDEL-v2/cdel/v19_0/verify_rsi_omega_daemon_v1.py`
+
+Key closeout implications:
+
+- Enforces strict coherence between shadow tier receipts and readiness receipt.
+- Enforces auto-swap prerequisites.
+- Enforces stricter proof status/fallback consistency than earlier evidence scripts assumed.
+
+---
+
+## J.22 Concrete Evidence Objects Worth Preserving as Goldens
+
+For ongoing closeout and operator onboarding, these existing run artifacts should be treated as golden evidence exemplars.
+
+1. `runs/PHASE3B_PHASE4_EVIDENCE_v1.json`
+- captures proof canary rates, proof timing, proof-size envelope, tamper/fallback behavior.
+
+2. `runs/PHASE4_AUDIT_BUNDLE_v1.json`
+- captures consolidated source/build/runtime/SIP evidence hashes for phase4 native transpiler path.
+
+3. `runs/phase4c_real_swap_drill_v1/drill_20260220T112240Z/PHASE4C_REAL_SWAP_DRILL_SUMMARY_v1.json`
+- captures shadow tier/readiness, failpoint path, live upgrade, rollback, and post checks.
+
+These three together form a strong narrative chain: proof path viability, native build integrity, and swap/rollback governance.
+
+---
+
+## J.23 Closeout Readiness Scorecard (Technical)
+
+The scorecard below is a qualitative engineering assessment derived from code and artifacts, not aspirational claims.
+
+### J.23.1 Deterministic substrate: **Strong**
+
+- Q32 fixed-point conventions preserved.
+- canonical hashing contracts pervasive.
+- proof and shadow telemetry integrated into snapshots.
+
+### J.23.2 Replay verifiability: **Strong with active expansion pressure**
+
+- v18 and v19 verifiers cover new paths.
+- native/shadow additions now have schema + verifier coverage.
+- complexity growth creates ongoing burden for completeness.
+
+### J.23.3 Capability generation breadth: **High**
+
+- 34 capability ids across registry universe.
+- active packs for baseline, phase-specific experimentation, and super-unified operation.
+
+### J.23.4 Capability activation safety: **Moderate-to-strong**
+
+- shadow-first semantics for new native path are strong.
+- RE1 upgrade gating now explicit.
+- still requires operational discipline in pack selection and gate enforcement.
+
+### J.23.5 Evidence and drill maturity: **Strong for newly added paths**
+
+- phase3b/phase4 evidence script,
+- phase4 audit bundle generator,
+- phase4c swap drill with failpoint and rollback.
+
+### J.23.6 Long-horizon autonomy confidence: **Improving, not complete**
+
+- architecture now has the right governance primitives.
+- long-run confidence still depends on sustained operations, anomaly handling, and strict gate culture.
+
+---
+
+## J.24 Final Architectural Interpretation for the "Run" Phase
+
+The architecture is entering a different regime from earlier phases.
+
+Earlier phases were dominated by:
+
+- adding campaigns,
+- adding verifiers,
+- adding policy machinery.
+
+Today’s phase increasingly emphasizes:
+
+- governance of generated capability forms,
+- evidentiary contracts for transition decisions,
+- runtime safety around shadow-to-live boundaries,
+- RE1-aware upgrade/rollback choreography.
+
+That is exactly what should happen near closeout.
+
+A system intended for highly autonomous operation should not end by adding raw capability only. It should end by hardening *how capability transitions happen*. Today’s delta is aligned with that requirement.
+
+---
+
+## J.25 Specific Recommendations for Immediate Next Iteration
+
+This section stays concrete and bounded.
+
+1. Normalize proof fallback reason semantics in evidence scripts and ensure emitted status/reason fields satisfy current verifier strictness.
+2. Keep `phase4c` drill in routine CI or scheduled canary cadence; treat regression in failpoint/live/rollback path as release blocker.
+3. Introduce a small compatibility layer in v19 verifier for tier-profile evolution only if accompanied by pinned profile-id checks; avoid silent broadening.
+4. Add explicit regression tests for `ACTIVE_NEXT_BUNDLE` pointer coherence under commit/rollback/upgrade interleavings.
+5. Expand native shadow soak analytics into observer metrics so decider can respond to route disable rates.
+6. Maintain phase-specific packs as first-class deployment channels; do not collapse all behavior into one monolithic production pack.
+
+These are engineering closeout steps, not conceptual research goals.
+
+---
+
+## J.26 Closing Statement for This Addendum
+
+As of February 20, 2026, the repository has crossed an important boundary:
+
+- It no longer only self-modifies code/config under verification.
+- It now also contains a deterministic pipeline for generating constrained native executable capability from ingested knowledge, validating it under reproducible build and runtime checks, installing it in shadow, measuring shadow-readiness, and connecting that readiness to explicit RE1 regime-upgrade mechanics with rollback and failpoint coverage.
+
+That does not by itself guarantee success at extreme autonomy targets. But it does materially improve the architecture’s ability to scale capability without collapsing its constitutional control model.
+
+The most important engineering truth now is this:
+
+**The system’s progress potential is increasingly limited less by raw generation and more by the quality, strictness, and operational discipline of its transition gates.**
+
+Today’s changes are a direct investment in those gates.
+
+---
+
+## J.27 Supplemental: Full Commit Delta Notes for 2026-02-20
+
+This supplemental section captures same-day deltas in compact form for future auditors.
+
+### `d14d946` (Phase 3 hardening)
+
+- Added `authority/evaluation_kernels/ek_omega_v19_phase3_v1.json`.
+- Tightened rollback lineage and scoring paths.
+- Updated mutator/death-test packs and `ignite_runaway.sh`/invoker plumbing.
+- Added `tools/omega/omega_benchmark_suite_v19_v1.py`.
+
+### `10ace95` (policy VM + Winterfell + deterministic hardening)
+
+- Added v19 policy VM proof pipeline and backend contract scaffolding.
+- Added v19 verifier modules for ISA program/opcode/trace/proposal/selection/proof artifacts.
+- Added pack schema v2 and policy assets in `campaigns/rsi_omega_daemon_v19_0_super_unified/`.
+- Introduced `orchestrator/omega_v19_0/microkernel_v1.py` and `orchestrator/omega_bid_market_v2.py`.
+- Expanded tests for policy VM phase1 and replay/microkernel behavior.
+
+### `dfbe6f4` (Phase4A alignment)
+
+- Aligned bootstrap campaign and microkernel SIP ingestion behavior with mainline expectations.
+
+### `14e32e8` (Phase4C regime upgrade)
+
+- Added RE1 regime upgrade module and failpointed drill script.
+- Extended constants and schema for ledger/pack support.
+
+### `9df315f` (Phase3b/Phase4 worktree consolidation)
+
+- Added native transpiler campaign/verifier/tooling.
+- Added shadow modules, schemas, tests.
+- Updated promoter/activator/daemon verifiers for native+shadow contracts.
+- Updated native router and added wasm shadow soak artifact emitter.
+- Added phase4 audit bundle script and additional evidence generation logic.
+
+This commit is particularly significant because it operationalizes features that were previously in worktree limbo.
+
+---
+
+## J.28 Supplemental: Capability and Goal Inventory Snapshot
+
+### J.28.1 Capability registries and enabled counts (selected)
+
+- `campaigns/rsi_omega_daemon_v19_0/omega_capability_registry_v2.json`: 24 total, 3 enabled.
+- `campaigns/rsi_omega_daemon_v19_0_super_unified/omega_capability_registry_v2.json`: 25 total, 9 enabled.
+- `campaigns/rsi_omega_daemon_v19_0_phase4b_native_transpiler_v1/omega_capability_registry_v2.json`: 25 total, 4 enabled.
+- `campaigns/rsi_omega_daemon_v19_0_phase4a_sip_ingestion/omega_capability_registry_v2.json`: focused single capability (`RSI_POLYMATH_SIP_INGESTION_L0`) enabled.
+
+### J.28.2 Goal queue intent snapshot (selected)
+
+- Base v19 pack: SAS triad goals.
+- Super unified: mixed SAS + SH-1 + polymath + EUDRS-U goals.
+- Phase4A pack: SIP ingestion goal.
+- Phase4B pack: knowledge-transpiler shadow goal.
+
+This demonstrates intentional use of pack-level objective profiles to stage deployment maturity.
+
+---
+
+## J.29 Supplemental: Why the New Native/Shadow Contracts Are Constitutionally Compatible
+
+A concern with native acceleration is always that it may undermine replay determinism or verifier authority. The current implementation remains constitutionally compatible because:
+
+1. transpiler outputs are schema-bound and hash-bound at every stage,
+2. verifier rebuilds and re-runs checks rather than trusting emitted claims,
+3. install intent is shadow-first,
+4. shadow mismatch disables route and records reason/tick,
+5. readiness receipts are explicit and checked before any swap path,
+6. RE1 still performs its own guarded commit semantics.
+
+In short, native capability expansion is not privileged over constitutional process; it is subordinated to it.
+
+---
+
+## J.30 Supplemental: Outstanding Practical Unknowns to Resolve Through Runs
+
+Several questions are now more operational than architectural:
+
+- How stable are proof runtime timings under sustained multi-day loads?
+- What distribution of shadow route disable reasons appears under real polymath-derived candidate diversity?
+- How often do tier checks fail in honest long-horizon operation versus synthetic drills?
+- Does capability expansion produce measurable net gains under J and benchmark gates without debt blow-up?
+- Are there hidden interactions between proof fallback paths and decision quality under stress?
+
+These are not answered by static code inspection alone. They require disciplined run campaigns with preserved artifacts.
+
+---
+
+## J.31 Final Note for Future Maintainers
+
+If you inherit this repository later, interpret this date as a major transition point:
+
+- Before this date, major emphasis was building deterministic self-improvement infrastructure.
+- On this date, the architecture meaningfully added deterministic capability-compilation and shadow-governed regime transition machinery.
+
+When debugging future behavior, always inspect artifacts across this chain:
+
+1. pack pins and profile ids,
+2. generated artifacts and their hash lineage,
+3. verifier decisions and reason codes,
+4. snapshot fields and ledger event sequence,
+5. RE1 audit and ledger outcomes.
+
+The system is now too compositional for single-file diagnosis.
+
+---
+
+*End Appendix N.*
+
+
+---
+
+# Appendix O: Comprehensive Folder Atlas for Final Autonomous Operations
+
+This appendix is a folder-by-folder and capability-by-capability atlas written for the closing operational phase. Its goal is practical: make it obvious what exists, what each surface can contribute, what is still experimental, and how to combine old and new assets without breaking constitutional safety.
+
+Where Appendix N emphasized same-day deltas, Appendix O emphasizes **full usable inventory posture** across old and new surfaces.
+
+---
+
+## K.1 Control Surfaces by Trust Ring and Operational Role
+
+A useful operational representation is to classify each major folder by two axes:
+
+- trust ring location (RE1/RE2/RE3/RE4/authority),
+- function in the autonomy loop (generation, selection, verification, activation, recovery, evidence).
+
+### K.1.1 `authority/` (root governance)
+
+Operational role:
+
+- pins and allowlists,
+- evaluation kernel sovereignty,
+- operator/sandbox contracts.
+
+Final-run interpretation:
+
+- this folder defines what "improvement" means and what mutation is even legal,
+- if this surface drifts, every downstream score can become meaningless.
+
+### K.1.2 `meta-core/` (RE1 constitutional execution)
+
+Operational role:
+
+- stage/verify/canary/commit/rollback,
+- audit and ledger chain,
+- now regime-upgrade gating entrypoint.
+
+Final-run interpretation:
+
+- this is the only acceptable place where active state pointer truth can move,
+- any autonomy claim that bypasses RE1 is a category error.
+
+### K.1.3 `CDEL-v2/` (RE2 replay judiciary)
+
+Operational role:
+
+- campaign-specific verification,
+- daemon replay verification,
+- policy VM proof verification,
+- shadow readiness/tier verification,
+- continuity/federation checks.
+
+Final-run interpretation:
+
+- this is where "creative generation" is reduced to binary pass/fail under deterministic replay law.
+
+### K.1.4 `orchestrator/` (control plane executor)
+
+Operational role:
+
+- tick composition and artifact emission,
+- dispatch to campaign executors,
+- promotion+activation handoff,
+- native routing and now shadow sidecar invocation.
+
+Final-run interpretation:
+
+- orchestrator is not trusted by itself; it is trusted only insofar as RE2 replay can reproduce and validate what it did.
+
+### K.1.5 `tools/` (operational leverage and capability factory)
+
+Operational role:
+
+- proposal synthesis (SH-1),
+- benchmarking and performance instrumentation,
+- polymath discovery and now transpilation,
+- mission-control tooling.
+
+Final-run interpretation:
+
+- tools are where practical acceleration happens, but their output must always collapse back into schema+hash+verifier channels.
+
+### K.1.6 `campaigns/` (behavioral profile layer)
+
+Operational role:
+
+- capability registry definitions,
+- policy/objective/runaway/goal queue profiles,
+- phase-specific operational envelopes.
+
+Final-run interpretation:
+
+- campaign packs are the system’s behavior selector. Same binary runtime with different pack can behave radically differently.
+
+### K.1.7 `polymath/`, `domains/`, `runs/` (knowledge and evidence memory)
+
+Operational role:
+
+- polymath registry/store and domain policy,
+- domain pack data in `domains/`,
+- execution traces and evidence in `runs/`.
+
+Final-run interpretation:
+
+- this is accumulated memory and audit substrate. It is where the system remembers what it learned and what it proved.
+
+---
+
+## K.2 Detailed Tool Atlas (What to Use, When, and Why)
+
+### K.2.1 `tools/omega`: runtime quality and native operations lab
+
+This tool family is the closest thing to an operations reliability kit. It contains benchmarking, verification helpers, native codegen/build/profiling, and test harness orchestration.
+
+High-value modules for final run:
+
+- `omega_benchmark_suite_v1.py` and `omega_benchmark_suite_v19_v1.py`: benchmark truth surfaces.
+- `omega_replay_bundle_v1.py`: replay packaging and trace analysis.
+- `omega_timings_aggregate_v1.py`: longitudinal stage timing aggregation.
+- `native/native_healthcheck_v1.py`: native route validation.
+- `native/rust_build_repro_v1.py`: reproducible-build diagnostics.
+- `survival_drill_runner_v1.py`: resilience exercise runner.
+
+Operational pattern:
+
+- use benchmark suite outputs as promotion gate context,
+- run timing aggregation on windows to detect slow drift before runaway overreacts,
+- periodically run survival drills in maintenance windows even when production is stable.
+
+### K.2.2 `tools/genesis_engine`: adaptive proposer memory
+
+SH-1 is still the strongest generalized proposer path, because it uses receipt memory and fail reason patterns.
+
+High-value modules:
+
+- `ge_symbiotic_optimizer_v0_3.py`: primary proposer engine.
+- `sh1_pd_v1.py`: promotion density extraction.
+- `sh1_xs_v1.py`: exploration score extraction.
+- `sh1_behavior_sig_v1.py`: behavior signatures to block novelty laundering.
+
+Operational pattern:
+
+- treat SH-1 as adaptive control, not random patch generator,
+- keep receipt corpus healthy and queryable,
+- ensure promoter reason-code granularity stays high so SH-1 receives useful learning signals.
+
+### K.2.3 `tools/polymath`: discovery, refinement, and now transpilation
+
+This family now spans three historically separate concerns:
+
+1. discovery (`scout`),
+2. data/domain construction (`bootstrap` and dataset/source utilities),
+3. capability compilation (`knowledge_transpiler`).
+
+Critical scripts:
+
+- `polymath_scout_v1.py`
+- `polymath_domain_bootstrap_v1.py`
+- `polymath_domain_corpus_v1.py`
+- `polymath_void_to_goals_v1.py`
+- `polymath_refinery_proposer_v1.py`
+- `polymath_knowledge_transpiler_v1.py`
+
+Operational pattern:
+
+- keep scout cadence steady to prevent stale void signals,
+- bootstrap only when source provenance and policy pass,
+- route high-confidence SIP knowledge into transpiler only after ingestion verification,
+- keep transpiler in shadow-first mode until shadow soak remains stable over sustained windows.
+
+### K.2.4 `tools/v19_runs` and `tools/v19_smoke`: repeatable evidence orchestration
+
+These folders support repeatable, automated evidence workflows.
+
+Examples:
+
+- `run_omega_v19_full_loop.py`
+- `v19_ladder_evidence_pipeline_v1.py`
+- `run_tick_gate_matrix_e2e.py`
+- `run_promotion_gate_smoke.py`
+
+Operational pattern:
+
+- promote these scripts from ad hoc usage to routine schedule,
+- persist outputs under stable naming for historical comparison,
+- integrate gate-matrix deltas into observer metrics for autonomous self-diagnosis.
+
+### K.2.5 `tools/mission_control` and `tools/omega_mission_control`
+
+These represent operational UI/service surfaces. They are not constitutional cores, but they matter for human oversight and for reducing operator error during high-complexity transitions.
+
+Operational pattern:
+
+- keep mission-control surfaces read-mostly for critical actions,
+- ensure any write/action path still resolves through canonical CLI/runtime flows and leaves signed/hashable traces.
+
+### K.2.6 `tools/vision`
+
+Vision utilities are smaller in count but strategically important for EUDRS-U world-model breadth.
+
+Operational pattern:
+
+- keep vision goldens generation deterministic,
+- ensure retrieval/selection utility outputs remain schema-bound and hash-addressed before downstream use.
+
+---
+
+## K.3 Campaign Atlas: How to Exploit Everything Built So Far
+
+Campaign surfaces now exceed what a flat list communicates. The useful view is by function family and maturity.
+
+### K.3.1 Baseline productivity family (always-on candidates)
+
+- `rsi_sas_code_v12_0`
+- `rsi_sas_metasearch_v16_1`
+- `rsi_sas_val_v17_0`
+
+These appear enabled in many packs for a reason: they provide broad improvement pressure with established verifier paths.
+
+### K.3.2 Adaptive proposer family
+
+- `rsi_ge_symbiotic_optimizer_sh1_v0_1`
+- coordinator/market mutator campaigns
+
+Use this family to maintain adaptive exploration-exploitation of code/config surfaces. Keep mutators gated and observed due higher blast radius.
+
+### K.3.3 Polymath expansion family
+
+- `rsi_polymath_scout_v1`
+- `rsi_polymath_bootstrap_domain_v1`
+- `rsi_polymath_conquer_domain_v1`
+- `rsi_polymath_sip_ingestion_l0_v1`
+
+This family extends knowledge frontier and now feeds capability compilation arcs.
+
+### K.3.4 Native/transpiler transition family
+
+- `rsi_omega_native_module_v0_1`
+- `rsi_knowledge_transpiler_v1`
+
+This family is the bridge into generated executable capability under deterministic controls.
+
+### K.3.5 EUDRS-U family
+
+- train/index/ontology/eval campaigns
+
+These remain critical for long-term embodied learning hypotheses and should be maintained even if not always enabled in production packs.
+
+### K.3.6 Skill/report family
+
+Multiple `rsi_omega_skill_*` campaigns remain low-risk, high-observability modules useful for periodic health probes and domain-specific diagnostics.
+
+### K.3.7 Stress/adversarial family
+
+- survival drills,
+- phase0 immune/victim paths,
+- death-test packs,
+- market toy and benchmark packs.
+
+These are essential for proving immune response and preventing complacency near closeout.
+
+---
+
+## K.4 Legacy Recovery: What Older Components Still Contribute
+
+A closeout risk is discarding "old" modules too early. Several legacy components remain strategically useful.
+
+### K.4.1 CAOE lineage in `Extension-1/agi-orchestrator`
+
+Even if SH-1 dominates code mutation, CAOE’s wake/sleep/dawn architecture remains useful as a conceptual or practical scaffold for architecture-level anomaly mining.
+
+### K.4.2 Historical SAS campaigns and verifiers
+
+Earlier-version campaigns and verifiers are necessary for replay and can also act as alternate search paths when newer campaigns overfit current gates.
+
+### K.4.3 Older bid-market and toy modules
+
+Toy campaigns are often the cheapest place to validate new market or selection semantics before exposing production capability registries.
+
+### K.4.4 Older schema versions
+
+Historical schema versions are not bloat. They are governance memory and compatibility anchors. Preserve them unless a formal replay-incompatibility deprecation plan exists.
+
+---
+
+## K.5 Polymath + Transpiler Integration Playbook
+
+This section gives an explicit operational choreography for turning external knowledge into shadow-verified native capability without violating determinism.
+
+### K.5.1 Step A: SIP ingest
+
+Run/verify SIP ingestion campaign. Require:
+
+- valid knowledge artifact hash,
+- empirical evidence hash,
+- no leakage/policy violations.
+
+### K.5.2 Step B: Build restricted kernel spec
+
+Maintain kernel spec under campaign pack with explicit Q32 params and health vectors.
+
+### K.5.3 Step C: Transpile under pinned toolchain/runtime manifests
+
+Run `rsi_knowledge_transpiler_v1` and require status `OK` and health PASS.
+
+Reject if:
+
+- candidate syntax error artifact exists,
+- nonrepro build artifact exists,
+- any required artifact hash mismatch.
+
+### K.5.4 Step D: Promotion and activation to STATUS_SHADOW
+
+Allow activator to install/update `native_shadow_registry_v1` with preserved disable state semantics.
+
+### K.5.5 Step E: Shadow soak observation window
+
+Monitor shadow soak summary/receipt over sustained ticks:
+
+- route-disabled modules should trend to zero for readiness,
+- portability status should remain RUNNABLE,
+- disable reason taxonomy should be stable and actionable.
+
+### K.5.6 Step F: Shadow regime readiness gating
+
+Require tier A/B + readiness receipt PASS/READY and no integrity mutations.
+
+### K.5.7 Step G: Optional auto-swap drill path
+
+Only with explicit auto-swap setup and handoff receipts, run regime-upgrade drill including failpoint and rollback validation.
+
+This is the operationally safe path from new knowledge to live-capable runtime transition.
+
+---
+
+## K.6 Test and Verification Coverage Snapshot
+
+### K.6.1 Newly relevant test families
+
+v18 tests now include native/transpiler routes, e.g.:
+
+- `test_native_router_shadow_mode_v1.py`
+- `test_transpiler_shadow_registry_install_v1.py`
+- `test_system_kernel_activation_keys.py` (updated)
+
+v19 tests include policy and shadow readiness surfaces:
+
+- `test_policy_vm_phase1.py`
+- `test_policy_vm_replay_and_microkernel.py`
+- `tests_continuity/test_shadow_airlock_v1.py`
+- `tests_continuity/test_shadow_fs_guard_v1.py`
+- `tests_continuity/test_shadow_tiers_v1.py`
+- `tests_continuity/test_corpus_descriptor_v1.py`
+
+### K.6.2 Coverage interpretation
+
+Coverage now spans key new contracts, but final-run safety depends on combined-sequence tests, not only unit tests. The highest-value additions going forward are scenario tests that chain:
+
+- transpiler generation -> promotion -> shadow install,
+- shadow soak transitions,
+- shadow readiness -> RE1 upgrade -> rollback,
+- replay verification across each stage.
+
+---
+
+## K.7 Autonomy Scaling Doctrine (Engineering Version)
+
+To align with the stated objective of maximizing autonomous problem-solving capacity, the engineering doctrine should be explicit.
+
+### K.7.1 Principle 1: Scale capability generation, not trust assumptions
+
+New generation mechanisms are welcome only if trust assumptions do not expand. Every new generator must produce artifacts that are verifiable by existing constitutional machinery or versioned extensions thereof.
+
+### K.7.2 Principle 2: Keep transition gates stricter than generation gates
+
+Generation can be broad and exploratory. Transition to active runtime must remain narrow, deterministic, and evidence-heavy.
+
+### K.7.3 Principle 3: Prefer layered deployment over single-shot activation
+
+Use staged packs and lane-based operation:
+
+- baseline lane for stable progress,
+- frontier lane for new capabilities,
+- swap lane for regime transitions.
+
+### K.7.4 Principle 4: Treat fallback paths as first-class, not exceptions
+
+Fallback status and reasons are part of system truth. They must be explicit in snapshots and verifier-checked.
+
+### K.7.5 Principle 5: Preserve reversibility as non-negotiable
+
+Any high-impact transition without tested rollback should be considered incomplete.
+
+---
+
+## K.8 Practical Execution Template for the Next 30-Day Closeout Window
+
+This template is designed for the immediate practical horizon.
+
+### K.8.1 Weekly cycle
+
+1. Run baseline production packs with stable enabled capability set.
+2. Run phase-specific frontier packs (`phase4a`, `phase4b`, proof canaries) and gather artifacts.
+3. Run shadow readiness drills and selected failpoint exercises.
+4. Generate audit bundles and compare against previous week.
+5. Update source-of-truth addendum with measured deltas and resolved/introduced risks.
+
+### K.8.2 Promotion criteria for moving frontier features toward baseline
+
+Require all of:
+
+- repeated verifier-valid runs,
+- no unresolved schema/hash mismatch class,
+- stable shadow soak readiness without rising disable transition rates,
+- successful rollback rehearsal for any swap-relevant path.
+
+### K.8.3 Non-negotiable stop conditions
+
+- recurrent nonrepro build findings,
+- unresolved proof status/fallback contradictions,
+- repeated shadow protected-root mutation findings,
+- inability to reproduce evidence bundles from pinned scripts.
+
+---
+
+## K.9 Folder-Level "Use It Now" Checklist
+
+The following checklist is intentionally operational.
+
+### `authority/`
+
+- confirm active kernel and allowlist pins before major runs,
+- verify no unintended pin drifts.
+
+### `meta-core/`
+
+- periodically run audit and check pointer/ledger coherence,
+- include failpoint mode in rehearsal cadence.
+
+### `CDEL-v2/`
+
+- execute relevant test suites when introducing schema/runtime changes,
+- keep verifier reason codes precise and stable.
+
+### `orchestrator/`
+
+- ensure pack freeze includes all required pinned assets,
+- verify snapshot fields for new branches are always populated/consistent.
+
+### `tools/`
+
+- treat evidence generator scripts as part of release process,
+- avoid ad hoc tool outputs that bypass schema contracts.
+
+### `polymath/`
+
+- keep source policy and registry hygiene strong,
+- rotate through scout/bootstrap/conquer/ingest cycles explicitly.
+
+### `campaigns/`
+
+- maintain narrow, purpose-built packs for risky transitions,
+- keep production packs conservative in enabled capability set.
+
+### `runs/`
+
+- preserve canonical evidence artifacts and indexes,
+- make trend comparisons part of observer inputs where possible.
+
+---
+
+## K.10 Closing Integration Note
+
+Everything needed for a disciplined autonomous closeout now exists in code:
+
+- deterministic generation paths,
+- strict replay verification,
+- shadow-first activation for new native forms,
+- explicit readiness contracts,
+- RE1 regime-upgrade and rollback drills,
+- growing evidence automation.
+
+The remaining work is not inventing a new architecture. The remaining work is **operating this one rigorously**, tightening edge inconsistencies, and refusing to trade governance strictness for speed.
+
+If that discipline holds, the architecture can continue increasing capability while preserving constitutional control, which is the only viable path for durable high-autonomy scaling.
+
+---
+
+*End Appendix O.*
+
+
+---
+
+# Appendix P: Capability Crosswalk and Deployment Stratification
+
+This appendix gives a direct crosswalk between the capability vocabulary and practical deployment strategy. It is designed for operators who need to answer: "which capability do we enable next, under which pack, with what verifier, and under what risk posture?"
+
+---
+
+## L.1 Capability ID Universe and Grouping Logic
+
+Observed unique capability ids across current registries form a mixed set of baseline, frontier, and test-specific surfaces. For closeout operations, the useful grouping is:
+
+- **Baseline Core**: proven high-utility campaigns used in regular operation.
+- **Expansion Core**: campaigns that directly increase domain breadth or generation power.
+- **Native Transition**: campaigns that move execution pathways toward compiled artifacts.
+- **Skill/Diagnostics**: campaignized analysis/report generation paths.
+- **Adversarial/Test**: intentionally constrained or stress-oriented capabilities.
+
+### L.1.1 Baseline Core group
+
+Includes:
+
+- `RSI_SAS_CODE`
+- `RSI_SAS_METASEARCH`
+- `RSI_SAS_VAL`
+- (often) `RSI_SAS_SCIENCE`
+
+Rationale:
+
+- repeatedly enabled in major packs,
+- broad contribution to code/search/validation loops,
+- mature verifier surfaces with known behavior.
+
+### L.1.2 Expansion Core group
+
+Includes:
+
+- `RSI_GE_SH1_OPTIMIZER`
+- `RSI_POLYMATH_SCOUT`
+- `RSI_POLYMATH_BOOTSTRAP_DOMAIN`
+- `RSI_POLYMATH_CONQUER_DOMAIN`
+- `RSI_EUDRS_U_*` family (`TRAIN`, `ONTOLOGY_UPDATE`, `INDEX_REBUILD`, `EVAL_CAC`)
+
+Rationale:
+
+- these are the principal capability-breadth amplifiers,
+- they create new information, new transformations, and improved policies over time,
+- they require stronger gate observation because effects can be broad.
+
+### L.1.3 Native Transition group
+
+Includes:
+
+- `RSI_OMEGA_NATIVE_MODULE`
+- `RSI_KNOWLEDGE_TRANSPILER`
+- `RSI_POLYMATH_SIP_INGESTION_L0` (as upstream enabler)
+
+Rationale:
+
+- this group bridges from interpreted/templated evolution toward generated executable kernels,
+- demands strict shadow-first governance and clear rollback plans.
+
+### L.1.4 Skill/Diagnostics group
+
+Includes:
+
+- `RSI_OMEGA_SKILL_ALIGNMENT`
+- `RSI_OMEGA_SKILL_BOUNDLESS_MATH`
+- `RSI_OMEGA_SKILL_BOUNDLESS_SCIENCE`
+- `RSI_OMEGA_SKILL_EFF_FLYWHEEL`
+- `RSI_OMEGA_SKILL_MODEL_GENESIS`
+- `RSI_OMEGA_SKILL_ONTOLOGY`
+- `RSI_OMEGA_SKILL_PERSISTENCE`
+- `RSI_OMEGA_SKILL_SWARM`
+- `RSI_OMEGA_SKILL_THERMO`
+- `RSI_OMEGA_SKILL_TRANSFER`
+
+Rationale:
+
+- low-risk diagnostic refreshers for observer/decider context,
+- useful for anomaly localization and prioritized hardening decisions.
+
+### L.1.5 Adversarial/Test group
+
+Includes:
+
+- `BID_MARKET_TOY_GOOD`
+- `BID_MARKET_TOY_BAD`
+- mutator/death-test linked capabilities (`RSI_COORDINATOR_MUTATOR`, `RSI_MARKET_RULES_MUTATOR`)
+
+Rationale:
+
+- not always production-on,
+- high value for preventing immune-system atrophy.
+
+---
+
+## L.2 Pack Stratification: Which Pack Is For What
+
+### L.2.1 `rsi_omega_daemon_v19_0` base pack
+
+Intent:
+
+- conservative baseline operation,
+- limited enabled set centered on SAS core.
+
+When to use:
+
+- production stability periods,
+- control runs for regression comparison.
+
+### L.2.2 `rsi_omega_daemon_v19_0_super_unified`
+
+Intent:
+
+- integrated multi-family operation (SAS + SH-1 + polymath + EUDRS-U),
+- v2 schema capable with richer policy assets.
+
+When to use:
+
+- integrated benchmark windows,
+- evaluating cross-family interactions.
+
+Watch-outs:
+
+- higher interaction complexity,
+- stronger need for replay and evidence review.
+
+### L.2.3 `rsi_omega_daemon_v19_0_phase4a_sip_ingestion`
+
+Intent:
+
+- isolate and validate SIP ingestion capability as a first-class daemon path.
+
+When to use:
+
+- ingestion hardening,
+- provenance/leakage policy tests,
+- preconditioning phase before transpiler runs.
+
+### L.2.4 `rsi_omega_daemon_v19_0_phase4b_native_transpiler_v1`
+
+Intent:
+
+- focus on transpiler/native transition with constrained enabled set.
+
+When to use:
+
+- shadow-install rehearsal,
+- route disable taxonomy stabilization,
+- reproducible build/runtime contract confidence building.
+
+### L.2.5 `phase3_*` packs and market/death variants
+
+Intent:
+
+- targeted stress, scoring, and regression scenarios.
+
+When to use:
+
+- verifier stress campaigns,
+- controlled chaos drills,
+- post-merge hardening before baseline promotion.
+
+---
+
+## L.3 Verifier-Centric Crosswalk
+
+This subsection emphasizes a crucial practical point: capabilities only matter if their verifier path is clear and maintainable.
+
+### L.3.1 Mature verifier-backed families
+
+- SAS code/system/kernel/science/metasearch/val verifiers (multi-version).
+- CCAP verifier (`verify_ccap_v1`) for broad patch proposals.
+- polymath domain verifier line.
+
+These should remain first-choice for high-frequency autonomous loops.
+
+### L.3.2 New verifier-backed families
+
+- `verify_rsi_polymath_sip_ingestion_l0_v1` (ingestion).
+- `verify_rsi_knowledge_transpiler_v1` (transpiler to native).
+- expanded v18 daemon verifier for native shadow registry + shadow soak.
+- expanded v19 daemon verifier for shadow tier/readiness path.
+
+These are now real and tracked, but should be promoted through staged operational confidence windows.
+
+### L.3.3 Composite verification path now possible
+
+A complete composite path can now be verified end-to-end:
+
+1. ingest knowledge,
+2. transpile to constrained native candidate,
+3. emit promotion bundle and activation binding,
+4. install shadow registry entry,
+5. observe shadow soak summary/receipt,
+6. evaluate shadow tiers and readiness,
+7. run RE1 regime-upgrade drill path.
+
+This path did not exist as a fully tracked and verifier-aware chain before today’s consolidation.
+
+---
+
+## L.4 Deployment Gate Hierarchy for Exponential-Scale Ambitions
+
+For ambitions of large-scale autonomous problem-solving, deployment discipline must be hierarchical.
+
+### L.4.1 Gate A: deterministic generation validity
+
+Requirements:
+
+- schema-valid generated artifacts,
+- canonical hash binding integrity,
+- no forbidden nondeterminism tokens.
+
+### L.4.2 Gate B: reproducibility and runtime contract validity
+
+Requirements:
+
+- reproducible build proof pass,
+- runtime binary pin match,
+- deterministic flags validated.
+
+### L.4.3 Gate C: functional correctness under vectorized checks
+
+Requirements:
+
+- healthcheck receipt PASS,
+- vector expected vs actual hashes all match,
+- no hidden runtime divergence.
+
+### L.4.4 Gate D: shadow operational stability
+
+Requirements:
+
+- shadow soak readiness PASS over sustained window,
+- no persistent route-disable accumulation,
+- portability status stable.
+
+### L.4.5 Gate E: shadow regime readiness
+
+Requirements:
+
+- tier A/B pass,
+- integrity report PASS,
+- determinism and conservatism receipts pass,
+- J comparison rules pass.
+
+### L.4.6 Gate F: RE1 transition legality and reversibility
+
+Requirements:
+
+- `commit_staged_regime_upgrade` pass,
+- RE1 audit coherent,
+- rollback path tested and successful.
+
+This hierarchy is the practical architecture for scaling capability without surrendering control.
+
+---
+
+## L.5 Recommended Capability Enablement Sequence (Concrete)
+
+If running a structured closeout progression from current state, a practical sequence is:
+
+1. Keep baseline SAS core enabled in production pack.
+2. Keep polymath scout/boot/conquer active in super-unified windows.
+3. Keep SIP ingestion pack cycles active to refresh frontier inputs.
+4. Run phase4b transpiler pack in dedicated windows until shadow soak becomes predictably PASS.
+5. Introduce controlled shadow readiness exercises in v2-capable packs.
+6. Run periodic phase4c swap drills with failpoint and rollback checks.
+7. Only then consider broader auto-swap activation policies, and only with explicit evidence thresholds.
+
+This sequencing uses existing assets fully while minimizing constitutional risk.
+
+---
+
+## L.6 Final Synthesis
+
+From a capability-program perspective, the system now has:
+
+- broad baseline self-improvement capability,
+- formalized knowledge-ingestion capability,
+- deterministic native-capability generation,
+- shadow-governed activation transition machinery,
+- RE1-level regime-upgrade and rollback instrumentation.
+
+That is enough to enter sustained autonomous scaling experiments, provided operations stay gate-disciplined and evidence-first.
+
+The central operational truth is simple:
+
+**Enablement order and gate discipline now matter more than raw feature count.**
+
+This repository has sufficient capability breadth. The closeout challenge is orchestration quality under constitutional constraints.
+
+---
+
+*End Appendix P.*
+
+
+---
+
+# Appendix Q: Short Operator Memo for the Run Phase
+
+The current codebase is no longer in a "missing pieces" state. It is in a "coordination and discipline" state.
+
+Three operator habits will determine whether the architecture scales safely:
+
+1. **Always read artifacts, not only logs.**
+   If a transition happened, there should be hash-bound evidence in snapshot, ledger, and promotion/activation artifacts. If evidence is missing, treat the transition as invalid until explained.
+
+2. **Always test rollback in the same window as forward movement.**
+   Forward-only confidence is false confidence. The system now has explicit swap/rollback instrumentation; use it routinely.
+
+3. **Always separate exploratory packs from baseline packs.**
+   Phase-specific packs exist to isolate risk. Keep them isolated unless evidence supports promotion.
+
+A practical review cadence for autonomous runs should include:
+
+- weekly comparison of shadow route disable reasons,
+- weekly proof canary trend checks (fast-path/fallback/timing/proof size),
+- periodic phase4c-style rehearsal with failpoint + rollback,
+- strict normalization checks for fallback reason/status semantics.
+
+The architecture has enough built capability to run hard. The failure mode now is less likely to be "we cannot generate improvements" and more likely to be "we generated and transitioned too quickly without enforcing our own contracts."
+
+The correct final-stretch posture is therefore:
+
+- keep generation throughput high,
+- keep transition thresholds strict,
+- keep evidence expectations uncompromising.
+
+That posture is compatible with strong autonomy and constitutional safety at the same time.
+
+---
+
+*End Appendix Q.*

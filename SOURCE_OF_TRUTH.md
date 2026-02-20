@@ -3657,3 +3657,879 @@ This is the AGI-Stack's design philosophy in action: **expand capability, preser
 *Document: AGI-Stack-Unchained Source of Truth*
 *Total sections: 7 Layers + Deep Dive + Detailed Module Analysis + Design Rationale + 12 Appendices*
 *Generated from analysis of 40,000+ lines of core source code across 15+ major components*
+
+
+## Repository Source-of-Truth Addendum: Three-Day Engineering Delta (February 17-20, 2026)
+
+### Scope, Method, and Guardrails
+
+This addendum records the implementation delta that landed during the last three days leading up to February 20, 2026. The analysis window is anchored on repository commits and code-level diffs, not on historical markdown narratives. The objective is to describe what changed, why it changed, and how the runtime and verification contracts were tightened.
+
+The audit process for this section used:
+
+- commit history and file-level churn for the period,
+- direct inspection of Python, Rust, JSON schema, and test artifacts,
+- cross-checking of orchestrator runtime paths with verifier expectations,
+- path-level tracing through `orchestrator`, `CDEL-v2/cdel`, `Genesis/schema`, and `agi-orchestrator`.
+
+Key quantitative footprint for the period:
+
+- approximately 347 files touched,
+- approximately 35,632 lines added,
+- approximately 8,066 lines deleted,
+- 131 high-signal non-markdown files in core runtime/verifier/schema paths,
+- major concentration in `orchestrator/omega_v19_0/*`, mutator pipelines, policy VM proof plumbing, and v19 schema verification.
+
+The dominant architectural moves in this period were:
+
+1. replacement of legacy v19 coordinator execution with a deterministic microkernel,
+2. introduction of typed-stack policy VM execution and policy market selection flow,
+3. addition of Winterfell STARK proof generation and verification pathways,
+4. hardened hash-pin contracts and inputs-descriptor binding checks,
+5. mutator reliability upgrades for malformed LLM outputs and strict replay gates,
+6. deterministic, fail-closed alignment of subverifier, axis-gate, and CCAP lineage paths,
+7. backend transition away from Gemini toward MLX in LLM routing,
+8. runtime and verifier convergence for v18/v19 cross-compatibility.
+
+The remainder of this addendum details these deltas by subsystem.
+
+---
+
+### Commit-Level Timeline (Three-Day Window)
+
+The implementation pattern is staged rather than monolithic. The period includes a progression from groundwork and environment hygiene to strict runtime hardening and finally proof-integrated policy execution.
+
+Representative milestones in order:
+
+- February 18, 2026: phase 1 native module pipeline proof lands, with native routing, reproducible build artifacts, and activation hooks.
+- February 18, 2026: phase 2 implementation wave introduces policy market and additional state structures in v18 coordinator paths.
+- February 18, 2026: phase 3 campaign/mutator hardening series begins (JSON extraction, patch normalization, explicit failure receipts, retry behavior, and deterministic worktree imports).
+- February 19, 2026: strict DoD integrations unify runtime mutation evidence, tighter mutator gates, and broad runtime wiring across v19 policy paths.
+- February 20, 2026: CCAP scoring and rollback lineage are stabilized in mutator and market paths.
+- February 20, 2026: deterministic hardening and Phase 3b lifecycle complete with Phase 4 Winterfell STARK integration.
+
+Two important directional signals from the commit history:
+
+- the code moved from tolerant experimental mutator execution toward explicit fail-closed behaviors with typed receipts and replay verdict constraints;
+- the runtime moved from coordinator-centric imperative flow toward microkernel execution where artifacts, hashes, and timing semantics are explicit first-class outputs.
+
+---
+
+### Repository Scan Findings by Priority Area
+
+#### 1) `orchestrator` (v18/v19): core runtime motion
+
+This was the highest-impact surface in the window. Major additions or large rewrites include:
+
+- `orchestrator/omega_v19_0/microkernel_v1.py` (new, large deterministic execution core),
+- `orchestrator/omega_v19_0/coordinator_v1.py` (reduced to compatibility wrapper over microkernel),
+- `orchestrator/omega_v19_0/policy_vm_v1.py` (new typed-stack VM),
+- `orchestrator/omega_bid_market_v2.py` (new policy proposal arbiter),
+- significant updates to `orchestrator/rsi_coordinator_mutator_v1.py` and `orchestrator/rsi_market_rules_mutator_v1.py`,
+- `orchestrator/llm_backend.py` added at repository root as overlay backend implementation.
+
+#### 2) `CDEL-v2/cdel`: verifier, proof, and policy contract enforcement
+
+This was the second highest-impact area. Major additions:
+
+- `CDEL-v2/cdel/v19_0/policy_vm_stark_runner_v1.py` (proof bridge to Rust STARK backend),
+- expansion of `CDEL-v2/cdel/v19_0/verify_rsi_omega_daemon_v1.py` into policy-path + proof-aware replay verification,
+- hardened `CDEL-v2/cdel/v18_0/verify_rsi_omega_daemon_v1.py` with descriptor binding fallback checks and tolerant repo-tree ID binding,
+- new verifier units for v19 policy artifacts (`verify_*` for inputs, hints, proposals, market selection, trace, proof),
+- comprehensive new test suites for v19 microkernel/policy VM/proof flows.
+
+#### 3) `Genesis/schema` and mirrored `CDEL-v2/Genesis/schema`
+
+Schema updates were broad and crucial. Patterns include:
+
+- new v19 policy schemas (`policy_vm_stark_proof_v1`, `policy_vm_trace_v1`, `policy_vm_air_profile_v1`, `policy_vm_winterfell_backend_contract_v1`, `policy_market_selection_v1`, `inputs_descriptor_v1`, etc.),
+- stronger `rsi_omega_daemon_pack_v2` requirements and conditional fields for policy-proof mode,
+- v18 schema expansions for bid-market and activation/ledger/native manifests,
+- mirrored schema updates in `CDEL-v2/Genesis/schema/v18_0` to keep runtime/verifier contract parity.
+
+#### 4) `agi-orchestrator`
+
+LLM backend behavior was materially altered:
+
+- Gemini backend support removed fail-closed,
+- MLX backend introduced with deterministic seed derivation and replay row emission,
+- harvest retry/backoff infrastructure carried forward and generalized.
+
+#### 5) lowercase `genesis`
+
+No high-churn commit activity was detected under lowercase `genesis` in this three-day commit window. It was still scanned for consistency and inventory shape, but the concrete implementation churn for this period is concentrated in uppercase `Genesis/schema`, `CDEL-v2`, and `orchestrator`.
+
+---
+
+### v19 Runtime Refactor: Deterministic Microkernel as Execution Center
+
+The single largest runtime move is the introduction of `orchestrator/omega_v19_0/microkernel_v1.py` and corresponding conversion of `orchestrator/omega_v19_0/coordinator_v1.py` into a wrapper.
+
+Before this shift, the coordinator carried broad execution logic directly. In this window, that logic is consolidated into the microkernel and exposed through a narrower compatibility interface.
+
+Key properties of the microkernel path:
+
+- deterministic timing toggle through environment (`OMEGA_V19_DETERMINISTIC_TIMING`),
+- explicit phase mutation signal hook (`OMEGA_PHASE3_MUTATION_SIGNAL`) for reproducible DoD evidence,
+- strict path confinement helpers to prevent out-of-root artifact writes,
+- normalized loading of previous state slices (`state`, `runaway`, `market`, `perf`, `observations`, etc.),
+- deterministic artifact emission order over structured state subdirectories,
+- integrated policy VM, policy market, and optional proof emission path,
+- explicit ledger event and snapshot population including policy and proof artifacts,
+- integration of axis-gate outcomes into safe-halt and promotion reason semantics.
+
+Important execution semantics in this refactor:
+
+1. deterministic stage accounting: when deterministic timing is enabled, timing vectors are stabilized instead of reflecting wall-clock variability;
+2. explicit prior-source wiring: prior tick perf/stats/scorecard and observation source metadata are loaded and propagated instead of inferred ad hoc;
+3. structured policy path output: policy inputs, traces, hints, merged hints, proposals, selection, counterfactual, proofs are now first-class state artifacts under known paths;
+4. hash-bound inputs descriptor path: descriptor construction is explicit and hash-pinned before downstream VM/proof calls.
+
+The coordinator file in v19 now largely delegates to `tick_once(...)` and re-exports helper functions, reducing divergence between runtime behavior and test harness import behavior.
+
+This is a substantive maintainability and determinism step: behavior-critical code moved from broad mutable coordinator context into a single deterministic kernel path.
+
+---
+
+### Policy VM v1: Typed Stack, Budgeted Trace, and Mode Separation
+
+`orchestrator/omega_v19_0/policy_vm_v1.py` is a major new component in this period.
+
+Core mechanics:
+
+- typed stack values (`Q32`, `U64`, `BOOL`, `STRING`, `HASH`, plus internal refs),
+- explicit budget accounting (`max_steps`, `max_stack_items`, `max_trace_bytes`) with fail-closed `TRACE_BUDGET_EXCEEDED`,
+- opcode enable/disable extraction from opcode table representations,
+- explicit forbidden opcode handling in phase mode,
+- deterministic plan finalization from constrained plan fields,
+- recompute proof integration in plan output.
+
+Design intent captured by implementation:
+
+- no implicit coercion across incomparable types;
+- all hash-like identity fields validated as strict `sha256:*` values;
+- stack transition behavior is bounded, typed, and replay-friendly;
+- policy modes (`DECISION_ONLY`, `PROPOSAL_ONLY`, `DUAL`) enforce feature barriers rather than soft preferences.
+
+This file forms the semantic source for both execution and proof witness generation. The downstream proof verifier replays transition semantics against this policy trace contract, so the typed-stack strictness here is foundational to proof integrity.
+
+---
+
+### Policy Market v2: Deterministic Proposal Ranking and Selection Commitment
+
+`orchestrator/omega_bid_market_v2.py` introduces a deterministic arbiter for policy proposals.
+
+What is new relative to earlier branch selection logic:
+
+- proposal-level verification includes strict hash and schema checks for descriptor, trace, plan, and proposal commitment;
+- optional direct recomputation of compute cost from traced budget usage when traces are supplied;
+- expected J delta prediction path integrated with predictor inputs and observation hash;
+- ranking sort key standardized as:
+  - highest `expected_J_new_q32`,
+  - lowest `compute_cost_q32`,
+  - lexical `program_id`;
+- selection receipt includes authoritative binding hashes for each ranked proposal;
+- selection commitment hash binds the full ranking plus winner binding.
+
+Operational impact:
+
+- branch completion order can no longer influence winner determination,
+- replay verifier can recompute winner deterministically from canonical inputs,
+- policy-market artifacts gain stronger anti-tamper structure via commitment hash.
+
+This aligns policy branch arbitration with the same deterministic principle used elsewhere in the daemon: if inputs are equal and hashes are bound, outcome must be identical.
+
+---
+
+### v18 and v19 Verifier Hardening
+
+#### v18 verifier (`CDEL-v2/cdel/v18_0/verify_rsi_omega_daemon_v1.py`)
+
+Important strengthening in the period:
+
+- acceptance of both `rsi_omega_daemon_pack_v1` and `v2` schema versions at load time;
+- new `_verify_inputs_descriptor_binding(...)` logic supporting both legacy descriptor shape and expanded descriptor shape;
+- strict field checks in expanded descriptor path (`state_hash`, `repo_tree_id`, `observation_hash`, `issues_hash`, `registry_hash`, `predictor_id`, `j_profile_id`, `opcode_table_id`, `budget_spec_id`, `determinism_contract_id`);
+- policy-aware behavior where recomputation can rely on descriptor-bound proof path, not only legacy decision recomputation path.
+
+A crucial addition is use of tolerant repo tree identity (`compute_repo_base_tree_id_tolerant`) for descriptor verification under dirty worktree conditions, preventing nondeterministic verifier failures when strict tree-id assumptions are not valid.
+
+#### v19 verifier (`CDEL-v2/cdel/v19_0/verify_rsi_omega_daemon_v1.py`)
+
+This file shifted from a light extension wrapper into a full policy-path verifier with proof integration.
+
+Major capabilities added:
+
+- direct loading and validation of hash-bound policy artifacts,
+- verification of opcode table, ISA program, inputs descriptor, trace proposals, market selection, hint bundles, merged hints, counterfactual trace examples,
+- verification of pack-level pin consistency for profile/backend/action enum/campaign IDs,
+- decision-only replay path and proposal/market replay path branching,
+- proof verification path that can validate `policy_vm_stark_proof_v1` and reconcile expected bindings.
+
+It now enforces both artifact existence and identity relationships between artifacts. That is a major contract tightening: not only must files exist and parse, their pin hashes and cross-reference IDs must match recomputed canonical hashes.
+
+---
+
+### STARK Integration: Winterfell Proof Generation and Verification
+
+The period introduces end-to-end proof plumbing rather than only schema placeholders.
+
+#### Python bridge (`CDEL-v2/cdel/v19_0/policy_vm_stark_runner_v1.py`)
+
+Responsibilities implemented:
+
+- convert policy VM trace rows into STARK-friendly row format,
+- map action kinds and campaign IDs into compact public output encodings,
+- canonicalize proof options against backend contract-defined key ordering,
+- build statement and CLI input artifacts with split hash components,
+- invoke Rust prover/verifier CLI and return structured results,
+- emit statement/public output/proof options hash in forms verifier can bind.
+
+It defines supported STARK operation subset (`NOP`, `PUSH_CONST`, `CMP_Q32`, `CMP_U64`, `JZ`, `JMP`, `SET_PLAN_FIELD`, `EMIT_PLAN`) and enforces that trace rows map only into this set.
+
+#### Winterfell contract helper (`CDEL-v2/cdel/v19_0/winterfell_contract_v1.py`)
+
+Adds strict canonical matching logic between:
+
+- profile metadata fields,
+- backend contract metadata fields,
+- required proof option key sets and values.
+
+This prevents silent drift where profile and backend disagree on the proof option schema or runtime metadata.
+
+#### Proof verifier (`CDEL-v2/cdel/v19_0/verify_policy_vm_stark_proof_v1.py`)
+
+This verifier supports two representations:
+
+- semantic trace witness mode,
+- `STARK_FRI_PROOF_V1` mode.
+
+Key checks include:
+
+- canonical `proof_id` recomputation,
+- cross-binding of payload top-level fields with `public_outputs`,
+- profile/backend pin checks from state config,
+- proof-bytes hash check against blob on disk,
+- transition-level semantic trace replay checks,
+- statement hash and commitment consistency checks,
+- optional Rust-side cryptographic verification path.
+
+The function is intentionally fail-closed on missing state and mismatched bindings. If expected trace/decision/profile assets are unavailable when required, it fails rather than downgrading silently.
+
+#### Rust crates
+
+Two Rust crates were added under `CDEL-v2/cdel/v19_0/rust/`:
+
+- `policy_vm_stark_rs_v1`: prover/verifier CLI using Winterfell `0.13.1` and a fixed trace AIR layout,
+- `policy_vm_winterfell_backend_contract_v1`: generator/validator for backend contract JSON with canonical ID derivation.
+
+This is significant because it moves proof logic beyond abstract schema into runnable prover/verifier binaries with deterministic input contracts.
+
+---
+
+### Inputs Descriptor Evolution and Binding Strictness
+
+Across runtime, schemas, and verifiers, `inputs_descriptor_v1` evolved from a simpler shape to a richer shape carrying additional hash-bound inputs needed by policy VM and proof pipelines.
+
+Expanded descriptor fields now include:
+
+- `state_hash`,
+- `repo_tree_id`,
+- `observation_hash`,
+- `issues_hash`,
+- `registry_hash`,
+- `policy_program_ids`,
+- `predictor_id`,
+- `j_profile_id`,
+- `opcode_table_id`,
+- `budget_spec_id`,
+- `determinism_contract_id`.
+
+What changed in practice:
+
+- runtime writes descriptor before policy execution,
+- decision plan recompute proof references descriptor hash,
+- verifiers validate descriptor file hash against proof hash and internal field consistency,
+- v18 verifier retains legacy compatibility while enforcing expanded checks when expanded shape is present.
+
+This is a major link-strengthening move: previously separated policy assets are now bound into a single descriptor identity that ties decision/proposal/trace/proof artifacts together.
+
+---
+
+### Mutator Pipeline Hardening (Coordinator + Market Rules)
+
+`orchestrator/rsi_coordinator_mutator_v1.py` and `orchestrator/rsi_market_rules_mutator_v1.py` received iterative hardening throughout the period.
+
+High-value improvements:
+
+1. LLM output parsing tolerance:
+- robust extraction for invalid JSON wrappers,
+- fallback extraction of `unified_diff` or `updated_file_text` from malformed responses,
+- fenced code block and loose-field extraction support.
+
+2. Patch applicability repair:
+- `_repair_patch_prefix_that_applies(...)` routines attempt salvage by trimming malformed tails,
+- tolerant check paths include `--recount` and whitespace-ignore fallbacks,
+- canonical patch regeneration from actual worktree diff after apply.
+
+3. Strict path targeting:
+- locked target relpaths enforced,
+- touched-path extraction and validation in patch headers,
+- safer patch-header normalization (`a/` and `b/`) and hunk context repair.
+
+4. Replay verification path decoupling:
+- in-process module verifier replaced with explicit subprocess invocation (`-m cdel.v19_0.verify_rsi_omega_daemon_v1`),
+- returned verdict strings normalized into explicit `VALID` or `INVALID:*` channels,
+- micro-bench gate fails with explicit dual-verdict context.
+
+5. CCAP lineage tightening:
+- base tree root configurable for CCAP emission to prevent ambiguous lineage in strict rollback contexts,
+- strict/structural/death-pack failure receipts expanded and explicit.
+
+6. environment and workflow controls:
+- `ORCH_MUTATOR_TEMPLATE_ONLY` path for controlled mutation template flow,
+- `ORCH_MUTATOR_ALLOW_DIRTY` escape hatch for dirtiness guard in controlled conditions,
+- signal variables for phase mutation behavior (`OMEGA_PHASE3_GOAL_FASTPATH_MODE`, `OMEGA_PHASE3_MUTATION_SIGNAL`).
+
+Operationally this means mutators now behave more like deterministic compilers than brittle prompt wrappers: they can recover from common model formatting failures and still preserve strict replay-verifiable outputs.
+
+---
+
+### LLM Backend Transition: Gemini Removal and MLX Deterministic Backend
+
+Both `orchestrator/llm_backend.py` (root overlay) and `agi-orchestrator/orchestrator/llm_backend.py` were aligned to a new backend posture.
+
+Core changes:
+
+- Gemini backends are explicitly removed fail-closed (`Gemini backend removed — use ORCH_LLM_BACKEND=mlx`),
+- MLX backend added with:
+  - model/tokenizer cache,
+  - deterministic per-call seed derivation from base seed + call index,
+  - chat-template prompt formatting with deterministic system prompt,
+  - configurable sampler behavior with greedy enforcement at low temperature,
+  - replay row logging including generation knobs and per-call seed.
+
+Additional transport hardening:
+
+- harvest HTTP post helper includes exponential backoff for HTTP 429 with configurable max attempts and base delay.
+
+Test impact:
+
+- Gemini harvest replay append test removed,
+- replacement test asserts Gemini backend selection fails closed.
+
+This is not a cosmetic refactor. It changes supported backend matrix and determinism characteristics of live generation paths.
+
+---
+
+### v18 IO and Pack Freezing: Hash-Pinned Copy Semantics
+
+`orchestrator/omega_v18_0/io_v1.py` was extended to support stronger pack handling, especially for `rsi_omega_daemon_pack_v2`.
+
+Important additions:
+
+- accepted pack schemas expanded to include v1 and v2,
+- required and optional pinned JSON copy helpers introduced,
+- pin verification supports payload self-ID fields and canonical hash fallback,
+- policy program arrays are copied with ID validation and bounded size,
+- optional policy proof profile/contract/action enum/campaign list assets copied and pinned when present.
+
+Effect:
+
+- frozen config directory now functions as a verified, hash-pinned snapshot of referenced pack assets,
+- runtime no longer implicitly trusts relative pack references without hash confirmation.
+
+This change directly supports policy VM proof integrity because downstream verifiers expect exact pinned assets in config.
+
+---
+
+### Bid Market Evolution: Scoring and Eligibility Behavior
+
+`orchestrator/omega_bid_market_v1.py` and mirrored `CDEL-v2/cdel/v18_0/omega_bid_market_v1.py` remained central.
+
+Observed changes include:
+
+- explicit disabled-campaign gating in eligibility (`DISABLED` skip reason),
+- score formula update in orchestrator path to include confidence penalty composition,
+- tie-break path instrumentation remains explicit and deterministic.
+
+Mutator template updates further indicate intended scoring evolution toward:
+
+- confidence-penalty scoring mode marker,
+- disabled recovery eligibility gate marker,
+- bankruptcy recovery behavior adjustments.
+
+Even where full scoring transitions are staged via mutator pipelines, the infrastructure around scoring and tie-break provenance is now richer and easier to audit.
+
+---
+
+### Axis Gate, CCAP, and Promotion Contract Hardening
+
+`CDEL-v2/cdel/v19_0/omega_promoter_v1.py` and related components introduced several strict controls:
+
+- axis gate exemption configuration is pinned by expected hash ID and validated fail-closed,
+- effective touched paths for CCAP bundles can be reconstructed from patch artifacts rather than relying only on declared touched paths,
+- axis gate decision receipts include governed/exempt path sets and config ID,
+- missing axis bundle in governed context triggers safe-halt behavior.
+
+`CDEL-v2/cdel/v18_0/omega_promoter_v1.py` adjustments:
+
+- CCAP subverifier PYTHONPATH is pinned to dispatch repo root to avoid import drift,
+- native module metadata can be included in promotion binding/receipt path when promoted.
+
+`CDEL-v2/cdel/v18_0/ccap_runtime_v1.py` adds tolerant base-tree ID computation:
+
+- strict routine attempted first,
+- fallback routine hashes index tree + HEAD + unstaged diff hash,
+- supports deterministic binding in dirty worktree contexts.
+
+Combined effect: promotion and CCAP verification become less vulnerable to environment drift while still remaining fail-closed on contract violations.
+
+---
+
+### Native Module Pipeline and Phase 3b Lifecycle Hooks
+
+Native path work from this window includes both initial phase-1 landing and subsequent lifecycle assertions in v19 tests.
+
+Primary additions:
+
+- `orchestrator/native/native_router_v1.py` introduced as a general runtime routing layer for native operations,
+- runtime stats tracking (`drain_runtime_stats`) and cache/policy handling,
+- campaign producer `CDEL-v2/cdel/v18_0/campaign_omega_native_module_v0_1.py` emits hotspot/source/vendor/build/health/bench/promotion artifacts,
+- schema and verification support for native manifests and promotion bundles.
+
+Phase 3b lifecycle testing in v19 suite adds:
+
+- activation lifecycle E2E expectations,
+- deprecation behavior checks ensuring historical replay remains valid while new execution is rejected when opcode lifecycle forbids it.
+
+This is important because it demonstrates the native execution path is not isolated from daemon determinism: it is now carried through activation, replay, and lifecycle verification semantics.
+
+---
+
+### EUDRS-U Bootstrap Producer Wiring
+
+The period added dispatchable producer entrypoints:
+
+- `orchestrator/rsi_eudrs_u_qxrl_train_v1.py`,
+- `orchestrator/rsi_eudrs_u_dmpl_plan_v1.py`,
+- shared helper `orchestrator/common/eudrs_u_bootstrap_producer_v1.py`.
+
+These producers:
+
+- validate pack schema,
+- write into daemon state directories under campaign ID,
+- emit promotion bundles via a shared producer utility,
+- support templated bootstrap states or fallback to staged producer flow.
+
+Additionally, `CDEL-v2/cdel/v18_0/campaign_polymath_bootstrap_domain_v1.py` gained optional SIP ingestion integration with safe-halt style blocked reporting and referenced artifact links.
+
+This closes a gap between standalone bootstrap tooling and orchestrator-dispatched campaign behavior.
+
+---
+
+### Test Surface Expansion and Determinism Assertions
+
+The period significantly expanded policy/microkernel/proof tests.
+
+Notable additions:
+
+- `CDEL-v2/cdel/v19_0/tests_omega_daemon/test_policy_vm_replay_and_microkernel.py` with broad coverage:
+  - deterministic tick replay,
+  - perturbation resistance (time and filesystem),
+  - tamper detection for policy artifacts,
+  - market mode selection and counterfactual checks,
+  - hint merge integrity failures,
+  - proposal/decision binding tamper checks,
+  - Phase 3b native lifecycle tests,
+  - STARK proof emission/verification/tamper tests,
+  - verifier fallback behavior when proof invalid.
+
+- `CDEL-v2/cdel/v19_0/tests_omega_daemon/test_policy_vm_phase1.py`:
+  - deterministic decision outputs,
+  - descriptor stability and self-consistency,
+  - mode violation rejection,
+  - stack mismatch fail-closed,
+  - trace budget exceed fail-closed,
+  - merged hint ownership constraints,
+  - opcode deprecation fail-closed behavior.
+
+- `CDEL-v2/cdel/v19_0/tests_omega_daemon/test_opcode_table_lifecycle.py`:
+  - sorted/unique lifecycle entries,
+  - active native opcode requires blob presence.
+
+- `CDEL-v2/cdel/v18_0/tests_integration/test_verifier_recomputes_observation_with_stats_source.py` improvements:
+  - source artifact lookup tightened to scoped run roots,
+  - direct state-subdir candidate search improvements,
+  - guard against expensive repository-wide scans in integration path,
+  - timeout guard via signal alarm where available.
+
+The testing direction is consistent: deterministic replay and anti-tamper checks are now first-order acceptance criteria.
+
+---
+
+### Schema Layer: Pack v2 and Policy-Proof Contracts
+
+`Genesis/schema/v19_0/rsi_omega_daemon_pack_v2.jsonschema` and v18 counterpart now require a richer policy VM contract surface.
+
+Highlights:
+
+- required base fields include policy VM mode and pinned ISA/opcode references,
+- conditional requirements force full policy proof contract fields when proof mode is enabled,
+- conditional requirements force policy program/budget/determinism/merge/selection/predictor/profile parameters for proposal/dual modes,
+- policy-proof profile and backend contract IDs are explicit hash-pattern fields.
+
+New v19 schema artifacts define policy-proof ecosystem:
+
+- `policy_vm_stark_proof_v1`: proof metadata, bytes hash/path, public outputs, and backend metadata,
+- `policy_vm_air_profile_v1`: profile kind, supported opcodes/actions, proof options, backend metadata hashes,
+- `policy_vm_winterfell_backend_contract_v1`: backend/version/hashers and proof-option key list,
+- additional policy artifacts: inputs descriptor, trace, proposal, selection, merged hints, hint bundle, determinism contract, action enum, campaign ID list, and counterfactual example.
+
+These schemas are not decorative. They are actively consumed by runtime and verifier code paths added in the same period.
+
+---
+
+### Determinism and Failure Semantics: Practical Shift
+
+Across all major changes, one repeated theme appears: transform ambiguous behavior into explicit deterministic state and explicit failure artifacts.
+
+Concrete examples from this window:
+
+- mutator failures now prefer typed receipts over opaque generic failure classes,
+- verifier binding checks distinguish schema fail, mismatch, nondeterministic, and missing input pathways,
+- proof verification distinguishes representation modes and requires state assets where needed,
+- environment propagation is whitelisted and expanded intentionally (run invoker sanitization list updates),
+- policy-market selection commitments encode ranking and winner binding deterministically.
+
+This is not just stricter validation. It is systemic observability hardening: each failure class is easier to reproduce and diagnose because artifact contracts are tighter and receipt payloads are richer.
+
+---
+
+### Operational Implications for Current Stack State
+
+As of this three-day update window, the stack state can be summarized as follows:
+
+1. v19 daemon execution is effectively microkernel-first, with coordinator compatibility wrapper semantics;
+2. policy VM execution and policy-market selection are integrated into canonical state emission paths;
+3. STARK proof artifact generation and verification are integrated end-to-end, with Winterfell contract pinning;
+4. v18 verifier and runtime paths remain compatible with legacy shapes while enforcing expanded descriptor binding where present;
+5. mutator workflows are more resilient to real-world LLM output defects and better isolated from environment drift;
+6. backend model routing policy has shifted materially by removing Gemini and adding deterministic MLX mode;
+7. schema contracts now require stronger configuration completeness for proposal and proof modes;
+8. test coverage now directly targets determinism perturbation, tamper detection, lifecycle constraints, and proof fallback behavior.
+
+Taken together, these changes move the repository from a phase of loosely coupled advanced features into a more contract-bound phase where advanced features are runtime-integrated and verifier-enforced.
+
+---
+
+### Risk Register and Remaining Sharp Edges (Post-Delta)
+
+Even with this hardening, the codebase still has operational risks worth tracking explicitly:
+
+- proof pipeline operational dependency: STARK proving/verifying relies on Rust toolchain and Winterfell behavior; environment or toolchain drift can still be a deployment concern even if contracts are pinned;
+- dual representation complexity: semantic-trace and STARK representation paths coexist; long-term maintenance requires keeping both consistent or formally deprecating one path;
+- mutator template evolution risk: mutator templates now encode targeted transformations; drift between template assumptions and target file structure can still cause no-op or partial patch behaviors;
+- large-file performance surfaces: integration tests reduced some broad scan risk, but repository-scale artifact lookup and replay scans still need ongoing profiling;
+- schema mirroring burden: `Genesis/schema` and `CDEL-v2/Genesis/schema` mirror updates introduce sync burden; tooling enforcement for schema parity should remain active.
+
+These are normal for a stack undergoing rapid capability layering, but they should remain explicit in operating docs and CI gating.
+
+---
+
+### Concluding Delta Statement
+
+The last three days established a strong architectural pivot:
+
+- runtime execution became microkernel-centered,
+- policy decisions became descriptor-bound and replay-verifiable in richer forms,
+- policy market and hint/merge flows became first-class verified state,
+- STARK proof infrastructure moved from concept to integrated artifact lifecycle,
+- mutator and LLM interfaces shifted from fragile parsing toward deterministic, fail-closed orchestration.
+
+If this trajectory continues, the next logical step is less about adding new conceptual subsystems and more about tightening deployment and CI economics around the existing deterministic contracts:
+
+- proof runtime cost controls,
+- schema parity automation,
+- stricter mutation test harnesses,
+- and continuous replay canaries over real campaign traces.
+
+This addendum therefore marks a transition point: the stack is now materially more contract-driven than feature-driven compared with the start of the three-day window.
+
+
+---
+
+### Detailed Daily Ledger: What Moved Each Day
+
+#### February 18, 2026: Foundation and Reliability Groundwork
+
+This day is the base layer for everything that followed.
+
+Primary movements:
+
+- native module path introduced in orchestrator and CDEL campaign/verifier paths,
+- v18 coordinator gained market-state loading and associated market state directories,
+- mutator pipeline started receiving defensive parsing and patch-normalization updates,
+- LLM harvest gained retry behavior for 429 responses,
+- environment propagation in run invoker began to include retry and mutation-control variables.
+
+Native module foundation details:
+
+- producer campaign emits source manifest, vendor manifest, reproducible build receipt, healthcheck receipt, benchmark report, and promotion bundle;
+- routing layer introduces policy registry loading, callable import support, binary ABI shape handling, and runtime stat emission;
+- activation key extraction was extended in promoter logic to include native module binary hashes.
+
+Why this matters:
+
+- native artifacts are now hash-addressed and verifier-visible,
+- native execution can be measured and bounded in deterministic runtime accounting,
+- promotion and rollback surfaces can reference native module identity consistently.
+
+Mutator reliability groundwork details:
+
+- ability to accept non-ideal LLM outputs expanded (invalid wrappers, non-strict JSON, raw diff fallback);
+- diff header normalization to `a/` and `b/` path format prevents apply ambiguity;
+- explicit verify failure receipts begin replacing opaque generic failure exits.
+
+Why this matters:
+
+- mutation campaigns can now fail with structured evidence instead of disappearing behind one generic error code,
+- malformed but salvageable model outputs can still be turned into deterministic patch attempts.
+
+LLM transport behavior details:
+
+- HTTP 429 retry loop with exponential backoff added;
+- base delay and max attempts are environment tunable;
+- behavior is now resilient to transient provider rate limits.
+
+Why this matters:
+
+- mutator/harvest flows stop treating temporary provider throttling as permanent campaign failure,
+- replay and harvest datasets become easier to build under real API conditions.
+
+#### February 19, 2026: Strict DoD Runtime Integration
+
+This day transitions the stack from reliability groundwork to strict integrated runtime behavior.
+
+Primary movements:
+
+- root overlay `orchestrator/llm_backend.py` introduced and aligned with agi-orchestrator backend behavior,
+- Gemini backend family removed fail-closed and MLX backend added with deterministic seed model,
+- v19 policy-path tests expanded massively,
+- mutators gain template paths that deliberately encode Phase 3 mutation signals,
+- run invoker sanitization list broadened for deterministic backend and mutator control variables.
+
+LLM backend transition details:
+
+- deterministic call seed derivation uses canonical JSON hashing of base seed plus call index,
+- replay rows include deterministic generation knobs and seed lineage,
+- MLX model/tokenizer cache reduces repeated initialization variance and runtime overhead,
+- backend routing explicitly blocks Gemini aliases.
+
+Why this matters:
+
+- backend selection becomes policy-enforced rather than best-effort,
+- generated outputs are more reproducible across sessions when seed and prompt are fixed,
+- replay artifacts carry enough metadata for deterministic audit reconstruction.
+
+Mutator strict DoD integration details:
+
+- coordinator mutator template now encodes a mutation signal version change and goal fastpath mode toggles,
+- market rules mutator template targets scoring and eligibility behavior in a deterministic way,
+- both mutators add stronger patch extraction and patch repair logic,
+- both mutators include controlled template-only modes.
+
+Why this matters:
+
+- it becomes practical to verify that mutated runtime paths were truly exercised,
+- mutator behavior is measurable and reproducible in bench/death/test variants,
+- path-level mutation scope can be constrained and audited more reliably.
+
+Testing expansion details:
+
+- v19 microkernel and policy VM tests now cover deterministic replay under perturbations,
+- policy artifact tamper tests validate detection at multiple levels (descriptor, proposal, selection, proof),
+- proof tamper tests include bytes tamper and binding tamper paths,
+- verifier fallback behavior is tested when proof path is invalid.
+
+Why this matters:
+
+- deterministic claims are now tested against perturbation and tamper scenarios, not only happy-path outputs,
+- policy and proof contracts are less likely to drift unnoticed.
+
+#### February 20, 2026: Deterministic Microkernel + Phase 4 Proof Integration Completion
+
+This is the convergence day where previously staged features are integrated into the runtime centerline.
+
+Primary movements:
+
+- v19 microkernel landed as dominant execution body,
+- v19 coordinator rewritten as compatibility wrapper,
+- policy VM and policy market runtime paths wired into microkernel artifact lifecycle,
+- STARK proving flow integrated into tick lifecycle with emitted proof artifacts,
+- v19 verifier upgraded into proof-aware policy-path validator,
+- v18 verifier upgraded with broader descriptor binding and tolerant repo tree ID checks,
+- mutator replay verdict path converted to subprocess verifier invocation for stricter isolation.
+
+Microkernel completion details:
+
+- creation of deterministic directory structure for all policy and market artifacts each tick,
+- deterministic artifact hash chain generation includes policy/proof artifact IDs,
+- safe-halt and axis-gate outcomes fed into outcome and promotion reason derivations,
+- prior-state loading strategy standardized for legacy and nested run layouts.
+
+Why this matters:
+
+- daemon runtime behavior is now central and explicit rather than spread over multiple coordinator branches,
+- replay verifier and runtime can reason over stable artifact topology.
+
+Proof integration completion details:
+
+- profile/backend/action-enum/campaign-list pin set is loaded, verified, and applied,
+- proof runtime status and reason code become explicit state in snapshot/event paths,
+- proof artifact emission produces both binary blob and hash-bound JSON metadata,
+- verifier can validate proof payload against expected descriptor/plan/trace bindings.
+
+Why this matters:
+
+- proof is no longer merely optional metadata; it has runtime lifecycle status and verifier-consumed contracts,
+- invalid proof pathways can trigger fallback or fail according to explicit mode and expectation context.
+
+Mutator replay isolation details:
+
+- direct module-level verifier invocation replaced with subprocess command invocation,
+- verdict strings are normalized and surfaced with full invalid detail context,
+- bench gates compare baseline and candidate verdicts explicitly.
+
+Why this matters:
+
+- replay validity checks are less sensitive to in-process import/path side effects,
+- failure diagnosis contains baseline/candidate context instead of one opaque exception.
+
+---
+
+### File-Level Delta Highlights (High-Churn and High-Impact)
+
+The following file-level list captures the key high-churn, behavior-critical surfaces in this period.
+
+1. `orchestrator/omega_v19_0/microkernel_v1.py`
+
+- added as new runtime centerline;
+- includes deterministic timing handling, prior artifact source handling, policy mode branching, market integration, STARK proof path integration;
+- emits policy artifacts (`inputs`, `traces`, `hints`, `merged_hints`, `proposals`, `selection`, `counterfactual`, `proofs`) under canonical paths.
+
+2. `orchestrator/omega_v19_0/coordinator_v1.py`
+
+- reduced from full coordinator implementation to compatibility wrapper over microkernel;
+- exports run tick interface and helper symbols for compatibility with existing imports.
+
+3. `orchestrator/omega_v19_0/policy_vm_v1.py`
+
+- new typed-stack policy VM;
+- explicit opcode enable/forbidden checks;
+- strict budget accounting and mode gating;
+- deterministic plan output + trace generation.
+
+4. `orchestrator/omega_bid_market_v2.py`
+
+- new deterministic policy proposal selector;
+- ranking and commitment hashing mechanisms;
+- validation of inputs descriptor, proposals, traces, decision plans.
+
+5. `CDEL-v2/cdel/v19_0/policy_vm_stark_runner_v1.py`
+
+- new Python bridge for proving and verifying policy VM STARK proofs;
+- trace-row conversion and public output mapping;
+- canonical proof option binding against backend contract.
+
+6. `CDEL-v2/cdel/v19_0/verify_rsi_omega_daemon_v1.py`
+
+- upgraded into full policy-path verifier;
+- verifies policy artifacts and proof artifacts;
+- enforces pack pin/hash bindings and cross-artifact consistency.
+
+7. `CDEL-v2/cdel/v18_0/verify_rsi_omega_daemon_v1.py`
+
+- expanded descriptor binding checks for legacy and expanded shapes;
+- tolerant repo tree ID verification path reduces dirty-worktree fragility while preserving deterministic binding intent.
+
+8. `CDEL-v2/cdel/v19_0/verify_policy_vm_stark_proof_v1.py`
+
+- robust proof verifier supporting semantic and STARK representations;
+- profile/backend contract checks;
+- transition-level semantic replay checks and statement/public output consistency checks.
+
+9. `orchestrator/rsi_coordinator_mutator_v1.py` and `orchestrator/rsi_market_rules_mutator_v1.py`
+
+- LLM output salvage improvements;
+- patch repair and canonicalization improvements;
+- strict replay subprocess verdict integration;
+- environment controls for template-only and dirty-worktree modes.
+
+10. `orchestrator/llm_backend.py` and `agi-orchestrator/orchestrator/llm_backend.py`
+
+- Gemini removal;
+- MLX backend with deterministic seed and replay logging;
+- preserved/reused 429 retry strategy.
+
+11. `orchestrator/omega_v18_0/io_v1.py`
+
+- hash-pinned pack v2 copy semantics;
+- policy asset pin verification and conditional copy logic;
+- policy programs bounded/validated during freeze.
+
+12. `CDEL-v2/cdel/v19_0/tests_omega_daemon/test_policy_vm_replay_and_microkernel.py`
+
+- broad deterministic and tamper test matrix;
+- includes proof emit/verify/tamper/fallback and phase3b lifecycle tests.
+
+---
+
+### Configuration and Environment Contract Changes
+
+Run invoker environment sanitization set was expanded and operationally significant. Newly propagated or enforced variables include:
+
+- retry controls (`ORCH_LLM_RETRY_429_MAX_ATTEMPTS`, `ORCH_LLM_RETRY_429_BASE_DELAY_S`),
+- mutator controls (`ORCH_MUTATOR_TEMPLATE_ONLY`, `ORCH_MUTATOR_ALLOW_DIRTY`),
+- phase signals (`OMEGA_PHASE3_GOAL_FASTPATH_MODE`, `OMEGA_PHASE3_MUTATION_SIGNAL`),
+- additional death-injection controls,
+- MLX model and sampling knobs (`ORCH_MLX_MODEL`, `ORCH_MLX_REVISION`, `ORCH_MLX_ADAPTER_PATH`, `ORCH_MLX_TRUST_REMOTE_CODE`, seed and top-p/temperature controls),
+- selected huggingface environment keys for model loading behavior.
+
+This has two practical impacts:
+
+- subrun behavior becomes more predictable because only explicit variables survive propagation,
+- deterministic replay issues become easier to triage because environment influence is narrowed and enumerated.
+
+---
+
+### Cross-Version Compatibility Posture (v18 + v19)
+
+A notable strength of this period is compatibility staging rather than abrupt replacement.
+
+Compatibility characteristics now present:
+
+- v18 verifier can validate expanded descriptor paths while still handling legacy descriptor shape;
+- v19 verifier builds on v18 verifier call and then adds policy/proof validation;
+- v19 coordinator remains import-compatible via wrapper exports while behavior is delegated to microkernel;
+- schema packs support v2 richer policy fields without removing v1 compatibility in all runtime entry contexts;
+- market and policy verifiers maintain explicit deterministic checks to prevent silent cross-version drift.
+
+This compatibility strategy reduces migration risk while still enabling a substantial runtime architecture change.
+
+---
+
+### Audit Closing Notes for This Addendum
+
+This update should be read as a contract-hardening phase, not only a feature phase.
+
+From a source-of-truth perspective, the essential facts now true in code are:
+
+- deterministic execution semantics are centered and explicit;
+- policy artifacts and proof artifacts are integrated into canonical state and verifier paths;
+- hash pinning and cross-artifact binding checks are much stricter;
+- LLM/mutator execution paths are substantially more resilient to malformed outputs while preserving fail-closed replay discipline;
+- tests now directly assert perturbation-resistance and tamper detection in the critical policy/proof pipeline.
+
+These are durable architecture facts reflected in runtime and verifier implementation, not only in configuration or documentation surfaces.
+

@@ -1,0 +1,33 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v19_0/epistemic_action_bid_v1",
+  "title": "Epistemic action bid v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "bid_id",
+    "tick_u64",
+    "inputs_manifest_id",
+    "market_profile_id",
+    "action_kind",
+    "dispatchable_b",
+    "predicted_delta_j_q32",
+    "predicted_cost_q32",
+    "score_q32",
+    "feature_binding_hash"
+  ],
+  "properties": {
+    "schema_version": {"const": "epistemic_action_bid_v1"},
+    "bid_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "tick_u64": {"type": "integer", "minimum": 0},
+    "inputs_manifest_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "market_profile_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "action_kind": {"type": "string", "enum": ["FETCH", "SEGMENT", "INFER", "REDUCE", "SEAL"]},
+    "dispatchable_b": {"type": "boolean"},
+    "predicted_delta_j_q32": {"type": "integer", "minimum": 0},
+    "predicted_cost_q32": {"type": "integer", "minimum": 1},
+    "score_q32": {"type": "integer", "minimum": 0},
+    "feature_binding_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"}
+  }
+}

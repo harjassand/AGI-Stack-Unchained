@@ -1,0 +1,76 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v19_0/epistemic_model_output_v2",
+  "title": "Epistemic model output v2",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "mob_id",
+    "mob_receipt_id",
+    "episode_id",
+    "model_id",
+    "model_contract_id",
+    "prompt_template_id",
+    "seed_lineage_id",
+    "runtime_profile_id",
+    "content_kind",
+    "mob_blob_id",
+    "mob_media_type"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "epistemic_model_output_v2"
+    },
+    "mob_id": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "mob_receipt_id": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "episode_id": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "model_id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 256
+    },
+    "model_contract_id": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "prompt_template_id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 256
+    },
+    "seed_lineage_id": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "runtime_profile_id": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "content_kind": {
+      "const": "BLOB_REF"
+    },
+    "mob_blob_id": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "mob_media_type": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128
+    },
+    "metadata": {
+      "type": "object",
+      "additionalProperties": true
+    }
+  }
+}

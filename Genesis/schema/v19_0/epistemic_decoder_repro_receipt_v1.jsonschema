@@ -1,0 +1,52 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v19_0/epistemic_decoder_repro_receipt_v1",
+  "title": "Epistemic decoder reproducibility receipt v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "repro_receipt_id",
+    "decoder_contract_id",
+    "source_blob_id",
+    "run1_frame_ids_hash",
+    "run2_frame_ids_hash",
+    "outcome"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "epistemic_decoder_repro_receipt_v1"
+    },
+    "repro_receipt_id": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "decoder_contract_id": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "source_blob_id": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "run1_frame_ids_hash": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "run2_frame_ids_hash": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "outcome": {
+      "type": "string",
+      "enum": [
+        "PASS",
+        "FAIL"
+      ]
+    },
+    "reason_code": {
+      "type": "string",
+      "maxLength": 128
+    }
+  }
+}

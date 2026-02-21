@@ -2,8 +2,15 @@ from __future__ import annotations
 
 import pytest
 
+from cdel.v19_0.common_v1 import canon_hash_obj
 from cdel.v19_0.determinism_witness_v1 import evaluate_determinism_witness
 from cdel.v19_0.shadow_j_eval_v1 import evaluate_j_comparison
+from cdel.v19_0.shadow_invariance_v1 import (
+    build_shadow_corpus_invariance_receipt,
+    default_cert_invariance_contract,
+    default_graph_invariance_contract,
+    default_type_binding_invariance_contract,
+)
 from cdel.v19_0.shadow_runner_v1 import enforce_outbox_only_writes
 
 
@@ -74,3 +81,70 @@ def test_forbidden_cache_write_rejected() -> None:
             forbidden_cache_root_rel=".omega_cache",
         )
 
+
+def test_shadow_invariance_receipt_contract_ids_bound() -> None:
+    entry_manifest = {
+        "schema_name": "shadow_corpus_entry_manifest_v1",
+        "schema_version": "v19_0",
+        "entry_manifest_id": "sha256:" + ("0" * 64),
+        "run_id": "run_x",
+        "tick_u64": 42,
+        "tick_snapshot_hash": "sha256:" + ("a" * 64),
+        "source_kind": "REAL_CAPTURED_EPISODE",
+        "synthetic_only_b": False,
+        "pinset_id": "sha256:" + ("1" * 64),
+        "raw_blob_ids": ["sha256:" + ("2" * 64)],
+        "mob_ids": ["sha256:" + ("3" * 64)],
+        "mob_receipt_ids": ["sha256:" + ("4" * 64)],
+        "mob_blob_ids": ["sha256:" + ("5" * 64)],
+        "contracts": {
+            "chunk_contract_id": "sha256:" + ("6" * 64),
+            "fetch_contract_id": "sha256:" + ("7" * 64),
+            "segment_contract_id": "sha256:" + ("8" * 64),
+            "instruction_strip_contract_id": "sha256:" + ("9" * 64),
+            "reduce_contract_id": "sha256:" + ("b" * 64),
+            "cert_profile_id": "sha256:" + ("c" * 64),
+            "type_registry_id": "sha256:" + ("d" * 64),
+        },
+        "expected_outputs": {
+            "capsule_id": "sha256:" + ("e" * 64),
+            "graph_id": "sha256:" + ("f" * 64),
+            "type_binding_id": "sha256:" + ("1" * 64),
+            "ecac_id": "sha256:" + ("2" * 64),
+            "eufc_id": "sha256:" + ("3" * 64),
+            "strip_receipt_id": "sha256:" + ("4" * 64),
+            "cert_profile_id": "sha256:" + ("5" * 64),
+            "task_input_ids": ["sha256:" + ("6" * 64)],
+        },
+    }
+    entry_manifest["entry_manifest_id"] = canon_hash_obj(
+        {k: v for k, v in entry_manifest.items() if k != "entry_manifest_id"}
+    )
+    receipt = build_shadow_corpus_invariance_receipt(
+        tick_u64=42,
+        corpus_entries=[
+            {
+                "run_id": "run_x",
+                "tick_u64": 42,
+                "tick_snapshot_hash": "sha256:" + ("a" * 64),
+                "entry_manifest_id": str(entry_manifest["entry_manifest_id"]),
+            }
+        ],
+        entry_manifests_by_id={str(entry_manifest["entry_manifest_id"]): entry_manifest},
+        graph_contract=default_graph_invariance_contract(),
+        type_binding_contract=default_type_binding_invariance_contract(),
+        cert_contract=default_cert_invariance_contract(),
+        candidate_outputs={
+            "graph_id": str(entry_manifest["expected_outputs"]["graph_id"]),
+            "type_binding_id": str(entry_manifest["expected_outputs"]["type_binding_id"]),
+            "type_registry_id": str(entry_manifest["contracts"]["type_registry_id"]),
+            "cert_id": str(entry_manifest["expected_outputs"]["eufc_id"]),
+            "cert_profile_id": str(entry_manifest["expected_outputs"]["cert_profile_id"]),
+            "strip_receipt_id": str(entry_manifest["expected_outputs"]["strip_receipt_id"]),
+            "task_input_ids": list(entry_manifest["expected_outputs"]["task_input_ids"]),
+        },
+    )
+    assert receipt["pass_b"] is True
+    assert str(receipt["graph_invariance_contract_id"]).startswith("sha256:")
+    assert str(receipt["type_binding_invariance_contract_id"]).startswith("sha256:")
+    assert str(receipt["cert_invariance_contract_id"]).startswith("sha256:")

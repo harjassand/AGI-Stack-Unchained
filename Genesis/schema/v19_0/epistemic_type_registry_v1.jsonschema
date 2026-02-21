@@ -1,0 +1,56 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v19_0/epistemic_type_registry_v1",
+  "title": "Epistemic type registry v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "registry_id",
+    "provisional_namespace_prefix",
+    "allowed_type_ids"
+  ],
+  "properties": {
+    "schema_version": {"const": "epistemic_type_registry_v1"},
+    "registry_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "registry_epoch_u64": {"type": "integer", "minimum": 0},
+    "parent_registry_id": {
+      "oneOf": [
+        {"type": "null"},
+        {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"}
+      ]
+    },
+    "evolution_rule": {"type": "string", "enum": ["APPEND_ONLY"]},
+    "version_u64": {"type": "integer", "minimum": 0},
+    "provisional_namespace_prefix": {"type": "string", "const": "PROVISIONAL/"},
+    "allowed_type_ids": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "maxItems": 65536,
+      "items": {"type": "string", "minLength": 1, "maxLength": 256}
+    },
+    "type_definitions": {
+      "type": "object",
+      "minProperties": 1,
+      "additionalProperties": {
+        "type": "string",
+        "pattern": "^sha256:[0-9a-f]{64}$"
+      }
+    },
+    "alias_edges": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["from_type_id", "to_type_id", "relation"],
+        "properties": {
+          "from_type_id": {"type": "string", "minLength": 1, "maxLength": 256},
+          "to_type_id": {"type": "string", "minLength": 1, "maxLength": 256},
+          "relation": {"type": "string", "const": "ALIAS_OF"}
+        }
+      }
+    },
+    "ratification_policy_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"}
+  }
+}

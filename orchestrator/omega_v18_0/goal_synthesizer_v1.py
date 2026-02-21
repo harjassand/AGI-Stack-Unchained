@@ -25,12 +25,22 @@ _CORE_SELF_OPT_CAPABILITY_ID = "RSI_OMEGA_SELF_OPTIMIZE_CORE"
 _POLYMATH_SCOUT_CAPABILITY_ID = "RSI_POLYMATH_SCOUT"
 _POLYMATH_BOOTSTRAP_CAPABILITY_ID = "RSI_POLYMATH_BOOTSTRAP_DOMAIN"
 _POLYMATH_CONQUER_CAPABILITY_ID = "RSI_POLYMATH_CONQUER_DOMAIN"
+_EPISTEMIC_REDUCE_CAPABILITY_ID = "RSI_EPISTEMIC_REDUCE_V1"
 _POLYMATH_VOID_TRIGGER_Q32 = int(0.30 * Q32_ONE)
 _POLYMATH_SCOUT_TTL_TICKS_U64 = 50
 _ALREADY_ACTIVE_TAIL_U64 = 3
 _ALREADY_ACTIVE_SUPPRESS_TICKS_U64 = 25
-_NO_PROMOTION_BUNDLE_TAIL_U64 = 5
-_NO_PROMOTION_BUNDLE_SUPPRESS_TICKS_U64 = 15
+_EPISTEMIC_LOW_CONF_TRIGGER_Q32 = int(0.60 * Q32_ONE)
+_EPISTEMIC_REPLAY_PASS_MIN_Q32 = int(0.80 * Q32_ONE)
+_EPISTEMIC_FAILURE_TRIGGER_U64 = 1
+_NO_PROMOTION_BUNDLE_TAIL_U64 = max(
+    1,
+    int(os.environ.get("OMEGA_NO_PROMOTION_BUNDLE_DISABLE_AFTER_U64", "3")),
+)
+_NO_PROMOTION_BUNDLE_SUPPRESS_TICKS_U64 = max(
+    1,
+    int(os.environ.get("OMEGA_NO_PROMOTION_BUNDLE_DISABLE_FOR_TICKS_U64", "40")),
+)
 _CHURN_CONTEXT_MUST_MATCH_B = True
 _GOAL_ID_TOKEN_RE = re.compile(r"[^a-z0-9_]+")
 _PROMO_FOCUS_ENV_VAR = "OMEGA_PROMO_FOCUS"
@@ -422,6 +432,14 @@ def _suppressed_caps_from_episodic_memory(tick_u64: int, episodic_memory: dict[s
     return out
 
 
+def suppressed_capability_ids_from_episodic_memory(
+    *,
+    tick_u64: int,
+    episodic_memory: dict[str, Any] | None,
+) -> set[str]:
+    return _suppressed_caps_from_episodic_memory(int(tick_u64), episodic_memory)
+
+
 def _demote_suppressed_pending_goals(
     goals: list[dict[str, str]],
     *,
@@ -707,6 +725,10 @@ def synthesize_goal_queue(
     top_void_score_q32 = _optional_metric_q32(observation_report, "top_void_score_q32")
     polymath_scout_age_ticks_u64 = _optional_metric_u64(observation_report, "polymath_scout_age_ticks_u64")
     domains_ready_for_conquer_u64 = _optional_metric_u64(observation_report, "domains_ready_for_conquer_u64")
+    epistemic_capsule_count_u64 = _optional_metric_u64(observation_report, "epistemic_capsule_count_u64")
+    epistemic_low_confidence_ratio_q32 = _optional_metric_q32(observation_report, "epistemic_low_confidence_ratio_q32")
+    epistemic_replay_pass_rate_q32 = _optional_metric_q32(observation_report, "epistemic_replay_pass_rate_q32")
+    epistemic_failure_total_u64 = _optional_metric_u64(observation_report, "epistemic_failure_total_u64")
 
     if (
         top_void_score_q32 > _POLYMATH_VOID_TRIGGER_Q32
@@ -735,6 +757,22 @@ def synthesize_goal_queue(
         add_named_goal(
             f"goal_polymath_conquer_{_slug(domain_id)}_{int(tick_u64):06d}",
             _POLYMATH_CONQUER_CAPABILITY_ID,
+        )
+
+    epistemic_health_triggered = (
+        epistemic_capsule_count_u64 <= 0
+        or epistemic_low_confidence_ratio_q32 >= _EPISTEMIC_LOW_CONF_TRIGGER_Q32
+        or epistemic_replay_pass_rate_q32 < _EPISTEMIC_REPLAY_PASS_MIN_Q32
+        or epistemic_failure_total_u64 >= _EPISTEMIC_FAILURE_TRIGGER_U64
+    )
+    if (
+        preexisting_pending_count <= 0
+        and epistemic_health_triggered
+        and _EPISTEMIC_REDUCE_CAPABILITY_ID in eligible_cap_set
+    ):
+        add_named_goal(
+            f"goal_epistemic_health_{int(tick_u64):06d}",
+            _EPISTEMIC_REDUCE_CAPABILITY_ID,
         )
 
     stps_regression_triggered = _scorecard_stps_regressed(run_scorecard)
@@ -872,4 +910,4 @@ def synthesize_goal_queue(
     }
 
 
-__all__ = ["synthesize_goal_queue"]
+__all__ = ["suppressed_capability_ids_from_episodic_memory", "synthesize_goal_queue"]

@@ -168,6 +168,26 @@ _CAPABILITY_FRONTIER_WINDOW_U64 = 512
 _HEX64 = set("0123456789abcdef")
 
 
+def _is_epistemic_metric_key(metric_id: str) -> bool:
+    return str(metric_id).startswith("epistemic_")
+
+
+def _normalize_optional_metric_value(value: Any) -> Any:
+    if isinstance(value, int):
+        return int(value)
+    if isinstance(value, dict):
+        keys = set(value.keys())
+        if keys == {"q"}:
+            return {"q": int(value.get("q", 0))}
+        if keys == {"num_u64", "den_u64"}:
+            return {
+                "num_u64": max(0, int(value.get("num_u64", 0))),
+                "den_u64": max(1, int(value.get("den_u64", 1))),
+            }
+    fail("SCHEMA_FAIL")
+    return 0
+
+
 def _is_sha256_prefixed(value: Any) -> bool:
     if not isinstance(value, str):
         return False
@@ -1461,6 +1481,21 @@ def _recompute_observation_from_sources(
             "objectives_hash": objectives_hash,
         },
     }
+    observed_metrics = observation_payload.get("metrics")
+    observed_metric_series = observation_payload.get("metric_series")
+    if not isinstance(observed_metrics, dict) or not isinstance(observed_metric_series, dict):
+        fail("SCHEMA_FAIL")
+    payload_metrics = payload.get("metrics")
+    payload_series = payload.get("metric_series")
+    if not isinstance(payload_metrics, dict) or not isinstance(payload_series, dict):
+        fail("SCHEMA_FAIL")
+    for metric_id, observed_value in sorted(observed_metrics.items(), key=lambda kv: str(kv[0])):
+        if not _is_epistemic_metric_key(str(metric_id)):
+            continue
+        normalized = _normalize_optional_metric_value(observed_value)
+        payload_metrics[str(metric_id)] = normalized
+        payload_series[str(metric_id)] = [normalized]
+
     if prev_observation is not None:
         prev_metric_series = prev_observation.get("metric_series")
         cur_metric_series = payload.get("metric_series")
@@ -1473,7 +1508,10 @@ def _recompute_observation_from_sources(
                 continue
             prev_rows = prev_metric_series.get(key)
             if not isinstance(prev_rows, list):
-                fail("SCHEMA_FAIL")
+                if _is_epistemic_metric_key(str(key)):
+                    prev_rows = []
+                else:
+                    fail("SCHEMA_FAIL")
             if len(prev_rows) >= _MAX_SERIES_LEN_U64:
                 prev_rows = prev_rows[-(_MAX_SERIES_LEN_U64 - 1) :]
             cur_metric_series[key] = [*prev_rows, cur_rows[-1]]

@@ -16,7 +16,7 @@ from .omega_common_v1 import (
 
 _ACTION_KINDS = {"RUN_CAMPAIGN", "RUN_GOAL_TASK", "NOOP", "SAFE_HALT"}
 _SUBVERIFIER_STATUSES = {"VALID", "INVALID", "N/A"}
-_PROMOTION_STATUSES = {"PROMOTED", "REJECTED", "SKIPPED", "N/A"}
+_PROMOTION_STATUSES = {"PROMOTED", "REJECTED", "SKIPPED"}
 
 
 def build_tick_outcome(
@@ -44,8 +44,19 @@ def build_tick_outcome(
         fail("SCHEMA_FAIL")
 
     promotion_status_norm = str(promotion_status).strip()
+    if not promotion_status_norm or promotion_status_norm == "N/A":
+        promotion_status_norm = "SKIPPED"
     if promotion_status_norm not in _PROMOTION_STATUSES:
         fail("SCHEMA_FAIL")
+
+    promotion_reason_code_norm = str(promotion_reason_code).strip()
+    if not promotion_reason_code_norm or promotion_reason_code_norm == "N/A":
+        if promotion_status_norm == "PROMOTED":
+            promotion_reason_code_norm = "ACCEPTED"
+        elif promotion_status_norm == "REJECTED":
+            promotion_reason_code_norm = "REJECTED_UNKNOWN"
+        else:
+            promotion_reason_code_norm = "NO_PROMOTION_RECEIPT"
 
     if execution_mode is None:
         execution_mode_norm = "STRICT"
@@ -79,7 +90,7 @@ def build_tick_outcome(
         "campaign_id": campaign_id_norm,
         "subverifier_status": subverifier_status_norm,
         "promotion_status": promotion_status_norm,
-        "promotion_reason_code": str(promotion_reason_code),
+        "promotion_reason_code": promotion_reason_code_norm,
         "execution_mode": execution_mode_norm,
         "activation_success": bool(activation_success),
         "activation_reasons": activation_reasons_norm,

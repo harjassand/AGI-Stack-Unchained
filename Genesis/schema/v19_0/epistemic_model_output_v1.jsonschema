@@ -1,0 +1,79 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v19_0/epistemic_model_output_v1",
+  "title": "Epistemic model output v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "mob_id",
+    "episode_id",
+    "model_id",
+    "prompt_template_id",
+    "content_kind",
+    "content_id",
+    "claims"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "epistemic_model_output_v1"
+    },
+    "mob_id": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "episode_id": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "model_id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 256
+    },
+    "prompt_template_id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 256
+    },
+    "content_kind": {
+      "const": "CANON_JSON"
+    },
+    "content_id": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "claims": {
+      "type": "array",
+      "maxItems": 4096,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "claim_text",
+          "confidence_f64"
+        ],
+        "properties": {
+          "claim_text": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 8192
+          },
+          "confidence_f64": {
+            "type": "number",
+            "minimum": 0.0,
+            "maximum": 1.0
+          },
+          "source_span": {
+            "type": "string",
+            "maxLength": 1024
+          }
+        }
+      }
+    },
+    "metadata": {
+      "type": "object",
+      "additionalProperties": true
+    }
+  }
+}

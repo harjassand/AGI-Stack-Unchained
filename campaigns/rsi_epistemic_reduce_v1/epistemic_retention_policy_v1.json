@@ -1,0 +1,1 @@
+{"capsule_retention_ticks_u64":1048576,"deletion_mode":"PLAN_ONLY","policy_id":"sha256:a84c73e34527701cd4e7674b9bf0188491e1685dd9823fa289cb38f3a906fe6a","raw_retention_ticks_u64":131072,"sampling_rate_q32":1073741824,"schema_version":"epistemic_retention_policy_v1","summary_proof_required_b":true}

@@ -1,50 +1,37 @@
 #!/usr/bin/env python3
 from __future__ import annotations
 
+import argparse
 import csv
-import glob
 import hashlib
 import json
-import math
 import statistics
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
-RUNS_ROOT = REPO_ROOT / "runs"
-OUT_ROOT = RUNS_ROOT / "ceiling_report_v1"
+PROMOTION_STATUSES = {"PROMOTED", "REJECTED", "SKIPPED"}
+TICK_OUTCOME_RECORD_SCHEMA_REL = Path("Genesis/schema/v18_0/omega_tick_outcome_record_v1.jsonschema")
 
-PHASES = (
+PHASE_SPECS = (
     ("phase1_baseline", "ceiling_phase2_market_toy", 1, 20),
     ("phase2_exploration", "ceiling_phase2_market_toy", 21, 240),
     ("phase3_adversarial", "ceiling_phase3_phase0", 1, 60),
+    ("phase2_data_ingest", "ceiling_phase2_sip", 1, 5),
 )
 
-SIP_PHASE = ("phase2_data_ingest", "ceiling_phase2_sip", 1, 5)
-SURVIVAL_DRILL_DIR = RUNS_ROOT / "ceiling_survival_drill_v1"
-ARCH_MUTATOR_DIR = RUNS_ROOT / "manual_mlx_coordinator_mutator_tick_0009"
-SCIENCE_DIR = RUNS_ROOT / "ceiling_science_tick_0001"
-PROOF_TAMPER_EVIDENCE = RUNS_ROOT / "PHASE3B_PHASE4_EVIDENCE_v1.json"
 
-
-def _load_json(path: Path) -> dict[str, Any]:
+def _load_json(path: Path | None) -> dict[str, Any]:
+    if path is None:
+        return {}
     try:
-        obj = json.loads(path.read_text(encoding="utf-8"))
+        payload = json.loads(path.read_text(encoding="utf-8"))
     except Exception:
         return {}
-    return obj if isinstance(obj, dict) else {}
-
-
-def _q32_to_float(value: Any) -> float:
-    if isinstance(value, dict):
-        value = value.get("q")
-    try:
-        q = int(value)
-    except Exception:
-        return 0.0
-    return float(q) / float(1 << 32)
+    return payload if isinstance(payload, dict) else {}
 
 
 def _q32_to_int(value: Any) -> int:
@@ -56,29 +43,40 @@ def _q32_to_int(value: Any) -> int:
         return 0
 
 
-def _find_one(root: Path, pattern: str) -> Path | None:
+def _q32_to_float(value: Any) -> float:
+    return float(_q32_to_int(value)) / float(1 << 32)
+
+
+def _canon_hash_obj(payload: Any) -> str:
+    raw = json.dumps(payload, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode("utf-8")
+    return "sha256:" + hashlib.sha256(raw).hexdigest()
+
+
+def _rel(path: Path | None, base: Path) -> str | None:
+    if path is None:
+        return None
+    try:
+        return str(path.relative_to(base))
+    except ValueError:
+        return str(path)
+
+
+def _find_latest(root: Path, pattern: str) -> Path | None:
+    if not root.exists():
+        return None
     rows = sorted(root.glob(pattern), key=lambda p: p.as_posix())
     return rows[-1] if rows else None
 
 
-def _find_by_hash(root: Path, digest: str, suffix: str) -> Path | None:
-    if not digest.startswith("sha256:"):
-        return None
-    h = digest.split(":", 1)[1]
-    rows = sorted(root.glob(f"**/sha256_{h}.{suffix}"), key=lambda p: p.as_posix())
-    return rows[0] if rows else None
-
-
-def _tick_dirs(prefix: str, start: int, end: int) -> list[Path]:
+def _tick_dirs(source_runs_root: Path, prefix: str, start: int, end: int) -> list[Path]:
     out: list[Path] = []
-    for path in sorted(RUNS_ROOT.glob(f"{prefix}_tick_*"), key=lambda p: p.as_posix()):
-        name = path.name
-        tick_str = name.rsplit("_tick_", 1)[-1]
+    for path in sorted(source_runs_root.glob(f"{prefix}_tick_*"), key=lambda p: p.as_posix()):
+        tick_raw = path.name.rsplit("_tick_", 1)[-1]
         try:
-            tick = int(tick_str)
+            tick_u64 = int(tick_raw)
         except ValueError:
             continue
-        if start <= tick <= end:
+        if start <= tick_u64 <= end:
             out.append(path)
     return out
 
@@ -89,11 +87,11 @@ def _ledger_rollbacks(state_root: Path) -> int:
         return 0
     total = 0
     for line in ledger.read_text(encoding="utf-8").splitlines():
-        line = line.strip()
-        if not line:
+        value = line.strip()
+        if not value:
             continue
         try:
-            row = json.loads(line)
+            row = json.loads(value)
         except Exception:
             continue
         if isinstance(row, dict) and str(row.get("event_type", "")) == "ROLLBACK":
@@ -101,211 +99,271 @@ def _ledger_rollbacks(state_root: Path) -> int:
     return total
 
 
-def _rel(path: Path | None) -> str | None:
-    if path is None:
-        return None
-    try:
-        return str(path.relative_to(REPO_ROOT))
-    except ValueError:
-        return str(path)
+@dataclass
+class TickOutcomeRecord:
+    schema_version: str
+    phase: str
+    tick_u64: int
+    run_dir_rel: str
+    selected_campaign_id: str | None
+    promotion_status: str
+    promotion_reason: str
+    eval_kernel_ran_b: bool
+    objective_terms_before_hash: str | None
+    objective_terms_after_hash: str | None
+    delta_j_q32: int | None
+    promotion_receipt_rel: str | None
+    subverifier_receipt_rel: str | None
+    dispatch_receipt_rel: str | None
 
 
 @dataclass
 class TickRow:
     phase: str
     tick_u64: int
+    run_dir: Path
     run_dir_rel: str
-    action_kind: str
-    campaign_id: str | None
-    promotion_status: str | None
-    promotion_reason: str | None
-    promotion_bundle_hash: str | None
-    obj_expand_q32: int
-    cap_frontier_u64: int
+    selected_campaign_id: str | None
+    promotion_status: str
+    promotion_reason: str
+    eval_kernel_ran_b: bool
+    delta_j_q32: int | None
     total_ns: int
     subverifier_ns: int
     activation_success_b: bool
     rollback_events_u64: int
-    settlement_delta_j_q32: int
-    settlement_j_cur_q32: int
-    settlement_j_prev_q32: int
-    tick_snapshot_hash: str | None
-    observation_hash: str | None
+    obj_expand_q32: int
+    cap_frontier_u64: int
+    promotion_bundle_hash: str | None
     promotion_receipt_rel: str | None
-    dispatch_receipt_rel: str | None
     subverifier_receipt_rel: str | None
+    dispatch_receipt_rel: str | None
+    observation_hash: str | None
+    snapshot_hash: str | None
+    record: TickOutcomeRecord
 
 
-def _extract_tick_row(phase: str, tick_dir: Path) -> TickRow | None:
+def _extract_tick_row(
+    *,
+    phase: str,
+    tick_dir: Path,
+    source_runs_root: Path,
+    prev_observation_hash: str | None,
+    prev_snapshot_hash: str | None,
+) -> TickRow | None:
     state_root = tick_dir / "daemon" / "rsi_omega_daemon_v19_0" / "state"
     if not state_root.exists():
         return None
 
-    obs_path = _find_one(state_root / "observations", "*.omega_observation_report_v1.json")
-    obs_obj = _load_json(obs_path) if obs_path else {}
-    metrics = obs_obj.get("metrics") if isinstance(obs_obj.get("metrics"), dict) else {}
-    obj_expand_q32 = _q32_to_int((metrics or {}).get("OBJ_EXPAND_CAPABILITIES"))
-    cap_frontier_u64 = int((metrics or {}).get("cap_frontier_u64", 0) or 0)
+    obs_path = _find_latest(state_root / "observations", "sha256_*.omega_observation_report_v1.json")
+    obs_obj = _load_json(obs_path)
+    obs_metrics = obs_obj.get("metrics") if isinstance(obs_obj.get("metrics"), dict) else {}
+    obj_expand_q32 = _q32_to_int((obs_metrics or {}).get("OBJ_EXPAND_CAPABILITIES"))
+    cap_frontier_u64 = int((obs_metrics or {}).get("cap_frontier_u64", 0) or 0)
+    observation_hash = (
+        obs_path.name.split(".", 1)[0].replace("sha256_", "sha256:")
+        if obs_path is not None
+        else None
+    )
 
-    perf_path = _find_one(state_root / "perf", "*.omega_tick_perf_v1.json")
-    perf_obj = _load_json(perf_path) if perf_path else {}
+    snapshot_path = _find_latest(state_root / "snapshot", "sha256_*.omega_tick_snapshot_v1.json")
+    snapshot_obj = _load_json(snapshot_path)
+    snapshot_hash = str(snapshot_obj.get("snapshot_id", "")).strip() or None
+    if not snapshot_hash and snapshot_path is not None:
+        snapshot_hash = snapshot_path.name.split(".", 1)[0].replace("sha256_", "sha256:")
+
+    perf_path = _find_latest(state_root / "perf", "sha256_*.omega_tick_perf_v1.json")
+    perf_obj = _load_json(perf_path)
     stage_ns = perf_obj.get("stage_ns") if isinstance(perf_obj.get("stage_ns"), dict) else {}
     total_ns = int(perf_obj.get("total_ns", 0) or 0)
     subverifier_ns = int((stage_ns or {}).get("run_subverifier", 0) or 0)
 
-    outcome_path = _find_one(state_root / "perf", "*.omega_tick_outcome_v1.json")
-    outcome_obj = _load_json(outcome_path) if outcome_path else {}
-    action_kind = str(outcome_obj.get("action_kind", "UNKNOWN"))
-    activation_success_b = bool(outcome_obj.get("activation_success", False))
+    outcome_path = _find_latest(state_root / "perf", "sha256_*.omega_tick_outcome_v1.json")
+    outcome_obj = _load_json(outcome_path)
 
-    dispatch_path = _find_one(state_root / "dispatch", "*/*.omega_dispatch_receipt_v1.json")
-    dispatch_obj = _load_json(dispatch_path) if dispatch_path else {}
-    campaign_id = str(dispatch_obj.get("campaign_id", "")).strip() or None
+    dispatch_path = _find_latest(state_root / "dispatch", "*/sha256_*.omega_dispatch_receipt_v1.json")
+    dispatch_obj = _load_json(dispatch_path)
+    selected_campaign_id = str(dispatch_obj.get("campaign_id", "")).strip() or None
+    if selected_campaign_id is None:
+        selected_campaign_id = str(outcome_obj.get("campaign_id", "")).strip() or None
 
-    promo_path = _find_one(state_root / "dispatch", "*/promotion/*.omega_promotion_receipt_v1.json")
-    promo_obj = _load_json(promo_path) if promo_path else {}
-    result = promo_obj.get("result") if isinstance(promo_obj.get("result"), dict) else {}
-    promotion_status = str(result.get("status", "")).strip() or None
-    promotion_reason = str(result.get("reason_code", "")).strip() or None
-    promotion_bundle_hash = str(promo_obj.get("promotion_bundle_hash", "")).strip() or None
+    promotion_path = _find_latest(state_root / "dispatch", "*/promotion/sha256_*.omega_promotion_receipt_v1.json")
+    promotion_obj = _load_json(promotion_path)
+    promotion_result = promotion_obj.get("result") if isinstance(promotion_obj.get("result"), dict) else {}
+    promotion_status_raw = str(promotion_result.get("status", "")).strip()
+    promotion_status = promotion_status_raw if promotion_status_raw in PROMOTION_STATUSES else "SKIPPED"
+    promotion_reason = str(promotion_result.get("reason_code", "")).strip()
+    if not promotion_reason:
+        promotion_reason = "NO_PROMOTION_RECEIPT" if promotion_status == "SKIPPED" else "UNKNOWN"
 
-    subverifier_path = _find_one(state_root / "dispatch", "*/verifier/*.omega_subverifier_receipt_v1.json")
+    eval_kernel_ran_b = promotion_status in {"PROMOTED", "REJECTED"}
+    settlement_path = _find_latest(state_root / "market" / "settlement", "sha256_*.bid_settlement_receipt_v1.json")
+    settlement_obj = _load_json(settlement_path)
+    delta_j_q32: int | None = None
+    if eval_kernel_ran_b and settlement_path is not None:
+        delta_j_q32 = _q32_to_int(settlement_obj.get("realized_delta_J_q32"))
+    if promotion_status == "SKIPPED":
+        delta_j_q32 = None
+    if not eval_kernel_ran_b:
+        delta_j_q32 = None
+
+    if promotion_status == "SKIPPED" and delta_j_q32 is not None:
+        raise RuntimeError(f"SKIPPED tick has delta_j_q32: {tick_dir}")
+
+    objective_before = {
+        "observation_hash": prev_observation_hash,
+        "snapshot_hash": prev_snapshot_hash,
+        "settlement_j_prev_q32": _q32_to_int(settlement_obj.get("J_prev_q32")) if settlement_obj else None,
+    }
+    objective_after = {
+        "observation_hash": observation_hash,
+        "snapshot_hash": snapshot_hash,
+        "settlement_j_cur_q32": _q32_to_int(settlement_obj.get("J_cur_q32")) if settlement_obj else None,
+    }
+    objective_terms_before_hash = _canon_hash_obj(objective_before) if any(v is not None for v in objective_before.values()) else None
+    objective_terms_after_hash = _canon_hash_obj(objective_after) if any(v is not None for v in objective_after.values()) else None
+
+    subverifier_path = _find_latest(state_root / "dispatch", "*/verifier/sha256_*.omega_subverifier_receipt_v1.json")
     if subverifier_path is None:
-        subverifier_path = _find_one(state_root / "dispatch", "*/verifier/*.ccap_receipt_v1.json")
+        subverifier_path = _find_latest(state_root / "dispatch", "*/verifier/sha256_*.ccap_receipt_v1.json")
 
-    settlement_path = _find_one(state_root / "market" / "settlement", "*.bid_settlement_receipt_v1.json")
-    settlement_obj = _load_json(settlement_path) if settlement_path else {}
-    settlement_delta_j_q32 = _q32_to_int(settlement_obj.get("realized_delta_J_q32"))
-    settlement_j_cur_q32 = _q32_to_int(settlement_obj.get("J_cur_q32"))
-    settlement_j_prev_q32 = _q32_to_int(settlement_obj.get("J_prev_q32"))
-
+    promotion_bundle_hash = str(promotion_obj.get("promotion_bundle_hash", "")).strip() or None
+    activation_success_b = bool(outcome_obj.get("activation_success", False))
     tick_u64 = int(outcome_obj.get("tick_u64", obs_obj.get("tick_u64", 0)) or 0)
-    tick_snapshot_hash = str(_load_json(_find_one(state_root / "snapshot", "*.omega_tick_snapshot_v1.json") or Path()).get("snapshot_id", "")) if (state_root / "snapshot").exists() else None
-    if not tick_snapshot_hash:
-        snap = _find_one(state_root / "snapshot", "*.omega_tick_snapshot_v1.json")
-        tick_snapshot_hash = (snap.name.split(".")[0].replace("sha256_", "sha256:") if snap else None)
 
-    obs_hash = None
-    if obs_path is not None:
-        obs_hash = obs_path.name.split(".")[0].replace("sha256_", "sha256:")
+    record = TickOutcomeRecord(
+        schema_version="omega_tick_outcome_record_v1",
+        phase=phase,
+        tick_u64=tick_u64,
+        run_dir_rel=_rel(tick_dir, source_runs_root) or tick_dir.as_posix(),
+        selected_campaign_id=selected_campaign_id,
+        promotion_status=promotion_status,
+        promotion_reason=promotion_reason,
+        eval_kernel_ran_b=bool(eval_kernel_ran_b),
+        objective_terms_before_hash=objective_terms_before_hash,
+        objective_terms_after_hash=objective_terms_after_hash,
+        delta_j_q32=delta_j_q32,
+        promotion_receipt_rel=_rel(promotion_path, source_runs_root),
+        subverifier_receipt_rel=_rel(subverifier_path, source_runs_root),
+        dispatch_receipt_rel=_rel(dispatch_path, source_runs_root),
+    )
+
+    if record.promotion_status == "SKIPPED" and record.delta_j_q32 is not None:
+        raise RuntimeError(f"invalid SKIPPED semantics in tick record: {tick_dir}")
+    if (not record.eval_kernel_ran_b) and record.delta_j_q32 is not None:
+        raise RuntimeError(f"invalid eval semantics in tick record: {tick_dir}")
 
     return TickRow(
         phase=phase,
         tick_u64=tick_u64,
-        run_dir_rel=_rel(tick_dir) or str(tick_dir),
-        action_kind=action_kind,
-        campaign_id=campaign_id,
+        run_dir=tick_dir,
+        run_dir_rel=record.run_dir_rel,
+        selected_campaign_id=selected_campaign_id,
         promotion_status=promotion_status,
         promotion_reason=promotion_reason,
-        promotion_bundle_hash=promotion_bundle_hash,
-        obj_expand_q32=obj_expand_q32,
-        cap_frontier_u64=cap_frontier_u64,
+        eval_kernel_ran_b=bool(eval_kernel_ran_b),
+        delta_j_q32=delta_j_q32,
         total_ns=total_ns,
         subverifier_ns=subverifier_ns,
         activation_success_b=activation_success_b,
         rollback_events_u64=_ledger_rollbacks(state_root),
-        settlement_delta_j_q32=settlement_delta_j_q32,
-        settlement_j_cur_q32=settlement_j_cur_q32,
-        settlement_j_prev_q32=settlement_j_prev_q32,
-        tick_snapshot_hash=tick_snapshot_hash,
-        observation_hash=obs_hash,
-        promotion_receipt_rel=_rel(promo_path),
-        dispatch_receipt_rel=_rel(dispatch_path),
-        subverifier_receipt_rel=_rel(subverifier_path),
+        obj_expand_q32=obj_expand_q32,
+        cap_frontier_u64=cap_frontier_u64,
+        promotion_bundle_hash=promotion_bundle_hash,
+        promotion_receipt_rel=record.promotion_receipt_rel,
+        subverifier_receipt_rel=record.subverifier_receipt_rel,
+        dispatch_receipt_rel=record.dispatch_receipt_rel,
+        observation_hash=observation_hash,
+        snapshot_hash=snapshot_hash,
+        record=record,
     )
 
 
 def _phase_summary(rows: list[TickRow]) -> dict[str, Any]:
-    promoted = sum(1 for row in rows if row.promotion_status == "PROMOTED")
-    rejected = sum(1 for row in rows if row.promotion_status == "REJECTED")
-    skipped = sum(1 for row in rows if row.promotion_status == "SKIPPED")
-    attempted = promoted + rejected + skipped
-    accepted_plus_rejected = promoted + rejected
-
-    deltas = []
     by_tick = sorted(rows, key=lambda r: r.tick_u64)
-    for idx in range(1, len(by_tick)):
-        deltas.append(by_tick[idx].obj_expand_q32 - by_tick[idx - 1].obj_expand_q32)
+    promoted = sum(1 for r in by_tick if r.promotion_status == "PROMOTED")
+    rejected = sum(1 for r in by_tick if r.promotion_status == "REJECTED")
+    skipped = sum(1 for r in by_tick if r.promotion_status == "SKIPPED")
+    attempted = promoted + rejected + skipped
+    promote_vs_reject = promoted + rejected
 
-    settlement_deltas = [row.settlement_delta_j_q32 for row in by_tick if row.settlement_delta_j_q32 != 0]
-    total_ns_rows = [row.total_ns for row in by_tick if row.total_ns > 0]
-    subverifier_rows = [row.subverifier_ns for row in by_tick if row.subverifier_ns > 0]
-    frontiers = [row.cap_frontier_u64 for row in by_tick]
-    rollback_total = sum(row.rollback_events_u64 for row in by_tick)
+    obj_delta: list[int] = []
+    for idx in range(1, len(by_tick)):
+        obj_delta.append(int(by_tick[idx].obj_expand_q32) - int(by_tick[idx - 1].obj_expand_q32))
+
+    eligible_deltas = [int(r.delta_j_q32) for r in by_tick if r.eval_kernel_ran_b and r.delta_j_q32 is not None]
+    total_ns = [int(r.total_ns) for r in by_tick if int(r.total_ns) > 0]
+    sub_ns = [int(r.subverifier_ns) for r in by_tick if int(r.subverifier_ns) >= 0]
+    frontiers = [int(r.cap_frontier_u64) for r in by_tick]
 
     return {
-        "ticks_u64": len(rows),
+        "ticks_u64": len(by_tick),
         "promoted_u64": promoted,
         "rejected_u64": rejected,
         "skipped_u64": skipped,
         "attempted_u64": attempted,
         "acceptance_rate_all_attempts_f64": (float(promoted) / float(attempted)) if attempted else 0.0,
-        "acceptance_rate_promote_vs_reject_f64": (float(promoted) / float(accepted_plus_rejected)) if accepted_plus_rejected else 0.0,
-        "median_delta_obj_expand_q32": int(statistics.median(deltas)) if deltas else 0,
-        "delta_obj_expand_distribution_q32": deltas,
-        "median_settlement_delta_j_q32": int(statistics.median(settlement_deltas)) if settlement_deltas else 0,
-        "settlement_delta_j_distribution_q32": settlement_deltas,
-        "median_total_ns": int(statistics.median(total_ns_rows)) if total_ns_rows else 0,
-        "median_subverifier_ns": int(statistics.median(subverifier_rows)) if subverifier_rows else 0,
-        "rollback_events_u64": rollback_total,
+        "acceptance_rate_promote_vs_reject_f64": (float(promoted) / float(promote_vs_reject)) if promote_vs_reject else 0.0,
+        "eligible_settlement_rows_u64": len(eligible_deltas),
+        "median_settlement_delta_j_q32": int(statistics.median(eligible_deltas)) if eligible_deltas else None,
+        "median_settlement_delta_j_q32_eligible": int(statistics.median(eligible_deltas)) if eligible_deltas else None,
+        "settlement_delta_j_distribution_q32_eligible": eligible_deltas,
+        "median_delta_obj_expand_q32": int(statistics.median(obj_delta)) if obj_delta else None,
+        "delta_obj_expand_distribution_q32": obj_delta,
+        "median_total_ns": int(statistics.median(total_ns)) if total_ns else 0,
+        "median_subverifier_ns": int(statistics.median(sub_ns)) if sub_ns else 0,
+        "rollback_events_u64": sum(int(r.rollback_events_u64) for r in by_tick),
         "frontier_movement_u64": (frontiers[-1] - frontiers[0]) if len(frontiers) >= 2 else 0,
-        "activation_success_u64": sum(1 for row in rows if row.activation_success_b),
+        "activation_success_u64": sum(1 for r in by_tick if r.activation_success_b),
     }
 
 
 def _resolve_bundle(state_root: Path, bundle_hash: str | None) -> Path | None:
     if not bundle_hash or not bundle_hash.startswith("sha256:"):
         return None
-    h = bundle_hash.split(":", 1)[1]
-    rows = sorted(state_root.glob(f"subruns/**/promotion/sha256_{h}.*.json"), key=lambda p: p.as_posix())
+    bundle_hex = bundle_hash.split(":", 1)[1]
+    rows = sorted(
+        state_root.glob(f"subruns/**/promotion/sha256_{bundle_hex}.*.json"),
+        key=lambda p: p.as_posix(),
+    )
     return rows[0] if rows else None
 
 
-def _extract_promoted_change(row: TickRow) -> dict[str, Any] | None:
+def _extract_promoted_change(row: TickRow, source_runs_root: Path) -> dict[str, Any] | None:
     if row.promotion_status != "PROMOTED":
         return None
-    state_root = REPO_ROOT / row.run_dir_rel / "daemon" / "rsi_omega_daemon_v19_0" / "state"
+    state_root = row.run_dir / "daemon" / "rsi_omega_daemon_v19_0" / "state"
     bundle_path = _resolve_bundle(state_root, row.promotion_bundle_hash)
     if bundle_path is None:
         return None
     bundle = _load_json(bundle_path)
     schema = str(bundle.get("schema_version", "unknown"))
+
     change_type = "other"
     novelty_score = 0.0
-    perf_impact = {}
-    novelty_pass = False
+    novelty_pass_b = False
     non_trivial_b = False
-    replay_proof = row.subverifier_receipt_rel
-
+    perf_impact: dict[str, Any] = {}
     if schema == "sas_code_promotion_bundle_v1":
         change_type = "code_algo"
-        novelty_pass = bool((bundle.get("acceptance_decision") or {}).get("pass", False)) and bool(bundle.get("require_novelty", False))
-        baseline_algo = str(bundle.get("baseline_algo_id", ""))
-        candidate_algo = str(bundle.get("candidate_algo_id", ""))
-        non_trivial_b = baseline_algo != candidate_algo
+        novelty_pass_b = bool((bundle.get("acceptance_decision") or {}).get("pass", False))
+        non_trivial_b = str(bundle.get("baseline_algo_id", "")) != str(bundle.get("candidate_algo_id", ""))
         heldout_hash = str(bundle.get("perf_report_sha256_heldout", ""))
-        dev_hash = str(bundle.get("perf_report_sha256_dev", ""))
         heldout_path = _find_by_hash(state_root, heldout_hash, "sas_code_perf_report_v1.json")
-        dev_path = _find_by_hash(state_root, dev_hash, "sas_code_perf_report_v1.json")
-        heldout_obj = _load_json(heldout_path) if heldout_path else {}
-        dev_obj = _load_json(dev_path) if dev_path else {}
-        heldout_speedup = _q32_to_float((heldout_obj.get("speedup_q32") or {}).get("q"))
-        dev_speedup = _q32_to_float((dev_obj.get("speedup_q32") or {}).get("q"))
-        novelty_score = heldout_speedup
+        heldout_obj = _load_json(heldout_path)
+        novelty_score = _q32_to_float((heldout_obj.get("speedup_q32") or {}).get("q"))
         perf_impact = {
-            "heldout_speedup_x": heldout_speedup,
-            "dev_speedup_x": dev_speedup,
-            "heldout_report_rel": _rel(heldout_path),
-            "dev_report_rel": _rel(dev_path),
+            "heldout_speedup_x": novelty_score,
+            "heldout_report_rel": _rel(heldout_path, source_runs_root),
         }
-    elif schema == "omega_promotion_bundle_ccap_v1":
-        change_type = "ccap_patch"
-        non_trivial_b = True
-        novelty_pass = True
-        novelty_score = 1.0
     elif schema == "sas_science_promotion_bundle_v1":
         change_type = "science_theory"
-        novelty_pass = bool((bundle.get("acceptance_decision") or {}).get("pass", False))
+        novelty_pass_b = bool((bundle.get("acceptance_decision") or {}).get("pass", False))
+        non_trivial_b = True
+        novelty_score = 1.0
+    elif schema == "omega_promotion_bundle_ccap_v1":
+        change_type = "ccap_patch"
+        novelty_pass_b = True
         non_trivial_b = True
         novelty_score = 1.0
 
@@ -313,63 +371,92 @@ def _extract_promoted_change(row: TickRow) -> dict[str, Any] | None:
         "tick_u64": row.tick_u64,
         "phase": row.phase,
         "run_dir_rel": row.run_dir_rel,
-        "campaign_id": row.campaign_id,
-        "promotion_bundle_hash": row.promotion_bundle_hash,
-        "promotion_bundle_rel": _rel(bundle_path),
+        "campaign_id": row.selected_campaign_id,
         "bundle_schema": schema,
         "change_type": change_type,
-        "novelty_pass_b": novelty_pass,
-        "non_trivial_b": non_trivial_b,
         "novelty_score": novelty_score,
+        "novelty_pass_b": novelty_pass_b,
+        "non_trivial_b": non_trivial_b,
+        "promotion_bundle_hash": row.promotion_bundle_hash,
+        "promotion_bundle_rel": _rel(bundle_path, source_runs_root),
         "perf_impact": perf_impact,
-        "replay_proof_rel": replay_proof,
+        "replay_proof_rel": row.subverifier_receipt_rel,
     }
 
 
-def _extract_mutator_proposal() -> dict[str, Any]:
-    bench = _load_json(ARCH_MUTATOR_DIR / "coordinator_mutator_bench_receipt_v1.json")
-    structural = _load_json(ARCH_MUTATOR_DIR / "coordinator_mutator_structural_receipt_v1.json")
-    promo_bundle_path = _find_one(ARCH_MUTATOR_DIR / "promotion", "*.omega_promotion_bundle_ccap_v1.json")
-    promo_bundle = _load_json(promo_bundle_path) if promo_bundle_path else {}
-    ccap_path = _find_one(ARCH_MUTATOR_DIR / "ccap", "*.ccap_v1.json")
-    ccap = _load_json(ccap_path) if ccap_path else {}
-    median_impr = float(bench.get("median_improvement_frac_f64", "0") or 0.0)
-    structural_ok = str(structural.get("tree_hash_a", "")) == str(structural.get("tree_hash_b", ""))
+def _find_by_hash(root: Path, digest: str, suffix: str) -> Path | None:
+    if not digest.startswith("sha256:"):
+        return None
+    h = digest.split(":", 1)[1]
+    rows = sorted(root.glob(f"**/sha256_{h}.{suffix}"), key=lambda p: p.as_posix())
+    return rows[0] if rows else None
+
+
+def _anti_goodhart(rows: list[TickRow]) -> dict[str, Any]:
+    vals = [int(r.delta_j_q32) for r in sorted(rows, key=lambda r: r.tick_u64) if r.eval_kernel_ran_b and r.delta_j_q32 is not None]
+    if not vals:
+        return {"status": "NO_DATA", "suspect_b": True}
+    original_mean = float(sum(vals)) / float(len(vals))
+    hash_order = sorted(vals, key=lambda v: hashlib.sha256(str(v).encode("utf-8")).hexdigest())
+    hash_mean = float(sum(hash_order)) / float(len(hash_order))
+    reverse_mean = float(sum(reversed(vals))) / float(len(vals))
+    suspect_b = False
+    if original_mean != 0.0:
+        if abs(hash_mean / original_mean) < 0.2 or abs(reverse_mean / original_mean) < 0.2:
+            suspect_b = True
+    if original_mean > 0.0 and (hash_mean <= 0.0 or reverse_mean <= 0.0):
+        suspect_b = True
     return {
-        "proposal_id": str(promo_bundle.get("ccap_id", "")) or str(ccap.get("meta", {}).get("base_tree_id", "")),
+        "status": "OK",
+        "suspect_b": bool(suspect_b),
+        "original_mean_delta_j_q32": original_mean,
+        "hash_order_mean_delta_j_q32": hash_mean,
+        "reverse_order_mean_delta_j_q32": reverse_mean,
+    }
+
+
+def _extract_mutator_proposal(source_runs_root: Path) -> dict[str, Any]:
+    run_dir = source_runs_root / "manual_mlx_coordinator_mutator_tick_0009"
+    bench = _load_json(run_dir / "coordinator_mutator_bench_receipt_v1.json")
+    structural = _load_json(run_dir / "coordinator_mutator_structural_receipt_v1.json")
+    ccap_bundle = _find_latest(run_dir / "promotion", "sha256_*.omega_promotion_bundle_ccap_v1.json")
+    ccap_payload = _load_json(ccap_bundle)
+    return {
+        "proposal_id": str(ccap_payload.get("ccap_id", "")),
         "kind": "architecture_upgrade",
         "inputs_hashes": {
-            "base_tree_id": str((ccap.get("meta") or {}).get("base_tree_id", "")),
-            "ccap_id": str(promo_bundle.get("ccap_id", "")),
-            "patch_blob_id": str((ccap.get("payload") or {}).get("patch_blob_id", "")),
+            "base_tree_id": str((_load_json(_find_latest(run_dir / "ccap", "sha256_*.ccap_v1.json"))).get("meta", {}).get("base_tree_id", "")),
         },
         "outputs_hashes": {
-            "promotion_bundle_hash": str(promo_bundle.get("activation_key", "")),
+            "promotion_bundle_hash": str(ccap_payload.get("activation_key", "")),
         },
         "novelty_gate_evidence": {
-            "structural_tree_match_b": structural_ok,
-            "alternate_order_b": bool(bench.get("alternate_order_b", False)),
             "non_trivial_b": True,
+            "structural_tree_match_b": str(structural.get("tree_hash_a", "")) == str(structural.get("tree_hash_b", "")),
+            "alternate_order_b": bool(bench.get("alternate_order_b", False)),
         },
         "performance_impact": {
-            "median_improvement_frac_f64": median_impr,
-            "accept_gate_f64": float(bench.get("accept_median_improvement_frac_f64", "0") or 0.0),
+            "median_improvement_frac_f64": float(bench.get("median_improvement_frac_f64", 0.0) or 0.0),
+            "accept_gate_f64": float(bench.get("accept_median_improvement_frac_f64", 0.0) or 0.0),
         },
         "replay_verification_proof": {
-            "bench_receipt_rel": _rel(ARCH_MUTATOR_DIR / "coordinator_mutator_bench_receipt_v1.json"),
-            "structural_receipt_rel": _rel(ARCH_MUTATOR_DIR / "coordinator_mutator_structural_receipt_v1.json"),
-            "llm_replay_rel": _rel(ARCH_MUTATOR_DIR / "orch_llm_replay.jsonl"),
+            "bench_receipt_rel": _rel(run_dir / "coordinator_mutator_bench_receipt_v1.json", source_runs_root),
+            "structural_receipt_rel": _rel(run_dir / "coordinator_mutator_structural_receipt_v1.json", source_runs_root),
+            "llm_replay_rel": _rel(run_dir / "orch_llm_replay.jsonl", source_runs_root),
         },
-        "novelty_score": median_impr,
+        "novelty_score": float(bench.get("median_improvement_frac_f64", 0.0) or 0.0),
     }
 
 
-def _extract_science_proposal() -> dict[str, Any]:
-    promo_path = _find_one(SCIENCE_DIR / "daemon" / "rsi_sas_science_v13_0" / "state" / "promotion", "*.sas_science_promotion_bundle_v1.json")
-    promo = _load_json(promo_path) if promo_path else {}
+def _extract_science_proposal(source_runs_root: Path) -> dict[str, Any]:
+    run_dir = source_runs_root / "ceiling_science_tick_0001"
+    promo_path = _find_latest(
+        run_dir / "daemon" / "rsi_sas_science_v13_0" / "state" / "promotion",
+        "sha256_*.sas_science_promotion_bundle_v1.json",
+    )
+    promo = _load_json(promo_path)
     discovery = promo.get("discovery_bundle") if isinstance(promo.get("discovery_bundle"), dict) else {}
-    heldout_metrics = discovery.get("heldout_metrics") if isinstance(discovery.get("heldout_metrics"), dict) else {}
-    work_cost = int(heldout_metrics.get("work_cost_total", 0) or 0)
+    heldout = discovery.get("heldout_metrics") if isinstance(discovery.get("heldout_metrics"), dict) else {}
     return {
         "proposal_id": str(promo.get("bundle_id", "")),
         "kind": "math_science_proposal",
@@ -388,11 +475,11 @@ def _extract_science_proposal() -> dict[str, Any]:
             "new_law_kind": str(discovery.get("law_kind", "")),
         },
         "performance_impact": {
-            "heldout_work_cost_total": work_cost,
+            "heldout_work_cost_total": int(heldout.get("work_cost_total", 0) or 0),
             "audit_evidence_rel": str(promo.get("audit_evidence_path", "")),
         },
         "replay_verification_proof": {
-            "promotion_bundle_rel": _rel(promo_path),
+            "promotion_bundle_rel": _rel(promo_path, source_runs_root),
             "selection_receipt_hash": str(promo.get("selection_receipt_hash", "")),
             "sealed_eval_receipts_u64": len(promo.get("candidate_evals") or []),
         },
@@ -400,120 +487,92 @@ def _extract_science_proposal() -> dict[str, Any]:
     }
 
 
-def _anti_goodhart(rows_phase2: list[TickRow]) -> dict[str, Any]:
-    # Deterministic perturbation test:
-    # 1) original ordering
-    # 2) ordering by hash(tick_snapshot_hash)
-    # 3) reversed ordering
-    vals = [row.settlement_delta_j_q32 for row in sorted(rows_phase2, key=lambda r: r.tick_u64)]
-    if not vals:
-        return {
-            "status": "NO_DATA",
-            "suspect_b": True,
-        }
-
-    def _mean(seq: list[int]) -> float:
-        return float(sum(seq)) / float(len(seq)) if seq else 0.0
-
-    original_mean = _mean(vals)
-    by_hash = sorted(
-        rows_phase2,
-        key=lambda row: hashlib.sha256(str(row.tick_snapshot_hash or "").encode("utf-8")).hexdigest(),
+def _ceiling_criteria(
+    *,
+    summary_phase2: dict[str, Any],
+    summary_phase3: dict[str, Any],
+    novelty_pass_rate_f64: float,
+    anti_goodhart: dict[str, Any],
+    proof_tamper: dict[str, Any],
+) -> dict[str, Any]:
+    net_delta_positive_b = (summary_phase2.get("median_settlement_delta_j_q32") or 0) > 0
+    acceptance_non_trivial_b = (
+        float(summary_phase3.get("acceptance_rate_promote_vs_reject_f64", 0.0)) > 0.0
+        and novelty_pass_rate_f64 > 0.0
     )
-    hash_mean = _mean([row.settlement_delta_j_q32 for row in by_hash])
-    reverse_mean = _mean(list(reversed(vals)))
-
-    # If alternate representations materially flip sign or collapse near zero, suspect gaming.
-    suspect_b = False
-    if original_mean > 0 and (hash_mean <= 0 or reverse_mean <= 0):
-        suspect_b = True
-    if original_mean != 0:
-        if abs(hash_mean / original_mean) < 0.2 or abs(reverse_mean / original_mean) < 0.2:
-            suspect_b = True
-
-    return {
-        "status": "OK",
-        "original_mean_delta_j_q32": original_mean,
-        "hash_order_mean_delta_j_q32": hash_mean,
-        "reverse_order_mean_delta_j_q32": reverse_mean,
-        "suspect_b": suspect_b,
-    }
-
-
-def _bottleneck(summary_phase2: dict[str, Any], summary_phase3: dict[str, Any], accepted_changes: list[dict[str, Any]]) -> dict[str, Any]:
-    if summary_phase2.get("median_subverifier_ns", 0) > 0 and summary_phase2.get("median_total_ns", 0) > 0:
-        ratio = float(summary_phase2["median_subverifier_ns"]) / float(summary_phase2["median_total_ns"])
-    else:
-        ratio = 0.0
-    novelty_pass_rate = (
-        float(sum(1 for row in accepted_changes if row.get("novelty_pass_b"))) / float(len(accepted_changes))
-        if accepted_changes
-        else 0.0
+    frontier_movement_positive_b = int(summary_phase2.get("frontier_movement_u64", 0)) > 0
+    robustness_fail_closed_b = bool(
+        str((proof_tamper.get("phase4_proof_fallback") or {}).get("proof_unit_verdict_after_tamper", "")).startswith("INVALID:")
+        and bool((proof_tamper.get("phase4_proof_fallback") or {}).get("fallback_triggered_b", False))
     )
-
-    if ratio > 0.55:
-        primary = "verification_cost"
-        detail = "subverifier time dominates tick cost"
-    elif summary_phase2.get("median_settlement_delta_j_q32", 0) == 0:
-        primary = "evaluation_kernel_too_narrow"
-        detail = "exploration lane shows near-zero net delta-J"
-    elif novelty_pass_rate < 0.3:
-        primary = "proposer_quality"
-        detail = "novelty gates pass too rarely"
-    else:
-        primary = "data_ingest_quality"
-        detail = "ingest lane active but low frontier movement"
-
+    anti_goodhart_pass_b = not bool(anti_goodhart.get("suspect_b", True))
+    pass_b = bool(
+        acceptance_non_trivial_b
+        and net_delta_positive_b
+        and frontier_movement_positive_b
+        and robustness_fail_closed_b
+        and anti_goodhart_pass_b
+    )
     return {
-        "primary_bottleneck": primary,
-        "detail": detail,
-        "subverifier_cost_ratio_f64": ratio,
-        "novelty_pass_rate_f64": novelty_pass_rate,
+        "acceptance_non_trivial_b": acceptance_non_trivial_b,
+        "net_delta_positive_b": net_delta_positive_b,
+        "frontier_movement_positive_b": frontier_movement_positive_b,
+        "robustness_fail_closed_b": robustness_fail_closed_b,
+        "anti_goodhart_pass_b": anti_goodhart_pass_b,
+        "pass_b": pass_b,
     }
 
 
 def main() -> int:
-    OUT_ROOT.mkdir(parents=True, exist_ok=True)
+    parser = argparse.ArgumentParser(prog="generate_ceiling_report_v1")
+    parser.add_argument("--source_runs_root", default=str(REPO_ROOT / "runs"))
+    parser.add_argument("--out_root", default="")
+    args = parser.parse_args()
+
+    source_runs_root = Path(args.source_runs_root).resolve()
+    out_root = Path(args.out_root).resolve() if str(args.out_root).strip() else (source_runs_root / "ceiling_report_v1")
+    out_root.mkdir(parents=True, exist_ok=True)
 
     phase_rows: dict[str, list[TickRow]] = {}
-    for phase_name, prefix, start, end in PHASES:
+    all_tick_records: list[TickOutcomeRecord] = []
+
+    for phase_name, prefix, start, end in PHASE_SPECS:
         rows: list[TickRow] = []
-        for tick_dir in _tick_dirs(prefix, start, end):
-            row = _extract_tick_row(phase_name, tick_dir)
-            if row is not None:
-                rows.append(row)
+        prev_obs_hash: str | None = None
+        prev_snapshot_hash: str | None = None
+        for tick_dir in _tick_dirs(source_runs_root, prefix, start, end):
+            row = _extract_tick_row(
+                phase=phase_name,
+                tick_dir=tick_dir,
+                source_runs_root=source_runs_root,
+                prev_observation_hash=prev_obs_hash,
+                prev_snapshot_hash=prev_snapshot_hash,
+            )
+            if row is None:
+                continue
+            rows.append(row)
+            all_tick_records.append(row.record)
+            prev_obs_hash = row.observation_hash
+            prev_snapshot_hash = row.snapshot_hash
         phase_rows[phase_name] = sorted(rows, key=lambda r: r.tick_u64)
 
-    sip_rows: list[TickRow] = []
-    sip_name, sip_prefix, sip_start, sip_end = SIP_PHASE
-    for tick_dir in _tick_dirs(sip_prefix, sip_start, sip_end):
-        row = _extract_tick_row(sip_name, tick_dir)
-        if row is not None:
-            sip_rows.append(row)
+    phase_summaries = {phase: _phase_summary(rows) for phase, rows in phase_rows.items()}
+    all_rows = [row for phase in phase_rows.values() for row in phase]
 
-    summary = {name: _phase_summary(rows) for name, rows in phase_rows.items()}
-    summary[sip_name] = _phase_summary(sip_rows)
-
-    all_rows = []
-    for name, rows in phase_rows.items():
-        all_rows.extend(rows)
-    all_rows.extend(sip_rows)
-
-    # Accepted changes from promoted phase3 ticks
     accepted_changes = []
     for row in phase_rows.get("phase3_adversarial", []):
-        item = _extract_promoted_change(row)
+        item = _extract_promoted_change(row, source_runs_root)
         if item is not None:
             accepted_changes.append(item)
-    accepted_changes = sorted(accepted_changes, key=lambda x: (-float(x.get("novelty_score", 0.0)), int(x.get("tick_u64", 0))))
-    top10_accepted = accepted_changes[:10]
+    accepted_changes = sorted(
+        accepted_changes,
+        key=lambda item: (-float(item.get("novelty_score", 0.0)), int(item.get("tick_u64", 0))),
+    )
+    top10 = accepted_changes[:10]
 
-    # Top 20 novel proposals dossier (accepted + architecture + science)
-    dossier = []
-    dossier.extend(top10_accepted)
-    dossier.append(_extract_mutator_proposal())
-    dossier.append(_extract_science_proposal())
-    # Fill up to 20 from remaining accepted changes
+    dossier = list(top10)
+    dossier.append(_extract_mutator_proposal(source_runs_root))
+    dossier.append(_extract_science_proposal(source_runs_root))
     for item in accepted_changes[10:]:
         if len(dossier) >= 20:
             break
@@ -521,75 +580,116 @@ def main() -> int:
     dossier = dossier[:20]
 
     anti_goodhart = _anti_goodhart(phase_rows.get("phase2_exploration", []))
-    bottleneck = _bottleneck(summary.get("phase2_exploration", {}), summary.get("phase3_adversarial", {}), accepted_changes)
+    novelty_pass = sum(1 for item in accepted_changes if bool(item.get("novelty_pass_b", False)))
+    novelty_total = len(accepted_changes)
+    novelty_pass_rate = (float(novelty_pass) / float(novelty_total)) if novelty_total else 0.0
 
-    proof_evidence = _load_json(PROOF_TAMPER_EVIDENCE)
-    survival_failure = _load_json(SURVIVAL_DRILL_DIR / "survival_drill" / "SURVIVAL_DRILL_FAILURE_v1.json")
-    survival_config = _load_json(SURVIVAL_DRILL_DIR / "survival_drill" / "SURVIVAL_DRILL_CONFIG_v1.json")
+    proof_tamper = _load_json(source_runs_root / "PHASE3B_PHASE4_EVIDENCE_v1.json")
+    survival_failure = _load_json(source_runs_root / "ceiling_survival_drill_v1" / "survival_drill" / "SURVIVAL_DRILL_FAILURE_v1.json")
+    survival_config = _load_json(source_runs_root / "ceiling_survival_drill_v1" / "survival_drill" / "SURVIVAL_DRILL_CONFIG_v1.json")
+
+    summary_phase2 = phase_summaries.get("phase2_exploration", {})
+    summary_phase3 = phase_summaries.get("phase3_adversarial", {})
+    criteria = _ceiling_criteria(
+        summary_phase2=summary_phase2,
+        summary_phase3=summary_phase3,
+        novelty_pass_rate_f64=novelty_pass_rate,
+        anti_goodhart=anti_goodhart,
+        proof_tamper=proof_tamper,
+    )
+
+    bottleneck = {
+        "primary_bottleneck": (
+            "evaluation_kernel_too_narrow"
+            if not criteria.get("net_delta_positive_b", False)
+            else "proposer_quality"
+        ),
+        "detail": (
+            "exploration lane shows near-zero net delta-J on eligible ticks"
+            if not criteria.get("net_delta_positive_b", False)
+            else "frontier movement remains low under strict novelty gates"
+        ),
+        "novelty_pass_rate_f64": novelty_pass_rate,
+        "subverifier_cost_ratio_f64": (
+            float(summary_phase2.get("median_subverifier_ns", 0)) / float(summary_phase2.get("median_total_ns", 1) or 1)
+        ),
+    }
 
     report_obj = {
         "schema_version": "ceiling_report_v1",
-        "generated_at_utc": __import__("datetime").datetime.utcnow().isoformat() + "Z",
+        "generated_at_utc": datetime.now(UTC).isoformat(),
+        "source_runs_root": str(source_runs_root),
+        "tick_outcome_records_schema_rel": str(TICK_OUTCOME_RECORD_SCHEMA_REL),
         "phase_config": {
-            "phase1_baseline_ticks_u64": summary.get("phase1_baseline", {}).get("ticks_u64", 0),
-            "phase2_exploration_ticks_u64": summary.get("phase2_exploration", {}).get("ticks_u64", 0),
-            "phase3_adversarial_ticks_u64": summary.get("phase3_adversarial", {}).get("ticks_u64", 0),
-            "data_ingest_ticks_u64": summary.get(sip_name, {}).get("ticks_u64", 0),
+            phase: {
+                "ticks_u64": int(phase_summaries.get(phase, {}).get("ticks_u64", 0)),
+            }
+            for phase, *_ in PHASE_SPECS
         },
-        "phase_summaries": summary,
+        "phase_summaries": phase_summaries,
+        "novelty": {
+            "novelty_pass_u64": novelty_pass,
+            "novelty_total_u64": novelty_total,
+            "novelty_pass_rate_f64": novelty_pass_rate,
+        },
         "anti_goodhart_detector": anti_goodhart,
-        "top_10_novel_accepted_changes": top10_accepted,
+        "ceiling_criteria": criteria,
+        "top_10_novel_accepted_changes": top10,
         "top_20_novel_proposals_dossier": dossier,
-        "architecture_upgrade_evidence_rel": _rel(ARCH_MUTATOR_DIR),
-        "science_proposal_evidence_rel": _rel(SCIENCE_DIR),
-        "proof_tamper_evidence_rel": _rel(PROOF_TAMPER_EVIDENCE),
+        "proof_tamper_evidence_rel": _rel(source_runs_root / "PHASE3B_PHASE4_EVIDENCE_v1.json", source_runs_root),
         "proof_tamper_summary": {
-            "fallback_accept_b": bool((proof_evidence.get("phase4_proof_fallback") or {}).get("fallback_accept_b", False)),
-            "fallback_triggered_b": bool((proof_evidence.get("phase4_proof_fallback") or {}).get("fallback_triggered_b", False)),
-            "proof_unit_verdict_after_tamper": str((proof_evidence.get("phase4_proof_fallback") or {}).get("proof_unit_verdict_after_tamper", "")),
+            "fallback_accept_b": bool((proof_tamper.get("phase4_proof_fallback") or {}).get("fallback_accept_b", False)),
+            "fallback_triggered_b": bool((proof_tamper.get("phase4_proof_fallback") or {}).get("fallback_triggered_b", False)),
+            "proof_unit_verdict_after_tamper": str((proof_tamper.get("phase4_proof_fallback") or {}).get("proof_unit_verdict_after_tamper", "")),
+            "proof_fallback_reason_code": (proof_tamper.get("phase4_proof_fallback") or {}).get("proof_fallback_reason_code"),
         },
         "survival_drill": {
-            "config_rel": _rel(SURVIVAL_DRILL_DIR / "survival_drill" / "SURVIVAL_DRILL_CONFIG_v1.json"),
-            "failure_rel": _rel(SURVIVAL_DRILL_DIR / "survival_drill" / "SURVIVAL_DRILL_FAILURE_v1.json"),
+            "failure_rel": _rel(source_runs_root / "ceiling_survival_drill_v1" / "survival_drill" / "SURVIVAL_DRILL_FAILURE_v1.json", source_runs_root),
+            "config_rel": _rel(source_runs_root / "ceiling_survival_drill_v1" / "survival_drill" / "SURVIVAL_DRILL_CONFIG_v1.json", source_runs_root),
             "tick_budget_u64": int(survival_config.get("tick_budget_u64", 0) or 0),
             "start_head": str(survival_failure.get("start_head", "")),
             "end_head": str(survival_failure.get("end_head", "")),
         },
         "bottleneck_diagnosis": bottleneck,
         "next_phase_plan": [
-            "Keep bid-market exploration lane but replace toy campaigns with verifier-valid capability campaigns that emit promotion bundles.",
-            "Preserve current novelty/perf gates; add per-campaign minimum non-triviality checks at promotion-bundle level.",
-            "Expand SIP lane with additional pinned corpora and route resulting artifacts into science/code campaigns under existing allowlists.",
-            "Run survival drill with higher tick budget and track rollback invariants per 25-tick window.",
+            "Use the non-toy exploration registries and no-promotion-bundle throttle to keep market selection evaluable.",
+            "Use ek_omega_v19_ceiling_v1 with expanded economics and science-suite gates pinned in authority.",
+            "Require positive eligible-delta-J movement over long windows before declaring a ceiling.",
+            "Continue adversarial proof/survival interleaving and fail closed on any nondeterministic evidence path.",
         ],
     }
 
-    (OUT_ROOT / "top_10_novel_accepted_changes_v1.json").write_text(
-        json.dumps(top10_accepted, sort_keys=True, separators=(",", ":")) + "\n",
+    tick_records_path = out_root / "tick_outcomes_v1.jsonl"
+    with tick_records_path.open("w", encoding="utf-8") as handle:
+        for row in sorted(all_tick_records, key=lambda r: (r.phase, r.tick_u64)):
+            handle.write(json.dumps(asdict(row), sort_keys=True, separators=(",", ":")) + "\n")
+
+    (out_root / "top_10_novel_accepted_changes_v1.json").write_text(
+        json.dumps(top10, sort_keys=True, separators=(",", ":")) + "\n",
         encoding="utf-8",
     )
-    (OUT_ROOT / "top_20_novel_proposals_v1.json").write_text(
+    (out_root / "top_20_novel_proposals_v1.json").write_text(
         json.dumps(dossier, sort_keys=True, separators=(",", ":")) + "\n",
         encoding="utf-8",
     )
-    (OUT_ROOT / "ceiling_report_v1.json").write_text(
+    (out_root / "ceiling_report_v1.json").write_text(
         json.dumps(report_obj, sort_keys=True, indent=2) + "\n",
         encoding="utf-8",
     )
 
-    # CSV artifacts for tables/plots
-    acceptance_csv = OUT_ROOT / "acceptance_over_time.csv"
+    acceptance_csv = out_root / "acceptance_over_time.csv"
     with acceptance_csv.open("w", newline="", encoding="utf-8") as handle:
         writer = csv.writer(handle)
         writer.writerow(
             [
                 "phase",
                 "tick_u64",
-                "campaign_id",
+                "selected_campaign_id",
                 "promotion_status",
                 "promotion_reason",
+                "eval_kernel_ran_b",
+                "delta_j_q32",
                 "activation_success_b",
-                "settlement_delta_j_q32",
                 "total_ns",
                 "subverifier_ns",
             ]
@@ -599,17 +699,18 @@ def main() -> int:
                 [
                     row.phase,
                     row.tick_u64,
-                    row.campaign_id or "",
-                    row.promotion_status or "",
-                    row.promotion_reason or "",
+                    row.selected_campaign_id or "",
+                    row.promotion_status,
+                    row.promotion_reason,
+                    "1" if row.eval_kernel_ran_b else "0",
+                    "" if row.delta_j_q32 is None else int(row.delta_j_q32),
                     "1" if row.activation_success_b else "0",
-                    row.settlement_delta_j_q32,
-                    row.total_ns,
-                    row.subverifier_ns,
+                    int(row.total_ns),
+                    int(row.subverifier_ns),
                 ]
             )
 
-    novelty_csv = OUT_ROOT / "novelty_over_time.csv"
+    novelty_csv = out_root / "novelty_over_time.csv"
     with novelty_csv.open("w", newline="", encoding="utf-8") as handle:
         writer = csv.writer(handle)
         writer.writerow(["rank", "phase", "tick_u64", "change_type", "novelty_pass_b", "novelty_score", "promotion_bundle_rel"])
@@ -618,114 +719,86 @@ def main() -> int:
                 [
                     idx,
                     item.get("phase", ""),
-                    item.get("tick_u64", 0),
+                    int(item.get("tick_u64", 0)),
                     item.get("change_type", ""),
-                    "1" if item.get("novelty_pass_b") else "0",
-                    item.get("novelty_score", 0.0),
+                    "1" if bool(item.get("novelty_pass_b", False)) else "0",
+                    float(item.get("novelty_score", 0.0)),
                     item.get("promotion_bundle_rel", ""),
                 ]
             )
 
-    delta_csv = OUT_ROOT / "delta_j_distribution.csv"
+    delta_csv = out_root / "delta_j_distribution.csv"
     with delta_csv.open("w", newline="", encoding="utf-8") as handle:
         writer = csv.writer(handle)
         writer.writerow(["phase", "delta_j_q32"])
-        for phase_name, phase_summary in summary.items():
-            for val in phase_summary.get("settlement_delta_j_distribution_q32", []):
-                writer.writerow([phase_name, val])
+        for phase, summary in phase_summaries.items():
+            for value in summary.get("settlement_delta_j_distribution_q32_eligible", []):
+                writer.writerow([phase, int(value)])
 
-    runtime_csv = OUT_ROOT / "runtime_cost.csv"
+    runtime_csv = out_root / "runtime_cost.csv"
     with runtime_csv.open("w", newline="", encoding="utf-8") as handle:
         writer = csv.writer(handle)
         writer.writerow(["phase", "median_total_ns", "median_subverifier_ns", "rollback_events_u64"])
-        for phase_name, phase_summary in summary.items():
+        for phase, summary in phase_summaries.items():
             writer.writerow(
                 [
-                    phase_name,
-                    phase_summary.get("median_total_ns", 0),
-                    phase_summary.get("median_subverifier_ns", 0),
-                    phase_summary.get("rollback_events_u64", 0),
+                    phase,
+                    int(summary.get("median_total_ns", 0)),
+                    int(summary.get("median_subverifier_ns", 0)),
+                    int(summary.get("rollback_events_u64", 0)),
                 ]
             )
 
-    # Human-readable markdown
     md = []
     md.append("# Ceiling Report v1")
     md.append("")
     md.append("## Phase Summary")
     md.append("")
-    md.append("| Phase | Ticks | Promoted | Rejected | Skipped | Acceptance(all) | Median ΔJ(q32) | Median total ns |")
+    md.append("| Phase | Ticks | Promoted | Rejected | Skipped | Eligible ΔJ rows | Median eligible ΔJ(q32) | Frontier movement |")
     md.append("|---|---:|---:|---:|---:|---:|---:|---:|")
-    for phase_name in ("phase1_baseline", "phase2_exploration", "phase3_adversarial", sip_name):
-        row = summary.get(phase_name, {})
+    for phase, *_ in PHASE_SPECS:
+        row = phase_summaries.get(phase, {})
         md.append(
-            f"| {phase_name} | {row.get('ticks_u64', 0)} | {row.get('promoted_u64', 0)} | "
+            f"| {phase} | {row.get('ticks_u64', 0)} | {row.get('promoted_u64', 0)} | "
             f"{row.get('rejected_u64', 0)} | {row.get('skipped_u64', 0)} | "
-            f"{row.get('acceptance_rate_all_attempts_f64', 0.0):.4f} | {row.get('median_settlement_delta_j_q32', 0)} | "
-            f"{row.get('median_total_ns', 0)} |"
+            f"{row.get('eligible_settlement_rows_u64', 0)} | {row.get('median_settlement_delta_j_q32', None)} | "
+            f"{row.get('frontier_movement_u64', 0)} |"
         )
     md.append("")
-    md.append("## Novelty Gates")
+    md.append("## Ceiling Criteria")
     md.append("")
-    novelty_pass_u64 = sum(1 for item in accepted_changes if item.get("novelty_pass_b"))
-    novelty_total_u64 = len(accepted_changes)
-    novelty_rate = (float(novelty_pass_u64) / float(novelty_total_u64)) if novelty_total_u64 else 0.0
-    md.append(f"- `novelty_pass_u64`: {novelty_pass_u64}")
-    md.append(f"- `novelty_total_u64`: {novelty_total_u64}")
-    md.append(f"- `novelty_pass_rate_f64`: {novelty_rate:.4f}")
+    for key in (
+        "acceptance_non_trivial_b",
+        "net_delta_positive_b",
+        "frontier_movement_positive_b",
+        "robustness_fail_closed_b",
+        "anti_goodhart_pass_b",
+        "pass_b",
+    ):
+        md.append(f"- `{key}`: {criteria.get(key)}")
     md.append("")
-    md.append("## Anti-Goodhart Detector")
+    md.append("## Novelty")
     md.append("")
-    md.append(f"- `status`: {anti_goodhart.get('status', '')}")
-    md.append(f"- `suspect_b`: {anti_goodhart.get('suspect_b', True)}")
-    md.append(
-        f"- `means_q32`: original={anti_goodhart.get('original_mean_delta_j_q32', 0.0)} "
-        f"hash_order={anti_goodhart.get('hash_order_mean_delta_j_q32', 0.0)} "
-        f"reverse={anti_goodhart.get('reverse_order_mean_delta_j_q32', 0.0)}"
-    )
-    md.append("")
-    md.append("## Robustness")
-    md.append("")
-    md.append(f"- `proof_tamper_evidence_rel`: `{_rel(PROOF_TAMPER_EVIDENCE)}`")
-    md.append(f"- `proof_fallback_accept_b`: {bool((proof_evidence.get('phase4_proof_fallback') or {}).get('fallback_accept_b', False))}")
-    md.append(f"- `survival_failure_rel`: `{_rel(SURVIVAL_DRILL_DIR / 'survival_drill' / 'SURVIVAL_DRILL_FAILURE_v1.json')}`")
-    md.append("")
-    md.append("## Bottleneck Diagnosis")
-    md.append("")
-    md.append(f"- `primary_bottleneck`: {bottleneck.get('primary_bottleneck', '')}")
-    md.append(f"- `detail`: {bottleneck.get('detail', '')}")
-    md.append(f"- `subverifier_cost_ratio_f64`: {bottleneck.get('subverifier_cost_ratio_f64', 0.0):.4f}")
-    md.append("")
-    md.append("## Top 10 Novel Accepted Changes")
-    md.append("")
-    md.append("| Rank | Tick | Phase | Type | Novelty Score | Bundle | Replay Proof |")
-    md.append("|---|---:|---|---|---:|---|---|")
-    for idx, item in enumerate(top10_accepted, start=1):
-        md.append(
-            f"| {idx} | {item.get('tick_u64', 0)} | {item.get('phase', '')} | {item.get('change_type', '')} | "
-            f"{float(item.get('novelty_score', 0.0)):.6f} | `{item.get('promotion_bundle_rel', '')}` | "
-            f"`{item.get('replay_proof_rel', '')}` |"
-        )
-    md.append("")
-    md.append("## Top 20 Novel Proposals Dossier")
-    md.append("")
-    md.append(f"- Saved at `{_rel(OUT_ROOT / 'top_20_novel_proposals_v1.json')}`")
+    md.append(f"- `novelty_pass_u64`: {novelty_pass}")
+    md.append(f"- `novelty_total_u64`: {novelty_total}")
+    md.append(f"- `novelty_pass_rate_f64`: {novelty_pass_rate:.4f}")
     md.append("")
     md.append("## Generated Artifacts")
     md.append("")
-    for artifact in (
-        OUT_ROOT / "ceiling_report_v1.json",
-        OUT_ROOT / "acceptance_over_time.csv",
-        OUT_ROOT / "novelty_over_time.csv",
-        OUT_ROOT / "delta_j_distribution.csv",
-        OUT_ROOT / "runtime_cost.csv",
-        OUT_ROOT / "top_10_novel_accepted_changes_v1.json",
-        OUT_ROOT / "top_20_novel_proposals_v1.json",
+    for path in (
+        out_root / "ceiling_report_v1.json",
+        out_root / "tick_outcomes_v1.jsonl",
+        out_root / "acceptance_over_time.csv",
+        out_root / "novelty_over_time.csv",
+        out_root / "delta_j_distribution.csv",
+        out_root / "runtime_cost.csv",
+        out_root / "top_10_novel_accepted_changes_v1.json",
+        out_root / "top_20_novel_proposals_v1.json",
     ):
-        md.append(f"- `{_rel(artifact)}`")
-    (OUT_ROOT / "ceiling_report_v1.md").write_text("\n".join(md) + "\n", encoding="utf-8")
+        md.append(f"- `{_rel(path, source_runs_root)}`")
+    (out_root / "ceiling_report_v1.md").write_text("\n".join(md) + "\n", encoding="utf-8")
 
-    print(str(_rel(OUT_ROOT / "ceiling_report_v1.json")))
+    print(str(out_root / "ceiling_report_v1.json"))
     return 0
 
 

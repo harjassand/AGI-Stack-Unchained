@@ -1,0 +1,51 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v19_0/epistemic_instruction_strip_contract_v1",
+  "title": "Epistemic instruction strip contract v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "contract_id",
+    "unicode_normalization",
+    "whitespace_policy",
+    "pattern_engine_semantics",
+    "rule_version",
+    "strip_tokens",
+    "removed_span_binding_mode",
+    "tie_break_policy"
+  ],
+  "properties": {
+    "schema_version": {"const": "epistemic_instruction_strip_contract_v1"},
+    "contract_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "unicode_normalization": {"const": "NFC"},
+    "whitespace_policy": {
+      "type": "string",
+      "enum": [
+        "PRESERVE_LINES"
+      ]
+    },
+    "pattern_engine_semantics": {
+      "const": "LOWERCASE_SUBSTRING_MATCH_V1"
+    },
+    "rule_version": {
+      "const": "RULESET_V1"
+    },
+    "strip_tokens": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 256
+      }
+    },
+    "removed_span_binding_mode": {
+      "const": "REMOVED_LINE_HASHES_V1"
+    },
+    "tie_break_policy": {
+      "const": "INPUT_ORDER_ASC"
+    }
+  }
+}

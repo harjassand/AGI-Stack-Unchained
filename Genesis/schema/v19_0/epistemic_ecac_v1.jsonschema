@@ -1,0 +1,40 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v19_0/epistemic_ecac_v1",
+  "title": "Epistemic ECAC v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "ecac_id",
+    "capsule_id",
+    "graph_id",
+    "type_binding_id",
+    "objective_profile_id",
+    "cert_profile_id",
+    "strip_receipt_id",
+    "task_input_ids",
+    "advantage_lb_q32",
+    "evaluation_binding_hash",
+    "status",
+    "reason_code"
+  ],
+  "properties": {
+    "schema_version": {"const": "epistemic_ecac_v1"},
+    "ecac_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "capsule_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "graph_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "type_binding_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "objective_profile_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "cert_profile_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "strip_receipt_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "task_input_ids": {
+      "type": "array",
+      "items": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"}
+    },
+    "advantage_lb_q32": {"type": "integer"},
+    "evaluation_binding_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "status": {"type": "string", "enum": ["OK", "FAIL"]},
+    "reason_code": {"type": "string", "minLength": 1, "maxLength": 128}
+  }
+}

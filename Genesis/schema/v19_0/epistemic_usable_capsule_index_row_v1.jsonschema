@@ -1,0 +1,66 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v19_0/epistemic_usable_capsule_index_row_v1",
+  "title": "Epistemic usable capsule index row v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "row_hash",
+    "prev_row_hash",
+    "capsule_id",
+    "distillate_graph_id",
+    "usable_b",
+    "cert_gate_status",
+    "cert_profile_id",
+    "reason_code"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "epistemic_usable_capsule_index_row_v1"
+    },
+    "row_hash": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "prev_row_hash": {
+      "oneOf": [
+        {
+          "type": "null"
+        },
+        {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        }
+      ]
+    },
+    "capsule_id": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "distillate_graph_id": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "usable_b": {
+      "type": "boolean"
+    },
+    "cert_gate_status": {
+      "type": "string",
+      "enum": [
+        "PASS",
+        "WARN",
+        "BLOCKED"
+      ]
+    },
+    "cert_profile_id": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "reason_code": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128
+    }
+  }
+}

@@ -1,0 +1,22 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v19_0/epistemic_compaction_pack_manifest_v1",
+  "title": "Epistemic compaction pack manifest v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "pack_manifest_id",
+    "store_root_id",
+    "blob_ids"
+  ],
+  "properties": {
+    "schema_version": {"const": "epistemic_compaction_pack_manifest_v1"},
+    "pack_manifest_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "store_root_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "blob_ids": {
+      "type": "array",
+      "items": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"}
+    }
+  }
+}

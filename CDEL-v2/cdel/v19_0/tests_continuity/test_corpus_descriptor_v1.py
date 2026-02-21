@@ -16,6 +16,7 @@ def _valid_descriptor() -> dict[str, object]:
                 "run_id": "ignite_v19_super_unified_tick_42",
                 "tick_u64": 42,
                 "tick_snapshot_hash": "sha256:" + ("b" * 64),
+                "entry_manifest_id": "sha256:" + ("c" * 64),
             }
         ],
     }
@@ -32,3 +33,9 @@ def test_corpus_descriptor_rejects_non_explicit_discovery_mode() -> None:
     with pytest.raises(Exception):
         validate_schema(payload, "corpus_descriptor_v1")
 
+
+def test_corpus_descriptor_rejects_non_hash_snapshot_ref() -> None:
+    payload = _valid_descriptor()
+    payload["entries"][0]["tick_snapshot_hash"] = "not-a-sha"
+    with pytest.raises(Exception):
+        validate_schema(payload, "corpus_descriptor_v1")

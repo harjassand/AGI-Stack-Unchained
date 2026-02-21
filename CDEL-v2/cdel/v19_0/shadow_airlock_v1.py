@@ -29,7 +29,10 @@ def evaluate_shadow_regime_proposal(
     non_weakening_j_verified_b: bool | None = None,
     corpus_replay_verified_b: bool = True,
     deterministic_fuzz_verified_b: bool = True,
+    corpus_invariance_verified_b: bool = True,
+    corpus_invariance_receipt_id: str | None = None,
     rollback_plan_bound_b: bool = True,
+    rollback_evidence_hash: str | None = None,
     auto_swap_b: bool = False,
 ) -> dict[str, Any]:
     validate_schema(proposal, "shadow_regime_proposal_v1")
@@ -57,8 +60,25 @@ def evaluate_shadow_regime_proposal(
     j_per_tick_floor_verified_b = _require_bool(j_per_tick_floor_verified_b, field="j_per_tick_floor_verified_b")
     corpus_replay_verified_b = _require_bool(corpus_replay_verified_b, field="corpus_replay_verified_b")
     deterministic_fuzz_verified_b = _require_bool(deterministic_fuzz_verified_b, field="deterministic_fuzz_verified_b")
+    corpus_invariance_verified_b = _require_bool(corpus_invariance_verified_b, field="corpus_invariance_verified_b")
     rollback_plan_bound_b = _require_bool(rollback_plan_bound_b, field="rollback_plan_bound_b")
     auto_swap_b = _require_bool(auto_swap_b, field="auto_swap_b")
+    if corpus_invariance_receipt_id is not None:
+        corpus_invariance_receipt_id = str(corpus_invariance_receipt_id).strip()
+        if not corpus_invariance_receipt_id:
+            corpus_invariance_receipt_id = None
+    if corpus_invariance_receipt_id is None:
+        raise RuntimeError("SCHEMA_FAIL:corpus_invariance_receipt_id")
+    if rollback_evidence_hash is None:
+        rollback_evidence_hash = canon_hash_obj(
+            {
+                "schema_version": "shadow_rollback_evidence_binding_v1",
+                "proposal_id": str(proposal.get("proposal_id", "")),
+            }
+        )
+    rollback_evidence_hash = str(rollback_evidence_hash).strip()
+    if not rollback_evidence_hash.startswith("sha256:") or len(rollback_evidence_hash) != 71:
+        raise RuntimeError("SCHEMA_FAIL:rollback_evidence_hash")
 
     if non_weakening_j_verified_b is None:
         non_weakening_j_verified_b = bool(j_window_rule_verified_b and j_per_tick_floor_verified_b)
@@ -87,6 +107,8 @@ def evaluate_shadow_regime_proposal(
         reasons.append("CORPUS_REPLAY_FAIL")
     if not deterministic_fuzz_verified_b:
         reasons.append("DETERMINISTIC_FUZZ_FAIL")
+    if not corpus_invariance_verified_b:
+        reasons.append("CORPUS_INVARIANCE_FAIL")
     if not rollback_plan_bound_b:
         reasons.append("ROLLBACK_PLAN_MISSING")
     if auto_swap_b and not tier_b_pass_b:
@@ -106,6 +128,7 @@ def evaluate_shadow_regime_proposal(
         and non_weakening_j_verified_b
         and corpus_replay_verified_b
         and deterministic_fuzz_verified_b
+        and corpus_invariance_verified_b
         and rollback_plan_bound_b
     )
 
@@ -126,9 +149,12 @@ def evaluate_shadow_regime_proposal(
         "dynamic_protected_roots_verified_b": bool(dynamic_protected_roots_verified_b),
         "j_window_rule_verified_b": bool(j_window_rule_verified_b),
         "j_per_tick_floor_verified_b": bool(j_per_tick_floor_verified_b),
+        "corpus_invariance_verified_b": bool(corpus_invariance_verified_b),
+        "corpus_invariance_receipt_id": corpus_invariance_receipt_id,
         "auto_swap_b": bool(auto_swap_b),
         "swap_execution_performed_b": False,
         "rollback_plan_bound_b": bool(rollback_plan_bound_b),
+        "rollback_evidence_hash": rollback_evidence_hash,
         "reasons": sorted(set(reasons)),
     }
     receipt = dict(receipt_without_id)
@@ -156,6 +182,7 @@ def _parse_args() -> argparse.Namespace:
     ap.add_argument("--corpus_replay_verified_b", default="1")
     ap.add_argument("--deterministic_fuzz_verified_b", default="1")
     ap.add_argument("--rollback_plan_bound_b", default="1")
+    ap.add_argument("--rollback_evidence_hash", default="")
     ap.add_argument("--auto_swap_b", default="0")
     return ap.parse_args()
 
@@ -181,6 +208,7 @@ def main() -> None:
         corpus_replay_verified_b=_as_bool(args.corpus_replay_verified_b),
         deterministic_fuzz_verified_b=_as_bool(args.deterministic_fuzz_verified_b),
         rollback_plan_bound_b=_as_bool(args.rollback_plan_bound_b),
+        rollback_evidence_hash=(str(args.rollback_evidence_hash).strip() or None),
         auto_swap_b=_as_bool(args.auto_swap_b),
     )
     out_path.parent.mkdir(parents=True, exist_ok=True)

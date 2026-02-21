@@ -1,0 +1,39 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v19_0/epistemic_confidence_calibration_v1",
+  "title": "Epistemic confidence calibration v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "calibration_id",
+    "calibration_kind",
+    "clamp_min_q32",
+    "clamp_max_q32"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "epistemic_confidence_calibration_v1"
+    },
+    "calibration_id": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "calibration_kind": {
+      "type": "string",
+      "enum": [
+        "IDENTITY_CLAMP_V1"
+      ]
+    },
+    "clamp_min_q32": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 4294967296
+    },
+    "clamp_max_q32": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 4294967296
+    }
+  }
+}

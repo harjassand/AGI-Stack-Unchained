@@ -1,0 +1,49 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v19_0/omega_event_epistemic_capsule_v1",
+  "title": "Omega event epistemic capsule v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_name",
+    "schema_version",
+    "capsule_id",
+    "world_snapshot_id",
+    "world_root",
+    "sip_receipt_id",
+    "distillate_graph_id",
+    "episode_id"
+  ],
+  "properties": {
+    "schema_name": {
+      "const": "omega_event_epistemic_capsule_v1"
+    },
+    "schema_version": {
+      "const": "v19_0"
+    },
+    "capsule_id": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "world_snapshot_id": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "world_root": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "sip_receipt_id": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "distillate_graph_id": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "episode_id": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    }
+  }
+}

@@ -6,6 +6,7 @@ from contextlib import contextmanager
 import hashlib
 import json
 import os
+import re
 import time
 from pathlib import Path
 from typing import Any, Iterator
@@ -39,11 +40,26 @@ from cdel.v18_0.omega_common_v1 import (
     write_hashed_json,
 )
 from cdel.v18_0.ccap_runtime_v1 import compute_repo_base_tree_id_tolerant
+from cdel.v1_7r.canon import canon_bytes
 from cdel.v19_0.common_v1 import validate_schema as validate_schema_v19
 from cdel.v19_0.conservatism_v1 import evaluate_reject_conservatism
 from cdel.v19_0.determinism_witness_v1 import evaluate_determinism_witness
+from cdel.v19_0.epistemic.action_market_v1 import (
+    build_action_bid_set,
+    build_action_bids,
+    build_action_market_inputs_manifest,
+    build_default_action_market_profile,
+    select_action_winner,
+    settle_action_selection,
+)
+from cdel.v19_0.epistemic.usable_index_v1 import (
+    append_usable_index_row,
+    iter_usable_graphs,
+    load_usable_capsule_ids,
+)
 from cdel.v19_0.policy_vm_stark_runner_v1 import prove_policy_vm_stark
 from cdel.v19_0.shadow_airlock_v1 import evaluate_shadow_regime_proposal
+from cdel.v19_0.world.merkle_v1 import compute_world_root
 from cdel.v19_0.shadow_fs_guard_v1 import (
     build_integrity_report,
     default_shadow_protected_roots_profile,
@@ -51,6 +67,10 @@ from cdel.v19_0.shadow_fs_guard_v1 import (
     hash_protected_roots,
 )
 from cdel.v19_0.shadow_j_eval_v1 import evaluate_j_comparison
+from cdel.v19_0.shadow_invariance_v1 import (
+    build_shadow_corpus_invariance_receipt,
+)
+from cdel.v19_0.shadow_corpus_v1 import load_shadow_corpus_entries
 from cdel.v19_0.shadow_runner_v1 import run_shadow_tick
 from cdel.v19_0.winterfell_contract_v1 import resolve_profile_backend_contract_bindings
 from cdel.v18_0.omega_episodic_memory_v1 import (
@@ -87,7 +107,10 @@ from orchestrator.omega_v18_0.applier_v1 import run_activation
 from orchestrator.omega_v18_0.decider_v1 import decide
 from orchestrator.omega_v18_0.diagnoser_v1 import diagnose
 from orchestrator.omega_v18_0.dispatcher_v1 import dispatch_campaign
-from orchestrator.omega_v18_0.goal_synthesizer_v1 import synthesize_goal_queue
+from .goal_synthesizer_v1 import (
+    suppressed_capability_ids_from_episodic_memory,
+    synthesize_goal_queue,
+)
 from orchestrator.omega_v18_0.io_v1 import freeze_pack_config, load_goal_queue, write_goal_queue_effective
 from orchestrator.omega_v18_0.locks_v1 import acquire_lock
 from orchestrator.omega_v18_0.observer_v1 import observe, read_meta_core_active_manifest_hash
@@ -118,6 +141,10 @@ _TIMING_STAGES: tuple[str, ...] = (
     "trace_write",
     "snapshot_write",
 )
+_Q32_ONE = 1 << 32
+_EPISTEMIC_LOW_CONF_THRESHOLD_Q32 = _Q32_ONE // 2
+_MAX_METRIC_SERIES_LEN_U64 = 64
+_FAILURE_KEY_RE = re.compile(r"[^a-z0-9_]+")
 
 
 @contextmanager
@@ -160,11 +187,134 @@ def _write_payload(dir_path: Path, suffix: str, payload: dict[str, Any], id_fiel
     return write_hashed_json(dir_path, suffix, payload, id_field=id_field)
 
 
+def _write_payload_atomic(
+    dir_path: Path,
+    suffix: str,
+    payload: dict[str, Any],
+    *,
+    id_field: str | None = None,
+) -> tuple[Path, dict[str, Any], str]:
+    dir_path.mkdir(parents=True, exist_ok=True)
+    obj = dict(payload)
+    if id_field is not None:
+        no_id = dict(obj)
+        no_id.pop(id_field, None)
+        obj[id_field] = canon_hash_obj(no_id)
+    digest = canon_hash_obj(obj)
+    out_path = dir_path / f"sha256_{digest.split(':', 1)[1]}.{suffix}"
+    content = canon_bytes(obj) + b"\n"
+
+    if out_path.exists():
+        existing = out_path.read_bytes()
+        if existing.rstrip(b"\n") != content.rstrip(b"\n"):
+            fail("NONDETERMINISTIC")
+        return out_path, obj, digest
+
+    tmp_name = f".tmp_{out_path.name}.{os.getpid()}.{time.monotonic_ns()}"
+    tmp_path = dir_path / tmp_name
+    with tmp_path.open("wb") as handle:
+        handle.write(content)
+        handle.flush()
+        os.fsync(handle.fileno())
+    os.replace(tmp_path, out_path)
+    fd = os.open(str(dir_path), os.O_RDONLY)
+    try:
+        os.fsync(fd)
+    finally:
+        os.close(fd)
+    return out_path, obj, digest
+
+
 def _assert_path_within(path: Path, root: Path) -> None:
     try:
         path.resolve().relative_to(root.resolve())
     except Exception:
         fail("FORBIDDEN_PATH")
+
+
+def _ratio_q32(num_u64: int, den_u64: int, *, default_q32: int) -> dict[str, int]:
+    den = int(den_u64)
+    if den <= 0:
+        return {"q": int(max(0, min(_Q32_ONE, default_q32)))}
+    num = int(max(0, num_u64))
+    q = int((num * _Q32_ONE) // den)
+    if q < 0:
+        q = 0
+    if q > _Q32_ONE:
+        q = _Q32_ONE
+    return {"q": q}
+
+
+def _failure_metric_key(reason_code: str) -> str:
+    token = _FAILURE_KEY_RE.sub("_", str(reason_code).strip().lower()).strip("_")
+    return f"epistemic_failure_{token or 'unknown'}_u64"
+
+
+def _collect_epistemic_metrics_from_prev_state(prev_state_dir: Path | None) -> dict[str, Any]:
+    metrics: dict[str, Any] = {
+        "epistemic_capsule_count_u64": 0,
+        "epistemic_refutation_count_u64": 0,
+        "epistemic_failure_total_u64": 0,
+        "epistemic_low_confidence_ratio_q32": {"q": 0},
+        "epistemic_novelty_ratio_q32": {"q": 0},
+        "epistemic_replay_pass_rate_q32": {"q": _Q32_ONE},
+    }
+    if prev_state_dir is None:
+        return metrics
+    epi_root = prev_state_dir.resolve() / "epistemic"
+    if not epi_root.exists() or not epi_root.is_dir():
+        return metrics
+
+    refutation_paths = sorted((epi_root / "refutations").glob("sha256_*.epistemic_capsule_refutation_v1.json"), key=lambda p: p.as_posix())
+    usable_capsule_ids = load_usable_capsule_ids(prev_state_dir.resolve())
+    graph_paths = iter_usable_graphs(prev_state_dir.resolve())
+
+    capsule_count = int(len(usable_capsule_ids))
+    refutation_count = int(len(refutation_paths))
+    metrics["epistemic_capsule_count_u64"] = capsule_count
+    metrics["epistemic_refutation_count_u64"] = refutation_count
+    metrics["epistemic_failure_total_u64"] = refutation_count
+    metrics["epistemic_replay_pass_rate_q32"] = _ratio_q32(
+        capsule_count,
+        capsule_count + refutation_count,
+        default_q32=_Q32_ONE,
+    )
+
+    low_conf_u64 = 0
+    novelty_u64 = 0
+    node_total_u64 = 0
+    for graph_path in graph_paths:
+        payload = load_canon_dict(graph_path)
+        if str(payload.get("schema_version", "")).strip() != "qxwmr_graph_v1":
+            fail("SCHEMA_FAIL")
+        nodes = payload.get("nodes")
+        if not isinstance(nodes, list):
+            fail("SCHEMA_FAIL")
+        for row in nodes:
+            if not isinstance(row, dict):
+                fail("SCHEMA_FAIL")
+            node_total_u64 += 1
+            confidence_q32 = int(row.get("confidence_q32", 0))
+            if confidence_q32 < _EPISTEMIC_LOW_CONF_THRESHOLD_Q32:
+                low_conf_u64 += 1
+            if str(row.get("type_id", "")).strip() != "CLAIM":
+                novelty_u64 += 1
+
+    metrics["epistemic_low_confidence_ratio_q32"] = _ratio_q32(low_conf_u64, node_total_u64, default_q32=0)
+    metrics["epistemic_novelty_ratio_q32"] = _ratio_q32(novelty_u64, node_total_u64, default_q32=0)
+
+    by_reason: dict[str, int] = {}
+    for refutation_path in refutation_paths:
+        payload = load_canon_dict(refutation_path)
+        if str(payload.get("schema_version", "")).strip() != "epistemic_capsule_refutation_v1":
+            fail("SCHEMA_FAIL")
+        reason = str(payload.get("reason_code", "")).strip()
+        key = _failure_metric_key(reason)
+        by_reason[key] = int(by_reason.get(key, 0)) + 1
+    for key in sorted(by_reason.keys()):
+        metrics[key] = int(by_reason[key])
+
+    return metrics
 
 
 def build_inputs_descriptor_once(
@@ -306,6 +456,85 @@ def _shadow_double_run_rows(count: int) -> list[dict[str, Any]]:
     return rows
 
 
+def _load_shadow_corpus_entry_manifests(
+    *,
+    config_dir: Path,
+    corpus_entries: list[dict[str, Any]],
+) -> dict[str, dict[str, Any]]:
+    manifests: dict[str, dict[str, Any]] = {}
+    for row in corpus_entries:
+        if not isinstance(row, dict):
+            fail("SCHEMA_FAIL")
+        entry_manifest_id = ensure_sha256(row.get("entry_manifest_id"), reason="SCHEMA_FAIL")
+        hexd = entry_manifest_id.split(":", 1)[1]
+        matches = sorted(
+            config_dir.rglob(f"sha256_{hexd}.shadow_corpus_entry_manifest_v1.json"),
+            key=lambda p: p.as_posix(),
+        )
+        if len(matches) != 1:
+            fail("MISSING_STATE_INPUT")
+        payload = load_canon_dict(matches[0])
+        validate_schema_v19(payload, "shadow_corpus_entry_manifest_v1")
+        if str(payload.get("schema_name", "")) != "shadow_corpus_entry_manifest_v1":
+            fail("SCHEMA_FAIL")
+        observed_id = canon_hash_obj({k: v for k, v in payload.items() if k != "entry_manifest_id"})
+        if str(payload.get("entry_manifest_id", "")) != observed_id:
+            fail("NONDETERMINISTIC")
+        if observed_id != entry_manifest_id:
+            fail("NONDETERMINISTIC")
+        manifests[entry_manifest_id] = payload
+    return manifests
+
+
+def _load_shadow_candidate_outputs(*, state_root: Path) -> dict[str, Any]:
+    epi_root = state_root / "epistemic"
+    capsule_rows = sorted((epi_root / "capsules").glob("sha256_*.epistemic_capsule_v1.json"), key=lambda p: p.as_posix())
+    graph_rows = sorted((epi_root / "graphs").glob("sha256_*.qxwmr_graph_v1.json"), key=lambda p: p.as_posix())
+    binding_rows = sorted((epi_root / "type_bindings").glob("sha256_*.epistemic_type_binding_v1.json"), key=lambda p: p.as_posix())
+    registry_rows = sorted((epi_root / "type_registry").glob("sha256_*.epistemic_type_registry_v1.json"), key=lambda p: p.as_posix())
+    eufc_rows = sorted((epi_root / "certs").glob("sha256_*.epistemic_eufc_v1.json"), key=lambda p: p.as_posix())
+    strip_receipt_rows = sorted(
+        (epi_root / "strip_receipts").glob("sha256_*.epistemic_instruction_strip_receipt_v1.json"),
+        key=lambda p: p.as_posix(),
+    )
+    if not (capsule_rows and graph_rows and binding_rows and registry_rows and eufc_rows and strip_receipt_rows):
+        fail("MISSING_STATE_INPUT")
+    capsule = load_canon_dict(capsule_rows[-1])
+    graph = load_canon_dict(graph_rows[-1])
+    type_binding = load_canon_dict(binding_rows[-1])
+    type_registry = load_canon_dict(registry_rows[-1])
+    eufc = load_canon_dict(eufc_rows[-1])
+    strip_receipts = [load_canon_dict(path) for path in strip_receipt_rows]
+    validate_schema_v19(capsule, "epistemic_capsule_v1")
+    validate_schema_v19(graph, "qxwmr_graph_v1")
+    validate_schema_v19(type_binding, "epistemic_type_binding_v1")
+    validate_schema_v19(type_registry, "epistemic_type_registry_v1")
+    validate_schema_v19(eufc, "epistemic_eufc_v1")
+    for strip_receipt in strip_receipts:
+        validate_schema_v19(strip_receipt, "epistemic_instruction_strip_receipt_v1")
+    task_input_ids = eufc.get("task_input_ids")
+    if not isinstance(task_input_ids, list):
+        fail("SCHEMA_FAIL")
+    strip_contract_ids = sorted(
+        {
+            ensure_sha256(strip_receipt.get("instruction_strip_contract_id"), reason="SCHEMA_FAIL")
+            for strip_receipt in strip_receipts
+        }
+    )
+    if len(strip_contract_ids) != 1:
+        fail("NONDETERMINISTIC")
+    return {
+        "graph_id": ensure_sha256(graph.get("graph_id"), reason="SCHEMA_FAIL"),
+        "type_binding_id": ensure_sha256(type_binding.get("binding_id"), reason="SCHEMA_FAIL"),
+        "type_registry_id": ensure_sha256(type_registry.get("registry_id"), reason="SCHEMA_FAIL"),
+        "cert_id": ensure_sha256(eufc.get("eufc_id"), reason="SCHEMA_FAIL"),
+        "cert_profile_id": ensure_sha256(capsule.get("cert_profile_id"), reason="SCHEMA_FAIL"),
+        "instruction_strip_contract_id": str(strip_contract_ids[0]),
+        "strip_receipt_id": ensure_sha256(capsule.get("strip_receipt_id"), reason="SCHEMA_FAIL"),
+        "task_input_ids": sorted(ensure_sha256(v, reason="SCHEMA_FAIL") for v in task_input_ids),
+    }
+
+
 def _run_shadow_sidecar(
     *,
     repo_root_path: Path,
@@ -346,13 +575,15 @@ def _run_shadow_sidecar(
         raise RuntimeError("SCHEMA_FAIL") from exc
     protected_profile = dict(protected_profile)
     protected_profile["dynamic_protected_roots"] = [active_state_root_rel]
-    corpus_descriptor = _load_shadow_profile_payload(
+    corpus_descriptor, _corpus_descriptor_id = _load_pinned_json_payload(
         config_dir=config_dir,
         pack=pack,
         rel_key="shadow_corpus_descriptor_rel",
-        schema_name="corpus_descriptor_v1",
-        required=True,
+        id_key="shadow_corpus_descriptor_id",
+        payload_id_field="descriptor_id",
+        missing_reason="MISSING_STATE_INPUT",
     )
+    validate_schema_v19(corpus_descriptor, "corpus_descriptor_v1")
     det_profile = _load_shadow_profile_payload(
         config_dir=config_dir,
         pack=pack,
@@ -367,6 +598,33 @@ def _run_shadow_sidecar(
         schema_name="j_comparison_v1",
         required=True,
     )
+    graph_invariance_contract, _graph_contract_id = _load_pinned_json_payload(
+        config_dir=config_dir,
+        pack=pack,
+        rel_key="shadow_graph_invariance_contract_rel",
+        id_key="shadow_graph_invariance_contract_id",
+        payload_id_field="contract_id",
+        missing_reason="MISSING_STATE_INPUT",
+    )
+    validate_schema_v19(graph_invariance_contract, "graph_invariance_contract_v1")
+    type_binding_invariance_contract, _type_contract_id = _load_pinned_json_payload(
+        config_dir=config_dir,
+        pack=pack,
+        rel_key="shadow_type_binding_invariance_contract_rel",
+        id_key="shadow_type_binding_invariance_contract_id",
+        payload_id_field="contract_id",
+        missing_reason="MISSING_STATE_INPUT",
+    )
+    validate_schema_v19(type_binding_invariance_contract, "type_binding_invariance_contract_v1")
+    cert_invariance_contract, _cert_contract_id = _load_pinned_json_payload(
+        config_dir=config_dir,
+        pack=pack,
+        rel_key="shadow_cert_invariance_contract_rel",
+        id_key="shadow_cert_invariance_contract_id",
+        payload_id_field="contract_id",
+        missing_reason="MISSING_STATE_INPUT",
+    )
+    validate_schema_v19(cert_invariance_contract, "cert_invariance_contract_v1")
     _ensure_shadow_profile_id_match(
         proposal=proposal,
         proposal_id_field="shadow_evaluation_tiers_profile_id",
@@ -481,11 +739,83 @@ def _run_shadow_sidecar(
         reason_codes=integrity_reasons,
     )
 
-    corpus_entries = corpus_descriptor.get("entries")
-    if not isinstance(corpus_entries, list) or not corpus_entries:
+    corpus_descriptor_rel = str(pack.get("shadow_corpus_descriptor_rel", "")).strip()
+    if not corpus_descriptor_rel:
+        fail("MISSING_STATE_INPUT")
+    corpus_descriptor_rel_path = Path(corpus_descriptor_rel)
+    if corpus_descriptor_rel_path.is_absolute() or ".." in corpus_descriptor_rel_path.parts:
         fail("SCHEMA_FAIL")
-    corpus_rows = [{"baseline_accept_b": False, "candidate_accept_b": False} for _ in corpus_entries]
-    conservatism = evaluate_reject_conservatism(corpus_results=corpus_rows, probe_results=[{"baseline_accept_b": False, "candidate_accept_b": False}])
+    shadow_corpus_bundle = load_shadow_corpus_entries(
+        corpus_descriptor=dict(corpus_descriptor),
+        descriptor_dir=(config_dir / corpus_descriptor_rel_path).parent,
+    )
+    corpus_entries = [dict(row) for row in list(shadow_corpus_bundle.get("corpus_entries") or []) if isinstance(row, dict)]
+    if not corpus_entries:
+        fail("SCHEMA_FAIL")
+    replay_entries = [dict(row) for row in list(shadow_corpus_bundle.get("replay_entries") or []) if isinstance(row, dict)]
+    if len(replay_entries) != len(corpus_entries):
+        fail("NONDETERMINISTIC")
+    entry_manifests_by_id = {
+        str(k): dict(v)
+        for k, v in dict(shadow_corpus_bundle.get("entry_manifests_by_id") or {}).items()
+        if isinstance(v, dict)
+    }
+    if len(entry_manifests_by_id) != len(corpus_entries):
+        fail("NONDETERMINISTIC")
+
+    shadow_cert_profile_id_raw = str(pack.get("shadow_cert_profile_id", "")).strip()
+    shadow_instruction_strip_contract_id_raw = str(pack.get("shadow_instruction_strip_contract_id", "")).strip()
+    if not shadow_cert_profile_id_raw or not shadow_instruction_strip_contract_id_raw:
+        fail("MISSING_STATE_INPUT")
+    shadow_cert_profile_id = ensure_sha256(shadow_cert_profile_id_raw, reason="SCHEMA_FAIL")
+    shadow_instruction_strip_contract_id = ensure_sha256(shadow_instruction_strip_contract_id_raw, reason="SCHEMA_FAIL")
+    for replay_entry in replay_entries:
+        contracts = replay_entry.get("contracts")
+        expected_outputs = replay_entry.get("expected_outputs")
+        if not isinstance(contracts, dict) or not isinstance(expected_outputs, dict):
+            fail("SCHEMA_FAIL")
+        if ensure_sha256(contracts.get("instruction_strip_contract_id"), reason="SCHEMA_FAIL") != shadow_instruction_strip_contract_id:
+            fail("PIN_HASH_MISMATCH")
+        if ensure_sha256(contracts.get("cert_profile_id"), reason="SCHEMA_FAIL") != shadow_cert_profile_id:
+            fail("PIN_HASH_MISMATCH")
+        if ensure_sha256(expected_outputs.get("cert_profile_id"), reason="SCHEMA_FAIL") != shadow_cert_profile_id:
+            fail("PIN_HASH_MISMATCH")
+
+    candidate_outputs = _load_shadow_candidate_outputs(state_root=state_root)
+    if ensure_sha256(candidate_outputs.get("cert_profile_id"), reason="SCHEMA_FAIL") != shadow_cert_profile_id:
+        fail("PIN_HASH_MISMATCH")
+    if (
+        ensure_sha256(candidate_outputs.get("instruction_strip_contract_id"), reason="SCHEMA_FAIL")
+        != shadow_instruction_strip_contract_id
+    ):
+        fail("PIN_HASH_MISMATCH")
+    corpus_invariance_receipt = build_shadow_corpus_invariance_receipt(
+        tick_u64=int(tick_u64),
+        corpus_entries=corpus_entries,
+        entry_manifests_by_id=entry_manifests_by_id,
+        graph_contract=dict(graph_invariance_contract),
+        type_binding_contract=dict(type_binding_invariance_contract),
+        cert_contract=dict(cert_invariance_contract),
+        candidate_outputs=candidate_outputs,
+    )
+    corpus_rows = [
+        {
+            "baseline_accept_b": True,
+            "candidate_accept_b": bool(
+                row.get("graph_match_b", False)
+                and row.get("type_binding_match_b", False)
+                and row.get("cert_match_b", False)
+            ),
+        }
+        for row in list(corpus_invariance_receipt.get("compared_rows") or [])
+        if isinstance(row, dict)
+    ]
+    if not corpus_rows:
+        fail("SCHEMA_FAIL")
+    conservatism = evaluate_reject_conservatism(
+        corpus_results=corpus_rows,
+        probe_results=[dict(corpus_rows[0])],
+    )
 
     tier_a_double_runs = int((det_profile.get("tier_a") or {}).get("n_double_runs", 0))
     tier_b_double_runs = int((det_profile.get("tier_b") or {}).get("n_double_runs", 0))
@@ -524,6 +854,7 @@ def _run_shadow_sidecar(
         str(runner_receipt.get("status", "PASS")) == "PASS"
         and str(integrity_report.get("status", "FAIL")) == "PASS"
         and bool(conservatism.get("pass_b", False))
+        and bool(corpus_invariance_receipt.get("pass_b", False))
         and bool(tier_a_det.get("pass_b", False))
         and bool(tier_a_j.get("window_rule_pass_b", False))
     )
@@ -566,6 +897,16 @@ def _run_shadow_sidecar(
     }
 
     auto_swap_b = bool(pack.get("auto_swap_b", False))
+    rollback_evidence_hash = canon_hash_obj(
+        {
+            "schema_version": "shadow_rollback_evidence_binding_v1",
+            "proposal_id": str(proposal.get("proposal_id", "")),
+            "candidate_regime_id": candidate_regime_id,
+            "tick_u64": int(tick_u64),
+            "tier_b_pass_b": bool(tier_b_pass_b),
+            "corpus_invariance_receipt_id": str(corpus_invariance_receipt.get("receipt_id", "")),
+        }
+    )
     readiness_receipt = evaluate_shadow_regime_proposal(
         proposal=proposal,
         tier_a_pass_b=tier_a_pass_b,
@@ -580,6 +921,9 @@ def _run_shadow_sidecar(
         deterministic_fuzz_verified_b=bool(tier_b_det.get("pass_b", False)),
         rollback_plan_bound_b=True,
         auto_swap_b=auto_swap_b,
+        corpus_invariance_verified_b=bool(corpus_invariance_receipt.get("pass_b", False)),
+        corpus_invariance_receipt_id=str(corpus_invariance_receipt.get("receipt_id")),
+        rollback_evidence_hash=rollback_evidence_hash,
     )
     handoff_rel = str(pack.get("shadow_handoff_receipt_rel", "")).strip()
     if auto_swap_b:
@@ -609,6 +953,7 @@ def _run_shadow_sidecar(
         "tier_a_receipt": tier_a_receipt,
         "tier_b_receipt": tier_b_receipt,
         "readiness_receipt": readiness_receipt,
+        "corpus_invariance_receipt": corpus_invariance_receipt,
         "runner_receipt": runner_receipt,
     }
 
@@ -1129,6 +1474,126 @@ def _ensure_sha256_id(value: Any) -> str:
     return text
 
 
+def _observation_metric_ids(observation_report: dict[str, Any]) -> list[str]:
+    rows = observation_report.get("metrics")
+    if not isinstance(rows, dict):
+        fail("SCHEMA_FAIL")
+    out = sorted(str(key).strip() for key in rows.keys() if str(key).strip())
+    return out
+
+
+def _lookup_capsule_tick(*, state_root: Path, capsule_id: str) -> int:
+    caps_dir = state_root / "epistemic" / "capsules"
+    if not caps_dir.exists() or not caps_dir.is_dir():
+        return 0
+    for path in sorted(caps_dir.glob("sha256_*.epistemic_capsule_v1.json"), key=lambda p: p.as_posix()):
+        payload, _ = _load_hashed_payload(path=path, expected_schema_version="epistemic_capsule_v1")
+        if _ensure_sha256_id(payload.get("capsule_id")) != capsule_id:
+            continue
+        return int(payload.get("tick_u64", 0))
+    return 0
+
+
+def _collect_eufc_window_rows(
+    *,
+    current_tick_u64: int,
+    window_ticks_u64: int,
+    state_roots: list[Path],
+) -> list[dict[str, Any]]:
+    close_tick = int(current_tick_u64)
+    open_tick = max(0, close_tick - max(1, int(window_ticks_u64)) + 1)
+    by_id: dict[str, int] = {}
+    for state_root in state_roots:
+        cert_dir = state_root / "epistemic" / "certs"
+        if not cert_dir.exists() or not cert_dir.is_dir():
+            continue
+        for path in sorted(cert_dir.glob("sha256_*.epistemic_eufc_v1.json"), key=lambda p: p.as_posix()):
+            payload, _ = _load_hashed_payload(path=path, expected_schema_version="epistemic_eufc_v1")
+            eufc_id = _ensure_sha256_id(payload.get("eufc_id"))
+            capsule_id = _ensure_sha256_id(payload.get("capsule_id"))
+            row_tick = _lookup_capsule_tick(state_root=state_root, capsule_id=capsule_id)
+            if row_tick < open_tick or row_tick > close_tick:
+                continue
+            prev_tick = by_id.get(eufc_id)
+            if prev_tick is None or int(row_tick) < int(prev_tick):
+                by_id[eufc_id] = int(row_tick)
+    rows = [
+        {"eufc_id": eufc_id, "tick_u64": int(row_tick)}
+        for eufc_id, row_tick in by_id.items()
+    ]
+    rows.sort(key=lambda row: (int(row["tick_u64"]), str(row["eufc_id"])))
+    return rows
+
+
+def _load_prev_action_market_state_id(prev_state_dir: Path | None) -> str | None:
+    if prev_state_dir is None:
+        return None
+    sel_dir = prev_state_dir.resolve() / "epistemic" / "market" / "actions" / "settlement"
+    if not sel_dir.exists() or not sel_dir.is_dir():
+        return None
+    rows = sorted(sel_dir.glob("sha256_*.epistemic_action_settlement_receipt_v1.json"), key=lambda p: p.as_posix())
+    if not rows:
+        return None
+    payload, _ = _load_hashed_payload(
+        path=rows[-1],
+        expected_schema_version="epistemic_action_settlement_receipt_v1",
+    )
+    return _ensure_sha256_id(payload.get("action_settlement_id"))
+
+
+def _rewrite_eufc_with_credit_attribution(
+    *,
+    state_root: Path,
+    eufc_id: str,
+    credit_key: str,
+    credit_window_open_tick_u64: int,
+    credit_window_close_tick_u64: int,
+    credit_window_receipt_ids: list[str],
+) -> tuple[dict[str, Any], str]:
+    cert_dir = state_root / "epistemic" / "certs"
+    eufc_id = _ensure_sha256_id(eufc_id)
+    credit_key = _ensure_sha256_id(credit_key)
+    receipt_ids = [_ensure_sha256_id(row) for row in list(credit_window_receipt_ids)]
+    if len(set(receipt_ids)) != len(receipt_ids):
+        fail("SCHEMA_FAIL")
+    eufc_path: Path | None = None
+    payload: dict[str, Any] | None = None
+    for candidate_path in sorted(cert_dir.glob("sha256_*.epistemic_eufc_v1.json"), key=lambda p: p.as_posix()):
+        candidate_payload, _ = _load_hashed_payload(path=candidate_path, expected_schema_version="epistemic_eufc_v1")
+        if _ensure_sha256_id(candidate_payload.get("eufc_id")) != eufc_id:
+            continue
+        if eufc_path is not None:
+            fail("NONDETERMINISTIC")
+        eufc_path = candidate_path
+        payload = candidate_payload
+    if eufc_path is None or payload is None:
+        fail("MISSING_STATE_INPUT")
+
+    credited_keys = sorted(
+        {
+            _ensure_sha256_id(row)
+            for row in list(payload.get("credited_credit_keys") or [])
+        }
+        | {credit_key}
+    )
+    materialized = dict(payload)
+    materialized["credited_credit_keys"] = credited_keys
+    materialized["credit_window_mode"] = "EUFC_WINDOW"
+    materialized["credit_window_open_tick_u64"] = int(max(0, int(credit_window_open_tick_u64)))
+    materialized["credit_window_close_tick_u64"] = int(
+        max(int(materialized["credit_window_open_tick_u64"]), int(credit_window_close_tick_u64))
+    )
+    materialized["credit_window_receipt_ids"] = list(receipt_ids)
+    validate_schema_v19(materialized, "epistemic_eufc_v1")
+    _, materialized, observed_hash = _write_payload_atomic(
+        cert_dir,
+        "epistemic_eufc_v1.json",
+        materialized,
+        id_field="eufc_id",
+    )
+    return materialized, observed_hash
+
+
 def _load_hashed_payload(
     *,
     path: Path,
@@ -1332,7 +1797,7 @@ def _find_subrun_payload_by_id(
 ) -> tuple[dict[str, Any], str]:
     artifact_id = _ensure_sha256_id(artifact_id)
     paths = sorted(subrun_root.glob(f"**/sha256_*.{suffix}"), key=lambda row: row.as_posix())
-    matches: list[tuple[dict[str, Any], str]] = []
+    matches_by_hash: dict[str, dict[str, Any]] = {}
     for path in paths:
         payload, observed_hash = _load_hashed_payload(
             path=path,
@@ -1348,10 +1813,22 @@ def _find_subrun_payload_by_id(
                 fail("NONDETERMINISTIC")
             effective_id = declared_id
         if effective_id == artifact_id:
-            matches.append((payload, observed_hash))
-    if len(matches) != 1:
+            matches_by_hash.setdefault(observed_hash, payload)
+    if not matches_by_hash:
         fail("MISSING_STATE_INPUT")
-    return matches[0]
+    if len(matches_by_hash) != 1:
+        fail("NONDETERMINISTIC")
+    observed_hash, payload = next(iter(matches_by_hash.items()))
+    return payload, observed_hash
+
+
+def _verify_declared_id(payload: dict[str, Any], id_field: str) -> str:
+    declared = _ensure_sha256_id(payload.get(id_field))
+    no_id = dict(payload)
+    no_id.pop(id_field, None)
+    if canon_hash_obj(no_id) != declared:
+        fail("NONDETERMINISTIC")
+    return declared
 
 
 def _import_sip_ingestion_artifacts(
@@ -1511,6 +1988,630 @@ def _import_sip_ingestion_artifacts(
     return out
 
 
+def _import_epistemic_capsule_artifacts(
+    *,
+    dispatch_ctx: dict[str, Any] | None,
+    state_root: Path,
+) -> dict[str, str | None]:
+    out: dict[str, str | None] = {
+        "capsule_hash": None,
+        "capsule_id": None,
+        "world_snapshot_id": None,
+        "world_root": None,
+        "sip_receipt_id": None,
+        "distillate_graph_id": None,
+        "strip_receipt_id": None,
+        "episode_id": None,
+        "refutation_hash": None,
+        "type_registry_hash": None,
+        "type_binding_hash": None,
+        "type_registry_id": None,
+        "type_binding_id": None,
+        "epistemic_ecac_hash": None,
+        "epistemic_eufc_hash": None,
+        "epistemic_ecac_id": None,
+        "epistemic_eufc_id": None,
+        "epistemic_cert_profile_hash": None,
+        "epistemic_cert_gate_binding_hash": None,
+        "retention_deletion_plan_hash": None,
+        "retention_sampling_manifest_hash": None,
+        "retention_summary_proof_hash": None,
+        "epistemic_kernel_spec_hash": None,
+        "epistemic_kernel_spec_id": None,
+    }
+    if dispatch_ctx is None:
+        return out
+
+    subrun_root_raw = dispatch_ctx.get("subrun_root_abs")
+    if not isinstance(subrun_root_raw, (str, Path)):
+        return out
+    subrun_root = Path(subrun_root_raw).resolve()
+    if not subrun_root.exists() or not subrun_root.is_dir():
+        return out
+
+    capsule_paths = sorted(
+        subrun_root.glob("**/sha256_*.epistemic_capsule_v1.json"),
+        key=lambda row: row.as_posix(),
+    )
+    refutation_paths = sorted(
+        subrun_root.glob("**/sha256_*.epistemic_capsule_refutation_v1.json"),
+        key=lambda row: row.as_posix(),
+    )
+    if not capsule_paths and not refutation_paths:
+        return out
+    if len(capsule_paths) > 1 or len(refutation_paths) > 1:
+        fail("SCHEMA_FAIL")
+    if capsule_paths and refutation_paths:
+        fail("SCHEMA_FAIL")
+
+    epi_root = state_root / "epistemic"
+    (epi_root / "capsules").mkdir(parents=True, exist_ok=True)
+    (epi_root / "usable_capsules").mkdir(parents=True, exist_ok=True)
+    (epi_root / "refutations").mkdir(parents=True, exist_ok=True)
+    (epi_root / "graphs").mkdir(parents=True, exist_ok=True)
+    (epi_root / "strip_receipts").mkdir(parents=True, exist_ok=True)
+    (epi_root / "type_registry").mkdir(parents=True, exist_ok=True)
+    (epi_root / "type_bindings").mkdir(parents=True, exist_ok=True)
+    (epi_root / "type" / "provisionals").mkdir(parents=True, exist_ok=True)
+    (epi_root / "type" / "ratifications").mkdir(parents=True, exist_ok=True)
+    (epi_root / "certs").mkdir(parents=True, exist_ok=True)
+    (epi_root / "certs" / "profiles").mkdir(parents=True, exist_ok=True)
+    (epi_root / "contracts").mkdir(parents=True, exist_ok=True)
+    (epi_root / "retention").mkdir(parents=True, exist_ok=True)
+    (epi_root / "kernels" / "specs").mkdir(parents=True, exist_ok=True)
+    (epi_root / "world" / "manifests").mkdir(parents=True, exist_ok=True)
+    (epi_root / "world" / "receipts").mkdir(parents=True, exist_ok=True)
+    (epi_root / "world" / "snapshots").mkdir(parents=True, exist_ok=True)
+
+    def _unique_payload_from_paths(
+        paths: list[Path],
+        *,
+        schema_version: str,
+    ) -> tuple[dict[str, Any], str] | None:
+        by_hash: dict[str, dict[str, Any]] = {}
+        for path in paths:
+            payload, payload_hash = _load_hashed_payload(
+                path=path,
+                expected_schema_version=schema_version,
+            )
+            by_hash.setdefault(payload_hash, payload)
+        if not by_hash:
+            return None
+        if len(by_hash) != 1:
+            fail("NONDETERMINISTIC")
+        payload_hash, payload = next(iter(by_hash.items()))
+        return payload, payload_hash
+
+    if refutation_paths:
+        refutation_payload, refutation_hash = _load_hashed_payload(
+            path=refutation_paths[0],
+            expected_schema_version="epistemic_capsule_refutation_v1",
+        )
+        validate_schema_v19(refutation_payload, "epistemic_capsule_refutation_v1")
+        _ = _verify_declared_id(refutation_payload, "refutation_id")
+        _, _ref_obj, imported_refutation_hash = _write_payload_atomic(
+            epi_root / "refutations",
+            "epistemic_capsule_refutation_v1.json",
+            refutation_payload,
+            id_field="refutation_id",
+        )
+        if imported_refutation_hash != refutation_hash:
+            fail("NONDETERMINISTIC")
+        out["refutation_hash"] = imported_refutation_hash
+        return out
+
+    capsule_payload, capsule_hash = _load_hashed_payload(
+        path=capsule_paths[0],
+        expected_schema_version="epistemic_capsule_v1",
+    )
+    validate_schema_v19(capsule_payload, "epistemic_capsule_v1")
+    capsule_id = _verify_declared_id(capsule_payload, "capsule_id")
+    _, _capsule_obj, imported_capsule_hash = _write_payload_atomic(
+        epi_root / "capsules",
+        "epistemic_capsule_v1.json",
+        capsule_payload,
+        id_field="capsule_id",
+    )
+    if imported_capsule_hash != capsule_hash:
+        fail("NONDETERMINISTIC")
+
+    graph_id = _ensure_sha256_id(capsule_payload.get("distillate_graph_id"))
+    strip_receipt_id = _ensure_sha256_id(capsule_payload.get("strip_receipt_id"))
+    reduce_contract_id = _ensure_sha256_id(capsule_payload.get("reduce_contract_id"))
+    manifest_id = _ensure_sha256_id(capsule_payload.get("sip_manifest_id"))
+    receipt_id = _ensure_sha256_id(capsule_payload.get("sip_receipt_id"))
+    snapshot_id = _ensure_sha256_id(capsule_payload.get("world_snapshot_id"))
+    world_root = _ensure_sha256_id(capsule_payload.get("world_root"))
+    episode_id = _ensure_sha256_id(capsule_payload.get("episode_id"))
+    usable_b = bool(capsule_payload.get("usable_b"))
+    cert_gate_status = str(capsule_payload.get("cert_gate_status", "")).strip().upper()
+    if cert_gate_status not in {"PASS", "WARN", "BLOCKED"}:
+        fail("SCHEMA_FAIL")
+    cert_profile_id_raw = capsule_payload.get("cert_profile_id")
+    cert_profile_id = (
+        _ensure_sha256_id(cert_profile_id_raw)
+        if cert_profile_id_raw is not None
+        else "sha256:" + ("0" * 64)
+    )
+
+    graph_payload, graph_hash = _find_subrun_payload_by_id(
+        subrun_root=subrun_root,
+        artifact_id=graph_id,
+        suffix="qxwmr_graph_v1.json",
+        id_field="graph_id",
+        expected_schema_version="qxwmr_graph_v1",
+    )
+    validate_schema_v19(graph_payload, "qxwmr_graph_v1")
+    _, _graph_obj, imported_graph_hash = _write_payload_atomic(
+        epi_root / "graphs",
+        "qxwmr_graph_v1.json",
+        graph_payload,
+        id_field="graph_id",
+    )
+    if imported_graph_hash != graph_hash:
+        fail("NONDETERMINISTIC")
+
+    reduce_contract_payload, _reduce_contract_hash = _find_subrun_payload_by_id(
+        subrun_root=subrun_root,
+        artifact_id=reduce_contract_id,
+        suffix="epistemic_reduce_contract_v1.json",
+        id_field="contract_id",
+        expected_schema_version="epistemic_reduce_contract_v1",
+    )
+    validate_schema_v19(reduce_contract_payload, "epistemic_reduce_contract_v1")
+    instruction_strip_contract_id = _ensure_sha256_id(reduce_contract_payload.get("instruction_strip_contract_id"))
+    instruction_strip_contract_payload, instruction_strip_contract_hash = _find_subrun_payload_by_id(
+        subrun_root=subrun_root,
+        artifact_id=instruction_strip_contract_id,
+        suffix="epistemic_instruction_strip_contract_v1.json",
+        id_field="contract_id",
+        expected_schema_version="epistemic_instruction_strip_contract_v1",
+    )
+    validate_schema_v19(instruction_strip_contract_payload, "epistemic_instruction_strip_contract_v1")
+    _, _strip_contract_obj, imported_strip_contract_hash = _write_payload_atomic(
+        epi_root / "contracts",
+        "epistemic_instruction_strip_contract_v1.json",
+        instruction_strip_contract_payload,
+        id_field="contract_id",
+    )
+    if imported_strip_contract_hash != instruction_strip_contract_hash:
+        fail("NONDETERMINISTIC")
+
+    strip_receipt_paths = sorted(
+        subrun_root.glob("**/sha256_*.epistemic_instruction_strip_receipt_v1.json"),
+        key=lambda row: row.as_posix(),
+    )
+    if not strip_receipt_paths:
+        fail("MISSING_STATE_INPUT")
+    strip_receipt_ids: set[str] = set()
+    for strip_receipt_path in strip_receipt_paths:
+        strip_receipt_payload, _strip_receipt_hash = _load_hashed_payload(
+            path=strip_receipt_path,
+            expected_schema_version="epistemic_instruction_strip_receipt_v1",
+        )
+        validate_schema_v19(strip_receipt_payload, "epistemic_instruction_strip_receipt_v1")
+        if _ensure_sha256_id(strip_receipt_payload.get("instruction_strip_contract_id")) != instruction_strip_contract_id:
+            fail("NONDETERMINISTIC")
+        strip_receipt_id_row = _verify_declared_id(strip_receipt_payload, "receipt_id")
+        strip_receipt_ids.add(strip_receipt_id_row)
+        _write_payload_atomic(
+            epi_root / "strip_receipts",
+            "epistemic_instruction_strip_receipt_v1.json",
+            strip_receipt_payload,
+            id_field="receipt_id",
+        )
+    strip_receipt_set_hash = canon_hash_obj(
+        {
+            "schema_version": "epistemic_instruction_strip_receipt_set_v1",
+            "receipt_ids": sorted(strip_receipt_ids),
+        }
+    )
+    if strip_receipt_set_hash != strip_receipt_id:
+        fail("NONDETERMINISTIC")
+
+    manifest_payload, manifest_hash = _find_subrun_payload_by_id(
+        subrun_root=subrun_root,
+        artifact_id=manifest_id,
+        suffix="world_snapshot_manifest_v1.json",
+        id_field="manifest_id",
+        expected_schema_version="v19_0",
+        expected_schema_name="world_snapshot_manifest_v1",
+    )
+    validate_schema_v19(manifest_payload, "world_snapshot_manifest_v1")
+    _, _manifest_obj, imported_manifest_hash = _write_payload_atomic(
+        epi_root / "world" / "manifests",
+        "world_snapshot_manifest_v1.json",
+        manifest_payload,
+        id_field="manifest_id",
+    )
+    if imported_manifest_hash != manifest_hash:
+        fail("NONDETERMINISTIC")
+
+    receipt_payload, receipt_hash = _find_subrun_payload_by_id(
+        subrun_root=subrun_root,
+        artifact_id=receipt_id,
+        suffix="sealed_ingestion_receipt_v1.json",
+        id_field="receipt_id",
+        expected_schema_version="v19_0",
+        expected_schema_name="sealed_ingestion_receipt_v1",
+    )
+    validate_schema_v19(receipt_payload, "sealed_ingestion_receipt_v1")
+    _, _receipt_obj, imported_receipt_hash = _write_payload_atomic(
+        epi_root / "world" / "receipts",
+        "sealed_ingestion_receipt_v1.json",
+        receipt_payload,
+        id_field="receipt_id",
+    )
+    if imported_receipt_hash != receipt_hash:
+        fail("NONDETERMINISTIC")
+
+    snapshot_payload, snapshot_hash = _find_subrun_payload_by_id(
+        subrun_root=subrun_root,
+        artifact_id=snapshot_id,
+        suffix="world_snapshot_v1.json",
+        id_field="world_snapshot_id",
+        expected_schema_version="v19_0",
+        expected_schema_name="world_snapshot_v1",
+    )
+    validate_schema_v19(snapshot_payload, "world_snapshot_v1")
+    _, _snapshot_obj, imported_snapshot_hash = _write_payload_atomic(
+        epi_root / "world" / "snapshots",
+        "world_snapshot_v1.json",
+        snapshot_payload,
+        id_field="world_snapshot_id",
+    )
+    if imported_snapshot_hash != snapshot_hash:
+        fail("NONDETERMINISTIC")
+
+    if _ensure_sha256_id(snapshot_payload.get("world_manifest_ref")) != manifest_id:
+        fail("NONDETERMINISTIC")
+    if _ensure_sha256_id(snapshot_payload.get("ingestion_receipt_ref")) != receipt_id:
+        fail("NONDETERMINISTIC")
+    if _ensure_sha256_id(snapshot_payload.get("world_root")) != world_root:
+        fail("NONDETERMINISTIC")
+    if _ensure_sha256_id(receipt_payload.get("world_manifest_ref")) != manifest_id:
+        fail("NONDETERMINISTIC")
+    if _ensure_sha256_id(receipt_payload.get("computed_world_root")) != world_root:
+        fail("NONDETERMINISTIC")
+
+    gate_results = receipt_payload.get("gate_results")
+    if not isinstance(gate_results, dict):
+        fail("SCHEMA_FAIL")
+    leakage_gate = gate_results.get("leakage_gate")
+    non_interference_gate = gate_results.get("non_interference_gate")
+    if not isinstance(leakage_gate, dict) or not isinstance(non_interference_gate, dict):
+        fail("SCHEMA_FAIL")
+    if _ensure_sha256_id(snapshot_payload.get("leakage_gate_receipt_ref")) != canon_hash_obj(leakage_gate):
+        fail("NONDETERMINISTIC")
+    if _ensure_sha256_id(snapshot_payload.get("non_interference_gate_receipt_ref")) != canon_hash_obj(non_interference_gate):
+        fail("NONDETERMINISTIC")
+
+    observed_world_root = compute_world_root(manifest_payload, enforce_sorted=True)
+    if observed_world_root != world_root:
+        fail("NONDETERMINISTIC")
+
+    type_registry_id_raw = capsule_payload.get("type_registry_id")
+    type_binding_id_raw = capsule_payload.get("type_binding_id")
+    if (type_registry_id_raw is None) != (type_binding_id_raw is None):
+        fail("SCHEMA_FAIL")
+    if type_registry_id_raw is not None and type_binding_id_raw is not None:
+        type_registry_id = _ensure_sha256_id(type_registry_id_raw)
+        type_binding_id = _ensure_sha256_id(type_binding_id_raw)
+        if graph_payload.get("type_registry_id") is not None:
+            if _ensure_sha256_id(graph_payload.get("type_registry_id")) != type_registry_id:
+                fail("NONDETERMINISTIC")
+
+        type_registry_payload, type_registry_hash = _find_subrun_payload_by_id(
+            subrun_root=subrun_root,
+            artifact_id=type_registry_id,
+            suffix="epistemic_type_registry_v1.json",
+            id_field="registry_id",
+            expected_schema_version="epistemic_type_registry_v1",
+        )
+        validate_schema_v19(type_registry_payload, "epistemic_type_registry_v1")
+        _, _type_registry_obj, imported_type_registry_hash = _write_payload_atomic(
+            epi_root / "type_registry",
+            "epistemic_type_registry_v1.json",
+            type_registry_payload,
+            id_field="registry_id",
+        )
+        if imported_type_registry_hash != type_registry_hash:
+            fail("NONDETERMINISTIC")
+
+        type_binding_payload, type_binding_hash = _find_subrun_payload_by_id(
+            subrun_root=subrun_root,
+            artifact_id=type_binding_id,
+            suffix="epistemic_type_binding_v1.json",
+            id_field="binding_id",
+            expected_schema_version="epistemic_type_binding_v1",
+        )
+        validate_schema_v19(type_binding_payload, "epistemic_type_binding_v1")
+        if _ensure_sha256_id(type_binding_payload.get("graph_id")) != graph_id:
+            fail("NONDETERMINISTIC")
+        if _ensure_sha256_id(type_binding_payload.get("type_registry_id")) != type_registry_id:
+            fail("NONDETERMINISTIC")
+        _, _type_binding_obj, imported_type_binding_hash = _write_payload_atomic(
+            epi_root / "type_bindings",
+            "epistemic_type_binding_v1.json",
+            type_binding_payload,
+            id_field="binding_id",
+        )
+        if imported_type_binding_hash != type_binding_hash:
+            fail("NONDETERMINISTIC")
+
+        provisional_paths = sorted(
+            subrun_root.glob("**/sha256_*.epistemic_type_provisional_v1.json"),
+            key=lambda row: row.as_posix(),
+        )
+        for path in provisional_paths:
+            provisional_payload, _provisional_hash = _load_hashed_payload(
+                path=path,
+                expected_schema_version="epistemic_type_provisional_v1",
+            )
+            validate_schema_v19(provisional_payload, "epistemic_type_provisional_v1")
+            if _ensure_sha256_id(provisional_payload.get("graph_id")) != graph_id:
+                fail("NONDETERMINISTIC")
+            _write_payload_atomic(
+                epi_root / "type" / "provisionals",
+                "epistemic_type_provisional_v1.json",
+                provisional_payload,
+                id_field="provisional_id",
+            )
+
+        ratification_paths = sorted(
+            subrun_root.glob("**/sha256_*.epistemic_type_ratification_receipt_v1.json"),
+            key=lambda row: row.as_posix(),
+        )
+        for path in ratification_paths:
+            ratification_payload, _ratification_hash = _load_hashed_payload(
+                path=path,
+                expected_schema_version="epistemic_type_ratification_receipt_v1",
+            )
+            validate_schema_v19(ratification_payload, "epistemic_type_ratification_receipt_v1")
+            if _ensure_sha256_id(ratification_payload.get("type_registry_id")) != type_registry_id:
+                fail("NONDETERMINISTIC")
+            _write_payload_atomic(
+                epi_root / "type" / "ratifications",
+                "epistemic_type_ratification_receipt_v1.json",
+                ratification_payload,
+                id_field="receipt_id",
+            )
+
+        out["type_registry_hash"] = imported_type_registry_hash
+        out["type_binding_hash"] = imported_type_binding_hash
+        out["type_registry_id"] = type_registry_id
+        out["type_binding_id"] = type_binding_id
+
+    ecac_paths = sorted(subrun_root.glob("**/sha256_*.epistemic_ecac_v1.json"), key=lambda row: row.as_posix())
+    eufc_paths = sorted(subrun_root.glob("**/sha256_*.epistemic_eufc_v1.json"), key=lambda row: row.as_posix())
+    if ecac_paths or eufc_paths:
+        ecac_unique = _unique_payload_from_paths(ecac_paths, schema_version="epistemic_ecac_v1")
+        eufc_unique = _unique_payload_from_paths(eufc_paths, schema_version="epistemic_eufc_v1")
+        if ecac_unique is None or eufc_unique is None:
+            fail("SCHEMA_FAIL")
+        ecac_payload, ecac_hash = ecac_unique
+        eufc_payload, eufc_hash = eufc_unique
+        validate_schema_v19(ecac_payload, "epistemic_ecac_v1")
+        validate_schema_v19(eufc_payload, "epistemic_eufc_v1")
+        ecac_id = _verify_declared_id(ecac_payload, "ecac_id")
+        eufc_id = _verify_declared_id(eufc_payload, "eufc_id")
+        if _ensure_sha256_id(ecac_payload.get("capsule_id")) != capsule_id:
+            fail("NONDETERMINISTIC")
+        if _ensure_sha256_id(eufc_payload.get("capsule_id")) != capsule_id:
+            fail("NONDETERMINISTIC")
+        if _ensure_sha256_id(ecac_payload.get("graph_id")) != graph_id:
+            fail("NONDETERMINISTIC")
+        if _ensure_sha256_id(eufc_payload.get("graph_id")) != graph_id:
+            fail("NONDETERMINISTIC")
+        if out.get("type_binding_id") is not None:
+            if _ensure_sha256_id(ecac_payload.get("type_binding_id")) != str(out.get("type_binding_id")):
+                fail("NONDETERMINISTIC")
+            if _ensure_sha256_id(eufc_payload.get("type_binding_id")) != str(out.get("type_binding_id")):
+                fail("NONDETERMINISTIC")
+        _, _ecac_obj, imported_ecac_hash = _write_payload_atomic(
+            epi_root / "certs",
+            "epistemic_ecac_v1.json",
+            ecac_payload,
+            id_field="ecac_id",
+        )
+        _, _eufc_obj, imported_eufc_hash = _write_payload_atomic(
+            epi_root / "certs",
+            "epistemic_eufc_v1.json",
+            eufc_payload,
+            id_field="eufc_id",
+        )
+        if imported_ecac_hash != ecac_hash or imported_eufc_hash != eufc_hash:
+            fail("NONDETERMINISTIC")
+        out["epistemic_ecac_hash"] = imported_ecac_hash
+        out["epistemic_eufc_hash"] = imported_eufc_hash
+        out["epistemic_ecac_id"] = ecac_id
+        out["epistemic_eufc_id"] = eufc_id
+
+    cert_gate_binding_paths = sorted(
+        subrun_root.glob("**/sha256_*.epistemic_cert_gate_binding_v1.json"),
+        key=lambda row: row.as_posix(),
+    )
+    cert_gate_binding_unique = _unique_payload_from_paths(
+        cert_gate_binding_paths,
+        schema_version="epistemic_cert_gate_binding_v1",
+    )
+    if cert_gate_binding_unique is not None:
+        cert_gate_payload, cert_gate_hash = cert_gate_binding_unique
+        cert_gate_mode = str(cert_gate_payload.get("cert_gate_mode", "")).strip().upper()
+        if cert_gate_mode not in {"OFF", "WARN", "ENFORCE"}:
+            fail("SCHEMA_FAIL")
+        _ensure_sha256_id(cert_gate_payload.get("objective_profile_id"))
+        cert_profile_id_raw = cert_gate_payload.get("cert_profile_id")
+        if cert_profile_id_raw is not None:
+            _ensure_sha256_id(cert_profile_id_raw)
+        _, _cert_gate_obj, imported_cert_gate_hash = _write_payload_atomic(
+            epi_root / "contracts",
+            "epistemic_cert_gate_binding_v1.json",
+            cert_gate_payload,
+            id_field=None,
+        )
+        if imported_cert_gate_hash != cert_gate_hash:
+            fail("NONDETERMINISTIC")
+        out["epistemic_cert_gate_binding_hash"] = imported_cert_gate_hash
+
+    cert_profile_paths = sorted(
+        subrun_root.glob("**/sha256_*.epistemic_cert_profile_v1.json"),
+        key=lambda row: row.as_posix(),
+    )
+    cert_profile_unique = _unique_payload_from_paths(
+        cert_profile_paths,
+        schema_version="epistemic_cert_profile_v1",
+    )
+    if cert_profile_unique is not None:
+        cert_profile_payload, cert_profile_hash = cert_profile_unique
+        validate_schema_v19(cert_profile_payload, "epistemic_cert_profile_v1")
+        _, _cert_profile_obj, imported_cert_profile_hash = _write_payload_atomic(
+            epi_root / "certs" / "profiles",
+            "epistemic_cert_profile_v1.json",
+            cert_profile_payload,
+            id_field="cert_profile_id",
+        )
+        if imported_cert_profile_hash != cert_profile_hash:
+            fail("NONDETERMINISTIC")
+        out["epistemic_cert_profile_hash"] = imported_cert_profile_hash
+
+    retention_policy_paths = sorted(
+        subrun_root.glob("**/sha256_*.epistemic_retention_policy_v1.json"),
+        key=lambda row: row.as_posix(),
+    )
+    retention_policy_unique = _unique_payload_from_paths(
+        retention_policy_paths,
+        schema_version="epistemic_retention_policy_v1",
+    )
+    if retention_policy_unique is not None:
+        retention_policy_payload, _retention_policy_hash = retention_policy_unique
+        validate_schema_v19(retention_policy_payload, "epistemic_retention_policy_v1")
+        _write_payload_atomic(
+            epi_root / "retention",
+            "epistemic_retention_policy_v1.json",
+            retention_policy_payload,
+            id_field="policy_id",
+        )
+
+    deletion_paths = sorted(
+        subrun_root.glob("**/sha256_*.epistemic_deletion_plan_v1.json"),
+        key=lambda row: row.as_posix(),
+    )
+    deletion_unique = _unique_payload_from_paths(
+        deletion_paths,
+        schema_version="epistemic_deletion_plan_v1",
+    )
+    if deletion_unique is not None:
+        deletion_payload, deletion_hash = deletion_unique
+        validate_schema_v19(deletion_payload, "epistemic_deletion_plan_v1")
+        if _ensure_sha256_id(deletion_payload.get("capsule_id")) != capsule_id:
+            fail("NONDETERMINISTIC")
+        _, _deletion_obj, imported_deletion_hash = _write_payload_atomic(
+            epi_root / "retention",
+            "epistemic_deletion_plan_v1.json",
+            deletion_payload,
+            id_field="plan_id",
+        )
+        if imported_deletion_hash != deletion_hash:
+            fail("NONDETERMINISTIC")
+        out["retention_deletion_plan_hash"] = imported_deletion_hash
+
+    sampling_paths = sorted(
+        subrun_root.glob("**/sha256_*.epistemic_sampling_manifest_v1.json"),
+        key=lambda row: row.as_posix(),
+    )
+    sampling_unique = _unique_payload_from_paths(
+        sampling_paths,
+        schema_version="epistemic_sampling_manifest_v1",
+    )
+    if sampling_unique is not None:
+        sampling_payload, sampling_hash = sampling_unique
+        validate_schema_v19(sampling_payload, "epistemic_sampling_manifest_v1")
+        if _ensure_sha256_id(sampling_payload.get("capsule_id")) != capsule_id:
+            fail("NONDETERMINISTIC")
+        _, _sampling_obj, imported_sampling_hash = _write_payload_atomic(
+            epi_root / "retention",
+            "epistemic_sampling_manifest_v1.json",
+            sampling_payload,
+            id_field="manifest_id",
+        )
+        if imported_sampling_hash != sampling_hash:
+            fail("NONDETERMINISTIC")
+        out["retention_sampling_manifest_hash"] = imported_sampling_hash
+
+    summary_paths = sorted(
+        subrun_root.glob("**/sha256_*.epistemic_summary_proof_v1.json"),
+        key=lambda row: row.as_posix(),
+    )
+    summary_unique = _unique_payload_from_paths(
+        summary_paths,
+        schema_version="epistemic_summary_proof_v1",
+    )
+    if summary_unique is not None:
+        summary_payload, summary_hash = summary_unique
+        validate_schema_v19(summary_payload, "epistemic_summary_proof_v1")
+        if _ensure_sha256_id(summary_payload.get("capsule_id")) != capsule_id:
+            fail("NONDETERMINISTIC")
+        _, _summary_obj, imported_summary_hash = _write_payload_atomic(
+            epi_root / "retention",
+            "epistemic_summary_proof_v1.json",
+            summary_payload,
+            id_field="proof_id",
+        )
+        if imported_summary_hash != summary_hash:
+            fail("NONDETERMINISTIC")
+        out["retention_summary_proof_hash"] = imported_summary_hash
+
+    kernel_spec_paths = sorted(
+        subrun_root.glob("**/sha256_*.epistemic_kernel_spec_v1.json"),
+        key=lambda row: row.as_posix(),
+    )
+    kernel_spec_unique = _unique_payload_from_paths(
+        kernel_spec_paths,
+        schema_version="epistemic_kernel_spec_v1",
+    )
+    if kernel_spec_unique is not None:
+        kernel_spec_payload, kernel_spec_hash = kernel_spec_unique
+        validate_schema_v19(kernel_spec_payload, "epistemic_kernel_spec_v1")
+        kernel_spec_id = _verify_declared_id(kernel_spec_payload, "kernel_spec_id")
+        _, _kernel_spec_obj, imported_kernel_spec_hash = _write_payload_atomic(
+            epi_root / "kernels" / "specs",
+            "epistemic_kernel_spec_v1.json",
+            kernel_spec_payload,
+            id_field="kernel_spec_id",
+        )
+        if imported_kernel_spec_hash != kernel_spec_hash:
+            fail("NONDETERMINISTIC")
+        out["epistemic_kernel_spec_hash"] = imported_kernel_spec_hash
+        out["epistemic_kernel_spec_id"] = kernel_spec_id
+
+    if usable_b:
+        reason_code = "CERT_OK"
+        if cert_gate_status == "WARN":
+            reason_code = "CERT_WARN"
+        elif cert_gate_status == "BLOCKED":
+            reason_code = "CERT_BLOCKED"
+        _ = append_usable_index_row(
+            state_root=state_root,
+            capsule_id=capsule_id,
+            distillate_graph_id=graph_id,
+            usable_b=True,
+            cert_gate_status=cert_gate_status,
+            cert_profile_id=cert_profile_id,
+            reason_code=reason_code,
+        )
+
+    out["capsule_hash"] = imported_capsule_hash
+    out["capsule_id"] = capsule_id
+    out["world_snapshot_id"] = snapshot_id
+    out["world_root"] = world_root
+    out["sip_receipt_id"] = receipt_id
+    out["distillate_graph_id"] = graph_id
+    out["strip_receipt_id"] = strip_receipt_id
+    out["episode_id"] = episode_id
+    return out
+
+
 def tick_once(
     *,
     campaign_pack: Path,
@@ -1552,12 +2653,30 @@ def tick_once(
         "policy/workspaces",
         "policy/branches",
         "policy/branch_decisions",
+        "epistemic/capsules",
+        "epistemic/usable_capsules",
+        "epistemic/refutations",
+        "epistemic/graphs",
+        "epistemic/type_registry",
+        "epistemic/type_bindings",
+        "epistemic/type/provisionals",
+        "epistemic/type/ratifications",
+        "epistemic/certs",
+        "epistemic/certs/profiles",
+        "epistemic/contracts",
+        "epistemic/retention",
+        "epistemic/kernels/specs",
+        "epistemic/market",
+        "epistemic/world/manifests",
+        "epistemic/world/receipts",
+        "epistemic/world/snapshots",
         "snapshot",
         "subruns",
         "shadow/integrity",
         "shadow/tier_a",
         "shadow/tier_b",
         "shadow/readiness",
+        "ledger/epistemic",
     ]:
         (state_root / rel).mkdir(parents=True, exist_ok=True)
 
@@ -1626,7 +2745,7 @@ def tick_once(
         active_manifest_before = read_meta_core_active_manifest_hash_fn()
         prev_state = dict(prev_state)
         prev_state["active_manifest_hash"] = active_manifest_before
-        _, prev_state, _ = write_state(state_root / "state", prev_state)
+        _, prev_state, prev_state_hash_for_descriptor = write_state(state_root / "state", prev_state)
         prev_tick_perf, prev_tick_perf_source = _load_prev_tick_perf(prev_state_dir)
         prev_tick_stats, prev_tick_stats_source = _load_prev_tick_stats(prev_state_dir)
         prev_run_scorecard, prev_run_scorecard_source = _load_prev_run_scorecard(prev_state_dir)
@@ -1699,9 +2818,26 @@ def tick_once(
         if not isinstance(metrics, dict):
             fail("SCHEMA_FAIL")
         metrics["brain_temperature_q32"] = {"q": int(temperature_q32)}
+        epistemic_metrics = _collect_epistemic_metrics_from_prev_state(prev_state_dir)
+        for metric_id in sorted(epistemic_metrics.keys()):
+            metrics[metric_id] = epistemic_metrics[metric_id]
         metric_series = observation_report.get("metric_series")
         if isinstance(metric_series, dict):
             metric_series["brain_temperature_q32"] = [{"q": int(temperature_q32)}]
+            prev_metric_series: dict[str, Any] = {}
+            if isinstance(prev_observation_report, dict):
+                prev_series_raw = prev_observation_report.get("metric_series")
+                if isinstance(prev_series_raw, dict):
+                    prev_metric_series = prev_series_raw
+            for metric_id in sorted(epistemic_metrics.keys()):
+                prev_rows = prev_metric_series.get(metric_id)
+                carried_rows: list[Any] = []
+                if isinstance(prev_rows, list):
+                    carried_rows = list(prev_rows)
+                    if len(carried_rows) >= _MAX_METRIC_SERIES_LEN_U64:
+                        carried_rows = carried_rows[-(_MAX_METRIC_SERIES_LEN_U64 - 1) :]
+                carried_rows.append(epistemic_metrics[metric_id])
+                metric_series[metric_id] = carried_rows
         no_id = dict(observation_report)
         no_id.pop("report_id", None)
         observation_report["report_id"] = canon_hash_obj(no_id)
@@ -1765,6 +2901,11 @@ def tick_once(
         bid_settlement_receipt_hash = None
         bid_set_hash = None
         bid_selection_receipt_hash = None
+        epistemic_market_settlement_hash = None
+        epistemic_action_market_inputs_hash = None
+        epistemic_action_bid_set_hash = None
+        epistemic_action_selection_hash = None
+        epistemic_action_settlement_hash = None
         inputs_descriptor_hash = None
         policy_vm_trace_hash = None
         policy_vm_stark_proof_hash = None
@@ -1775,6 +2916,7 @@ def tick_once(
         shadow_tier_a_receipt_hash = None
         shadow_tier_b_receipt_hash = None
         shadow_readiness_receipt_hash = None
+        shadow_corpus_invariance_receipt_hash = None
         policy_vm_trace_payload_for_proof: dict[str, Any] | None = None
         policy_vm_proof_program_id: str | None = None
         merged_hint_state_hash_for_proof: str | None = None
@@ -1914,11 +3056,10 @@ def tick_once(
                         fail("PIN_HASH_MISMATCH")
                     policy_program_rows.append((f"b{idx:02d}", payload, observed_id))
 
-                prev_state_hash = canon_hash_obj(prev_state)
                 shared_repo_tree_id = compute_repo_base_tree_id_tolerant(repo_root())
                 descriptor_payload = build_inputs_descriptor_once(
                     tick_u64=tick_u64,
-                    prev_state_hash=prev_state_hash,
+                    prev_state_hash=prev_state_hash_for_descriptor,
                     repo_tree_id=shared_repo_tree_id,
                     observation_hash=observation_hash,
                     issue_hash=issue_hash,
@@ -2185,11 +3326,10 @@ def tick_once(
                     payload_id_field="program_id",
                     missing_reason="ISA_PROGRAM_MISSING",
                 )
-                prev_state_hash = canon_hash_obj(prev_state)
                 shared_repo_tree_id = compute_repo_base_tree_id_tolerant(repo_root())
                 descriptor_payload = build_inputs_descriptor_once(
                     tick_u64=tick_u64,
-                    prev_state_hash=prev_state_hash,
+                    prev_state_hash=prev_state_hash_for_descriptor,
                     repo_tree_id=shared_repo_tree_id,
                     observation_hash=observation_hash,
                     issue_hash=issue_hash,
@@ -2337,11 +3477,25 @@ def tick_once(
             caps = registry.get("capabilities")
             if not isinstance(caps, list):
                 fail("SCHEMA_FAIL")
+            suppressed_capability_ids = suppressed_capability_ids_from_episodic_memory(
+                tick_u64=int(tick_u64),
+                episodic_memory=prev_episodic_memory,
+            )
+            suppressed_campaign_ids: set[str] = set()
+            for cap_row in caps:
+                if not isinstance(cap_row, dict):
+                    continue
+                capability_id = str(cap_row.get("capability_id", "")).strip()
+                campaign_id = str(cap_row.get("campaign_id", "")).strip()
+                if capability_id in suppressed_capability_ids and campaign_id:
+                    suppressed_campaign_ids.add(campaign_id)
             bids_by_campaign: dict[str, dict[str, Any]] = {}
             bid_hash_by_campaign: dict[str, str] = {}
             for cap in sorted([row for row in caps if isinstance(row, dict)], key=lambda r: str(r.get("campaign_id"))):
                 campaign_id = str(cap.get("campaign_id", "")).strip()
                 if not campaign_id or not bool(cap.get("enabled", False)):
+                    continue
+                if campaign_id in suppressed_campaign_ids:
                     continue
                 st = market_state_map.get(campaign_id)
                 if st is None or bool(st.get("disabled_b", False)):
@@ -2443,6 +3597,31 @@ def tick_once(
             "refutation_hash": None,
             "manifest_hash": None,
             "receipt_hash": None,
+        }
+        epistemic_capsule_evidence = {
+            "capsule_hash": None,
+            "capsule_id": None,
+            "world_snapshot_id": None,
+            "world_root": None,
+            "sip_receipt_id": None,
+            "distillate_graph_id": None,
+            "episode_id": None,
+            "refutation_hash": None,
+            "type_registry_hash": None,
+            "type_binding_hash": None,
+            "type_registry_id": None,
+            "type_binding_id": None,
+            "epistemic_ecac_hash": None,
+            "epistemic_eufc_hash": None,
+            "epistemic_ecac_id": None,
+            "epistemic_eufc_id": None,
+            "epistemic_cert_profile_hash": None,
+            "epistemic_cert_gate_binding_hash": None,
+            "retention_deletion_plan_hash": None,
+            "retention_sampling_manifest_hash": None,
+            "retention_summary_proof_hash": None,
+            "epistemic_kernel_spec_hash": None,
+            "epistemic_kernel_spec_id": None,
         }
 
         safe_halt = decision_plan.get("action_kind") == "SAFE_HALT"
@@ -2570,12 +3749,187 @@ def tick_once(
             dispatch_ctx=dispatch_ctx,
             state_root=state_root,
         )
+        epistemic_capsule_evidence = _import_epistemic_capsule_artifacts(
+            dispatch_ctx=dispatch_ctx,
+            state_root=state_root,
+        )
         subverifier_reason_code: str | None = None
         reason_code_raw = (subverifier_receipt or {}).get("result", {}).get("reason_code")
         if reason_code_raw is not None:
             value = str(reason_code_raw).strip()
             if value:
                 subverifier_reason_code = value
+
+        if isinstance(decision_plan, dict):
+            winner_campaign_id = str((dispatch_receipt or {}).get("campaign_id") or decision_plan.get("campaign_id", "")).strip()
+            if winner_campaign_id:
+                capsule_id_raw = (epistemic_capsule_evidence or {}).get("capsule_id")
+                ecac_id_raw = (epistemic_capsule_evidence or {}).get("epistemic_ecac_id")
+                eufc_id_raw = (epistemic_capsule_evidence or {}).get("epistemic_eufc_id")
+                graph_id_raw = (epistemic_capsule_evidence or {}).get("distillate_graph_id")
+                capsule_id = _ensure_sha256_id(capsule_id_raw) if isinstance(capsule_id_raw, str) and capsule_id_raw.strip() else None
+                ecac_id = _ensure_sha256_id(ecac_id_raw) if isinstance(ecac_id_raw, str) and ecac_id_raw.strip() else None
+                eufc_id = _ensure_sha256_id(eufc_id_raw) if isinstance(eufc_id_raw, str) and eufc_id_raw.strip() else None
+                graph_id = _ensure_sha256_id(graph_id_raw) if isinstance(graph_id_raw, str) and graph_id_raw.strip() else None
+
+                action_market_profile = build_default_action_market_profile()
+                _, action_market_profile, _action_market_profile_hash = _write_payload_atomic(
+                    state_root / "epistemic" / "market" / "actions" / "profiles",
+                    "epistemic_action_market_profile_v1.json",
+                    action_market_profile,
+                    id_field="profile_id",
+                )
+                prior_action_state_id = _load_prev_action_market_state_id(prev_state_dir)
+                state_roots_for_window = [state_root]
+                if prev_state_dir is not None:
+                    state_roots_for_window.append(prev_state_dir.resolve())
+                eufc_window_rows = _collect_eufc_window_rows(
+                    current_tick_u64=int(tick_u64),
+                    window_ticks_u64=int(action_market_profile.get("eufc_window_ticks_u64", 8)),
+                    state_roots=state_roots_for_window,
+                )
+                eufc_window_close_tick = int(tick_u64)
+                eufc_window_open_tick = max(
+                    0,
+                    int(tick_u64) - int(action_market_profile.get("eufc_window_ticks_u64", 8)) + 1,
+                )
+                action_inputs_manifest = build_action_market_inputs_manifest(
+                    tick_u64=int(tick_u64),
+                    market_profile_id=str(action_market_profile.get("profile_id")),
+                    prior_market_state_id=prior_action_state_id,
+                    observation_report_hash=str(observation_hash),
+                    observation_metric_ids=_observation_metric_ids(observation_report),
+                    eligible_capsule_ids=([capsule_id] if capsule_id is not None else []),
+                    eligible_graph_ids=([graph_id] if graph_id is not None else []),
+                    eligible_ecac_ids=([ecac_id] if ecac_id is not None else []),
+                    eligible_eufc_ids=([eufc_id] if eufc_id is not None else []),
+                    eufc_window_receipt_rows=eufc_window_rows,
+                    eufc_window_open_tick_u64=eufc_window_open_tick,
+                    eufc_window_close_tick_u64=eufc_window_close_tick,
+                )
+                _, action_inputs_manifest, epistemic_action_market_inputs_hash = _write_payload_atomic(
+                    state_root / "epistemic" / "market" / "actions" / "inputs",
+                    "epistemic_action_market_inputs_v1.json",
+                    action_inputs_manifest,
+                    id_field="inputs_manifest_id",
+                )
+                action_bids = build_action_bids(
+                    inputs_manifest=action_inputs_manifest,
+                    market_profile=action_market_profile,
+                )
+                written_action_bids: list[dict[str, Any]] = []
+                for bid_row in sorted(action_bids, key=lambda row: str(row.get("action_kind", ""))):
+                    _, bid_obj, _ = _write_payload_atomic(
+                        state_root / "epistemic" / "market" / "actions" / "bids",
+                        "epistemic_action_bid_v1.json",
+                        bid_row,
+                        id_field="bid_id",
+                    )
+                    written_action_bids.append(dict(bid_obj))
+                action_bid_set = build_action_bid_set(
+                    inputs_manifest=action_inputs_manifest,
+                    market_profile=action_market_profile,
+                    bids=written_action_bids,
+                )
+                _, action_bid_set, epistemic_action_bid_set_hash = _write_payload_atomic(
+                    state_root / "epistemic" / "market" / "actions" / "bid_sets",
+                    "epistemic_action_bid_set_v1.json",
+                    action_bid_set,
+                    id_field="bid_set_id",
+                )
+                action_selection = select_action_winner(
+                    inputs_manifest=action_inputs_manifest,
+                    market_profile=action_market_profile,
+                    bid_set=action_bid_set,
+                    bids=written_action_bids,
+                )
+                _, action_selection, epistemic_action_selection_hash = _write_payload_atomic(
+                    state_root / "epistemic" / "market" / "actions" / "selection",
+                    "epistemic_action_selection_receipt_v1.json",
+                    action_selection,
+                    id_field="selection_id",
+                )
+                action_settlement = settle_action_selection(
+                    inputs_manifest=action_inputs_manifest,
+                    selection_receipt=action_selection,
+                    produced_capsule_id=capsule_id,
+                )
+                _, action_settlement, epistemic_action_settlement_hash = _write_payload_atomic(
+                    state_root / "epistemic" / "market" / "actions" / "settlement",
+                    "epistemic_action_settlement_receipt_v1.json",
+                    action_settlement,
+                    id_field="action_settlement_id",
+                )
+                credit_key_raw = action_settlement.get("credit_key")
+                if eufc_id is not None and isinstance(credit_key_raw, str) and credit_key_raw.strip():
+                    _updated_eufc_payload, _updated_eufc_hash = _rewrite_eufc_with_credit_attribution(
+                        state_root=state_root,
+                        eufc_id=eufc_id,
+                        credit_key=credit_key_raw,
+                        credit_window_open_tick_u64=int(action_inputs_manifest.get("eufc_window_open_tick_u64", 0)),
+                        credit_window_close_tick_u64=int(action_inputs_manifest.get("eufc_window_close_tick_u64", 0)),
+                        credit_window_receipt_ids=[str(row) for row in list(action_inputs_manifest.get("eufc_window_receipt_ids") or [])],
+                    )
+                    eufc_id = _ensure_sha256_id(_updated_eufc_payload.get("eufc_id"))
+                    if isinstance(epistemic_capsule_evidence, dict):
+                        epistemic_capsule_evidence["epistemic_eufc_id"] = eufc_id
+                        epistemic_capsule_evidence["epistemic_eufc_hash"] = _updated_eufc_hash
+
+                settlement_binding_hash = canon_hash_obj(
+                    {
+                        "schema_version": "epistemic_market_settlement_binding_v1",
+                        "tick_u64": int(tick_u64),
+                        "inputs_manifest_id": str(action_inputs_manifest.get("inputs_manifest_id")),
+                        "bid_selection_receipt_hash": (
+                            str(bid_selection_receipt_hash)
+                            if isinstance(bid_selection_receipt_hash, str) and bid_selection_receipt_hash
+                            else "sha256:" + ("0" * 64)
+                        ),
+                        "bid_settlement_receipt_hash": (
+                            str(bid_settlement_receipt_hash)
+                            if isinstance(bid_settlement_receipt_hash, str) and bid_settlement_receipt_hash
+                            else "sha256:" + ("0" * 64)
+                        ),
+                        "winner_campaign_id": winner_campaign_id,
+                        "capsule_id": capsule_id,
+                        "ecac_id": ecac_id,
+                        "eufc_id": eufc_id,
+                        "action_bid_set_hash": epistemic_action_bid_set_hash,
+                        "action_selection_receipt_hash": epistemic_action_selection_hash,
+                        "action_settlement_receipt_hash": epistemic_action_settlement_hash,
+                    }
+                )
+                settlement_payload = {
+                    "schema_version": "epistemic_market_settlement_v1",
+                    "settlement_id": "sha256:" + ("0" * 64),
+                    "tick_u64": int(tick_u64),
+                    "inputs_manifest_id": str(action_inputs_manifest.get("inputs_manifest_id")),
+                    "bid_selection_receipt_hash": (
+                        str(bid_selection_receipt_hash)
+                        if isinstance(bid_selection_receipt_hash, str) and bid_selection_receipt_hash
+                        else "sha256:" + ("0" * 64)
+                    ),
+                    "bid_settlement_receipt_hash": (
+                        str(bid_settlement_receipt_hash)
+                        if isinstance(bid_settlement_receipt_hash, str) and bid_settlement_receipt_hash
+                        else "sha256:" + ("0" * 64)
+                    ),
+                    "winner_campaign_id": winner_campaign_id,
+                    "capsule_id": capsule_id,
+                    "ecac_id": ecac_id,
+                    "eufc_id": eufc_id,
+                    "action_bid_set_hash": epistemic_action_bid_set_hash,
+                    "action_selection_receipt_hash": epistemic_action_selection_hash,
+                    "action_settlement_receipt_hash": epistemic_action_settlement_hash,
+                    "binding_hash": settlement_binding_hash,
+                }
+                validate_schema_v19(settlement_payload, "epistemic_market_settlement_v1")
+                _, _settlement_obj, epistemic_market_settlement_hash = _write_payload_atomic(
+                    state_root / "epistemic" / "market",
+                    "epistemic_market_settlement_v1.json",
+                    settlement_payload,
+                    id_field="settlement_id",
+                )
 
         goals = dict(prev_state.get("goals") or {})
         if str(decision_plan.get("action_kind")) == "RUN_GOAL_TASK":
@@ -2891,6 +4245,7 @@ def tick_once(
             tier_a_payload = shadow_artifacts.get("tier_a_receipt")
             tier_b_payload = shadow_artifacts.get("tier_b_receipt")
             readiness_payload = shadow_artifacts.get("readiness_receipt")
+            corpus_invariance_payload = shadow_artifacts.get("corpus_invariance_receipt")
             if isinstance(integrity_payload, dict):
                 _, _shadow_integrity_obj, shadow_integrity_report_hash = _write_payload(
                     state_root / "shadow" / "integrity",
@@ -2917,10 +4272,34 @@ def tick_once(
                     readiness_payload,
                     id_field="receipt_id",
                 )
+            if isinstance(corpus_invariance_payload, dict):
+                _, _shadow_corpus_invariance_obj, shadow_corpus_invariance_receipt_hash = _write_payload(
+                    state_root / "shadow" / "invariance",
+                    "shadow_corpus_invariance_receipt_v1.json",
+                    corpus_invariance_payload,
+                    id_field="receipt_id",
+                )
 
         ledger_path = state_root / "ledger" / "omega_ledger_v1.jsonl"
         prev_event_id: str | None = None
+        if ledger_path.exists():
+            if not ledger_path.is_file():
+                fail("SCHEMA_FAIL")
+            lines = [line.strip() for line in ledger_path.read_text(encoding="utf-8").splitlines() if line.strip()]
+            if lines:
+                try:
+                    last_row = json.loads(lines[-1])
+                except Exception:  # noqa: BLE001
+                    fail("SCHEMA_FAIL")
+                if not isinstance(last_row, dict):
+                    fail("SCHEMA_FAIL")
+                prev_event_id = ensure_sha256(last_row.get("event_id"), reason="SCHEMA_FAIL")
+                no_id = dict(last_row)
+                no_id.pop("event_id", None)
+                if canon_hash_obj(no_id) != prev_event_id:
+                    fail("TRACE_HASH_MISMATCH")
         artifact_hashes: list[str] = []
+        emitted_epistemic_capsules: set[str] = set()
 
         def _emit(event_type: str, artifact_hash: str) -> None:
             nonlocal prev_event_id
@@ -2989,6 +4368,45 @@ def tick_once(
         sip_ingestion_hash = str((sip_ingestion_evidence or {}).get("knowledge_hash") or "").strip()
         if sip_ingestion_hash:
             _emit("SIP_INGESTION_L0", sip_ingestion_hash)
+        epistemic_capsule_hash = str((epistemic_capsule_evidence or {}).get("capsule_hash") or "").strip()
+        if epistemic_capsule_hash:
+            capsule_id = _ensure_sha256_id((epistemic_capsule_evidence or {}).get("capsule_id"))
+            if capsule_id not in emitted_epistemic_capsules:
+                emitted_epistemic_capsules.add(capsule_id)
+                event_payload = {
+                    "schema_name": "omega_event_epistemic_capsule_v1",
+                    "schema_version": "v19_0",
+                    "capsule_id": capsule_id,
+                    "world_snapshot_id": _ensure_sha256_id((epistemic_capsule_evidence or {}).get("world_snapshot_id")),
+                    "world_root": _ensure_sha256_id((epistemic_capsule_evidence or {}).get("world_root")),
+                    "sip_receipt_id": _ensure_sha256_id((epistemic_capsule_evidence or {}).get("sip_receipt_id")),
+                    "distillate_graph_id": _ensure_sha256_id((epistemic_capsule_evidence or {}).get("distillate_graph_id")),
+                    "episode_id": _ensure_sha256_id((epistemic_capsule_evidence or {}).get("episode_id")),
+                }
+                validate_schema_v19(event_payload, "omega_event_epistemic_capsule_v1")
+                _, _event_obj, event_payload_hash = _write_payload_atomic(
+                    state_root / "ledger" / "epistemic",
+                    "omega_event_epistemic_capsule_v1.json",
+                    event_payload,
+                )
+                _emit("EPISTEMIC_CAPSULE_V1", event_payload_hash)
+        for event_type, key in [
+            ("EPISTEMIC_TYPE_REGISTRY_V1", "type_registry_hash"),
+            ("EPISTEMIC_TYPE_BINDING_V1", "type_binding_hash"),
+            ("EPISTEMIC_ECAC_V1", "epistemic_ecac_hash"),
+            ("EPISTEMIC_EUFC_V1", "epistemic_eufc_hash"),
+            ("EPISTEMIC_RETENTION_DELETION_PLAN_V1", "retention_deletion_plan_hash"),
+            ("EPISTEMIC_RETENTION_SAMPLING_MANIFEST_V1", "retention_sampling_manifest_hash"),
+            ("EPISTEMIC_RETENTION_SUMMARY_PROOF_V1", "retention_summary_proof_hash"),
+            ("EPISTEMIC_KERNEL_SPEC_V1", "epistemic_kernel_spec_hash"),
+        ]:
+            artifact_hash = str((epistemic_capsule_evidence or {}).get(key) or "").strip()
+            if artifact_hash:
+                _emit(event_type, artifact_hash)
+        if isinstance(epistemic_action_market_inputs_hash, str) and epistemic_action_market_inputs_hash:
+            _emit("EPISTEMIC_ACTION_MARKET_INPUTS_V1", epistemic_action_market_inputs_hash)
+        if isinstance(epistemic_market_settlement_hash, str) and epistemic_market_settlement_hash:
+            _emit("EPISTEMIC_MARKET_SETTLEMENT_V1", epistemic_market_settlement_hash)
 
         # Deterministic evidence that hotpaths actually exercised the runtime
         # router (and, when active, the native backend). We emit this into the
@@ -3057,6 +4475,8 @@ def tick_once(
             _emit("SHADOW_TIER_B", shadow_tier_b_receipt_hash)
         if shadow_readiness_receipt_hash is not None:
             _emit("SHADOW_READINESS", shadow_readiness_receipt_hash)
+        if shadow_corpus_invariance_receipt_hash is not None:
+            _emit("SHADOW_CORPUS_INVARIANCE", shadow_corpus_invariance_receipt_hash)
 
         prev_state_hash = canon_hash_obj(prev_state)
         h0 = compute_h0(
@@ -3110,6 +4530,7 @@ def tick_once(
                 "shadow_tier_a_receipt_hash": shadow_tier_a_receipt_hash,
                 "shadow_tier_b_receipt_hash": shadow_tier_b_receipt_hash,
                 "shadow_readiness_receipt_hash": shadow_readiness_receipt_hash,
+                "shadow_corpus_invariance_receipt_hash": shadow_corpus_invariance_receipt_hash,
             }
         )
         _, snapshot, snapshot_hash = write_snapshot(state_root / "snapshot", snapshot)
@@ -3132,8 +4553,8 @@ def tick_once(
             timings_file.write(timings_line + "\n")
 
         promotion_result = (promotion_receipt or {}).get("result")
-        promotion_status = "N/A"
-        promotion_reason_code = "N/A"
+        promotion_status = "SKIPPED"
+        promotion_reason_code = "NO_PROMOTION_RECEIPT"
         if isinstance(promotion_result, dict):
             status_value = str(promotion_result.get("status", "")).strip()
             if status_value in {"PROMOTED", "REJECTED", "SKIPPED"}:
@@ -3243,6 +4664,8 @@ def tick_once(
             "runaway_reason": str(runaway_reason),
             "sip_ingestion_artifact_hash": (sip_ingestion_evidence or {}).get("knowledge_hash"),
             "sip_ingestion_refutation_hash": (sip_ingestion_evidence or {}).get("refutation_hash"),
+            "epistemic_capsule_artifact_hash": (epistemic_capsule_evidence or {}).get("capsule_hash"),
+            "epistemic_capsule_refutation_hash": (epistemic_capsule_evidence or {}).get("refutation_hash"),
             "policy_vm_stark_proof_hash": policy_vm_stark_proof_hash,
             "policy_vm_proof_runtime_status": policy_vm_proof_runtime_status,
             "policy_vm_proof_profile_id": policy_vm_proof_profile_id,
@@ -3254,10 +4677,15 @@ def tick_once(
             "policy_market_selection_hash": policy_market_selection_hash,
             "policy_market_selection_commitment_hash": policy_market_selection_commitment_hash,
             "counterfactual_trace_example_hash": counterfactual_trace_example_hash,
+            "epistemic_action_market_inputs_hash": epistemic_action_market_inputs_hash,
+            "epistemic_action_bid_set_hash": epistemic_action_bid_set_hash,
+            "epistemic_action_selection_hash": epistemic_action_selection_hash,
+            "epistemic_action_settlement_hash": epistemic_action_settlement_hash,
             "shadow_fs_integrity_report_hash": shadow_integrity_report_hash,
             "shadow_tier_a_receipt_hash": shadow_tier_a_receipt_hash,
             "shadow_tier_b_receipt_hash": shadow_tier_b_receipt_hash,
             "shadow_readiness_receipt_hash": shadow_readiness_receipt_hash,
+            "shadow_corpus_invariance_receipt_hash": shadow_corpus_invariance_receipt_hash,
         }
 
 

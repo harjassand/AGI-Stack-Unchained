@@ -1,0 +1,58 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v19_0/epistemic_action_settlement_receipt_v1",
+  "title": "Epistemic action settlement receipt v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "action_settlement_id",
+    "tick_u64",
+    "inputs_manifest_id",
+    "selection_id",
+    "winner_action_kind",
+    "winner_bid_id",
+    "produced_capsule_id",
+    "credit_key",
+    "eufc_window_mode",
+    "eufc_window_receipt_ids",
+    "outcome"
+  ],
+  "properties": {
+    "schema_version": {"const": "epistemic_action_settlement_receipt_v1"},
+    "action_settlement_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "tick_u64": {"type": "integer", "minimum": 0},
+    "inputs_manifest_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "selection_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "winner_action_kind": {
+      "anyOf": [
+        {"type": "null"},
+        {"type": "string", "enum": ["FETCH", "SEGMENT", "INFER", "REDUCE", "SEAL"]}
+      ]
+    },
+    "winner_bid_id": {
+      "anyOf": [
+        {"type": "null"},
+        {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"}
+      ]
+    },
+    "produced_capsule_id": {
+      "anyOf": [
+        {"type": "null"},
+        {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"}
+      ]
+    },
+    "credit_key": {
+      "anyOf": [
+        {"type": "null"},
+        {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"}
+      ]
+    },
+    "eufc_window_mode": {"const": "EUFC_WINDOW"},
+    "eufc_window_receipt_ids": {
+      "type": "array",
+      "items": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"}
+    },
+    "outcome": {"type": "string", "enum": ["SETTLED", "NO_CREDIT"]}
+  }
+}

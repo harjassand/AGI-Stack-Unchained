@@ -35,7 +35,8 @@
         "required": [
           "run_id",
           "tick_u64",
-          "tick_snapshot_hash"
+          "tick_snapshot_hash",
+          "entry_manifest_id"
         ],
         "properties": {
           "run_id": {
@@ -47,6 +48,10 @@
             "minimum": 0
           },
           "tick_snapshot_hash": {
+            "type": "string",
+            "pattern": "^sha256:[0-9a-f]{64}$"
+          },
+          "entry_manifest_id": {
             "type": "string",
             "pattern": "^sha256:[0-9a-f]{64}$"
           }

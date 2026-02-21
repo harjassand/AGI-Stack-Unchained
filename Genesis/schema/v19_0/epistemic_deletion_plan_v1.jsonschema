@@ -1,0 +1,35 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v19_0/epistemic_deletion_plan_v1",
+  "title": "Epistemic deletion plan v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "plan_id",
+    "policy_id",
+    "capsule_id",
+    "candidate_raw_blob_ids",
+    "candidate_mob_blob_ids",
+    "planned_delete_count_u64",
+    "dry_run_b",
+    "reason_code"
+  ],
+  "properties": {
+    "schema_version": {"const": "epistemic_deletion_plan_v1"},
+    "plan_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "policy_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "capsule_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "candidate_raw_blob_ids": {
+      "type": "array",
+      "items": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"}
+    },
+    "candidate_mob_blob_ids": {
+      "type": "array",
+      "items": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"}
+    },
+    "planned_delete_count_u64": {"type": "integer", "minimum": 0},
+    "dry_run_b": {"type": "boolean"},
+    "reason_code": {"type": "string", "minLength": 1, "maxLength": 128}
+  }
+}

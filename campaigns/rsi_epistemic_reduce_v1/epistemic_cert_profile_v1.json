@@ -1,0 +1,1 @@
+{"acceptance_predicate":"ECAC_AND_EUFC_MIN_THRESHOLDS_V1","cert_profile_id":"sha256:0aa48f4463696fe575a74342ff064dfe3f29af746ea4dd09dd4b2c2eeebf75f6","min_ecac_lb_q32":0,"min_eufc_q32":0,"schema_version":"epistemic_cert_profile_v1","tasks":[{"budget_u64":1,"formula_id":"DMPL_PLAN_DELTA_Q32","task_id":"task_dmpltiny"}],"tie_break_policy":"TASK_ID_ASC"}

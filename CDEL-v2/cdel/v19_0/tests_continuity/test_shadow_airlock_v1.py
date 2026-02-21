@@ -47,7 +47,10 @@ def test_shadow_airlock_ready_receipt_is_outbox_only() -> None:
         j_per_tick_floor_verified_b=True,
         corpus_replay_verified_b=True,
         deterministic_fuzz_verified_b=True,
+        corpus_invariance_verified_b=True,
+        corpus_invariance_receipt_id="sha256:" + ("a" * 64),
         rollback_plan_bound_b=True,
+        rollback_evidence_hash="sha256:" + ("b" * 64),
         auto_swap_b=False,
     )
     assert receipt["verdict"] == "READY"
@@ -69,7 +72,10 @@ def test_shadow_airlock_not_ready_when_non_weakening_fails() -> None:
         non_weakening_j_verified_b=False,
         corpus_replay_verified_b=True,
         deterministic_fuzz_verified_b=True,
+        corpus_invariance_verified_b=False,
+        corpus_invariance_receipt_id="sha256:" + ("c" * 64),
         rollback_plan_bound_b=True,
+        rollback_evidence_hash="sha256:" + ("d" * 64),
         auto_swap_b=True,
     )
     assert receipt["verdict"] == "NOT_READY"

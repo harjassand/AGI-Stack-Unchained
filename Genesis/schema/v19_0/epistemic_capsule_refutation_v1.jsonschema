@@ -1,0 +1,50 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v19_0/epistemic_capsule_refutation_v1",
+  "title": "Epistemic capsule refutation v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "refutation_id",
+    "episode_id",
+    "tick_u64",
+    "reason_code"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "epistemic_capsule_refutation_v1"
+    },
+    "refutation_id": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "episode_id": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "tick_u64": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "reason_code": {
+      "type": "string",
+      "enum": [
+        "INDEX_CHAIN_MISMATCH",
+        "INDEX_SELECTION_EMPTY",
+        "EPISODE_NOT_COMPLETE",
+        "EPISODE_MARKER_MISMATCH",
+        "MOB_FORMAT_REJECTED",
+        "REDUCE_REPLAY_MISMATCH",
+        "SIP_REJECTED",
+        "SIP_SAFE_HALT",
+        "BUDGET_EXHAUSTED",
+        "NONDETERMINISTIC"
+      ]
+    },
+    "detail": {
+      "type": "string",
+      "maxLength": 16384
+    }
+  }
+}

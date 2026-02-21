@@ -1,0 +1,26 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v19_0/epistemic_action_bid_set_v1",
+  "title": "Epistemic action bid set v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "bid_set_id",
+    "tick_u64",
+    "inputs_manifest_id",
+    "market_profile_id",
+    "bid_ids"
+  ],
+  "properties": {
+    "schema_version": {"const": "epistemic_action_bid_set_v1"},
+    "bid_set_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "tick_u64": {"type": "integer", "minimum": 0},
+    "inputs_manifest_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "market_profile_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "bid_ids": {
+      "type": "array",
+      "items": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"}
+    }
+  }
+}

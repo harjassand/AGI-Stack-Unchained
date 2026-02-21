@@ -38,6 +38,28 @@ def _require_sha(value: Any) -> str:
     return text
 
 
+def _derive_polymath_kernel_spec_from_epistemic(epistemic_spec: dict[str, Any]) -> dict[str, Any]:
+    kernel_spec_id = _require_sha(epistemic_spec.get("kernel_spec_id"))
+    seed = int(kernel_spec_id.split(":", 1)[1][:16], 16)
+    alpha_q32 = int((seed & 0x7FFFFFFF) - (1 << 30))
+    beta_q32 = int(((seed >> 8) & 0x7FFFFFFF) - (1 << 30))
+    bias_q32 = int(((seed >> 16) & 0x1FFFFFFF) - (1 << 26))
+    return {
+        "schema_version": "polymath_kernel_spec_v1",
+        "kernel_kind": "Q32_AFFINE",
+        "theory_id": "qxwmr_epistemic_kernel_v1",
+        "alpha_q32": alpha_q32,
+        "beta_q32": beta_q32,
+        "bias_q32": bias_q32,
+        "healthcheck_vectors": [
+            {"x_q32": 0, "y_q32": 0},
+            {"x_q32": 1 << 32, "y_q32": 0},
+            {"x_q32": 0, "y_q32": 1 << 32},
+            {"x_q32": -(1 << 31), "y_q32": (3 << 30)},
+        ],
+    }
+
+
 def run(*, campaign_pack: Path, out_dir: Path) -> None:
     pack = _load_pack(campaign_pack)
     root = repo_root().resolve()
@@ -54,12 +76,36 @@ def run(*, campaign_pack: Path, out_dir: Path) -> None:
     promotion_dir = state_root / "promotion"
     promotion_dir.mkdir(parents=True, exist_ok=True)
 
+    kernel_spec_path = (root / kernel_spec_rel).resolve()
+    kernel_spec_payload = load_canon_dict(kernel_spec_path)
+    kernel_spec_for_transpile_path = kernel_spec_path
+    kernel_schema_version = str(kernel_spec_payload.get("schema_version", "")).strip()
+    if kernel_schema_version == "epistemic_kernel_spec_v1":
+        from ..v19_0.common_v1 import validate_schema as validate_schema_v19
+
+        validate_schema_v19(kernel_spec_payload, "epistemic_kernel_spec_v1")
+        if str(kernel_spec_payload.get("input_schema", "")) != "qxwmr_graph_v1":
+            fail("SCHEMA_FAIL")
+        expected_kernel_spec_id = _require_sha(kernel_spec_payload.get("kernel_spec_id"))
+        if expected_kernel_spec_id != canon_hash_obj({k: v for k, v in kernel_spec_payload.items() if k != "kernel_spec_id"}):
+            fail("PIN_HASH_MISMATCH")
+        normalized_dir = state_root / "native" / "kernel_specs"
+        normalized_dir.mkdir(parents=True, exist_ok=True)
+        write_canon_json(
+            normalized_dir / f"sha256_{expected_kernel_spec_id.split(':', 1)[1]}.epistemic_kernel_spec_v1.json",
+            kernel_spec_payload,
+        )
+        derived_kernel_spec = _derive_polymath_kernel_spec_from_epistemic(kernel_spec_payload)
+        derived_hash = canon_hash_obj(derived_kernel_spec)
+        kernel_spec_for_transpile_path = normalized_dir / f"sha256_{derived_hash.split(':', 1)[1]}.polymath_kernel_spec_v1.json"
+        write_canon_json(kernel_spec_for_transpile_path, derived_kernel_spec)
+
     from tools.polymath.polymath_knowledge_transpiler_v1 import run_transpile
 
     result = run_transpile(
         state_root=state_root,
         sip_knowledge_artifact_hash=sip_knowledge_artifact_hash,
-        kernel_spec_path=(root / kernel_spec_rel).resolve(),
+        kernel_spec_path=kernel_spec_for_transpile_path,
         rust_toolchain_manifest_path=(root / rust_toolchain_rel).resolve(),
         wasmtime_manifest_path=(root / wasmtime_manifest_rel).resolve(),
     )

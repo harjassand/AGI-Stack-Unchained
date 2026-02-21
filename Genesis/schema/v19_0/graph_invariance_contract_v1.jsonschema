@@ -1,0 +1,22 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v19_0/graph_invariance_contract_v1",
+  "title": "Graph invariance contract v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "contract_id",
+    "equality_mode",
+    "allowed_benign_differences"
+  ],
+  "properties": {
+    "schema_version": {"const": "graph_invariance_contract_v1"},
+    "contract_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "equality_mode": {"type": "string", "enum": ["ID_EQUAL", "CANON_PAYLOAD_EQUAL"]},
+    "allowed_benign_differences": {
+      "type": "array",
+      "const": []
+    }
+  }
+}

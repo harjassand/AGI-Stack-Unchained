@@ -22,9 +22,12 @@
     "dynamic_protected_roots_verified_b",
     "j_window_rule_verified_b",
     "j_per_tick_floor_verified_b",
+    "corpus_invariance_verified_b",
+    "corpus_invariance_receipt_id",
     "auto_swap_b",
     "swap_execution_performed_b",
     "rollback_plan_bound_b",
+    "rollback_evidence_hash",
     "reasons"
   ],
   "properties": {
@@ -45,9 +48,12 @@
     "dynamic_protected_roots_verified_b": {"type": "boolean"},
     "j_window_rule_verified_b": {"type": "boolean"},
     "j_per_tick_floor_verified_b": {"type": "boolean"},
+    "corpus_invariance_verified_b": {"type": "boolean"},
+    "corpus_invariance_receipt_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
     "auto_swap_b": {"type": "boolean"},
     "swap_execution_performed_b": {"const": false},
     "rollback_plan_bound_b": {"type": "boolean"},
+    "rollback_evidence_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
     "reasons": {
       "type": "array",
       "items": {"type": "string", "minLength": 1}

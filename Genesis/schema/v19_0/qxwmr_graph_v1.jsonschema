@@ -1,0 +1,173 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v19_0/qxwmr_graph_v1",
+  "title": "QXWMR graph v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "graph_id",
+    "episode_id",
+    "reduce_contract_id",
+    "confidence_calibration_id",
+    "nodes",
+    "edges"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "qxwmr_graph_v1"
+    },
+    "graph_id": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "episode_id": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "reduce_contract_id": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "confidence_calibration_id": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "type_binding_id": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "type_registry_id": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "nodes": {
+      "type": "array",
+      "maxItems": 200000,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "node_id",
+          "type_id",
+          "value_kind",
+          "confidence_q32",
+          "provenance_raw_blob_ids"
+        ],
+        "properties": {
+          "node_id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256
+          },
+          "type_id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256
+          },
+          "value_kind": {
+            "type": "string",
+            "enum": [
+              "Q32",
+              "STRING",
+              "ENUM",
+              "BLOB_REF"
+            ]
+          },
+          "q32": {
+            "type": "integer"
+          },
+          "text_value": {
+            "type": "string",
+            "maxLength": 65536
+          },
+          "enum_value": {
+            "type": "string",
+            "maxLength": 1024
+          },
+          "blob_ref": {
+            "type": "string",
+            "pattern": "^sha256:[0-9a-f]{64}$"
+          },
+          "confidence_q32": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 4294967296
+          },
+          "provenance_raw_blob_ids": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "pattern": "^sha256:[0-9a-f]{64}$"
+            }
+          },
+          "constraints": {
+            "type": "object",
+            "additionalProperties": true
+          },
+          "timestamps_u64": {
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "minimum": 0
+            }
+          }
+        }
+      }
+    },
+    "edges": {
+      "type": "array",
+      "maxItems": 200000,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "edge_id",
+          "src_node_id",
+          "dst_node_id",
+          "type_id",
+          "confidence_q32",
+          "provenance_raw_blob_ids"
+        ],
+        "properties": {
+          "edge_id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256
+          },
+          "src_node_id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256
+          },
+          "dst_node_id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256
+          },
+          "type_id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256
+          },
+          "confidence_q32": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 4294967296
+          },
+          "provenance_raw_blob_ids": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "pattern": "^sha256:[0-9a-f]{64}$"
+            }
+          },
+          "constraints": {
+            "type": "object",
+            "additionalProperties": true
+          }
+        }
+      }
+    }
+  }
+}

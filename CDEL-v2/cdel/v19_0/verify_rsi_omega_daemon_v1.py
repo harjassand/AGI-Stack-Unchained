@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 from pathlib import Path
 from typing import Any
 
@@ -28,6 +29,12 @@ from .verify_policy_market_selection_v1 import verify_policy_market_selection
 from .verify_policy_vm_stark_proof_v1 import verify_policy_vm_stark_proof
 from .verify_policy_trace_proposal_v1 import verify_policy_trace_proposal
 from .verify_policy_vm_trace_v1 import verify_policy_vm_trace
+from .epistemic.action_market_v1 import build_default_action_market_profile, verify_action_market_replay
+from .epistemic.compaction_v1 import verify_compaction_bundle
+from .epistemic.verify_epistemic_certs_v1 import verify_certs_bundle
+from .epistemic.verify_epistemic_capsule_v1 import verify_capsule_bundle
+from .epistemic.usable_index_v1 import load_usable_capsule_ids, load_usable_graph_ids, load_rows as load_usable_rows
+from .shadow_corpus_v1 import load_shadow_corpus_entries
 
 
 def _resolve_state_dir(path: Path) -> Path:
@@ -53,6 +60,103 @@ def _load_canon_json(path: Path) -> dict[str, Any]:
 
 def _is_sha256(value: Any) -> bool:
     return isinstance(value, str) and value.startswith("sha256:") and len(value.split(":", 1)[1]) == 64
+
+
+def _require_sha256(value: Any, *, reason: str = "SCHEMA_FAIL") -> str:
+    raw = str(value).strip()
+    if not _is_sha256(raw):
+        fail_v18(reason)
+    return raw
+
+
+def _load_pinned_pack_payload(
+    *,
+    config_dir: Path,
+    pack: dict[str, Any],
+    rel_key: str,
+    id_key: str,
+    payload_id_field: str,
+    schema_name: str,
+) -> dict[str, Any]:
+    rel_raw = str(pack.get(rel_key, "")).strip()
+    id_raw = str(pack.get(id_key, "")).strip()
+    if not rel_raw or not id_raw:
+        fail_v18("MISSING_STATE_INPUT")
+    rel_path = Path(rel_raw)
+    if rel_path.is_absolute() or ".." in rel_path.parts:
+        fail_v18("SCHEMA_FAIL")
+    declared_id = _require_sha256(id_raw, reason="PIN_HASH_MISMATCH")
+    path = config_dir / rel_path
+    if not path.exists() or not path.is_file():
+        fail_v18("MISSING_STATE_INPUT")
+    payload = _load_canon_json(path)
+    validate_schema_v19(payload, schema_name)
+    observed_id = _require_sha256(payload.get(payload_id_field), reason="PIN_HASH_MISMATCH")
+    payload_no_id = dict(payload)
+    payload_no_id.pop(payload_id_field, None)
+    if canon_hash_obj(payload_no_id) != observed_id:
+        fail_v18("PIN_HASH_MISMATCH")
+    if observed_id != declared_id:
+        fail_v18("PIN_HASH_MISMATCH")
+    return payload
+
+
+def _task_input_set_hash(task_input_ids: list[str]) -> str:
+    return canon_hash_obj(
+        {
+            "schema_version": "epistemic_cert_task_input_set_v1",
+            "task_input_ids": sorted(_require_sha256(v, reason="SCHEMA_FAIL") for v in task_input_ids),
+        }
+    )
+
+
+def _load_shadow_candidate_outputs(state_root: Path) -> dict[str, Any]:
+    epi_root = state_root / "epistemic"
+    capsule_rows = sorted((epi_root / "capsules").glob("sha256_*.epistemic_capsule_v1.json"), key=lambda p: p.as_posix())
+    graph_rows = sorted((epi_root / "graphs").glob("sha256_*.qxwmr_graph_v1.json"), key=lambda p: p.as_posix())
+    binding_rows = sorted((epi_root / "type_bindings").glob("sha256_*.epistemic_type_binding_v1.json"), key=lambda p: p.as_posix())
+    registry_rows = sorted((epi_root / "type_registry").glob("sha256_*.epistemic_type_registry_v1.json"), key=lambda p: p.as_posix())
+    eufc_rows = sorted((epi_root / "certs").glob("sha256_*.epistemic_eufc_v1.json"), key=lambda p: p.as_posix())
+    strip_receipt_rows = sorted(
+        (epi_root / "strip_receipts").glob("sha256_*.epistemic_instruction_strip_receipt_v1.json"),
+        key=lambda p: p.as_posix(),
+    )
+    if not (capsule_rows and graph_rows and binding_rows and registry_rows and eufc_rows and strip_receipt_rows):
+        fail_v18("MISSING_STATE_INPUT")
+    capsule = _load_canon_json(capsule_rows[-1])
+    graph = _load_canon_json(graph_rows[-1])
+    type_binding = _load_canon_json(binding_rows[-1])
+    type_registry = _load_canon_json(registry_rows[-1])
+    eufc = _load_canon_json(eufc_rows[-1])
+    strip_receipts = [_load_canon_json(path) for path in strip_receipt_rows]
+    validate_schema_v19(capsule, "epistemic_capsule_v1")
+    validate_schema_v19(graph, "qxwmr_graph_v1")
+    validate_schema_v19(type_binding, "epistemic_type_binding_v1")
+    validate_schema_v19(type_registry, "epistemic_type_registry_v1")
+    validate_schema_v19(eufc, "epistemic_eufc_v1")
+    for strip_receipt in strip_receipts:
+        validate_schema_v19(strip_receipt, "epistemic_instruction_strip_receipt_v1")
+    task_input_ids_raw = eufc.get("task_input_ids")
+    if not isinstance(task_input_ids_raw, list):
+        fail_v18("SCHEMA_FAIL")
+    strip_contract_ids = sorted(
+        {
+            _require_sha256(strip_receipt.get("instruction_strip_contract_id"), reason="SCHEMA_FAIL")
+            for strip_receipt in strip_receipts
+        }
+    )
+    if len(strip_contract_ids) != 1:
+        fail_v18("NONDETERMINISTIC")
+    return {
+        "graph_id": _require_sha256(graph.get("graph_id"), reason="SCHEMA_FAIL"),
+        "type_binding_id": _require_sha256(type_binding.get("binding_id"), reason="SCHEMA_FAIL"),
+        "type_registry_id": _require_sha256(type_registry.get("registry_id"), reason="SCHEMA_FAIL"),
+        "cert_id": _require_sha256(eufc.get("eufc_id"), reason="SCHEMA_FAIL"),
+        "cert_profile_id": _require_sha256(capsule.get("cert_profile_id"), reason="SCHEMA_FAIL"),
+        "instruction_strip_contract_id": str(strip_contract_ids[0]),
+        "strip_receipt_id": _require_sha256(capsule.get("strip_receipt_id"), reason="SCHEMA_FAIL"),
+        "task_input_ids": sorted(_require_sha256(v, reason="SCHEMA_FAIL") for v in task_input_ids_raw),
+    }
 
 
 def _path_for_hash(dir_path: Path, digest: str, suffix: str) -> Path | None:
@@ -94,11 +198,12 @@ def _latest_snapshot_or_fail(snapshot_dir: Path) -> dict[str, Any]:
     return best_payload
 
 
-def _ledger_event_types(state_root: Path) -> list[str]:
+def _ledger_rows(state_root: Path) -> list[dict[str, Any]]:
     ledger_path = state_root / "ledger" / "omega_ledger_v1.jsonl"
     if not ledger_path.exists() or not ledger_path.is_file():
         fail_v18("MISSING_STATE_INPUT")
-    out: list[str] = []
+    rows: list[dict[str, Any]] = []
+    prev_event_id: str | None = None
     for line in ledger_path.read_text(encoding="utf-8").splitlines():
         line = line.strip()
         if not line:
@@ -107,10 +212,27 @@ def _ledger_event_types(state_root: Path) -> list[str]:
             row = json.loads(line)
         except Exception:
             fail_v18("SCHEMA_FAIL")
-            return []
+            return rows
         if isinstance(row, dict):
-            out.append(str(row.get("event_type", "")))
-    return out
+            if str(row.get("schema_version", "")) != "omega_ledger_event_v1":
+                fail_v18("SCHEMA_FAIL")
+            event_id = str(row.get("event_id", "")).strip()
+            if not _is_sha256(event_id):
+                fail_v18("SCHEMA_FAIL")
+            prev = row.get("prev_event_id")
+            if prev_event_id is None:
+                if prev is not None:
+                    fail_v18("TRACE_HASH_MISMATCH")
+            else:
+                if str(prev) != prev_event_id:
+                    fail_v18("TRACE_HASH_MISMATCH")
+            prev_event_id = event_id
+            rows.append(row)
+    return rows
+
+
+def _ledger_event_types(state_root: Path) -> list[str]:
+    return [str(row.get("event_type", "")) for row in _ledger_rows(state_root)]
 
 
 def _find_nested_hash(state_root: Path, digest: str, suffix: str) -> Path:
@@ -154,8 +276,18 @@ def _verify_shadow_path(*, state_root: Path, config_dir: Path, snapshot: dict[st
     shadow_tier_a_hash = snapshot.get("shadow_tier_a_receipt_hash")
     shadow_tier_b_hash = snapshot.get("shadow_tier_b_receipt_hash")
     shadow_readiness_hash = snapshot.get("shadow_readiness_receipt_hash")
+    shadow_corpus_invariance_hash = snapshot.get("shadow_corpus_invariance_receipt_hash")
 
-    any_shadow_hash = any(_is_sha256(value) for value in [shadow_integrity_hash, shadow_tier_a_hash, shadow_tier_b_hash, shadow_readiness_hash])
+    any_shadow_hash = any(
+        _is_sha256(value)
+        for value in [
+            shadow_integrity_hash,
+            shadow_tier_a_hash,
+            shadow_tier_b_hash,
+            shadow_readiness_hash,
+            shadow_corpus_invariance_hash,
+        ]
+    )
     if not any_shadow_hash:
         if bool(pack.get("auto_swap_b", False)):
             fail_v18("TIER_B_REQUIRED_FOR_SWAP")
@@ -232,6 +364,204 @@ def _verify_shadow_path(*, state_root: Path, config_dir: Path, snapshot: dict[st
     elif shadow_readiness_hash is not None:
         fail_v18("SCHEMA_FAIL")
 
+    corpus_invariance_payload = None
+    if _is_sha256(shadow_corpus_invariance_hash):
+        corpus_invariance_payload = _load_hash_bound_payload(
+            dir_path=state_root / "shadow" / "invariance",
+            digest=str(shadow_corpus_invariance_hash),
+            suffix="shadow_corpus_invariance_receipt_v1.json",
+            schema_version="v19_0",
+        )
+        if str(corpus_invariance_payload.get("schema_name", "")) != "shadow_corpus_invariance_receipt_v1":
+            fail_v18("SCHEMA_FAIL")
+        validate_schema_v19(corpus_invariance_payload, "shadow_corpus_invariance_receipt_v1")
+    elif shadow_corpus_invariance_hash is not None:
+        fail_v18("SCHEMA_FAIL")
+
+    if isinstance(corpus_invariance_payload, dict):
+        graph_contract = _load_pinned_pack_payload(
+            config_dir=config_dir,
+            pack=pack,
+            rel_key="shadow_graph_invariance_contract_rel",
+            id_key="shadow_graph_invariance_contract_id",
+            payload_id_field="contract_id",
+            schema_name="graph_invariance_contract_v1",
+        )
+        type_contract = _load_pinned_pack_payload(
+            config_dir=config_dir,
+            pack=pack,
+            rel_key="shadow_type_binding_invariance_contract_rel",
+            id_key="shadow_type_binding_invariance_contract_id",
+            payload_id_field="contract_id",
+            schema_name="type_binding_invariance_contract_v1",
+        )
+        cert_contract = _load_pinned_pack_payload(
+            config_dir=config_dir,
+            pack=pack,
+            rel_key="shadow_cert_invariance_contract_rel",
+            id_key="shadow_cert_invariance_contract_id",
+            payload_id_field="contract_id",
+            schema_name="cert_invariance_contract_v1",
+        )
+        if str(corpus_invariance_payload.get("graph_invariance_contract_id", "")) != str(graph_contract.get("contract_id", "")):
+            fail_v18("PIN_HASH_MISMATCH")
+        if (
+            str(corpus_invariance_payload.get("type_binding_invariance_contract_id", ""))
+            != str(type_contract.get("contract_id", ""))
+        ):
+            fail_v18("PIN_HASH_MISMATCH")
+        if str(corpus_invariance_payload.get("cert_invariance_contract_id", "")) != str(cert_contract.get("contract_id", "")):
+            fail_v18("PIN_HASH_MISMATCH")
+
+        corpus_descriptor_payload = _load_pinned_pack_payload(
+            config_dir=config_dir,
+            pack=pack,
+            rel_key="shadow_corpus_descriptor_rel",
+            id_key="shadow_corpus_descriptor_id",
+            payload_id_field="descriptor_id",
+            schema_name="corpus_descriptor_v1",
+        )
+        corpus_descriptor_rel = str(pack.get("shadow_corpus_descriptor_rel", "")).strip()
+        if not corpus_descriptor_rel:
+            fail_v18("MISSING_STATE_INPUT")
+        corpus_descriptor_rel_path = Path(corpus_descriptor_rel)
+        if corpus_descriptor_rel_path.is_absolute() or ".." in corpus_descriptor_rel_path.parts:
+            fail_v18("SCHEMA_FAIL")
+        shadow_bundle = load_shadow_corpus_entries(
+            corpus_descriptor=dict(corpus_descriptor_payload),
+            descriptor_dir=(config_dir / corpus_descriptor_rel_path).parent,
+        )
+        replay_entries = [dict(row) for row in list(shadow_bundle.get("replay_entries") or []) if isinstance(row, dict)]
+        replay_by_manifest_id = {
+            str(row.get("entry_manifest_id", "")): row
+            for row in replay_entries
+            if isinstance(row, dict)
+        }
+        if len(replay_by_manifest_id) != len(replay_entries):
+            fail_v18("NONDETERMINISTIC")
+
+        shadow_cert_profile_id = _require_sha256(pack.get("shadow_cert_profile_id"), reason="MISSING_STATE_INPUT")
+        shadow_instruction_strip_contract_id = _require_sha256(
+            pack.get("shadow_instruction_strip_contract_id"),
+            reason="MISSING_STATE_INPUT",
+        )
+        candidate_outputs = _load_shadow_candidate_outputs(state_root)
+        if candidate_outputs["cert_profile_id"] != shadow_cert_profile_id:
+            fail_v18("PIN_HASH_MISMATCH")
+        if candidate_outputs["instruction_strip_contract_id"] != shadow_instruction_strip_contract_id:
+            fail_v18("PIN_HASH_MISMATCH")
+
+        rows = corpus_invariance_payload.get("compared_rows")
+        if not isinstance(rows, list) or not rows:
+            fail_v18("SCHEMA_FAIL")
+        observed_graph_id = str(candidate_outputs["graph_id"])
+        observed_type_binding_id = str(candidate_outputs["type_binding_id"])
+        observed_type_registry_id = str(candidate_outputs["type_registry_id"])
+        observed_cert_id = str(candidate_outputs["cert_id"])
+        observed_cert_profile_id = str(candidate_outputs["cert_profile_id"])
+        observed_strip_receipt_id = str(candidate_outputs["strip_receipt_id"])
+        observed_task_input_set_hash = _task_input_set_hash(list(candidate_outputs["task_input_ids"]))
+        graph_mode = str(graph_contract.get("equality_mode", "")).strip()
+        graph_pass = True
+        type_pass = True
+        cert_pass = True
+        for row in rows:
+            if not isinstance(row, dict):
+                fail_v18("SCHEMA_FAIL")
+            entry_manifest_id = _require_sha256(row.get("entry_manifest_id"), reason="SCHEMA_FAIL")
+            replay_entry = replay_by_manifest_id.get(entry_manifest_id)
+            if replay_entry is None:
+                fail_v18("NONDETERMINISTIC")
+            contracts = replay_entry.get("contracts")
+            expected_outputs = replay_entry.get("expected_outputs")
+            if not isinstance(contracts, dict) or not isinstance(expected_outputs, dict):
+                fail_v18("SCHEMA_FAIL")
+            if str(contracts.get("instruction_strip_contract_id", "")) != shadow_instruction_strip_contract_id:
+                fail_v18("PIN_HASH_MISMATCH")
+            if str(contracts.get("cert_profile_id", "")) != shadow_cert_profile_id:
+                fail_v18("PIN_HASH_MISMATCH")
+            if str(expected_outputs.get("cert_profile_id", "")) != shadow_cert_profile_id:
+                fail_v18("PIN_HASH_MISMATCH")
+            if str(row.get("run_id", "")).strip() != str(replay_entry.get("run_id", "")).strip():
+                fail_v18("NONDETERMINISTIC")
+            if int(row.get("tick_u64", -1)) != int(replay_entry.get("tick_u64", -1)):
+                fail_v18("NONDETERMINISTIC")
+            if _require_sha256(row.get("tick_snapshot_hash"), reason="SCHEMA_FAIL") != str(
+                replay_entry.get("tick_snapshot_hash", "")
+            ):
+                fail_v18("NONDETERMINISTIC")
+
+            expected_graph_id = _require_sha256(expected_outputs.get("graph_id"), reason="SCHEMA_FAIL")
+            expected_type_binding_id = _require_sha256(expected_outputs.get("type_binding_id"), reason="SCHEMA_FAIL")
+            expected_cert_id = _require_sha256(expected_outputs.get("eufc_id"), reason="SCHEMA_FAIL")
+            expected_strip_receipt_id = _require_sha256(expected_outputs.get("strip_receipt_id"), reason="SCHEMA_FAIL")
+            expected_task_input_ids = expected_outputs.get("task_input_ids")
+            if not isinstance(expected_task_input_ids, list):
+                fail_v18("SCHEMA_FAIL")
+            expected_task_input_set_hash = _task_input_set_hash([str(v) for v in expected_task_input_ids])
+
+            if _require_sha256(row.get("expected_graph_id"), reason="SCHEMA_FAIL") != expected_graph_id:
+                fail_v18("NONDETERMINISTIC")
+            if _require_sha256(row.get("observed_graph_id"), reason="SCHEMA_FAIL") != observed_graph_id:
+                fail_v18("NONDETERMINISTIC")
+            if _require_sha256(row.get("expected_type_binding_id"), reason="SCHEMA_FAIL") != expected_type_binding_id:
+                fail_v18("NONDETERMINISTIC")
+            if _require_sha256(row.get("observed_type_binding_id"), reason="SCHEMA_FAIL") != observed_type_binding_id:
+                fail_v18("NONDETERMINISTIC")
+            if _require_sha256(row.get("expected_cert_id"), reason="SCHEMA_FAIL") != expected_cert_id:
+                fail_v18("NONDETERMINISTIC")
+            if _require_sha256(row.get("observed_cert_id"), reason="SCHEMA_FAIL") != observed_cert_id:
+                fail_v18("NONDETERMINISTIC")
+            if _require_sha256(row.get("expected_strip_receipt_id"), reason="SCHEMA_FAIL") != expected_strip_receipt_id:
+                fail_v18("NONDETERMINISTIC")
+            if _require_sha256(row.get("observed_strip_receipt_id"), reason="SCHEMA_FAIL") != observed_strip_receipt_id:
+                fail_v18("NONDETERMINISTIC")
+            if _require_sha256(row.get("expected_task_input_set_hash"), reason="SCHEMA_FAIL") != expected_task_input_set_hash:
+                fail_v18("NONDETERMINISTIC")
+            if _require_sha256(row.get("observed_task_input_set_hash"), reason="SCHEMA_FAIL") != observed_task_input_set_hash:
+                fail_v18("NONDETERMINISTIC")
+
+            if graph_mode == "ID_EQUAL":
+                graph_match_b = observed_graph_id == expected_graph_id
+            elif graph_mode == "CANON_PAYLOAD_EQUAL":
+                graph_match_b = observed_graph_id == expected_graph_id
+            else:
+                fail_v18("SCHEMA_FAIL")
+            type_match_b = observed_type_binding_id == expected_type_binding_id
+            if bool(type_contract.get("require_same_type_registry_b", True)):
+                type_match_b = bool(
+                    type_match_b
+                    and observed_type_registry_id
+                    == _require_sha256(contracts.get("type_registry_id"), reason="SCHEMA_FAIL")
+                )
+            cert_match_b = observed_cert_id == expected_cert_id
+            if bool(cert_contract.get("require_same_cert_profile_b", True)):
+                cert_match_b = bool(cert_match_b and observed_cert_profile_id == str(expected_outputs["cert_profile_id"]))
+            if bool(cert_contract.get("require_same_strip_receipt_b", True)):
+                cert_match_b = bool(cert_match_b and observed_strip_receipt_id == expected_strip_receipt_id)
+            if bool(cert_contract.get("require_same_task_input_ids_b", True)):
+                cert_match_b = bool(cert_match_b and observed_task_input_set_hash == expected_task_input_set_hash)
+
+            if bool(row.get("graph_match_b", False)) != bool(graph_match_b):
+                fail_v18("NONDETERMINISTIC")
+            if bool(row.get("type_binding_match_b", False)) != bool(type_match_b):
+                fail_v18("NONDETERMINISTIC")
+            if bool(row.get("cert_match_b", False)) != bool(cert_match_b):
+                fail_v18("NONDETERMINISTIC")
+
+            graph_pass = bool(graph_pass and graph_match_b)
+            type_pass = bool(type_pass and type_match_b)
+            cert_pass = bool(cert_pass and cert_match_b)
+
+        if bool(corpus_invariance_payload.get("graph_invariance_pass_b", False)) != bool(graph_pass):
+            fail_v18("NONDETERMINISTIC")
+        if bool(corpus_invariance_payload.get("type_binding_invariance_pass_b", False)) != bool(type_pass):
+            fail_v18("NONDETERMINISTIC")
+        if bool(corpus_invariance_payload.get("cert_invariance_pass_b", False)) != bool(cert_pass):
+            fail_v18("NONDETERMINISTIC")
+        if bool(corpus_invariance_payload.get("pass_b", False)) != bool(graph_pass and type_pass and cert_pass):
+            fail_v18("NONDETERMINISTIC")
+
     if isinstance(readiness_payload, dict):
         if bool(readiness_payload.get("runtime_tier_b_pass_b", False)) != bool(readiness_payload.get("tier_b_pass_b", False)):
             fail_v18("NONDETERMINISTIC")
@@ -248,6 +578,13 @@ def _verify_shadow_path(*, state_root: Path, config_dir: Path, snapshot: dict[st
                 fail_v18("NONDETERMINISTIC")
             if bool(tier_b_payload.get("conservatism_pass_b", False)) != bool(readiness_payload.get("corpus_replay_verified_b", False)):
                 fail_v18("NONDETERMINISTIC")
+        if isinstance(corpus_invariance_payload, dict):
+            if bool(corpus_invariance_payload.get("pass_b", False)) != bool(readiness_payload.get("corpus_invariance_verified_b", False)):
+                fail_v18("NONDETERMINISTIC")
+            if str(readiness_payload.get("corpus_invariance_receipt_id", "")) != str(corpus_invariance_payload.get("receipt_id", "")):
+                fail_v18("NONDETERMINISTIC")
+        elif bool(readiness_payload.get("corpus_invariance_verified_b", False)):
+            fail_v18("MISSING_STATE_INPUT")
 
     if bool(pack.get("auto_swap_b", False)):
         if not isinstance(readiness_payload, dict):
@@ -270,6 +607,9 @@ def _verify_shadow_path(*, state_root: Path, config_dir: Path, snapshot: dict[st
         validate_schema_v19(handoff_payload, "shadow_regime_readiness_receipt_v1")
         if not bool(handoff_payload.get("runtime_tier_b_pass_b", False)):
             fail_v18("TIER_B_REQUIRED_FOR_SWAP")
+        if isinstance(readiness_payload, dict):
+            if str(handoff_payload.get("rollback_evidence_hash", "")) != str(readiness_payload.get("rollback_evidence_hash", "")):
+                fail_v18("NONDETERMINISTIC")
 
 
 def _verify_core_policy_assets(*, config_dir: Path, pack: dict[str, Any], descriptor_payload: dict[str, Any]) -> dict[str, Any]:
@@ -816,16 +1156,556 @@ def _verify_policy_path(state_root: Path, snapshot: dict[str, Any]) -> None:
         )
 
 
+def _verify_epistemic_path(state_root: Path, snapshot: dict[str, Any]) -> None:
+    ledger_rows = _ledger_rows(state_root)
+    event_rows = [row for row in ledger_rows if str(row.get("event_type", "")).startswith("EPISTEMIC_")]
+    capsule_event_rows = [row for row in ledger_rows if str(row.get("event_type", "")) == "EPISTEMIC_CAPSULE_V1"]
+    capsule_rows = sorted(
+        (state_root / "epistemic" / "capsules").glob("sha256_*.epistemic_capsule_v1.json"),
+        key=lambda p: p.as_posix(),
+    )
+    if not capsule_event_rows and not capsule_rows:
+        if event_rows:
+            fail_v18("NONDETERMINISTIC")
+        return
+    if capsule_rows and not capsule_event_rows:
+        fail_v18("NONDETERMINISTIC")
+    if capsule_event_rows and not capsule_rows:
+        fail_v18("MISSING_STATE_INPUT")
+
+    try:
+        summary = verify_capsule_bundle(state_root)
+    except Exception as exc:  # noqa: BLE001
+        _rethrow_as_v18(exc)
+        return
+    expected = {
+        "capsule_id": str(summary.get("capsule_id", "")),
+        "world_snapshot_id": str(summary.get("world_snapshot_id", "")),
+        "world_root": str(summary.get("world_root", "")),
+        "sip_receipt_id": str(summary.get("sip_receipt_id", "")),
+        "distillate_graph_id": str(summary.get("distillate_graph_id", "")),
+        "strip_receipt_id": str(summary.get("strip_receipt_id", "")),
+        "episode_id": str(summary.get("episode_id", "")),
+    }
+
+    def _load_by_id(*, dir_path: Path, suffix: str, schema_version: str, id_field: str, expected_id: str) -> dict[str, Any]:
+        rows = sorted(dir_path.glob(f"sha256_*.{suffix}"), key=lambda p: p.as_posix())
+        match: dict[str, Any] | None = None
+        for path in rows:
+            payload = _load_canon_json(path)
+            if str(payload.get("schema_version", "")).strip() != schema_version:
+                fail_v18("SCHEMA_FAIL")
+            if canon_hash_obj(payload) != "sha256:" + path.name.split(".", 1)[0].split("_", 1)[1]:
+                fail_v18("NONDETERMINISTIC")
+            declared_id = str(payload.get(id_field, "")).strip()
+            if declared_id:
+                no_id = dict(payload)
+                no_id.pop(id_field, None)
+                if canon_hash_obj(no_id) != declared_id:
+                    fail_v18("NONDETERMINISTIC")
+            if declared_id == expected_id:
+                if match is not None:
+                    fail_v18("NONDETERMINISTIC")
+                match = payload
+        if match is None:
+            fail_v18("MISSING_STATE_INPUT")
+        return match
+
+    capsule_payload = _load_by_id(
+        dir_path=state_root / "epistemic" / "capsules",
+        suffix="epistemic_capsule_v1.json",
+        schema_version="epistemic_capsule_v1",
+        id_field="capsule_id",
+        expected_id=str(expected["capsule_id"]),
+    )
+    graph_payload = _load_by_id(
+        dir_path=state_root / "epistemic" / "graphs",
+        suffix="qxwmr_graph_v1.json",
+        schema_version="qxwmr_graph_v1",
+        id_field="graph_id",
+        expected_id=str(expected["distillate_graph_id"]),
+    )
+    usable_b = bool(capsule_payload.get("usable_b"))
+    cert_gate_status = str(capsule_payload.get("cert_gate_status", "")).strip().upper()
+    if cert_gate_status not in {"PASS", "WARN", "BLOCKED"}:
+        fail_v18("SCHEMA_FAIL")
+    capsule_cert_profile_id_raw = capsule_payload.get("cert_profile_id")
+    capsule_cert_profile_id = (
+        str(capsule_cert_profile_id_raw).strip()
+        if isinstance(capsule_cert_profile_id_raw, str) and capsule_cert_profile_id_raw.strip()
+        else ("sha256:" + ("0" * 64))
+    )
+    if not _is_sha256(capsule_cert_profile_id):
+        fail_v18("SCHEMA_FAIL")
+
+    _ = load_usable_rows(state_root)
+    usable_capsule_ids = load_usable_capsule_ids(state_root)
+    usable_graph_ids = load_usable_graph_ids(state_root)
+    if usable_b:
+        if str(expected["capsule_id"]) not in usable_capsule_ids:
+            fail_v18("CERT_GATE_FAIL")
+        if str(expected["distillate_graph_id"]) not in usable_graph_ids:
+            fail_v18("CERT_GATE_FAIL")
+    else:
+        if str(expected["capsule_id"]) in usable_capsule_ids:
+            fail_v18("CERT_GATE_FAIL")
+        if str(expected["distillate_graph_id"]) in usable_graph_ids:
+            fail_v18("CERT_GATE_FAIL")
+
+    cert_gate_mode = "OFF"
+    cert_gate_objective_profile_id = "sha256:" + ("0" * 64)
+    cert_gate_profile_id = "sha256:" + ("0" * 64)
+    cert_gate_rows = sorted(
+        (state_root / "epistemic" / "contracts").glob("sha256_*.epistemic_cert_gate_binding_v1.json"),
+        key=lambda p: p.as_posix(),
+    )
+    if not cert_gate_rows:
+        cert_gate_rows = sorted(
+            (state_root / "epistemic" / "replay_inputs" / "contracts").glob("sha256_*.epistemic_cert_gate_binding_v1.json"),
+            key=lambda p: p.as_posix(),
+        )
+    if len(cert_gate_rows) > 1:
+        fail_v18("NONDETERMINISTIC")
+    if cert_gate_rows:
+        cert_gate_payload = _load_canon_json(cert_gate_rows[0])
+        if canon_hash_obj(cert_gate_payload) != "sha256:" + cert_gate_rows[0].name.split(".", 1)[0].split("_", 1)[1]:
+            fail_v18("NONDETERMINISTIC")
+        if str(cert_gate_payload.get("schema_version", "")) != "epistemic_cert_gate_binding_v1":
+            fail_v18("SCHEMA_FAIL")
+        cert_gate_mode = str(cert_gate_payload.get("cert_gate_mode", "OFF")).strip().upper()
+        if cert_gate_mode not in {"OFF", "WARN", "ENFORCE"}:
+            fail_v18("SCHEMA_FAIL")
+        cert_gate_objective_profile_id = str(cert_gate_payload.get("objective_profile_id", "")).strip()
+        cert_gate_profile_id = str(cert_gate_payload.get("cert_profile_id", cert_gate_profile_id)).strip() or cert_gate_profile_id
+        if not _is_sha256(cert_gate_objective_profile_id) or not _is_sha256(cert_gate_profile_id):
+            fail_v18("SCHEMA_FAIL")
+    if cert_gate_mode != "OFF" and cert_gate_profile_id != capsule_cert_profile_id:
+        fail_v18("CERT_GATE_FAIL")
+
+    seen_capsules: set[str] = set()
+    matched_expected_capsule_b = False
+    for row in capsule_event_rows:
+        artifact_hash = str(row.get("artifact_hash", "")).strip()
+        if not _is_sha256(artifact_hash):
+            fail_v18("SCHEMA_FAIL")
+        payload = _load_hash_bound_payload(
+            dir_path=state_root / "ledger" / "epistemic",
+            digest=artifact_hash,
+            suffix="omega_event_epistemic_capsule_v1.json",
+            schema_version="v19_0",
+        )
+        if str(payload.get("schema_name", "")) != "omega_event_epistemic_capsule_v1":
+            fail_v18("SCHEMA_FAIL")
+        validate_schema_v19(payload, "omega_event_epistemic_capsule_v1")
+        capsule_id = str(payload.get("capsule_id", ""))
+        if capsule_id in seen_capsules:
+            fail_v18("NONDETERMINISTIC")
+        seen_capsules.add(capsule_id)
+        if capsule_id == str(expected.get("capsule_id", "")):
+            matched_expected_capsule_b = True
+            for key in ("capsule_id", "world_snapshot_id", "world_root", "sip_receipt_id", "distillate_graph_id", "episode_id"):
+                if str(payload.get(key, "")) != str(expected.get(key, "")):
+                    fail_v18("NONDETERMINISTIC")
+    if not matched_expected_capsule_b:
+        fail_v18("MISSING_STATE_INPUT")
+
+    artifact_events: dict[str, list[str]] = {}
+    for row in event_rows:
+        event_type = str(row.get("event_type", ""))
+        artifact_hash = str(row.get("artifact_hash", "")).strip()
+        if not _is_sha256(artifact_hash):
+            fail_v18("SCHEMA_FAIL")
+        artifact_events.setdefault(event_type, []).append(artifact_hash)
+    optional_event_specs: dict[str, tuple[Path, str, str]] = {
+        "EPISTEMIC_TYPE_REGISTRY_V1": (state_root / "epistemic" / "type_registry", "epistemic_type_registry_v1.json", "epistemic_type_registry_v1"),
+        "EPISTEMIC_TYPE_BINDING_V1": (state_root / "epistemic" / "type_bindings", "epistemic_type_binding_v1.json", "epistemic_type_binding_v1"),
+        "EPISTEMIC_ECAC_V1": (state_root / "epistemic" / "certs", "epistemic_ecac_v1.json", "epistemic_ecac_v1"),
+        "EPISTEMIC_EUFC_V1": (state_root / "epistemic" / "certs", "epistemic_eufc_v1.json", "epistemic_eufc_v1"),
+        "EPISTEMIC_RETENTION_DELETION_PLAN_V1": (state_root / "epistemic" / "retention", "epistemic_deletion_plan_v1.json", "epistemic_deletion_plan_v1"),
+        "EPISTEMIC_RETENTION_SAMPLING_MANIFEST_V1": (state_root / "epistemic" / "retention", "epistemic_sampling_manifest_v1.json", "epistemic_sampling_manifest_v1"),
+        "EPISTEMIC_RETENTION_SUMMARY_PROOF_V1": (state_root / "epistemic" / "retention", "epistemic_summary_proof_v1.json", "epistemic_summary_proof_v1"),
+        "EPISTEMIC_KERNEL_SPEC_V1": (state_root / "epistemic" / "kernels" / "specs", "epistemic_kernel_spec_v1.json", "epistemic_kernel_spec_v1"),
+        "EPISTEMIC_ACTION_MARKET_INPUTS_V1": (
+            state_root / "epistemic" / "market" / "actions" / "inputs",
+            "epistemic_action_market_inputs_v1.json",
+            "epistemic_action_market_inputs_v1",
+        ),
+        "EPISTEMIC_MARKET_SETTLEMENT_V1": (state_root / "epistemic" / "market", "epistemic_market_settlement_v1.json", "epistemic_market_settlement_v1"),
+    }
+    loaded_by_event: dict[str, dict[str, Any]] = {}
+    for event_type, spec in optional_event_specs.items():
+        hashes = artifact_events.get(event_type) or []
+        if not hashes:
+            continue
+        dir_path, suffix, schema_version = spec
+        payload = _load_hash_bound_payload(
+            dir_path=dir_path,
+            digest=str(hashes[-1]),
+            suffix=suffix,
+            schema_version=schema_version,
+        )
+        validate_schema_v19(payload, schema_version)
+        loaded_by_event[event_type] = payload
+
+    capsule_type_registry_id = capsule_payload.get("type_registry_id")
+    capsule_type_binding_id = capsule_payload.get("type_binding_id")
+    if (capsule_type_registry_id is None) != (capsule_type_binding_id is None):
+        fail_v18("NONDETERMINISTIC")
+    if capsule_type_registry_id is not None and capsule_type_binding_id is not None:
+        if "EPISTEMIC_TYPE_REGISTRY_V1" not in loaded_by_event or "EPISTEMIC_TYPE_BINDING_V1" not in loaded_by_event:
+            fail_v18("MISSING_STATE_INPUT")
+        if str(loaded_by_event["EPISTEMIC_TYPE_REGISTRY_V1"].get("registry_id", "")) != str(capsule_type_registry_id):
+            fail_v18("NONDETERMINISTIC")
+        if str(loaded_by_event["EPISTEMIC_TYPE_BINDING_V1"].get("binding_id", "")) != str(capsule_type_binding_id):
+            fail_v18("NONDETERMINISTIC")
+        if str((loaded_by_event["EPISTEMIC_TYPE_BINDING_V1"]).get("graph_id", "")) != str(expected["distillate_graph_id"]):
+            fail_v18("NONDETERMINISTIC")
+        if str((loaded_by_event["EPISTEMIC_TYPE_BINDING_V1"]).get("type_registry_id", "")) != str(capsule_type_registry_id):
+            fail_v18("NONDETERMINISTIC")
+        graph_registry_id = graph_payload.get("type_registry_id")
+        if graph_registry_id is not None and str(graph_registry_id) != str(capsule_type_registry_id):
+            fail_v18("NONDETERMINISTIC")
+
+    ecac_payload = loaded_by_event.get("EPISTEMIC_ECAC_V1")
+    eufc_payload = loaded_by_event.get("EPISTEMIC_EUFC_V1")
+    if (ecac_payload is None) != (eufc_payload is None):
+        fail_v18("NONDETERMINISTIC")
+    cert_valid = False
+    cert_profile_payload: dict[str, Any] | None = None
+    if ecac_payload is not None and eufc_payload is not None:
+        if str(ecac_payload.get("capsule_id", "")) != str(expected["capsule_id"]):
+            fail_v18("NONDETERMINISTIC")
+        if str(eufc_payload.get("capsule_id", "")) != str(expected["capsule_id"]):
+            fail_v18("NONDETERMINISTIC")
+        if str(ecac_payload.get("graph_id", "")) != str(expected["distillate_graph_id"]):
+            fail_v18("NONDETERMINISTIC")
+        if str(eufc_payload.get("graph_id", "")) != str(expected["distillate_graph_id"]):
+            fail_v18("NONDETERMINISTIC")
+        if str(ecac_payload.get("strip_receipt_id", "")) != str(expected.get("strip_receipt_id", "")):
+            fail_v18("NONDETERMINISTIC")
+        if str(eufc_payload.get("strip_receipt_id", "")) != str(expected.get("strip_receipt_id", "")):
+            fail_v18("NONDETERMINISTIC")
+        if str(ecac_payload.get("objective_profile_id", "")) != str(eufc_payload.get("objective_profile_id", "")):
+            fail_v18("NONDETERMINISTIC")
+        if not _is_sha256(ecac_payload.get("cert_profile_id")) or not _is_sha256(eufc_payload.get("cert_profile_id")):
+            fail_v18("SCHEMA_FAIL")
+        if str(ecac_payload.get("cert_profile_id", "")) != str(eufc_payload.get("cert_profile_id", "")):
+            fail_v18("NONDETERMINISTIC")
+        if list(ecac_payload.get("task_input_ids") or []) != list(eufc_payload.get("task_input_ids") or []):
+            fail_v18("NONDETERMINISTIC")
+        if str(ecac_payload.get("cert_profile_id", "")) != str(capsule_cert_profile_id):
+            fail_v18("CERT_GATE_FAIL")
+        type_binding_payload = _load_by_id(
+            dir_path=state_root / "epistemic" / "type_bindings",
+            suffix="epistemic_type_binding_v1.json",
+            schema_version="epistemic_type_binding_v1",
+            id_field="binding_id",
+            expected_id=str(ecac_payload.get("type_binding_id", "")),
+        )
+        if cert_gate_mode != "OFF":
+            if str(ecac_payload.get("objective_profile_id", "")) != cert_gate_objective_profile_id:
+                fail_v18("CERT_GATE_FAIL")
+            if str(ecac_payload.get("cert_profile_id", "")) != cert_gate_profile_id:
+                fail_v18("CERT_GATE_FAIL")
+        cert_profile_paths = sorted(
+            (state_root / "epistemic" / "certs" / "profiles").glob("sha256_*.epistemic_cert_profile_v1.json"),
+            key=lambda p: p.as_posix(),
+        )
+        if cert_profile_paths:
+            matches: list[dict[str, Any]] = []
+            for cert_profile_path in cert_profile_paths:
+                payload = _load_canon_json(cert_profile_path)
+                if canon_hash_obj(payload) != "sha256:" + cert_profile_path.name.split(".", 1)[0].split("_", 1)[1]:
+                    fail_v18("NONDETERMINISTIC")
+                validate_schema_v19(payload, "epistemic_cert_profile_v1")
+                if str(payload.get("cert_profile_id", "")) == str(ecac_payload.get("cert_profile_id", "")):
+                    matches.append(payload)
+            if len(matches) > 1:
+                fail_v18("NONDETERMINISTIC")
+            if len(matches) == 1:
+                cert_profile_payload = matches[0]
+        try:
+            eufc_credit_context: dict[str, Any] | None = None
+            if isinstance(eufc_payload, dict):
+                eufc_credit_context = {
+                    "credited_credit_keys": list(eufc_payload.get("credited_credit_keys") or []),
+                    "credit_window_mode": str(eufc_payload.get("credit_window_mode", "")),
+                    "credit_window_open_tick_u64": int(eufc_payload.get("credit_window_open_tick_u64", 0)),
+                    "credit_window_close_tick_u64": int(eufc_payload.get("credit_window_close_tick_u64", 0)),
+                    "credit_window_receipt_ids": list(eufc_payload.get("credit_window_receipt_ids") or []),
+                }
+            verify_certs_bundle(
+                capsule=capsule_payload,
+                graph=graph_payload,
+                type_binding=type_binding_payload,
+                objective_profile_id=str(ecac_payload.get("objective_profile_id", "")),
+                cert_profile=cert_profile_payload,
+                ecac=ecac_payload,
+                eufc=eufc_payload,
+                eufc_credit_context=eufc_credit_context,
+            )
+        except Exception as exc:  # noqa: BLE001
+            _rethrow_as_v18(exc)
+        cert_valid = str(ecac_payload.get("status", "")) == "OK" and str(eufc_payload.get("status", "")) == "OK"
+
+    if cert_gate_mode == "OFF":
+        if not usable_b or cert_gate_status != "PASS":
+            fail_v18("CERT_GATE_FAIL")
+    elif cert_gate_mode == "ENFORCE":
+        if cert_valid:
+            if not usable_b or cert_gate_status != "PASS":
+                fail_v18("CERT_GATE_FAIL")
+        else:
+            if usable_b or cert_gate_status != "BLOCKED":
+                fail_v18("CERT_GATE_FAIL")
+    else:  # WARN
+        if cert_valid:
+            if not usable_b or cert_gate_status != "PASS":
+                fail_v18("CERT_GATE_FAIL")
+        else:
+            if not usable_b or cert_gate_status != "WARN":
+                fail_v18("CERT_GATE_FAIL")
+
+    for event_type in [
+        "EPISTEMIC_RETENTION_DELETION_PLAN_V1",
+        "EPISTEMIC_RETENTION_SAMPLING_MANIFEST_V1",
+        "EPISTEMIC_RETENTION_SUMMARY_PROOF_V1",
+    ]:
+        payload = loaded_by_event.get(event_type)
+        if payload is None:
+            continue
+        if str(payload.get("capsule_id", "")) != str(expected["capsule_id"]):
+            fail_v18("NONDETERMINISTIC")
+
+    market_payload = loaded_by_event.get("EPISTEMIC_MARKET_SETTLEMENT_V1")
+    if market_payload is not None:
+        has_legacy_bid_receipts = _is_sha256(snapshot.get("bid_selection_receipt_hash")) and _is_sha256(
+            snapshot.get("bid_settlement_receipt_hash")
+        )
+        market_inputs_payload = loaded_by_event.get("EPISTEMIC_ACTION_MARKET_INPUTS_V1")
+        if market_inputs_payload is None:
+            fail_v18("MISSING_STATE_INPUT")
+        if str(market_payload.get("inputs_manifest_id", "")) != str(market_inputs_payload.get("inputs_manifest_id", "")):
+            fail_v18("NONDETERMINISTIC")
+        if has_legacy_bid_receipts:
+            if str(market_payload.get("bid_selection_receipt_hash", "")) != str(snapshot.get("bid_selection_receipt_hash")):
+                fail_v18("NONDETERMINISTIC")
+            if str(market_payload.get("bid_settlement_receipt_hash", "")) != str(snapshot.get("bid_settlement_receipt_hash")):
+                fail_v18("NONDETERMINISTIC")
+            selection_payload = _load_hash_bound_payload(
+                dir_path=state_root / "market" / "selection",
+                digest=str(snapshot.get("bid_selection_receipt_hash")),
+                suffix="bid_selection_receipt_v1.json",
+                schema_version="bid_selection_receipt_v1",
+            )
+            settlement_payload = _load_hash_bound_payload(
+                dir_path=state_root / "market" / "settlement",
+                digest=str(snapshot.get("bid_settlement_receipt_hash")),
+                suffix="bid_settlement_receipt_v1.json",
+                schema_version="bid_settlement_receipt_v1",
+            )
+            if str(settlement_payload.get("winner_campaign_id", "")) != str(market_payload.get("winner_campaign_id", "")):
+                fail_v18("NONDETERMINISTIC")
+            winner = selection_payload.get("winner")
+            if isinstance(winner, dict):
+                if str(winner.get("campaign_id", "")) != str(market_payload.get("winner_campaign_id", "")):
+                    fail_v18("NONDETERMINISTIC")
+        else:
+            zero_hash = "sha256:" + ("0" * 64)
+            if str(market_payload.get("bid_selection_receipt_hash", "")) != zero_hash:
+                fail_v18("NONDETERMINISTIC")
+            if str(market_payload.get("bid_settlement_receipt_hash", "")) != zero_hash:
+                fail_v18("NONDETERMINISTIC")
+        capsule_id = market_payload.get("capsule_id")
+        if capsule_id is not None:
+            if str(capsule_id) != str(expected["capsule_id"]):
+                fail_v18("NONDETERMINISTIC")
+        ecac_id = market_payload.get("ecac_id")
+        eufc_id = market_payload.get("eufc_id")
+        if ecac_id is not None:
+            if ecac_payload is None or str(ecac_payload.get("ecac_id", "")) != str(ecac_id):
+                fail_v18("NONDETERMINISTIC")
+        if eufc_id is not None:
+            if eufc_payload is None or str(eufc_payload.get("eufc_id", "")) != str(eufc_id):
+                fail_v18("NONDETERMINISTIC")
+
+        action_bid_set_hash = market_payload.get("action_bid_set_hash")
+        action_selection_hash = market_payload.get("action_selection_receipt_hash")
+        action_settlement_hash = market_payload.get("action_settlement_receipt_hash")
+        if not (_is_sha256(action_bid_set_hash) and _is_sha256(action_selection_hash) and _is_sha256(action_settlement_hash)):
+            fail_v18("MISSING_STATE_INPUT")
+
+        action_bid_set_payload = _load_hash_bound_payload(
+            dir_path=state_root / "epistemic" / "market" / "actions" / "bid_sets",
+            digest=str(action_bid_set_hash),
+            suffix="epistemic_action_bid_set_v1.json",
+            schema_version="epistemic_action_bid_set_v1",
+        )
+        action_selection_payload = _load_hash_bound_payload(
+            dir_path=state_root / "epistemic" / "market" / "actions" / "selection",
+            digest=str(action_selection_hash),
+            suffix="epistemic_action_selection_receipt_v1.json",
+            schema_version="epistemic_action_selection_receipt_v1",
+        )
+        action_settlement_payload = _load_hash_bound_payload(
+            dir_path=state_root / "epistemic" / "market" / "actions" / "settlement",
+            digest=str(action_settlement_hash),
+            suffix="epistemic_action_settlement_receipt_v1.json",
+            schema_version="epistemic_action_settlement_receipt_v1",
+        )
+        if str(action_bid_set_payload.get("inputs_manifest_id", "")) != str(market_inputs_payload.get("inputs_manifest_id", "")):
+            fail_v18("NONDETERMINISTIC")
+        if str(action_selection_payload.get("inputs_manifest_id", "")) != str(market_inputs_payload.get("inputs_manifest_id", "")):
+            fail_v18("NONDETERMINISTIC")
+        if str(action_settlement_payload.get("inputs_manifest_id", "")) != str(market_inputs_payload.get("inputs_manifest_id", "")):
+            fail_v18("NONDETERMINISTIC")
+
+        action_profile_id = str(market_inputs_payload.get("market_profile_id", "")).strip()
+        if not _is_sha256(action_profile_id):
+            fail_v18("SCHEMA_FAIL")
+        action_profile_rows = sorted(
+            (state_root / "epistemic" / "market" / "actions" / "profiles").glob("sha256_*.epistemic_action_market_profile_v1.json"),
+            key=lambda p: p.as_posix(),
+        )
+        action_profile_payload = None
+        for row in action_profile_rows:
+            payload = _load_canon_json(row)
+            if canon_hash_obj(payload) != "sha256:" + row.name.split(".", 1)[0].split("_", 1)[1]:
+                fail_v18("NONDETERMINISTIC")
+            validate_schema_v19(payload, "epistemic_action_market_profile_v1")
+            if str(payload.get("profile_id", "")) == action_profile_id:
+                if action_profile_payload is not None:
+                    fail_v18("NONDETERMINISTIC")
+                action_profile_payload = payload
+        if action_profile_payload is None:
+            default_profile = build_default_action_market_profile()
+            if str(default_profile.get("profile_id", "")) != action_profile_id:
+                fail_v18("MISSING_STATE_INPUT")
+            action_profile_payload = default_profile
+
+        bid_rows_all = sorted(
+            (state_root / "epistemic" / "market" / "actions" / "bids").glob("sha256_*.epistemic_action_bid_v1.json"),
+            key=lambda p: p.as_posix(),
+        )
+        observed_action_bids: list[dict[str, Any]] = []
+        for row in bid_rows_all:
+            payload = _load_canon_json(row)
+            if canon_hash_obj(payload) != "sha256:" + row.name.split(".", 1)[0].split("_", 1)[1]:
+                fail_v18("NONDETERMINISTIC")
+            validate_schema_v19(payload, "epistemic_action_bid_v1")
+            if str(payload.get("inputs_manifest_id", "")) != str(market_inputs_payload.get("inputs_manifest_id", "")):
+                continue
+            observed_action_bids.append(payload)
+        if not observed_action_bids:
+            fail_v18("MISSING_STATE_INPUT")
+        try:
+            verify_action_market_replay(
+                inputs_manifest=market_inputs_payload,
+                market_profile=action_profile_payload,
+                observed_bids=observed_action_bids,
+                observed_bid_set=action_bid_set_payload,
+                observed_selection=action_selection_payload,
+                observed_settlement=action_settlement_payload,
+                produced_capsule_id=(str(market_payload.get("capsule_id", "")).strip() or None),
+            )
+        except Exception as exc:  # noqa: BLE001
+            _rethrow_as_v18(exc)
+        if eufc_payload is not None:
+            credit_key = action_settlement_payload.get("credit_key")
+            if credit_key is not None:
+                credited_keys = list(eufc_payload.get("credited_credit_keys") or [])
+                if credited_keys:
+                    if str(eufc_payload.get("credit_window_mode", "")) != "EUFC_WINDOW":
+                        fail_v18("NONDETERMINISTIC")
+                    if int(eufc_payload.get("credit_window_open_tick_u64", -1)) != int(market_inputs_payload.get("eufc_window_open_tick_u64", -2)):
+                        fail_v18("NONDETERMINISTIC")
+                    if int(eufc_payload.get("credit_window_close_tick_u64", -1)) != int(market_inputs_payload.get("eufc_window_close_tick_u64", -2)):
+                        fail_v18("NONDETERMINISTIC")
+                    if list(eufc_payload.get("credit_window_receipt_ids") or []) != list(market_inputs_payload.get("eufc_window_receipt_ids") or []):
+                        fail_v18("NONDETERMINISTIC")
+                    if credited_keys.count(str(credit_key)) != 1:
+                        fail_v18("NONDETERMINISTIC")
+
+    compaction_execution_paths = sorted(
+        (state_root / "epistemic" / "retention").glob("sha256_*.epistemic_compaction_execution_receipt_v1.json"),
+        key=lambda p: p.as_posix(),
+    )
+    for execution_path in compaction_execution_paths:
+        execution_payload = _load_canon_json(execution_path)
+        if canon_hash_obj(execution_payload) != "sha256:" + execution_path.name.split(".", 1)[0].split("_", 1)[1]:
+            fail_v18("NONDETERMINISTIC")
+        validate_schema_v19(execution_payload, "epistemic_compaction_execution_receipt_v1")
+
+        witness_paths = sorted(
+            (state_root / "epistemic" / "retention").glob("sha256_*.epistemic_compaction_witness_v1.json"),
+            key=lambda p: p.as_posix(),
+        )
+        if not witness_paths:
+            fail_v18("MISSING_STATE_INPUT")
+        witness_payload = None
+        for witness_path in witness_paths:
+            candidate = _load_canon_json(witness_path)
+            if canon_hash_obj(candidate) != "sha256:" + witness_path.name.split(".", 1)[0].split("_", 1)[1]:
+                fail_v18("NONDETERMINISTIC")
+            validate_schema_v19(candidate, "epistemic_compaction_witness_v1")
+            if int(candidate.get("replay_floor_tick_u64", -1)) != int(execution_payload.get("replay_floor_tick_u64", -2)):
+                continue
+            witness_payload = candidate
+            break
+        if witness_payload is None:
+            fail_v18("MISSING_STATE_INPUT")
+
+        pack_payload = _load_by_id(
+            dir_path=state_root / "epistemic" / "retention",
+            suffix="epistemic_compaction_pack_manifest_v1.json",
+            schema_version="epistemic_compaction_pack_manifest_v1",
+            id_field="pack_manifest_id",
+            expected_id=str(execution_payload.get("pack_manifest_id", "")),
+        )
+        mapping_payload = _load_by_id(
+            dir_path=state_root / "epistemic" / "retention",
+            suffix="epistemic_compaction_mapping_manifest_v1.json",
+            schema_version="epistemic_compaction_mapping_manifest_v1",
+            id_field="mapping_manifest_id",
+            expected_id=str(execution_payload.get("mapping_manifest_id", "")),
+        )
+        tombstone_payload = _load_by_id(
+            dir_path=state_root / "epistemic" / "retention",
+            suffix="epistemic_compaction_tombstone_manifest_v1.json",
+            schema_version="epistemic_compaction_tombstone_manifest_v1",
+            id_field="tombstone_manifest_id",
+            expected_id=str(execution_payload.get("tombstone_manifest_id", "")),
+        )
+        try:
+            verify_compaction_bundle(
+                state_root=state_root,
+                execution_receipt=execution_payload,
+                witness=witness_payload,
+                pack_manifest=pack_payload,
+                mapping_manifest=mapping_payload,
+                tombstone_manifest=tombstone_payload,
+            )
+        except Exception as exc:  # noqa: BLE001
+            _rethrow_as_v18(exc)
+
+
 def verify(state_dir: Path, *, mode: str = "full") -> str:
+    # Verifier replay is pinned-only; force network off regardless of caller env.
+    os.environ["OMEGA_NET_LIVE_OK"] = "0"
     verify_v18(state_dir, mode=mode)
 
     state_root = _resolve_state_dir(state_dir)
     snapshot = _latest_snapshot_or_fail(state_root / "snapshot")
     _verify_policy_path(state_root, snapshot)
-    config_dir = state_root.parent / "config"
-    if not config_dir.exists() or not config_dir.is_dir():
+    config_candidates = [
+        state_root.parent / "config",
+        state_root / "config",
+    ]
+    config_dir = next((path for path in config_candidates if path.exists() and path.is_dir()), None)
+    if config_dir is None:
         fail_v18("MISSING_STATE_INPUT")
     _verify_shadow_path(state_root=state_root, config_dir=config_dir, snapshot=snapshot)
+    _verify_epistemic_path(state_root, snapshot)
 
     promo_hash = snapshot.get("promotion_receipt_hash")
     if promo_hash is None:

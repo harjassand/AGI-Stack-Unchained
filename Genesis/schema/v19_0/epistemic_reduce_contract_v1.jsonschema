@@ -1,0 +1,72 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v19_0/epistemic_reduce_contract_v1",
+  "title": "Epistemic reduce contract v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "contract_id",
+    "reducer_kind",
+    "unicode_normalization",
+    "whitespace_policy",
+    "punctuation_policy",
+    "max_claims_u64",
+    "max_claim_text_len_u64",
+    "claim_hash_algorithm",
+    "confidence_calibration_id",
+    "instruction_strip_contract_id",
+    "tie_break_policy"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "epistemic_reduce_contract_v1"
+    },
+    "contract_id": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "reducer_kind": {
+      "const": "REDUCE_V1"
+    },
+    "unicode_normalization": {
+      "const": "NFC"
+    },
+    "whitespace_policy": {
+      "type": "string",
+      "enum": [
+        "COLLAPSE_ASCII_WHITESPACE"
+      ]
+    },
+    "punctuation_policy": {
+      "type": "string",
+      "enum": [
+        "STRIP_EDGE_PUNCT_KEEP_INNER"
+      ]
+    },
+    "max_claims_u64": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 100000
+    },
+    "max_claim_text_len_u64": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 65536
+    },
+    "claim_hash_algorithm": {
+      "const": "SHA256_CANON_V1"
+    },
+    "confidence_calibration_id": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "instruction_strip_contract_id": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "tie_break_policy": {
+      "const": "CLAIM_HASH_ASC"
+    }
+  }
+}

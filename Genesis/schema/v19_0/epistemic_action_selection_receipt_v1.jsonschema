@@ -1,0 +1,58 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v19_0/epistemic_action_selection_receipt_v1",
+  "title": "Epistemic action selection receipt v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "selection_id",
+    "tick_u64",
+    "inputs_manifest_id",
+    "market_profile_id",
+    "bid_set_id",
+    "winner_action_kind",
+    "winner_bid_id",
+    "outcome",
+    "tie_break_path",
+    "candidates"
+  ],
+  "properties": {
+    "schema_version": {"const": "epistemic_action_selection_receipt_v1"},
+    "selection_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "tick_u64": {"type": "integer", "minimum": 0},
+    "inputs_manifest_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "market_profile_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "bid_set_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "winner_action_kind": {
+      "anyOf": [
+        {"type": "null"},
+        {"type": "string", "enum": ["FETCH", "SEGMENT", "INFER", "REDUCE", "SEAL"]}
+      ]
+    },
+    "winner_bid_id": {
+      "anyOf": [
+        {"type": "null"},
+        {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"}
+      ]
+    },
+    "outcome": {"type": "string", "enum": ["OK", "NOOP"]},
+    "tie_break_path": {"type": "array", "items": {"type": "string", "minLength": 1}},
+    "candidates": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["action_kind", "bid_id", "dispatchable_b", "score_q32", "eligible_b", "skip_reason"],
+        "properties": {
+          "action_kind": {"type": "string", "enum": ["FETCH", "SEGMENT", "INFER", "REDUCE", "SEAL"]},
+          "bid_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+          "dispatchable_b": {"type": "boolean"},
+          "score_q32": {"type": "integer", "minimum": 0},
+          "eligible_b": {"type": "boolean"},
+          "skip_reason": {"type": "string", "minLength": 1}
+        }
+      }
+    }
+  }
+}

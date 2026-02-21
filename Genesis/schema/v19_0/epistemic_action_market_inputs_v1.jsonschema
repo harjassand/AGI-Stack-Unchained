@@ -1,0 +1,68 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v19_0/epistemic_action_market_inputs_v1",
+  "title": "Epistemic action market inputs v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "inputs_manifest_id",
+    "tick_u64",
+    "market_profile_id",
+    "prior_market_state_id",
+    "ordering_rule",
+    "eligible_capsule_ids",
+    "eligible_graph_ids",
+    "eligible_ecac_ids",
+    "eligible_eufc_ids",
+    "observation_metric_ids",
+    "observation_report_hash",
+    "eufc_window_mode",
+    "eufc_window_receipt_ids",
+    "eufc_window_receipt_ordering_rule",
+    "eufc_window_open_tick_u64",
+    "eufc_window_close_tick_u64"
+  ],
+  "properties": {
+    "schema_version": {"const": "epistemic_action_market_inputs_v1"},
+    "inputs_manifest_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "tick_u64": {"type": "integer", "minimum": 0},
+    "market_profile_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "prior_market_state_id": {
+      "anyOf": [
+        {"type": "null"},
+        {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"}
+      ]
+    },
+    "ordering_rule": {"const": "CANON_ASC_SHA256"},
+    "eligible_capsule_ids": {
+      "type": "array",
+      "items": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"}
+    },
+    "eligible_graph_ids": {
+      "type": "array",
+      "items": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"}
+    },
+    "eligible_ecac_ids": {
+      "type": "array",
+      "items": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"}
+    },
+    "eligible_eufc_ids": {
+      "type": "array",
+      "items": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"}
+    },
+    "observation_metric_ids": {
+      "type": "array",
+      "items": {"type": "string", "minLength": 1, "maxLength": 256}
+    },
+    "observation_report_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "eufc_window_mode": {"const": "EUFC_WINDOW"},
+    "eufc_window_receipt_ids": {
+      "type": "array",
+      "items": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"}
+    },
+    "eufc_window_receipt_ordering_rule": {"const": "TICK_ASC_THEN_ID_ASC"},
+    "eufc_window_open_tick_u64": {"type": "integer", "minimum": 0},
+    "eufc_window_close_tick_u64": {"type": "integer", "minimum": 0}
+  }
+}

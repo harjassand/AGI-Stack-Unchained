@@ -1,0 +1,23 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v19_0/cert_invariance_contract_v1",
+  "title": "Cert invariance contract v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "contract_id",
+    "equality_mode",
+    "require_same_cert_profile_b",
+    "require_same_strip_receipt_b",
+    "require_same_task_input_ids_b"
+  ],
+  "properties": {
+    "schema_version": {"const": "cert_invariance_contract_v1"},
+    "contract_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "equality_mode": {"const": "ID_EQUAL"},
+    "require_same_cert_profile_b": {"const": true},
+    "require_same_strip_receipt_b": {"const": true},
+    "require_same_task_input_ids_b": {"const": true}
+  }
+}

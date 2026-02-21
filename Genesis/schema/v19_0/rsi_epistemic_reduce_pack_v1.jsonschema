@@ -1,0 +1,245 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v19_0/rsi_epistemic_reduce_pack_v1",
+  "title": "RSI epistemic reduce pack v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "outbox_root_rel",
+    "episode_selector",
+    "accepted_mob_schema_versions",
+    "reduce_contract_rel",
+    "reduce_contract_id",
+    "instruction_strip_contract_rel",
+    "instruction_strip_contract_id",
+    "confidence_calibration_rel",
+    "confidence_calibration_id",
+    "sip_profile",
+    "sip_budget_spec"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "rsi_epistemic_reduce_pack_v1"
+    },
+    "outbox_root_rel": {
+      "type": "string",
+      "const": ".omega_cache/epistemic_outbox"
+    },
+    "episode_selector": {
+      "type": "object"
+    },
+    "accepted_mob_schema_versions": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": {
+        "type": "string",
+        "enum": [
+          "epistemic_model_output_v1",
+          "epistemic_model_output_v2"
+        ]
+      }
+    },
+    "reduce_contract_rel": {
+      "type": "string",
+      "minLength": 1
+    },
+    "reduce_contract_id": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "instruction_strip_contract_rel": {
+      "type": "string",
+      "minLength": 1
+    },
+    "instruction_strip_contract_id": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "confidence_calibration_rel": {
+      "type": "string",
+      "minLength": 1
+    },
+    "confidence_calibration_id": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "type_registry_rel": {
+      "type": "string",
+      "minLength": 1
+    },
+    "type_registry_id": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "parent_type_registry_rel": {
+      "type": "string",
+      "minLength": 1
+    },
+    "parent_type_registry_id": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "retention_policy_rel": {
+      "type": "string",
+      "minLength": 1
+    },
+    "retention_policy_id": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "cert_gate_mode": {
+      "type": "string",
+      "enum": [
+        "OFF",
+        "WARN",
+        "ENFORCE"
+      ]
+    },
+    "objective_profile_rel": {
+      "type": "string",
+      "minLength": 1
+    },
+    "objective_profile_id": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "cert_profile_rel": {
+      "type": "string",
+      "minLength": 1
+    },
+    "cert_profile_id": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "epistemic_kernel_spec_rel": {
+      "type": "string",
+      "minLength": 1
+    },
+    "epistemic_kernel_spec_id": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "sip_profile": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "sip_profile_id",
+        "canonicalization_profile_ids",
+        "leakage_policy"
+      ],
+      "properties": {
+        "sip_profile_id": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "canonicalization_profile_ids": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "string",
+            "pattern": "^sha256:[0-9a-f]{64}$"
+          }
+        },
+        "leakage_policy": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "on_detect"
+          ],
+          "properties": {
+            "forbidden_patterns": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "max_entropy_q16": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "on_detect": {
+              "type": "string",
+              "enum": [
+                "REJECT",
+                "SAFE_HALT"
+              ]
+            }
+          }
+        }
+      }
+    },
+    "sip_budget_spec": {
+      "$ref": "https://genesis.engine/specs/v19_0/budget_spec_v1"
+    },
+    "world_task_bindings": {
+      "type": "array",
+      "items": {
+        "$ref": "https://genesis.engine/specs/v19_0/world_task_binding_v1"
+      }
+    },
+    "enable_sip_adapter_b": {
+      "type": "boolean",
+      "const": false
+    }
+  },
+  "allOf": [
+    {
+      "if": {"required": ["type_registry_rel"]},
+      "then": {"required": ["type_registry_id"]}
+    },
+    {
+      "if": {"required": ["type_registry_id"]},
+      "then": {"required": ["type_registry_rel"]}
+    },
+    {
+      "if": {"required": ["parent_type_registry_rel"]},
+      "then": {"required": ["parent_type_registry_id"]}
+    },
+    {
+      "if": {"required": ["parent_type_registry_id"]},
+      "then": {"required": ["parent_type_registry_rel"]}
+    },
+    {
+      "if": {"required": ["retention_policy_rel"]},
+      "then": {"required": ["retention_policy_id"]}
+    },
+    {
+      "if": {"required": ["retention_policy_id"]},
+      "then": {"required": ["retention_policy_rel"]}
+    },
+    {
+      "if": {"required": ["objective_profile_rel"]},
+      "then": {"required": ["objective_profile_id"]}
+    },
+    {
+      "if": {"required": ["instruction_strip_contract_rel"]},
+      "then": {"required": ["instruction_strip_contract_id"]}
+    },
+    {
+      "if": {"required": ["instruction_strip_contract_id"]},
+      "then": {"required": ["instruction_strip_contract_rel"]}
+    },
+    {
+      "if": {"required": ["objective_profile_id"]},
+      "then": {"required": ["objective_profile_rel"]}
+    },
+    {
+      "if": {"required": ["cert_profile_rel"]},
+      "then": {"required": ["cert_profile_id"]}
+    },
+    {
+      "if": {"required": ["cert_profile_id"]},
+      "then": {"required": ["cert_profile_rel"]}
+    },
+    {
+      "if": {"required": ["epistemic_kernel_spec_rel"]},
+      "then": {"required": ["epistemic_kernel_spec_id"]}
+    },
+    {
+      "if": {"required": ["epistemic_kernel_spec_id"]},
+      "then": {"required": ["epistemic_kernel_spec_rel"]}
+    }
+  ]
+}

@@ -84,8 +84,17 @@
     "shadow_evaluation_tiers_rel": {"type": "string"},
     "shadow_protected_roots_profile_rel": {"type": "string"},
     "shadow_corpus_descriptor_rel": {"type": "string"},
+    "shadow_corpus_descriptor_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
     "shadow_witnessed_determinism_profile_rel": {"type": "string"},
     "shadow_j_comparison_profile_rel": {"type": "string"},
+    "shadow_graph_invariance_contract_rel": {"type": "string"},
+    "shadow_graph_invariance_contract_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "shadow_type_binding_invariance_contract_rel": {"type": "string"},
+    "shadow_type_binding_invariance_contract_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "shadow_cert_invariance_contract_rel": {"type": "string"},
+    "shadow_cert_invariance_contract_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "shadow_cert_profile_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "shadow_instruction_strip_contract_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
     "shadow_handoff_receipt_rel": {"type": "string"},
     "shadow_observed_writes_rel": {"type": "string"},
     "auto_swap_b": {"type": "boolean"}
@@ -183,6 +192,38 @@
       }
     },
     {
+      "if": {"required": ["shadow_corpus_descriptor_rel"]},
+      "then": {"required": ["shadow_corpus_descriptor_id"]}
+    },
+    {
+      "if": {"required": ["shadow_corpus_descriptor_id"]},
+      "then": {"required": ["shadow_corpus_descriptor_rel"]}
+    },
+    {
+      "if": {"required": ["shadow_graph_invariance_contract_rel"]},
+      "then": {"required": ["shadow_graph_invariance_contract_id"]}
+    },
+    {
+      "if": {"required": ["shadow_graph_invariance_contract_id"]},
+      "then": {"required": ["shadow_graph_invariance_contract_rel"]}
+    },
+    {
+      "if": {"required": ["shadow_type_binding_invariance_contract_rel"]},
+      "then": {"required": ["shadow_type_binding_invariance_contract_id"]}
+    },
+    {
+      "if": {"required": ["shadow_type_binding_invariance_contract_id"]},
+      "then": {"required": ["shadow_type_binding_invariance_contract_rel"]}
+    },
+    {
+      "if": {"required": ["shadow_cert_invariance_contract_rel"]},
+      "then": {"required": ["shadow_cert_invariance_contract_id"]}
+    },
+    {
+      "if": {"required": ["shadow_cert_invariance_contract_id"]},
+      "then": {"required": ["shadow_cert_invariance_contract_rel"]}
+    },
+    {
       "if": {
         "required": ["shadow_regime_proposal_rel"]
       },
@@ -191,8 +232,17 @@
           "shadow_evaluation_tiers_rel",
           "shadow_protected_roots_profile_rel",
           "shadow_corpus_descriptor_rel",
+          "shadow_corpus_descriptor_id",
           "shadow_witnessed_determinism_profile_rel",
-          "shadow_j_comparison_profile_rel"
+          "shadow_j_comparison_profile_rel",
+          "shadow_graph_invariance_contract_rel",
+          "shadow_graph_invariance_contract_id",
+          "shadow_type_binding_invariance_contract_rel",
+          "shadow_type_binding_invariance_contract_id",
+          "shadow_cert_invariance_contract_rel",
+          "shadow_cert_invariance_contract_id",
+          "shadow_cert_profile_id",
+          "shadow_instruction_strip_contract_id"
         ]
       }
     },

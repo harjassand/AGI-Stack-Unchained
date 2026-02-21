@@ -1,0 +1,161 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v19_0/epistemic_chunk_contract_v1",
+  "title": "Epistemic chunk contract v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "chunk_contract_id",
+    "sensor_kind",
+    "source_kind",
+    "ordering_rule"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "epistemic_chunk_contract_v1"
+    },
+    "chunk_contract_id": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "sensor_kind": {
+      "type": "string",
+      "enum": [
+        "VISION_FRAME",
+        "AUDIO_WINDOW",
+        "BYTE_STREAM_RABIN"
+      ]
+    },
+    "source_kind": {
+      "type": "string",
+      "enum": [
+        "FILE_SEQUENCE",
+        "VIDEO_FILE",
+        "LIVE_CAMERA",
+        "AUDIO_FILE",
+        "AUDIO_LIVE",
+        "BYTE_STREAM_FILE"
+      ]
+    },
+    "cadence_frames_u64": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "ordering_rule": {
+      "type": "string",
+      "enum": [
+        "LEXICOGRAPHIC_PATH_ASC",
+        "INDEX_ASC",
+        "RABIN_BOUNDARY_ASC"
+      ]
+    },
+    "decoder_contract_id": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "chunker_impl_relpath": {
+      "type": "string",
+      "minLength": 1
+    },
+    "chunker_impl_sha256": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "max_frames_u64": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "audio_window_ms_u32": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "audio_overlap_ms_u32": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "audio_decode_contract_id": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "rabin_polynomial_u64": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "rabin_window_bytes_u32": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "rabin_mask_u64": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "min_chunk_bytes_u32": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "max_chunk_bytes_u32": {
+      "type": "integer",
+      "minimum": 1
+    }
+  },
+  "oneOf": [
+    {
+      "required": [
+        "cadence_frames_u64",
+        "max_frames_u64"
+      ],
+      "properties": {
+        "sensor_kind": {"const": "VISION_FRAME"},
+        "source_kind": {"enum": ["FILE_SEQUENCE", "VIDEO_FILE", "LIVE_CAMERA"]}
+      }
+    },
+    {
+      "required": [
+        "audio_window_ms_u32",
+        "audio_overlap_ms_u32"
+      ],
+      "properties": {
+        "sensor_kind": {"const": "AUDIO_WINDOW"},
+        "source_kind": {"enum": ["AUDIO_FILE", "AUDIO_LIVE"]}
+      }
+    },
+    {
+      "required": [
+        "rabin_polynomial_u64",
+        "rabin_window_bytes_u32",
+        "rabin_mask_u64",
+        "min_chunk_bytes_u32",
+        "max_chunk_bytes_u32"
+      ],
+      "properties": {
+        "sensor_kind": {"const": "BYTE_STREAM_RABIN"},
+        "source_kind": {"const": "BYTE_STREAM_FILE"}
+      }
+    },
+    {
+      "if": {
+        "required": [
+          "chunker_impl_relpath"
+        ]
+      },
+      "then": {
+        "required": [
+          "chunker_impl_sha256"
+        ]
+      }
+    },
+    {
+      "if": {
+        "required": [
+          "chunker_impl_sha256"
+        ]
+      },
+      "then": {
+        "required": [
+          "chunker_impl_relpath"
+        ]
+      }
+    }
+  ]
+}

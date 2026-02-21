@@ -1,0 +1,27 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v19_0/epistemic_compaction_execution_receipt_v1",
+  "title": "Epistemic compaction execution receipt v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "receipt_id",
+    "replay_floor_tick_u64",
+    "pre_store_root_id",
+    "post_store_root_id",
+    "pack_manifest_id",
+    "mapping_manifest_id",
+    "tombstone_manifest_id"
+  ],
+  "properties": {
+    "schema_version": {"const": "epistemic_compaction_execution_receipt_v1"},
+    "receipt_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "replay_floor_tick_u64": {"type": "integer", "minimum": 0},
+    "pre_store_root_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "post_store_root_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "pack_manifest_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "mapping_manifest_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "tombstone_manifest_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"}
+  }
+}

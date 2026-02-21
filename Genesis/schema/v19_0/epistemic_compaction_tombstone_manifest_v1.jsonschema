@@ -1,0 +1,20 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v19_0/epistemic_compaction_tombstone_manifest_v1",
+  "title": "Epistemic compaction tombstone manifest v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "tombstone_manifest_id",
+    "tombstoned_blob_ids"
+  ],
+  "properties": {
+    "schema_version": {"const": "epistemic_compaction_tombstone_manifest_v1"},
+    "tombstone_manifest_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "tombstoned_blob_ids": {
+      "type": "array",
+      "items": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"}
+    }
+  }
+}

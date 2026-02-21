@@ -1,0 +1,32 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v19_0/epistemic_sampling_manifest_v1",
+  "title": "Epistemic sampling manifest v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "manifest_id",
+    "policy_id",
+    "capsule_id",
+    "source_content_count_u64",
+    "sampled_content_ids",
+    "sample_count_u64",
+    "sampling_seed_u64",
+    "sampling_rate_q32"
+  ],
+  "properties": {
+    "schema_version": {"const": "epistemic_sampling_manifest_v1"},
+    "manifest_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "policy_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "capsule_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "source_content_count_u64": {"type": "integer", "minimum": 0},
+    "sampled_content_ids": {
+      "type": "array",
+      "items": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"}
+    },
+    "sample_count_u64": {"type": "integer", "minimum": 0},
+    "sampling_seed_u64": {"type": "integer", "minimum": 0},
+    "sampling_rate_q32": {"type": "integer", "minimum": 0, "maximum": 4294967296}
+  }
+}

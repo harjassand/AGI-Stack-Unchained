@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import Any
 
 from orchestrator.omega_v18_0.applier_v1 import run_activation
-from orchestrator.omega_v18_0.goal_synthesizer_v1 import synthesize_goal_queue
+from .goal_synthesizer_v1 import synthesize_goal_queue
 from orchestrator.omega_v18_0.observer_v1 import read_meta_core_active_manifest_hash
 
 from .microkernel_v1 import (

@@ -1,0 +1,1 @@
+{"contract_id":"sha256:d2dcbd5a6310bdae8787ca091075f3e47fba441c0598c657416e6d83f9d7e755","equality_mode":"ID_EQUAL","require_same_cert_profile_b":true,"require_same_strip_receipt_b":true,"require_same_task_input_ids_b":true,"schema_version":"cert_invariance_contract_v1"}

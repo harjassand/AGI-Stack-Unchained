@@ -1,0 +1,31 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v19_0/epistemic_kernel_spec_v1",
+  "title": "Epistemic kernel spec v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "kernel_spec_id",
+    "kernel_name",
+    "input_schema",
+    "output_schema",
+    "determinism_contract_id",
+    "transpiler_contract_id",
+    "source_module_rel",
+    "entry_symbol",
+    "max_steps_u64"
+  ],
+  "properties": {
+    "schema_version": {"const": "epistemic_kernel_spec_v1"},
+    "kernel_spec_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "kernel_name": {"type": "string", "minLength": 1, "maxLength": 256},
+    "input_schema": {"type": "string", "enum": ["qxwmr_graph_v1"]},
+    "output_schema": {"type": "string", "minLength": 1, "maxLength": 256},
+    "determinism_contract_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "transpiler_contract_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "source_module_rel": {"type": "string", "minLength": 1},
+    "entry_symbol": {"type": "string", "minLength": 1, "maxLength": 256},
+    "max_steps_u64": {"type": "integer", "minimum": 1}
+  }
+}

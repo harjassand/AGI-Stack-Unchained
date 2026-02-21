@@ -32,8 +32,10 @@ from verifier_client import run_verify  # noqa: E402
 from cdel.v1_7r.canon import write_canon_json  # noqa: E402
 from cdel.v18_0.omega_common_v1 import canon_hash_obj, load_canon_dict  # noqa: E402
 from cdel.v19_0.conservatism_v1 import evaluate_reject_conservatism  # noqa: E402
+from cdel.v19_0.shadow_corpus_v1 import load_shadow_corpus_entries  # noqa: E402
 from cdel.v19_0.shadow_j_eval_v1 import evaluate_j_comparison  # noqa: E402
 from cdel.v19_0.shadow_runner_v1 import run_shadow_tick  # noqa: E402
+from cdel.v19_0.verify_rsi_omega_daemon_v1 import verify as verify_v19_daemon  # noqa: E402
 
 
 def _parse_args() -> argparse.Namespace:
@@ -180,133 +182,50 @@ def main() -> None:
     candidate_hash = _load_manifest_hash(candidate_bundle_dir / "constitution.manifest.json")
 
     shadow_config = evidence_dir / "shadow_config_v19"
-    shutil.copytree(REPO_ROOT / "campaigns" / "rsi_omega_daemon_v19_0_super_unified", shadow_config)
+    shutil.copytree(REPO_ROOT / "campaigns" / "rsi_omega_daemon_v19_0_phase4d_epistemic_airlock", shadow_config)
     pack_path = shadow_config / "rsi_omega_daemon_pack_v1.json"
     pack = load_canon_dict(pack_path)
+    required_shadow_pins = (
+        "shadow_regime_proposal_rel",
+        "shadow_evaluation_tiers_rel",
+        "shadow_protected_roots_profile_rel",
+        "shadow_corpus_descriptor_rel",
+        "shadow_corpus_descriptor_id",
+        "shadow_witnessed_determinism_profile_rel",
+        "shadow_j_comparison_profile_rel",
+        "shadow_graph_invariance_contract_rel",
+        "shadow_graph_invariance_contract_id",
+        "shadow_type_binding_invariance_contract_rel",
+        "shadow_type_binding_invariance_contract_id",
+        "shadow_cert_invariance_contract_rel",
+        "shadow_cert_invariance_contract_id",
+        "shadow_cert_profile_id",
+        "shadow_instruction_strip_contract_id",
+    )
+    for key in required_shadow_pins:
+        if not str(pack.get(key, "")).strip():
+            raise RuntimeError(f"missing required shadow pin: {key}")
+    if bool(pack.get("auto_swap_b", False)):
+        raise RuntimeError("phase4c drill requires auto_swap_b=false")
 
-    tiers_profile = _write_profile_with_id(
-        shadow_config / "shadow_evaluation_tiers_v1.json",
-        {
-            "schema_name": "shadow_evaluation_tiers_v1",
-            "schema_version": "v19_0",
-            "tier_a": {
-                "n_live_ticks": 250,
-                "n_fuzz_cases": 512,
-                "n_double_runs": 50,
-                "corpus_mode": "PINNED_SMALL",
-            },
-            "tier_b": {
-                "n_live_ticks": 1000,
-                "n_fuzz_cases": 20000,
-                "n_double_runs": 1000,
-                "corpus_mode": "PINNED_STRATIFIED",
-            },
-        },
-        "profile_id",
+    corpus_descriptor_rel = str(pack["shadow_corpus_descriptor_rel"]).strip()
+    corpus_descriptor_path = (shadow_config / corpus_descriptor_rel).resolve()
+    corpus_descriptor = load_canon_dict(corpus_descriptor_path)
+    if str(corpus_descriptor.get("descriptor_id", "")).strip() != str(pack.get("shadow_corpus_descriptor_id", "")).strip():
+        raise RuntimeError("shadow corpus descriptor id pin mismatch")
+    shadow_corpus = load_shadow_corpus_entries(
+        corpus_descriptor=dict(corpus_descriptor),
+        descriptor_dir=corpus_descriptor_path.parent,
     )
-    protected_profile = _write_profile_with_id(
-        shadow_config / "shadow_protected_roots_profile_v1.json",
-        {
-            "schema_name": "shadow_protected_roots_profile_v1",
-            "schema_version": "v19_0",
-            "hash_scope_version": "PHASE4C_V4_SCOPED_ROOTS",
-            "static_protected_roots": ["authority", "meta-core", "CDEL-v2", "Genesis"],
-            "dynamic_protected_roots": ["daemon/rsi_omega_daemon_v19_0/state"],
-            "excluded_roots": [
-                "runs",
-                "daemon/*/state",
-                ".omega_cache",
-                "CDEL-v2/.venv",
-                "CDEL-v2/cdel/v15_0/rust/agi_kernel_rs_v1/vendor",
-                "CDEL-v2/cdel/v15_1/rust/agi_kernel_rs_v1/vendor",
-                "CDEL-v2/cdel/v16_0/rust/sas_metasearch_rs_v1/vendor",
-                "CDEL-v2/cdel/v16_1/rust/sas_metasearch_rs_v1/vendor"
-            ],
-            "hash_budget_spec": {
-                "max_files": 2000000,
-                "max_bytes_read": 20000000000,
-                "max_steps": 10000000,
-            },
-            "symlink_policy": "FAIL_CLOSED",
-        },
-        "profile_id",
-    )
-    corpus_descriptor = _write_profile_with_id(
-        shadow_config / "corpus_descriptor_v1.json",
-        {
-            "schema_name": "corpus_descriptor_v1",
-            "schema_version": "v19_0",
-            "discovery_mode": "EXPLICIT_ENUMERATION_ONLY",
-            "entries": [
-                {
-                    "run_id": "phase4c_drill_seed",
-                    "tick_u64": 0,
-                    "tick_snapshot_hash": "sha256:" + ("0" * 64),
-                }
-            ],
-        },
-        "descriptor_id",
-    )
-    det_profile = _write_profile_with_id(
-        shadow_config / "witnessed_determinism_profile_v1.json",
-        {
-            "schema_name": "witnessed_determinism_profile_v1",
-            "schema_version": "v19_0",
-            "tier_a": {"n_double_runs": 50},
-            "tier_b": {"n_double_runs": 1000},
-        },
-        "profile_id",
-    )
-    j_profile = _write_profile_with_id(
-        shadow_config / "j_comparison_v1.json",
-        {
-            "schema_name": "j_comparison_v1",
-            "schema_version": "v19_0",
-            "window_rule": {"kind": "SUM_WINDOW_NON_WEAKENING", "margin_q32": 0},
-            "per_tick_floor_enabled_b": True,
-            "epsilon_tick_q32": 0,
-        },
-        "comparison_id",
-    )
+    if not list(shadow_corpus.get("replay_entries") or []):
+        raise RuntimeError("empty shadow corpus replay entries")
 
-    proposal = _write_profile_with_id(
-        shadow_config / "shadow_regime_proposal_v1.json",
-        {
-            "schema_name": "shadow_regime_proposal_v1",
-            "schema_version": "v19_0",
-            "proposer_campaign_id": "rsi_omega_daemon_v19_0_super_unified",
-            "target_regime_id": "v20_stub",
-            "mode": "OUTBOX_ONLY_SHADOW",
-            "activation_intent": "NO_SWAP",
-            "candidate_bundle_ref": {
-                "bundle_hash": "sha256:" + candidate_hash,
-                "state_dir_rel": "daemon/rsi_omega_daemon_v19_0/state",
-            },
-            "safety_invariants": [
-                "NON_WEAKENING_J",
-                "CORPUS_REPLAY",
-                "DETERMINISTIC_FUZZ",
-            ],
-            "determinism_contract_hash": "sha256:" + ("1" * 64),
-            "corpus_replay_suite_ref": "sha256:" + ("2" * 64),
-            "deterministic_fuzz_suite_ref": "sha256:" + ("3" * 64),
-            "shadow_evaluation_tiers_profile_id": str(tiers_profile["profile_id"]),
-            "shadow_protected_roots_profile_id": str(protected_profile["profile_id"]),
-            "corpus_descriptor_id": str(corpus_descriptor["descriptor_id"]),
-            "witnessed_determinism_profile_id": str(det_profile["profile_id"]),
-            "j_comparison_profile_id": str(j_profile["comparison_id"]),
-        },
-        "proposal_id",
-    )
-
-    pack["shadow_regime_proposal_rel"] = "shadow_regime_proposal_v1.json"
-    pack["shadow_evaluation_tiers_rel"] = "shadow_evaluation_tiers_v1.json"
-    pack["shadow_protected_roots_profile_rel"] = "shadow_protected_roots_profile_v1.json"
-    pack["shadow_corpus_descriptor_rel"] = "corpus_descriptor_v1.json"
-    pack["shadow_witnessed_determinism_profile_rel"] = "witnessed_determinism_profile_v1.json"
-    pack["shadow_j_comparison_profile_rel"] = "j_comparison_v1.json"
-    pack["auto_swap_b"] = False
-    write_canon_json(pack_path, pack)
+    proposal_rel = str(pack["shadow_regime_proposal_rel"]).strip()
+    protected_rel = str(pack["shadow_protected_roots_profile_rel"]).strip()
+    j_profile_rel = str(pack["shadow_j_comparison_profile_rel"]).strip()
+    proposal = load_canon_dict((shadow_config / proposal_rel).resolve())
+    protected_profile = load_canon_dict((shadow_config / protected_rel).resolve())
+    j_profile = load_canon_dict((shadow_config / j_profile_rel).resolve())
 
     shadow_out = evidence_dir / "shadow_tick"
     shadow_proc = _run_daemon_tick(
@@ -336,6 +255,11 @@ def main() -> None:
         "shadow/readiness",
         "shadow_regime_readiness_receipt_v1.json",
     )
+    invariance_path, invariance_payload, invariance_hash = _load_latest_shadow_receipt(
+        shadow_state_root,
+        "shadow/invariance",
+        "shadow_corpus_invariance_receipt_v1.json",
+    )
     _, integrity_payload, _ = _load_latest_shadow_receipt(
         shadow_state_root,
         "shadow/integrity",
@@ -350,6 +274,29 @@ def main() -> None:
         raise RuntimeError("readiness receipt is not READY")
     if str(integrity_payload.get("status", "")) != "PASS":
         raise RuntimeError("integrity report is not PASS")
+    if not bool(readiness_payload.get("corpus_invariance_verified_b", False)):
+        raise RuntimeError("readiness is missing corpus invariance verification")
+    if str(readiness_payload.get("corpus_invariance_receipt_id", "")) != str(invariance_payload.get("receipt_id", "")):
+        raise RuntimeError("readiness/corpus invariance receipt id mismatch")
+    invariance_pin_pairs = (
+        ("graph_invariance_contract_id", "shadow_graph_invariance_contract_id"),
+        ("type_binding_invariance_contract_id", "shadow_type_binding_invariance_contract_id"),
+        ("cert_invariance_contract_id", "shadow_cert_invariance_contract_id"),
+    )
+    for invariance_key, pack_key in invariance_pin_pairs:
+        if str(invariance_payload.get(invariance_key, "")).strip() != str(pack.get(pack_key, "")).strip():
+            raise RuntimeError(f"invariance comparator pin mismatch: {invariance_key}")
+    rollback_hash = str(readiness_payload.get("rollback_evidence_hash", "")).strip()
+    if not rollback_hash.startswith("sha256:") or len(rollback_hash) != 71:
+        raise RuntimeError("readiness rollback evidence hash missing")
+    if not bool(readiness_payload.get("rollback_plan_bound_b", False)):
+        raise RuntimeError("readiness rollback binding flag is false")
+
+    verifier_status = verify_v19_daemon(shadow_state_root, mode="full")
+    verifier_log_path = evidence_dir / "shadow_tick.verify_v19.log"
+    verifier_log_path.write_text(f"{verifier_status}\n", encoding="utf-8")
+    if verifier_status != "VALID":
+        raise RuntimeError(f"shadow tick verifier returned {verifier_status}")
 
     preflight_protected = dict(protected_profile)
     preflight_protected["dynamic_protected_roots"] = [
@@ -506,7 +453,16 @@ def main() -> None:
             "tier_b_pass_b": bool(tier_b_payload.get("pass_b", False)),
             "readiness_verdict": str(readiness_payload.get("verdict", "")),
             "integrity_status": str(integrity_payload.get("status", "")),
+            "corpus_invariance_pass_b": bool(invariance_payload.get("pass_b", False)),
             "readiness_receipt_rel": str(readiness_path.relative_to(REPO_ROOT)),
+            "corpus_invariance_receipt_rel": str(invariance_path.relative_to(REPO_ROOT)),
+            "corpus_invariance_receipt_hash": str(invariance_hash),
+            "corpus_invariance_receipt_id": str(invariance_payload.get("receipt_id", "")),
+            "readiness_corpus_invariance_receipt_id": str(readiness_payload.get("corpus_invariance_receipt_id", "")),
+            "readiness_rollback_evidence_hash": str(readiness_payload.get("rollback_evidence_hash", "")),
+            "graph_invariance_contract_id": str(invariance_payload.get("graph_invariance_contract_id", "")),
+            "type_binding_invariance_contract_id": str(invariance_payload.get("type_binding_invariance_contract_id", "")),
+            "cert_invariance_contract_id": str(invariance_payload.get("cert_invariance_contract_id", "")),
             "tier_b_reduced_preflight_rel": str(preflight_path.relative_to(REPO_ROOT)),
             "tier_b_reduced_preflight_pass_b": bool(preflight_payload.get("pass_b", False)),
             "tier_a_receipt_rel": str(
@@ -518,6 +474,8 @@ def main() -> None:
             "integrity_report_rel": str(
                 _latest(shadow_state_root / "shadow" / "integrity", "sha256_*.shadow_fs_integrity_report_v1.json").relative_to(REPO_ROOT)
             ),
+            "verifier_v19_status": verifier_status,
+            "verifier_v19_log_rel": str(verifier_log_path.relative_to(REPO_ROOT)),
         },
         "re1_upgrade": {
             "stage": {"code": int(stage_code), **stage_out},

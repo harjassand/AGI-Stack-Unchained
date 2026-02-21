@@ -1,0 +1,30 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v19_0/epistemic_type_provisional_v1",
+  "title": "Epistemic provisional type v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "provisional_id",
+    "type_id",
+    "episode_id",
+    "graph_id",
+    "evidence_refs",
+    "created_tick_u64"
+  ],
+  "properties": {
+    "schema_version": {"const": "epistemic_type_provisional_v1"},
+    "provisional_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "type_id": {"type": "string", "pattern": "^PROVISIONAL/.+"},
+    "episode_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "graph_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "proposer": {"type": "string", "minLength": 1, "maxLength": 256},
+    "evidence_refs": {
+      "type": "array",
+      "minItems": 1,
+      "items": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"}
+    },
+    "created_tick_u64": {"type": "integer", "minimum": 0}
+  }
+}

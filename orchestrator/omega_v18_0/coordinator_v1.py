@@ -1332,8 +1332,8 @@ def run_tick(
             timings_file.write(timings_line + "\n")
 
         promotion_result = (promotion_receipt or {}).get("result")
-        promotion_status = "N/A"
-        promotion_reason_code = "N/A"
+        promotion_status = "SKIPPED"
+        promotion_reason_code = "NO_PROMOTION_RECEIPT"
         if isinstance(promotion_result, dict):
             status_value = str(promotion_result.get("status", "")).strip()
             if status_value in {"PROMOTED", "REJECTED", "SKIPPED"}:

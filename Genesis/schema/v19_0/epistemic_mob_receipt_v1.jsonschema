@@ -1,0 +1,85 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v19_0/epistemic_mob_receipt_v1",
+  "title": "Epistemic MOB receipt v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "mob_receipt_id",
+    "mob_id",
+    "episode_id",
+    "model_id",
+    "model_contract_id",
+    "prompt_template_id",
+    "seed_lineage_id",
+    "runtime_profile_id",
+    "mob_blob_id",
+    "sandbox_profile_id",
+    "model_invocation_inputs_hash",
+    "runtime_limits_receipt_id"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "epistemic_mob_receipt_v1"
+    },
+    "mob_receipt_id": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "mob_id": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "episode_id": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "model_id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 256
+    },
+    "model_contract_id": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "prompt_template_id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 256
+    },
+    "seed_lineage_id": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "runtime_profile_id": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "mob_blob_id": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "sandbox_profile_id": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "model_invocation_inputs_hash": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "runtime_limits_receipt_id": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "sandbox_receipt_id": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "tick_u64": {
+      "type": "integer",
+      "minimum": 0
+    }
+  }
+}

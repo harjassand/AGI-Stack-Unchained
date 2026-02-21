@@ -1,0 +1,79 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v19_0/shadow_corpus_invariance_receipt_v1",
+  "title": "Shadow corpus invariance receipt v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_name",
+    "schema_version",
+    "receipt_id",
+    "tick_u64",
+    "graph_invariance_contract_id",
+    "type_binding_invariance_contract_id",
+    "cert_invariance_contract_id",
+    "graph_invariance_pass_b",
+    "type_binding_invariance_pass_b",
+    "cert_invariance_pass_b",
+    "pass_b",
+    "compared_rows"
+  ],
+  "properties": {
+    "schema_name": {"const": "shadow_corpus_invariance_receipt_v1"},
+    "schema_version": {"const": "v19_0"},
+    "receipt_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "tick_u64": {"type": "integer", "minimum": 0},
+    "graph_invariance_contract_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "type_binding_invariance_contract_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "cert_invariance_contract_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "graph_invariance_pass_b": {"type": "boolean"},
+    "type_binding_invariance_pass_b": {"type": "boolean"},
+    "cert_invariance_pass_b": {"type": "boolean"},
+    "pass_b": {"type": "boolean"},
+    "compared_rows": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "run_id",
+          "tick_u64",
+          "tick_snapshot_hash",
+          "entry_manifest_id",
+          "expected_graph_id",
+          "observed_graph_id",
+          "expected_type_binding_id",
+          "observed_type_binding_id",
+          "expected_cert_id",
+          "observed_cert_id",
+          "expected_strip_receipt_id",
+          "observed_strip_receipt_id",
+          "expected_task_input_set_hash",
+          "observed_task_input_set_hash",
+          "graph_match_b",
+          "type_binding_match_b",
+          "cert_match_b"
+        ],
+        "properties": {
+          "run_id": {"type": "string", "minLength": 1},
+          "tick_u64": {"type": "integer", "minimum": 0},
+          "tick_snapshot_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+          "entry_manifest_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+          "expected_graph_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+          "observed_graph_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+          "expected_type_binding_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+          "observed_type_binding_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+          "expected_cert_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+          "observed_cert_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+          "expected_strip_receipt_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+          "observed_strip_receipt_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+          "expected_task_input_set_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+          "observed_task_input_set_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+          "graph_match_b": {"type": "boolean"},
+          "type_binding_match_b": {"type": "boolean"},
+          "cert_match_b": {"type": "boolean"}
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,39 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v19_0/epistemic_action_market_profile_v1",
+  "title": "Epistemic action market profile v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "profile_id",
+    "eufc_window_ticks_u64",
+    "allowed_action_kinds",
+    "dispatchable_action_kinds",
+    "tie_break_policy"
+  ],
+  "properties": {
+    "schema_version": {"const": "epistemic_action_market_profile_v1"},
+    "profile_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "eufc_window_ticks_u64": {"type": "integer", "minimum": 1},
+    "allowed_action_kinds": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": {
+        "type": "string",
+        "enum": ["FETCH", "SEGMENT", "INFER", "REDUCE", "SEAL"]
+      }
+    },
+    "dispatchable_action_kinds": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": {
+        "type": "string",
+        "enum": ["FETCH", "SEGMENT", "INFER", "REDUCE", "SEAL"]
+      }
+    },
+    "tie_break_policy": {"const": "SCORE_DESC_ACTION_ASC_BID_ID_ASC"}
+  }
+}

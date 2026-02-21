@@ -1,0 +1,70 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v19_0/epistemic_episode_index_row_v1",
+  "title": "Epistemic episode index row v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "row_hash",
+    "prev_row_hash",
+    "episode_id",
+    "tick_u64",
+    "pinset_id",
+    "mob_ids",
+    "commit_ready_b",
+    "complete_b",
+    "episode_manifest_id"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "epistemic_episode_index_row_v1"
+    },
+    "row_hash": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "prev_row_hash": {
+      "anyOf": [
+        {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "episode_id": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "tick_u64": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "pinset_id": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "mob_ids": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": {
+        "type": "string",
+        "pattern": "^sha256:[0-9a-f]{64}$"
+      }
+    },
+    "commit_ready_b": {
+      "type": "boolean"
+    },
+    "complete_b": {
+      "type": "boolean"
+    },
+    "episode_manifest_id": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    }
+  }
+}

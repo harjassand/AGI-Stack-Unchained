@@ -1,0 +1,25 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v19_0/epistemic_sandbox_receipt_v1",
+  "title": "Epistemic sandbox receipt v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "receipt_id",
+    "sandbox_profile_id",
+    "runtime_limits_receipt_id",
+    "invocation_hash",
+    "outcome",
+    "reason_code"
+  ],
+  "properties": {
+    "schema_version": {"const": "epistemic_sandbox_receipt_v1"},
+    "receipt_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "sandbox_profile_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "runtime_limits_receipt_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "invocation_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "outcome": {"type": "string", "enum": ["OK", "SAFE_HALT", "REJECT"]},
+    "reason_code": {"type": "string", "minLength": 1, "maxLength": 128}
+  }
+}

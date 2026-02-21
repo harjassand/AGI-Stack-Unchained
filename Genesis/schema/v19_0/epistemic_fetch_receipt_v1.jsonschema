@@ -1,0 +1,60 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v19_0/epistemic_fetch_receipt_v1",
+  "title": "Epistemic fetch receipt v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "fetch_receipt_id",
+    "episode_id",
+    "source_uri",
+    "status_code_u16",
+    "selected_headers",
+    "raw_blob_id",
+    "capture_nonce_u64",
+    "fetch_contract_id"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "epistemic_fetch_receipt_v1"
+    },
+    "fetch_receipt_id": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "episode_id": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "source_uri": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 4096
+    },
+    "status_code_u16": {
+      "type": "integer",
+      "minimum": 100,
+      "maximum": 599
+    },
+    "selected_headers": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "string",
+        "maxLength": 4096
+      }
+    },
+    "raw_blob_id": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "capture_nonce_u64": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "fetch_contract_id": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    }
+  }
+}

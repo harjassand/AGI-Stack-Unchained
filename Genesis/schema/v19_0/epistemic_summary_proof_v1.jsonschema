@@ -1,0 +1,27 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v19_0/epistemic_summary_proof_v1",
+  "title": "Epistemic summary proof v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "proof_id",
+    "capsule_id",
+    "source_content_ids_root",
+    "summary_content_id",
+    "transform_contract_id",
+    "verifier_commitment_hash",
+    "outcome"
+  ],
+  "properties": {
+    "schema_version": {"const": "epistemic_summary_proof_v1"},
+    "proof_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "capsule_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "source_content_ids_root": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "summary_content_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "transform_contract_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "verifier_commitment_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "outcome": {"type": "string", "enum": ["OK", "FAIL"]}
+  }
+}

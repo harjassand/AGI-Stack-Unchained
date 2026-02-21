@@ -55,12 +55,19 @@ _PACK_V2_OPTIONAL_PINNED = [
         "policy_vm_candidate_campaign_ids_list_id",
         "candidate_campaign_ids_list_id",
     ),
+    ("shadow_corpus_descriptor_rel", "shadow_corpus_descriptor_id", "descriptor_id"),
+    ("shadow_graph_invariance_contract_rel", "shadow_graph_invariance_contract_id", "contract_id"),
+    (
+        "shadow_type_binding_invariance_contract_rel",
+        "shadow_type_binding_invariance_contract_id",
+        "contract_id",
+    ),
+    ("shadow_cert_invariance_contract_rel", "shadow_cert_invariance_contract_id", "contract_id"),
 ]
 _PACK_V2_OPTIONAL_COPY_ONLY = [
     "shadow_regime_proposal_rel",
     "shadow_evaluation_tiers_rel",
     "shadow_protected_roots_profile_rel",
-    "shadow_corpus_descriptor_rel",
     "shadow_witnessed_determinism_profile_rel",
     "shadow_j_comparison_profile_rel",
     "shadow_handoff_receipt_rel",
@@ -176,6 +183,70 @@ def _copy_optional_relfile_from_pack(
     write_canon_json(config_dir / rel, payload)
 
 
+def _copy_shadow_corpus_entry_manifests_from_descriptor(
+    *,
+    source_root: Path,
+    config_dir: Path,
+    pack: dict[str, Any],
+) -> None:
+    descriptor_rel_raw = str(pack.get("shadow_corpus_descriptor_rel", "")).strip()
+    descriptor_id_raw = str(pack.get("shadow_corpus_descriptor_id", "")).strip()
+    if not descriptor_rel_raw and not descriptor_id_raw:
+        return
+    if bool(descriptor_rel_raw) != bool(descriptor_id_raw):
+        fail("SCHEMA_FAIL")
+    descriptor_rel = Path(require_relpath(descriptor_rel_raw))
+    descriptor_src = source_root / descriptor_rel
+    if not descriptor_src.exists() or not descriptor_src.is_file():
+        fail("MISSING_STATE_INPUT")
+    descriptor_payload = load_canon_dict(descriptor_src)
+    if str(descriptor_payload.get("schema_name", "")).strip() != "corpus_descriptor_v1":
+        fail("SCHEMA_FAIL")
+    if str(descriptor_payload.get("schema_version", "")).strip() != "v19_0":
+        fail("SCHEMA_FAIL")
+    declared_descriptor_id = ensure_sha256(descriptor_id_raw, reason="PIN_HASH_MISMATCH")
+    observed_descriptor_id = ensure_sha256(descriptor_payload.get("descriptor_id"), reason="PIN_HASH_MISMATCH")
+    descriptor_no_id = dict(descriptor_payload)
+    descriptor_no_id.pop("descriptor_id", None)
+    if canon_hash_obj(descriptor_no_id) != observed_descriptor_id:
+        fail("PIN_HASH_MISMATCH")
+    if observed_descriptor_id != declared_descriptor_id:
+        fail("PIN_HASH_MISMATCH")
+
+    entries_raw = descriptor_payload.get("entries")
+    if not isinstance(entries_raw, list) or not entries_raw:
+        fail("SCHEMA_FAIL")
+    manifest_ids: set[str] = set()
+    for row in entries_raw:
+        if not isinstance(row, dict):
+            fail("SCHEMA_FAIL")
+        manifest_id = ensure_sha256(row.get("entry_manifest_id"), reason="SCHEMA_FAIL")
+        if manifest_id in manifest_ids:
+            fail("NONDETERMINISTIC")
+        manifest_ids.add(manifest_id)
+
+    descriptor_parent = descriptor_rel.parent
+    for manifest_id in sorted(manifest_ids):
+        hex_digest = manifest_id.split(":", 1)[1]
+        manifest_rel = descriptor_parent / "entries" / f"sha256_{hex_digest}.shadow_corpus_entry_manifest_v1.json"
+        manifest_src = source_root / manifest_rel
+        if not manifest_src.exists() or not manifest_src.is_file():
+            fail("MISSING_STATE_INPUT")
+        manifest_payload = load_canon_dict(manifest_src)
+        if str(manifest_payload.get("schema_name", "")).strip() != "shadow_corpus_entry_manifest_v1":
+            fail("SCHEMA_FAIL")
+        if str(manifest_payload.get("schema_version", "")).strip() != "v19_0":
+            fail("SCHEMA_FAIL")
+        observed_manifest_id = ensure_sha256(manifest_payload.get("entry_manifest_id"), reason="PIN_HASH_MISMATCH")
+        manifest_no_id = dict(manifest_payload)
+        manifest_no_id.pop("entry_manifest_id", None)
+        if canon_hash_obj(manifest_no_id) != observed_manifest_id:
+            fail("PIN_HASH_MISMATCH")
+        if observed_manifest_id != manifest_id:
+            fail("PIN_HASH_MISMATCH")
+        write_canon_json(config_dir / manifest_rel, manifest_payload)
+
+
 def freeze_pack_config(*, campaign_pack: Path, config_dir: Path) -> tuple[dict[str, Any], str]:
     pack = load_canon_dict(campaign_pack)
     pack_schema = str(pack.get("schema_version", "")).strip()
@@ -222,6 +293,11 @@ def freeze_pack_config(*, campaign_pack: Path, config_dir: Path) -> tuple[dict[s
                 payload_id_field=payload_id_field,
                 optional=True,
             )
+        _copy_shadow_corpus_entry_manifests_from_descriptor(
+            source_root=source_root,
+            config_dir=config_dir,
+            pack=pack,
+        )
         policy_mode = str(pack.get("policy_vm_mode", "DECISION_ONLY")).strip().upper()
         if policy_mode in {"PROPOSAL_ONLY", "DUAL"}:
             _copy_policy_programs_from_pack(

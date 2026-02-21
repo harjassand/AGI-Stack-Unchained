@@ -1,0 +1,1 @@
+{"comparison_id":"sha256:ffb5adce9673074cf2d689aa453d8ab3fc05debb6cb87ec5075ec6d6d427e4d8","epsilon_tick_q32":0,"per_tick_floor_enabled_b":true,"schema_name":"j_comparison_v1","schema_version":"v19_0","window_rule":{"kind":"SUM_WINDOW_NON_WEAKENING","margin_q32":0}}

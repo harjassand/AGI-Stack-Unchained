@@ -1,0 +1,109 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v18_0/omega_tick_outcome_record_v1",
+  "title": "Omega tick outcome record v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "phase",
+    "tick_u64",
+    "run_dir_rel",
+    "selected_campaign_id",
+    "promotion_status",
+    "promotion_reason",
+    "eval_kernel_ran_b",
+    "objective_terms_before_hash",
+    "objective_terms_after_hash",
+    "delta_j_q32"
+  ],
+  "properties": {
+    "schema_version": {"const": "omega_tick_outcome_record_v1"},
+    "phase": {"type": "string", "minLength": 1},
+    "tick_u64": {"type": "integer", "minimum": 0},
+    "run_dir_rel": {"type": "string", "minLength": 1},
+    "selected_campaign_id": {
+      "anyOf": [
+        {"type": "string", "minLength": 1},
+        {"type": "null"}
+      ]
+    },
+    "promotion_status": {"type": "string", "enum": ["PROMOTED", "REJECTED", "SKIPPED"]},
+    "promotion_reason": {"type": "string", "minLength": 1},
+    "eval_kernel_ran_b": {"type": "boolean"},
+    "objective_terms_before_hash": {
+      "anyOf": [
+        {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+        {"type": "null"}
+      ]
+    },
+    "objective_terms_after_hash": {
+      "anyOf": [
+        {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+        {"type": "null"}
+      ]
+    },
+    "delta_j_q32": {
+      "anyOf": [
+        {"type": "integer"},
+        {"type": "null"}
+      ]
+    },
+    "promotion_receipt_rel": {
+      "anyOf": [
+        {"type": "string", "minLength": 1},
+        {"type": "null"}
+      ]
+    },
+    "subverifier_receipt_rel": {
+      "anyOf": [
+        {"type": "string", "minLength": 1},
+        {"type": "null"}
+      ]
+    },
+    "dispatch_receipt_rel": {
+      "anyOf": [
+        {"type": "string", "minLength": 1},
+        {"type": "null"}
+      ]
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "promotion_status": {"const": "SKIPPED"}
+        }
+      },
+      "then": {
+        "properties": {
+          "delta_j_q32": {"type": "null"}
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "eval_kernel_ran_b": {"const": true}
+        }
+      },
+      "then": {
+        "properties": {
+          "delta_j_q32": {"type": "integer"}
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "eval_kernel_ran_b": {"const": false}
+        }
+      },
+      "then": {
+        "properties": {
+          "delta_j_q32": {"type": "null"}
+        }
+      }
+    }
+  ]
+}

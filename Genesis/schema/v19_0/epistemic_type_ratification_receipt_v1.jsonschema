@@ -1,0 +1,28 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v19_0/epistemic_type_ratification_receipt_v1",
+  "title": "Epistemic type ratification receipt v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "receipt_id",
+    "provisional_id",
+    "ratified_type_id",
+    "type_registry_id",
+    "outcome",
+    "reason_code",
+    "tick_u64"
+  ],
+  "properties": {
+    "schema_version": {"const": "epistemic_type_ratification_receipt_v1"},
+    "receipt_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "provisional_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "ratified_type_id": {"type": "string", "minLength": 1, "maxLength": 256},
+    "type_registry_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "outcome": {"type": "string", "enum": ["RATIFIED", "REJECTED"]},
+    "reason_code": {"type": "string", "minLength": 1, "maxLength": 128},
+    "tick_u64": {"type": "integer", "minimum": 0},
+    "constraints_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"}
+  }
+}

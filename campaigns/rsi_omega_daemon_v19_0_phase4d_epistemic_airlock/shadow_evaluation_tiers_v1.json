@@ -1,0 +1,1 @@
+{"profile_id":"sha256:d3d2e8afd9a9eecb829634c0226114d7d32ba68e5103145689fd51fe343fca4a","schema_name":"shadow_evaluation_tiers_v1","schema_version":"v19_0","tier_a":{"corpus_mode":"PINNED_SMALL","n_double_runs":50,"n_fuzz_cases":512,"n_live_ticks":250},"tier_b":{"corpus_mode":"PINNED_STRATIFIED","n_double_runs":1000,"n_fuzz_cases":20000,"n_live_ticks":1000}}

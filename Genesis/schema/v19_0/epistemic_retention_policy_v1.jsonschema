@@ -1,0 +1,25 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v19_0/epistemic_retention_policy_v1",
+  "title": "Epistemic retention policy v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "policy_id",
+    "raw_retention_ticks_u64",
+    "capsule_retention_ticks_u64",
+    "sampling_rate_q32",
+    "summary_proof_required_b",
+    "deletion_mode"
+  ],
+  "properties": {
+    "schema_version": {"const": "epistemic_retention_policy_v1"},
+    "policy_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "raw_retention_ticks_u64": {"type": "integer", "minimum": 0},
+    "capsule_retention_ticks_u64": {"type": "integer", "minimum": 0},
+    "sampling_rate_q32": {"type": "integer", "minimum": 0, "maximum": 4294967296},
+    "summary_proof_required_b": {"type": "boolean"},
+    "deletion_mode": {"type": "string", "enum": ["PLAN_ONLY", "EXECUTE"]}
+  }
+}

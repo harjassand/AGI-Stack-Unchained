@@ -650,7 +650,8 @@ def main() -> None:
     proof_profile_id = str(snapshot_payload.get("policy_vm_proof_profile_id", ""))
     proof_options_hash = str(snapshot_payload.get("policy_vm_proof_options_hash", ""))
     proof_runtime_reason_code = str(snapshot_payload.get("policy_vm_proof_runtime_reason_code", ""))
-    proof_fallback_reason_code = str(snapshot_payload.get("policy_vm_proof_fallback_reason_code", ""))
+    proof_fallback_raw = snapshot_payload.get("policy_vm_proof_fallback_reason_code")
+    proof_fallback_reason_code = str(proof_fallback_raw).strip() if proof_fallback_raw is not None else ""
     proof_payload_path = _latest_single(proof_state / "policy" / "proofs", "sha256_*.policy_vm_stark_proof_v1.json")
     proof_payload = load_canon_json(proof_payload_path)
     proof_representation_kind = str(proof_payload.get("proof_representation_kind", ""))
@@ -714,7 +715,7 @@ def main() -> None:
             "proof_options_hash": proof_options_hash,
             "proof_runtime_status": proof_runtime_status,
             "proof_runtime_reason_code": proof_runtime_reason_code,
-            "proof_fallback_reason_code": proof_fallback_reason_code,
+            "proof_fallback_reason_code": proof_fallback_reason_code or None,
             "proof_events": proof_events,
             "daemon_verdict_before_tamper": proof_verdict_before,
             "daemon_verdict_after_tamper": daemon_verdict_after_tamper,

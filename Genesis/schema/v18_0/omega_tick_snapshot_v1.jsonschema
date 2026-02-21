@@ -334,6 +334,17 @@
         }
       ]
     },
+    "shadow_corpus_invariance_receipt_hash": {
+      "anyOf": [
+        {
+          "pattern": "^sha256:[0-9a-f]{64}$",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
     "rollback_receipt_hash": {
       "anyOf": [
         {

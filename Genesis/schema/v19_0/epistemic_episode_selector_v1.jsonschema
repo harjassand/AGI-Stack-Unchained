@@ -1,0 +1,67 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v19_0/epistemic_episode_selector_v1",
+  "title": "Epistemic episode selector v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "kind"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "epistemic_episode_selector_v1"
+    },
+    "kind": {
+      "type": "string",
+      "enum": [
+        "BY_EPISODE_ID",
+        "BY_TICK_U64"
+      ]
+    },
+    "episode_id": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "tick_u64": {
+      "type": "integer",
+      "minimum": 0
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "kind": {
+            "const": "BY_EPISODE_ID"
+          }
+        },
+        "required": [
+          "kind"
+        ]
+      },
+      "then": {
+        "required": [
+          "episode_id"
+        ]
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "kind": {
+            "const": "BY_TICK_U64"
+          }
+        },
+        "required": [
+          "kind"
+        ]
+      },
+      "then": {
+        "required": [
+          "tick_u64"
+        ]
+      }
+    }
+  ]
+}

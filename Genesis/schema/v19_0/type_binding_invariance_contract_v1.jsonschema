@@ -1,0 +1,19 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v19_0/type_binding_invariance_contract_v1",
+  "title": "Type binding invariance contract v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "contract_id",
+    "equality_mode",
+    "require_same_type_registry_b"
+  ],
+  "properties": {
+    "schema_version": {"const": "type_binding_invariance_contract_v1"},
+    "contract_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "equality_mode": {"const": "ID_EQUAL"},
+    "require_same_type_registry_b": {"const": true}
+  }
+}

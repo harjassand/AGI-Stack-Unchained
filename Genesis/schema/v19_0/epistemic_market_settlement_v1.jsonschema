@@ -1,0 +1,63 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v19_0/epistemic_market_settlement_v1",
+  "title": "Epistemic market settlement v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "settlement_id",
+    "tick_u64",
+    "inputs_manifest_id",
+    "bid_selection_receipt_hash",
+    "bid_settlement_receipt_hash",
+    "winner_campaign_id",
+    "binding_hash"
+  ],
+  "properties": {
+    "schema_version": {"const": "epistemic_market_settlement_v1"},
+    "settlement_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "tick_u64": {"type": "integer", "minimum": 0},
+    "inputs_manifest_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "bid_selection_receipt_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "bid_settlement_receipt_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "winner_campaign_id": {"type": "string", "minLength": 1, "maxLength": 256},
+    "capsule_id": {
+      "anyOf": [
+        {"type": "null"},
+        {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"}
+      ]
+    },
+    "ecac_id": {
+      "anyOf": [
+        {"type": "null"},
+        {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"}
+      ]
+    },
+    "eufc_id": {
+      "anyOf": [
+        {"type": "null"},
+        {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"}
+      ]
+    },
+    "action_bid_set_hash": {
+      "anyOf": [
+        {"type": "null"},
+        {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"}
+      ]
+    },
+    "action_selection_receipt_hash": {
+      "anyOf": [
+        {"type": "null"},
+        {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"}
+      ]
+    },
+    "action_settlement_receipt_hash": {
+      "anyOf": [
+        {"type": "null"},
+        {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"}
+      ]
+    },
+    "binding_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"}
+  }
+}

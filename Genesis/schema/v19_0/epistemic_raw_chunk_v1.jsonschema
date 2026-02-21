@@ -1,0 +1,40 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v19_0/epistemic_raw_chunk_v1",
+  "title": "Epistemic raw chunk v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "chunk_receipt_id",
+    "episode_id",
+    "chunk_index_u64",
+    "raw_blob_id",
+    "chunk_contract_id"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "epistemic_raw_chunk_v1"
+    },
+    "chunk_receipt_id": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "episode_id": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "chunk_index_u64": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "raw_blob_id": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "chunk_contract_id": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    }
+  }
+}

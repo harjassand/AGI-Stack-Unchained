@@ -1,0 +1,104 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v19_0/shadow_corpus_entry_manifest_v1",
+  "title": "Shadow corpus entry manifest v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_name",
+    "schema_version",
+    "entry_manifest_id",
+    "run_id",
+    "tick_u64",
+    "tick_snapshot_hash",
+    "source_kind",
+    "synthetic_only_b",
+    "pinset_id",
+    "raw_blob_ids",
+    "mob_ids",
+    "mob_receipt_ids",
+    "mob_blob_ids",
+    "contracts",
+    "expected_outputs"
+  ],
+  "properties": {
+    "schema_name": {"const": "shadow_corpus_entry_manifest_v1"},
+    "schema_version": {"const": "v19_0"},
+    "entry_manifest_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "run_id": {"type": "string", "minLength": 1},
+    "tick_u64": {"type": "integer", "minimum": 0},
+    "tick_snapshot_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "source_kind": {"const": "REAL_CAPTURED_EPISODE"},
+    "synthetic_only_b": {"type": "boolean"},
+    "pinset_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "raw_blob_ids": {
+      "type": "array",
+      "minItems": 1,
+      "items": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"}
+    },
+    "mob_ids": {
+      "type": "array",
+      "minItems": 1,
+      "items": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"}
+    },
+    "mob_receipt_ids": {
+      "type": "array",
+      "minItems": 1,
+      "items": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"}
+    },
+    "mob_blob_ids": {
+      "type": "array",
+      "minItems": 1,
+      "items": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"}
+    },
+    "contracts": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "chunk_contract_id",
+        "fetch_contract_id",
+        "segment_contract_id",
+        "instruction_strip_contract_id",
+        "reduce_contract_id",
+        "cert_profile_id",
+        "type_registry_id"
+      ],
+      "properties": {
+        "chunk_contract_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+        "fetch_contract_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+        "segment_contract_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+        "instruction_strip_contract_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+        "reduce_contract_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+        "cert_profile_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+        "type_registry_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"}
+      }
+    },
+    "expected_outputs": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "capsule_id",
+        "graph_id",
+        "type_binding_id",
+        "ecac_id",
+        "eufc_id",
+        "strip_receipt_id",
+        "cert_profile_id",
+        "task_input_ids"
+      ],
+      "properties": {
+        "capsule_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+        "graph_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+        "type_binding_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+        "ecac_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+        "eufc_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+        "strip_receipt_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+        "cert_profile_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+        "task_input_ids": {
+          "type": "array",
+          "items": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"}
+        }
+      }
+    }
+  }
+}

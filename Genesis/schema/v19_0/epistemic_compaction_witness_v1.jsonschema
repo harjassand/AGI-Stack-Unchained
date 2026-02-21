@@ -1,0 +1,25 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v19_0/epistemic_compaction_witness_v1",
+  "title": "Epistemic compaction witness v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "witness_id",
+    "replay_floor_tick_u64",
+    "candidate_set_ordered_hash",
+    "retained_root_set_ordered_hash",
+    "reachable_from_any_tick_0_to_floor_ordered_hash",
+    "store_root_being_compacted"
+  ],
+  "properties": {
+    "schema_version": {"const": "epistemic_compaction_witness_v1"},
+    "witness_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "replay_floor_tick_u64": {"type": "integer", "minimum": 0},
+    "candidate_set_ordered_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "retained_root_set_ordered_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "reachable_from_any_tick_0_to_floor_ordered_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "store_root_being_compacted": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"}
+  }
+}

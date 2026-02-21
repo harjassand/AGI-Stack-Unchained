@@ -22,12 +22,17 @@ if str(REPO_ROOT / "CDEL-v2") not in sys.path:
 
 from cdel.v1_7r.canon import canon_bytes
 from cdel.v18_0.omega_common_v1 import canon_hash_obj, load_canon_dict
+from cdel.v18_0.omega_ledger_v1 import append_event, load_ledger
+from cdel.v19_0.common_v1 import validate_schema as validate_schema_v19
 
 
 TICK_INDEX_NAME = "long_run_tick_index_v1.jsonl"
 PRUNE_INDEX_NAME = "long_run_prune_index_v1.jsonl"
 HEAD_NAME = "long_run_head_v1.json"
 ENV_RECEIPT_NAME = "run_env_receipt_v1.json"
+LAUNCH_MANIFEST_NAME = "long_run_launch_manifest_v1.json"
+LAUNCH_BINDING_MARKER_NAME = "long_run_launch_manifest_binding_v1.json"
+STOP_RECEIPT_NAME = "LONG_RUN_STOP_RECEIPT_v1.json"
 
 DEFAULT_PACK = "campaigns/rsi_omega_daemon_v19_0_long_run_v1/rsi_omega_daemon_pack_v1.json"
 DEFAULT_RUN_ROOT = "runs/long_disciplined_v1"
@@ -131,6 +136,242 @@ def _env_receipt(*, env: dict[str, str]) -> dict[str, Any]:
     }
     payload["receipt_id"] = canon_hash_obj({k: v for k, v in payload.items() if k != "receipt_id"})
     return payload
+
+
+def _repo_relpath(path: Path) -> str:
+    resolved = path.resolve()
+    try:
+        return resolved.relative_to(REPO_ROOT.resolve()).as_posix()
+    except ValueError:
+        return resolved.as_posix()
+
+
+def _write_hashed_payload(
+    *,
+    dir_path: Path,
+    suffix: str,
+    payload: dict[str, Any],
+    id_field: str | None = None,
+) -> tuple[Path, dict[str, Any], str]:
+    obj = dict(payload)
+    if id_field is not None:
+        no_id = dict(obj)
+        no_id.pop(id_field, None)
+        obj[id_field] = canon_hash_obj(no_id)
+    digest = canon_hash_obj(obj)
+    dir_path.mkdir(parents=True, exist_ok=True)
+    out_path = dir_path / f"sha256_{digest.split(':', 1)[1]}.{suffix}"
+    content = canon_bytes(obj) + b"\n"
+    if out_path.exists():
+        if out_path.read_bytes().rstrip(b"\n") != content.rstrip(b"\n"):
+            raise RuntimeError("NONDETERMINISTIC")
+        return out_path, obj, digest
+    out_path.write_bytes(content)
+    return out_path, obj, digest
+
+
+def _load_or_create_launch_manifest(
+    *,
+    campaign_pack: Path,
+    run_root: Path,
+    env_receipt: dict[str, Any],
+    start_tick_u64: int,
+    max_ticks: int,
+    max_disk_bytes: int,
+    retain_last_u64: int,
+    anchor_every_u64: int,
+    canary_every_u64: int,
+    force_lane: str | None,
+    force_eval: bool,
+) -> tuple[Path, dict[str, Any], str]:
+    manifest_path = run_root / "configs" / LAUNCH_MANIFEST_NAME
+    hashed_dir = run_root / "launch"
+    if manifest_path.exists() and manifest_path.is_file():
+        payload = load_canon_dict(manifest_path)
+        validate_schema_v19(payload, "long_run_launch_manifest_v1")
+        expected_manifest_relpath = _repo_relpath(manifest_path)
+        if str(payload.get("manifest_relpath", "")).strip() != expected_manifest_relpath:
+            raise RuntimeError("NONDETERMINISTIC")
+        no_id = dict(payload)
+        no_id.pop("manifest_id", None)
+        observed = canon_hash_obj(no_id)
+        declared = str(payload.get("manifest_id", "")).strip()
+        if observed != declared:
+            raise RuntimeError("NONDETERMINISTIC")
+        _write_hashed_payload(
+            dir_path=hashed_dir,
+            suffix="long_run_launch_manifest_v1.json",
+            payload=payload,
+        )
+        return manifest_path, payload, declared
+
+    pack_payload = load_canon_dict(campaign_pack)
+    pack_hash = canon_hash_obj(pack_payload)
+    profile_hash_raw = str(pack_payload.get("long_run_profile_id", "")).strip()
+    profile_hash = profile_hash_raw if profile_hash_raw.startswith("sha256:") and len(profile_hash_raw) == 71 else None
+    manifest_relpath = _repo_relpath(manifest_path)
+    payload: dict[str, Any] = {
+        "schema_name": "long_run_launch_manifest_v1",
+        "schema_version": "v19_0",
+        "manifest_id": "sha256:" + ("0" * 64),
+        "created_unix_s": int(time.time()),
+        "manifest_relpath": manifest_relpath,
+        "run_root_relpath": _repo_relpath(run_root),
+        "campaign_pack_relpath": _repo_relpath(campaign_pack),
+        "campaign_pack_hash": pack_hash,
+        "long_run_profile_hash": profile_hash,
+        "env_receipt_hash": canon_hash_obj(env_receipt),
+        "execution": {
+            "start_tick_u64": int(start_tick_u64),
+            "max_ticks": int(max_ticks),
+            "max_disk_bytes": int(max_disk_bytes),
+            "retain_last_u64": int(retain_last_u64),
+            "anchor_every_u64": int(anchor_every_u64),
+            "canary_every_u64": int(canary_every_u64),
+            "force_lane": str(force_lane).upper() if force_lane else None,
+            "force_eval_b": bool(force_eval),
+        },
+        "env": dict(env_receipt.get("env", {})),
+    }
+    no_id = dict(payload)
+    no_id.pop("manifest_id", None)
+    payload["manifest_id"] = canon_hash_obj(no_id)
+    validate_schema_v19(payload, "long_run_launch_manifest_v1")
+    _write_json(manifest_path, payload)
+    _write_hashed_payload(
+        dir_path=hashed_dir,
+        suffix="long_run_launch_manifest_v1.json",
+        payload=payload,
+    )
+    return manifest_path, payload, str(payload["manifest_id"])
+
+
+def _append_ledger_event(
+    *,
+    state_dir: Path,
+    tick_u64: int,
+    event_type: str,
+    artifact_hash: str,
+) -> dict[str, Any]:
+    ledger_path = state_dir / "ledger" / "omega_ledger_v1.jsonl"
+    if not ledger_path.exists() or not ledger_path.is_file():
+        raise RuntimeError("MISSING_LEDGER")
+    rows = load_ledger(ledger_path)
+    prev_event_id = str(rows[-1]["event_id"]) if rows else None
+    return append_event(
+        ledger_path,
+        tick_u64=int(tick_u64),
+        event_type=str(event_type),
+        artifact_hash=str(artifact_hash),
+        prev_event_id=prev_event_id,
+    )
+
+
+def _bind_launch_manifest_to_tick_ledger(
+    *,
+    state_dir: Path,
+    tick_u64: int,
+    manifest_relpath: str,
+    manifest_hash: str,
+) -> tuple[str, str]:
+    binding_payload = {
+        "schema_name": "long_run_launch_manifest_binding_v1",
+        "schema_version": "v1",
+        "manifest_relpath": str(manifest_relpath),
+        "manifest_hash": str(manifest_hash),
+        "bound_tick_u64": int(tick_u64),
+    }
+    _binding_path, _binding_obj, binding_hash = _write_hashed_payload(
+        dir_path=state_dir / "long_run" / "launch",
+        suffix="long_run_launch_manifest_binding_v1.json",
+        payload=binding_payload,
+    )
+    ledger_rows = load_ledger(state_dir / "ledger" / "omega_ledger_v1.jsonl")
+    existing = [row for row in ledger_rows if str(row.get("event_type", "")) == "LONG_RUN_LAUNCH_MANIFEST"]
+    if existing:
+        event_artifact_hash = str(existing[-1].get("artifact_hash", "")).strip()
+        if event_artifact_hash != binding_hash:
+            raise RuntimeError("NONDETERMINISTIC")
+        return event_artifact_hash, str(existing[-1].get("event_id", ""))
+    event_row = _append_ledger_event(
+        state_dir=state_dir,
+        tick_u64=int(tick_u64),
+        event_type="LONG_RUN_LAUNCH_MANIFEST",
+        artifact_hash=binding_hash,
+    )
+    return binding_hash, str(event_row.get("event_id", ""))
+
+
+def _state_verifier_outcome(state_dir: Path) -> tuple[bool, str | None]:
+    cmd = [
+        sys.executable,
+        "-m",
+        "cdel.v19_0.verify_rsi_omega_daemon_v1",
+        "--mode",
+        "full",
+        "--state_dir",
+        str(state_dir),
+    ]
+    env = {
+        "PYTHONPATH": ".:CDEL-v2:Extension-1/agi-orchestrator",
+        "OMEGA_NET_LIVE_OK": "0",
+    }
+    proc = subprocess.run(
+        cmd,
+        cwd=str(REPO_ROOT),
+        capture_output=True,
+        text=True,
+        env=env,
+        check=False,
+    )
+    if proc.returncode == 0 and "VALID" in (proc.stdout or ""):
+        return True, None
+    reason = None
+    for line in ((proc.stdout or "") + "\n" + (proc.stderr or "")).splitlines():
+        line = line.strip()
+        if line.startswith("INVALID:"):
+            reason = line.split(":", 1)[1].strip() or "STATE_VERIFIER_INVALID"
+            break
+    if reason is None:
+        reason = "STATE_VERIFIER_FAILED"
+    return False, reason
+
+
+def _write_stop_receipt(
+    *,
+    run_root: Path,
+    halt_reason_code: str,
+    halt_tick_u64: int,
+    last_valid_state_dir_relpath: str,
+    manifest_hash: str,
+    manifest_relpath: str,
+    state_verifier_reason_code: str | None,
+    detail: dict[str, Any],
+) -> tuple[Path, dict[str, Any], str]:
+    payload: dict[str, Any] = {
+        "schema_name": "long_run_stop_receipt_v1",
+        "schema_version": "v19_0",
+        "stop_receipt_id": "sha256:" + ("0" * 64),
+        "created_unix_s": int(time.time()),
+        "halt_reason_code": str(halt_reason_code),
+        "halt_tick_u64": int(max(0, int(halt_tick_u64))),
+        "last_valid_state_dir_relpath": str(last_valid_state_dir_relpath),
+        "manifest_hash": str(manifest_hash),
+        "manifest_relpath": str(manifest_relpath),
+        "state_verifier_reason_code": state_verifier_reason_code,
+        "detail": dict(detail),
+    }
+    no_id = dict(payload)
+    no_id.pop("stop_receipt_id", None)
+    payload["stop_receipt_id"] = canon_hash_obj(no_id)
+    validate_schema_v19(payload, "long_run_stop_receipt_v1")
+    out_path, out_obj, out_hash = _write_hashed_payload(
+        dir_path=run_root / "stop",
+        suffix="long_run_stop_receipt_v1.json",
+        payload=payload,
+    )
+    _write_json(run_root / STOP_RECEIPT_NAME, out_obj)
+    return out_path, out_obj, out_hash
 
 
 def _authority_pins_hash() -> str:
@@ -249,6 +490,61 @@ def _write_head(head_path: Path, row: dict[str, Any]) -> None:
     _write_json(head_path, payload)
 
 
+def _read_launch_binding_marker(path: Path) -> dict[str, Any] | None:
+    if not path.exists() or not path.is_file():
+        return None
+    payload = load_canon_dict(path)
+    if not isinstance(payload, dict):
+        return None
+    return payload
+
+
+def _write_launch_binding_marker(
+    *,
+    path: Path,
+    tick_u64: int,
+    state_dir: Path,
+    binding_hash: str,
+    manifest_hash: str,
+    manifest_relpath: str,
+) -> None:
+    payload = {
+        "schema_name": "long_run_launch_manifest_binding_marker_v1",
+        "schema_version": "v1",
+        "marker_id": "sha256:" + ("0" * 64),
+        "tick_u64": int(tick_u64),
+        "state_dir_relpath": _repo_relpath(state_dir),
+        "binding_hash": str(binding_hash),
+        "manifest_hash": str(manifest_hash),
+        "manifest_relpath": str(manifest_relpath),
+    }
+    no_id = dict(payload)
+    no_id.pop("marker_id", None)
+    payload["marker_id"] = canon_hash_obj(no_id)
+    _write_json(path, payload)
+
+
+def _load_health_gate_thresholds(campaign_pack: Path) -> dict[str, int]:
+    out = {
+        "max_budget_exhaust_u64": 0,
+        "max_route_disabled_u64": 0,
+    }
+    pack_payload = load_canon_dict(campaign_pack)
+    profile_rel = str(pack_payload.get("long_run_profile_rel", "")).strip()
+    if not profile_rel:
+        return out
+    profile_path = campaign_pack.parent / profile_rel
+    if not profile_path.exists() or not profile_path.is_file():
+        return out
+    profile_payload = load_canon_dict(profile_path)
+    gate = profile_payload.get("frontier_health_gate")
+    if not isinstance(gate, dict):
+        return out
+    out["max_budget_exhaust_u64"] = int(max(0, int(gate.get("max_budget_exhaust_u64", 0))))
+    out["max_route_disabled_u64"] = int(max(0, int(gate.get("max_route_disabled_u64", 0))))
+    return out
+
+
 def _retention_keep_ticks(*, live_rows: list[dict[str, Any]], retain_last_u64: int, anchor_every_u64: int) -> set[int]:
     keep: set[int] = set()
     if not live_rows:
@@ -346,9 +642,19 @@ def run_tick(
     snapshot_payload, snapshot_hash = _latest_payload(state_dir / "snapshot", "omega_tick_snapshot_v1.json")
     tick_outcome_payload, _tick_outcome_hash = _latest_payload(state_dir / "perf", "omega_tick_outcome_v1.json")
     lane_name = None
+    lane_frontier_gate_pass_b = None
+    lane_invalid_count_u64 = None
+    lane_budget_exhaust_count_u64 = None
+    lane_route_disabled_count_u64 = None
     lane_payload, _lane_hash = _latest_payload(state_dir / "long_run" / "lane", "lane_decision_receipt_v1.json")
     if isinstance(lane_payload, dict):
         lane_name = lane_payload.get("lane_name")
+        lane_frontier_gate_pass_b = lane_payload.get("frontier_gate_pass_b")
+        lane_health = lane_payload.get("health_window")
+        if isinstance(lane_health, dict):
+            lane_invalid_count_u64 = lane_health.get("invalid_count_u64")
+            lane_budget_exhaust_count_u64 = lane_health.get("budget_exhaust_count_u64")
+            lane_route_disabled_count_u64 = lane_health.get("route_disabled_count_u64")
     row = {
         "schema_name": "long_run_tick_index_row_v1",
         "schema_version": "v1",
@@ -359,6 +665,10 @@ def run_tick(
         "exit_code": int(proc.returncode),
         "snapshot_hash": snapshot_hash,
         "lane_name": lane_name,
+        "lane_frontier_gate_pass_b": lane_frontier_gate_pass_b,
+        "lane_invalid_count_u64": lane_invalid_count_u64,
+        "lane_budget_exhaust_count_u64": lane_budget_exhaust_count_u64,
+        "lane_route_disabled_count_u64": lane_route_disabled_count_u64,
         "mission_goal_ingest_receipt_hash": (snapshot_payload or {}).get("mission_goal_ingest_receipt_hash"),
         "eval_report_hash": (snapshot_payload or {}).get("eval_report_hash"),
         "subverifier_status": (tick_outcome_payload or {}).get("subverifier_status"),
@@ -393,12 +703,32 @@ def run_loop(
     index_dir.mkdir(parents=True, exist_ok=True)
     env_receipt = _env_receipt(env=_build_subprocess_env(force_lane=force_lane, force_eval=force_eval))
     _write_json(run_root / ENV_RECEIPT_NAME, env_receipt)
+    launch_manifest_path, launch_manifest_payload, launch_manifest_hash = _load_or_create_launch_manifest(
+        campaign_pack=campaign_pack,
+        run_root=run_root,
+        env_receipt=env_receipt,
+        start_tick_u64=start_tick_u64,
+        max_ticks=max_ticks,
+        max_disk_bytes=max_disk_bytes,
+        retain_last_u64=retain_last_u64,
+        anchor_every_u64=anchor_every_u64,
+        canary_every_u64=canary_every_u64,
+        force_lane=force_lane,
+        force_eval=force_eval,
+    )
+    print(f"launch_manifest_hash={launch_manifest_hash}")
     pins_hash_initial = _authority_pins_hash()
+    health_gate_thresholds = _load_health_gate_thresholds(campaign_pack)
+    manifest_relpath = str(launch_manifest_payload.get("manifest_relpath", _repo_relpath(launch_manifest_path)))
 
     tick_rows, pruned_ticks = _read_indexes(index_dir)
     live_rows = _live_rows(tick_rows, pruned_ticks)
     head = _read_head(index_dir / HEAD_NAME)
+    launch_binding_marker_path = index_dir / LAUNCH_BINDING_MARKER_NAME
+    launch_binding_marker = _read_launch_binding_marker(launch_binding_marker_path)
+    launch_bound_b = launch_binding_marker is not None
     prev_state_dir: Path | None = None
+    last_valid_state_dir: Path | None = None
     tick_u64 = int(start_tick_u64)
     if head is not None:
         head_tick = int(head.get("tick_u64", -1))
@@ -406,10 +736,41 @@ def run_loop(
         if head_tick >= 0 and head_state_dir.exists():
             tick_u64 = head_tick + 1
             prev_state_dir = head_state_dir
+            last_valid_state_dir = head_state_dir
     elif live_rows:
         last = live_rows[-1]
         prev_state_dir = Path(str(last["state_dir"]))
         tick_u64 = int(last["tick_u64"]) + 1
+        if prev_state_dir.exists():
+            last_valid_state_dir = prev_state_dir
+
+    if not launch_bound_b and live_rows:
+        first_ok = None
+        for row in live_rows:
+            if str(row.get("status", "")) != "OK":
+                continue
+            candidate = Path(str(row.get("state_dir", "")))
+            if candidate.exists() and candidate.is_dir():
+                first_ok = row
+                break
+        if first_ok is not None:
+            state_dir = Path(str(first_ok.get("state_dir", "")))
+            tick_for_bind = int(first_ok.get("tick_u64", 0))
+            binding_hash, _event_id = _bind_launch_manifest_to_tick_ledger(
+                state_dir=state_dir,
+                tick_u64=tick_for_bind,
+                manifest_relpath=manifest_relpath,
+                manifest_hash=launch_manifest_hash,
+            )
+            _write_launch_binding_marker(
+                path=launch_binding_marker_path,
+                tick_u64=tick_for_bind,
+                state_dir=state_dir,
+                binding_hash=binding_hash,
+                manifest_hash=launch_manifest_hash,
+                manifest_relpath=manifest_relpath,
+            )
+            launch_bound_b = True
 
     ticks_run = 0
     while max_ticks <= 0 or ticks_run < max_ticks:
@@ -421,11 +782,131 @@ def run_loop(
             force_lane=force_lane,
             force_eval=force_eval,
         )
+        hard_stop_reason_code: str | None = None
+        hard_stop_detail: dict[str, Any] = {}
+        state_verifier_reason_code: str | None = None
+
+        state_dir = Path(str(row.get("state_dir", "")))
+        tick_value = int(row.get("tick_u64", tick_u64))
+        if not launch_bound_b and str(row.get("status", "")) == "OK" and state_dir.exists() and state_dir.is_dir():
+            binding_hash, _event_id = _bind_launch_manifest_to_tick_ledger(
+                state_dir=state_dir,
+                tick_u64=tick_value,
+                manifest_relpath=manifest_relpath,
+                manifest_hash=launch_manifest_hash,
+            )
+            _write_launch_binding_marker(
+                path=launch_binding_marker_path,
+                tick_u64=tick_value,
+                state_dir=state_dir,
+                binding_hash=binding_hash,
+                manifest_hash=launch_manifest_hash,
+                manifest_relpath=manifest_relpath,
+            )
+            launch_bound_b = True
+            row["launch_manifest_bound_b"] = True
+            row["launch_manifest_hash"] = launch_manifest_hash
+        else:
+            row["launch_manifest_bound_b"] = bool(launch_bound_b)
+            row["launch_manifest_hash"] = launch_manifest_hash
+
+        if str(row.get("status", "")) == "OK" and state_dir.exists() and state_dir.is_dir():
+            valid_b, state_verifier_reason_code = _state_verifier_outcome(state_dir)
+            row["state_verifier_valid_b"] = bool(valid_b)
+            row["state_verifier_reason_code"] = state_verifier_reason_code
+            if valid_b:
+                prev_state_dir = state_dir
+                last_valid_state_dir = state_dir
+            else:
+                hard_stop_reason_code = "STATE_VERIFIER_INVALID"
+                hard_stop_detail = {
+                    "state_verifier_reason_code": state_verifier_reason_code,
+                }
+        else:
+            row["state_verifier_valid_b"] = False
+            if not state_dir.exists() or not state_dir.is_dir():
+                state_verifier_reason_code = "TICK_STATE_MISSING"
+                if hard_stop_reason_code is None and bool(stop_on_error):
+                    hard_stop_reason_code = "TICK_STATE_MISSING"
+            else:
+                state_verifier_reason_code = "TICK_PROCESS_ERROR"
+                if hard_stop_reason_code is None and bool(stop_on_error):
+                    hard_stop_reason_code = "TICK_PROCESS_ERROR"
+            row["state_verifier_reason_code"] = state_verifier_reason_code
+
+        subverifier_status = str(row.get("subverifier_status", "")).strip()
+        if subverifier_status == "INVALID":
+            row["harness_control_reason_code"] = "SUBVERIFIER_INVALID_CONTINUE"
+        else:
+            row["harness_control_reason_code"] = "CONTINUE"
+
+        frontier_gate_pass_raw = row.get("lane_frontier_gate_pass_b")
+        frontier_gate_pass = frontier_gate_pass_raw if isinstance(frontier_gate_pass_raw, bool) else None
+        budget_count = int(max(0, int(row.get("lane_budget_exhaust_count_u64") or 0)))
+        route_count = int(max(0, int(row.get("lane_route_disabled_count_u64") or 0)))
+        budget_breach = budget_count > int(health_gate_thresholds["max_budget_exhaust_u64"])
+        route_breach = route_count > int(health_gate_thresholds["max_route_disabled_u64"])
+        if hard_stop_reason_code is None and frontier_gate_pass is False and (budget_breach or route_breach):
+            if budget_breach and route_breach:
+                hard_stop_reason_code = "HEALTH_GATE_BUDGET_AND_ROUTE"
+            elif budget_breach:
+                hard_stop_reason_code = "HEALTH_GATE_BUDGET_EXHAUST"
+            else:
+                hard_stop_reason_code = "HEALTH_GATE_ROUTE_DISABLED"
+            hard_stop_detail = {
+                "lane_name": row.get("lane_name"),
+                "lane_budget_exhaust_count_u64": budget_count,
+                "lane_route_disabled_count_u64": route_count,
+                "max_budget_exhaust_u64": int(health_gate_thresholds["max_budget_exhaust_u64"]),
+                "max_route_disabled_u64": int(health_gate_thresholds["max_route_disabled_u64"]),
+            }
+
+        if hard_stop_reason_code is None and str(row.get("status", "")) != "OK" and bool(stop_on_error):
+            hard_stop_reason_code = "STOP_ON_ERROR"
+            hard_stop_detail = {
+                "exit_code": int(row.get("exit_code", 0)),
+            }
+
+        row["hard_stop_reason_code"] = hard_stop_reason_code
+        if hard_stop_reason_code is not None:
+            last_valid_state_rel = _repo_relpath(last_valid_state_dir) if isinstance(last_valid_state_dir, Path) else ""
+            stop_path, stop_obj, stop_hash = _write_stop_receipt(
+                run_root=run_root,
+                halt_reason_code=hard_stop_reason_code,
+                halt_tick_u64=tick_value,
+                last_valid_state_dir_relpath=last_valid_state_rel,
+                manifest_hash=launch_manifest_hash,
+                manifest_relpath=manifest_relpath,
+                state_verifier_reason_code=state_verifier_reason_code,
+                detail=hard_stop_detail,
+            )
+            row["stop_receipt_hash"] = stop_hash
+            row["stop_receipt_relpath"] = _repo_relpath(stop_path)
+            row["stop_receipt_ledger_bound_b"] = False
+            if str(row.get("status", "")) == "OK" and state_dir.exists() and state_dir.is_dir():
+                try:
+                    _state_stop_path, _state_stop_obj, state_stop_hash = _write_hashed_payload(
+                        dir_path=state_dir / "long_run" / "stop",
+                        suffix="long_run_stop_receipt_v1.json",
+                        payload=stop_obj,
+                        id_field="stop_receipt_id",
+                    )
+                    if state_stop_hash != stop_hash:
+                        raise RuntimeError("NONDETERMINISTIC")
+                    _ = _append_ledger_event(
+                        state_dir=state_dir,
+                        tick_u64=tick_value,
+                        event_type="LONG_RUN_STOP_RECEIPT",
+                        artifact_hash=stop_hash,
+                    )
+                    row["stop_receipt_ledger_bound_b"] = True
+                except Exception:
+                    row["stop_receipt_ledger_bound_b"] = False
+
         _append_jsonl(index_dir / TICK_INDEX_NAME, row)
-        _write_head(index_dir / HEAD_NAME, row)
         tick_rows.append(row)
-        if int(row.get("status") == "OK"):
-            prev_state_dir = Path(str(row["state_dir"]))
+        if row.get("state_verifier_valid_b") is True:
+            _write_head(index_dir / HEAD_NAME, row)
         _prune_if_needed(
             run_root=run_root,
             max_disk_bytes=max_disk_bytes,
@@ -441,7 +922,7 @@ def run_loop(
             pins_hash_initial=pins_hash_initial,
             canary_every=canary_every_u64,
         )
-        if row.get("status") != "OK" and stop_on_error:
+        if hard_stop_reason_code is not None:
             break
         tick_u64 += 1
         ticks_run += 1

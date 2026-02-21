@@ -58,6 +58,8 @@
         "MISSION_GOAL_RECEIPT",
         "LANE_DECISION",
         "EVAL_REPORT",
+        "LONG_RUN_LAUNCH_MANIFEST",
+        "LONG_RUN_STOP_RECEIPT",
         "SNAPSHOT",
         "SAFE_HALT"
       ],

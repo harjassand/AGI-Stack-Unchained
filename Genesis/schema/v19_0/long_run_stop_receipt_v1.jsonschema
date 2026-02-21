@@ -1,0 +1,50 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v19_0/long_run_stop_receipt_v1",
+  "title": "Long run stop receipt v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_name",
+    "schema_version",
+    "stop_receipt_id",
+    "created_unix_s",
+    "halt_reason_code",
+    "halt_tick_u64",
+    "last_valid_state_dir_relpath",
+    "manifest_hash",
+    "manifest_relpath"
+  ],
+  "properties": {
+    "schema_name": {"const": "long_run_stop_receipt_v1"},
+    "schema_version": {"const": "v19_0"},
+    "stop_receipt_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "created_unix_s": {"type": "integer", "minimum": 0},
+    "halt_reason_code": {
+      "type": "string",
+      "enum": [
+        "STATE_VERIFIER_INVALID",
+        "HEALTH_GATE_BUDGET_EXHAUST",
+        "HEALTH_GATE_ROUTE_DISABLED",
+        "HEALTH_GATE_BUDGET_AND_ROUTE",
+        "TICK_PROCESS_ERROR",
+        "TICK_STATE_MISSING",
+        "STOP_ON_ERROR"
+      ]
+    },
+    "halt_tick_u64": {"type": "integer", "minimum": 0},
+    "last_valid_state_dir_relpath": {"type": "string"},
+    "manifest_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "manifest_relpath": {"type": "string", "minLength": 1},
+    "state_verifier_reason_code": {
+      "anyOf": [
+        {"type": "null"},
+        {"type": "string", "minLength": 1}
+      ]
+    },
+    "detail": {
+      "type": "object",
+      "additionalProperties": true
+    }
+  }
+}

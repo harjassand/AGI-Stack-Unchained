@@ -1,0 +1,70 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v19_0/long_run_launch_manifest_v1",
+  "title": "Long run launch manifest v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_name",
+    "schema_version",
+    "manifest_id",
+    "created_unix_s",
+    "manifest_relpath",
+    "run_root_relpath",
+    "campaign_pack_relpath",
+    "campaign_pack_hash",
+    "env_receipt_hash",
+    "execution",
+    "env"
+  ],
+  "properties": {
+    "schema_name": {"const": "long_run_launch_manifest_v1"},
+    "schema_version": {"const": "v19_0"},
+    "manifest_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "created_unix_s": {"type": "integer", "minimum": 0},
+    "manifest_relpath": {"type": "string", "minLength": 1},
+    "run_root_relpath": {"type": "string", "minLength": 1},
+    "campaign_pack_relpath": {"type": "string", "minLength": 1},
+    "campaign_pack_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "long_run_profile_hash": {
+      "anyOf": [
+        {"type": "null"},
+        {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"}
+      ]
+    },
+    "env_receipt_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "execution": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "start_tick_u64",
+        "max_ticks",
+        "max_disk_bytes",
+        "retain_last_u64",
+        "anchor_every_u64",
+        "canary_every_u64",
+        "force_lane",
+        "force_eval_b"
+      ],
+      "properties": {
+        "start_tick_u64": {"type": "integer", "minimum": 0},
+        "max_ticks": {"type": "integer", "minimum": 0},
+        "max_disk_bytes": {"type": "integer", "minimum": 1},
+        "retain_last_u64": {"type": "integer", "minimum": 1},
+        "anchor_every_u64": {"type": "integer", "minimum": 1},
+        "canary_every_u64": {"type": "integer", "minimum": 1},
+        "force_lane": {
+          "anyOf": [
+            {"type": "null"},
+            {"type": "string", "enum": ["BASELINE", "CANARY", "FRONTIER"]}
+          ]
+        },
+        "force_eval_b": {"type": "boolean"}
+      }
+    },
+    "env": {
+      "type": "object",
+      "additionalProperties": {"type": "string"}
+    }
+  }
+}

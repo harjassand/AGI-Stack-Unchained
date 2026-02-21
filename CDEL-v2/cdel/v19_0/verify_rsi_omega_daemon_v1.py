@@ -235,6 +235,84 @@ def _ledger_event_types(state_root: Path) -> list[str]:
     return [str(row.get("event_type", "")) for row in _ledger_rows(state_root)]
 
 
+def _verify_long_run_ledger_bindings(state_root: Path) -> None:
+    repo_root_path = repo_root_v18().resolve()
+    rows = _ledger_rows(state_root)
+    for row in rows:
+        event_type = str(row.get("event_type", "")).strip()
+        artifact_hash = _require_sha256(row.get("artifact_hash"), reason="SCHEMA_FAIL")
+        if event_type == "LONG_RUN_LAUNCH_MANIFEST":
+            path = _path_for_hash(
+                state_root / "long_run" / "launch",
+                artifact_hash,
+                "long_run_launch_manifest_binding_v1.json",
+            )
+            if path is None:
+                fail_v18("MISSING_STATE_INPUT")
+            payload = _load_canon_json(path)
+            if canon_hash_obj(payload) != artifact_hash:
+                fail_v18("NONDETERMINISTIC")
+            if str(payload.get("schema_name", "")).strip() != "long_run_launch_manifest_binding_v1":
+                fail_v18("SCHEMA_FAIL")
+            if str(payload.get("schema_version", "")).strip() != "v1":
+                fail_v18("SCHEMA_FAIL")
+            manifest_relpath = str(payload.get("manifest_relpath", "")).strip()
+            if not manifest_relpath:
+                fail_v18("SCHEMA_FAIL")
+            manifest_path = repo_root_path / manifest_relpath
+            try:
+                manifest_path.resolve().relative_to(repo_root_path)
+            except Exception:
+                fail_v18("SCHEMA_FAIL")
+            if not manifest_path.exists() or not manifest_path.is_file():
+                fail_v18("MISSING_STATE_INPUT")
+            manifest_payload = _load_canon_json(manifest_path)
+            validate_schema_v19(manifest_payload, "long_run_launch_manifest_v1")
+            manifest_id = _require_sha256(manifest_payload.get("manifest_id"), reason="SCHEMA_FAIL")
+            manifest_no_id = dict(manifest_payload)
+            manifest_no_id.pop("manifest_id", None)
+            if canon_hash_obj(manifest_no_id) != manifest_id:
+                fail_v18("NONDETERMINISTIC")
+            if manifest_id != _require_sha256(payload.get("manifest_hash"), reason="SCHEMA_FAIL"):
+                fail_v18("NONDETERMINISTIC")
+            if str(manifest_payload.get("manifest_relpath", "")).strip() != manifest_relpath:
+                fail_v18("NONDETERMINISTIC")
+        elif event_type == "LONG_RUN_STOP_RECEIPT":
+            path = _path_for_hash(
+                state_root / "long_run" / "stop",
+                artifact_hash,
+                "long_run_stop_receipt_v1.json",
+            )
+            if path is None:
+                fail_v18("MISSING_STATE_INPUT")
+            payload = _load_canon_json(path)
+            if canon_hash_obj(payload) != artifact_hash:
+                fail_v18("NONDETERMINISTIC")
+            if str(payload.get("schema_name", "")).strip() != "long_run_stop_receipt_v1":
+                fail_v18("SCHEMA_FAIL")
+            if str(payload.get("schema_version", "")).strip() != "v19_0":
+                fail_v18("SCHEMA_FAIL")
+            manifest_relpath = str(payload.get("manifest_relpath", "")).strip()
+            if not manifest_relpath:
+                fail_v18("SCHEMA_FAIL")
+            manifest_path = repo_root_path / manifest_relpath
+            try:
+                manifest_path.resolve().relative_to(repo_root_path)
+            except Exception:
+                fail_v18("SCHEMA_FAIL")
+            if not manifest_path.exists() or not manifest_path.is_file():
+                fail_v18("MISSING_STATE_INPUT")
+            manifest_payload = _load_canon_json(manifest_path)
+            validate_schema_v19(manifest_payload, "long_run_launch_manifest_v1")
+            manifest_id = _require_sha256(manifest_payload.get("manifest_id"), reason="SCHEMA_FAIL")
+            manifest_no_id = dict(manifest_payload)
+            manifest_no_id.pop("manifest_id", None)
+            if canon_hash_obj(manifest_no_id) != manifest_id:
+                fail_v18("NONDETERMINISTIC")
+            if manifest_id != _require_sha256(payload.get("manifest_hash"), reason="SCHEMA_FAIL"):
+                fail_v18("NONDETERMINISTIC")
+
+
 def _find_nested_hash(state_root: Path, digest: str, suffix: str) -> Path:
     hexd = str(digest).split(":", 1)[1]
     target = f"sha256_{hexd}.{suffix}"
@@ -1705,6 +1783,7 @@ def verify(state_dir: Path, *, mode: str = "full") -> str:
         fail_v18("MISSING_STATE_INPUT")
     _verify_shadow_path(state_root=state_root, config_dir=config_dir, snapshot=snapshot)
     _verify_epistemic_path(state_root, snapshot)
+    _verify_long_run_ledger_bindings(state_root)
 
     promo_hash = snapshot.get("promotion_receipt_hash")
     if promo_hash is None:

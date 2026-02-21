@@ -45,6 +45,7 @@ def _parse_args() -> argparse.Namespace:
     ap = argparse.ArgumentParser(prog="run_epistemic_airlock_closure_v1")
     ap.add_argument("--out-dir", default="runs/epistemic_airlock_closure_v1", help="Base output directory.")
     ap.add_argument("--tick-base", type=int, default=9200, help="Base tick for the closure run.")
+    ap.add_argument("--ticks", type=int, default=3, help="Number of deterministic closure ticks to execute.")
     return ap.parse_args()
 
 
@@ -275,6 +276,7 @@ def _load_hash_bound(path: Path) -> dict[str, Any]:
 
 def main() -> None:
     args = _parse_args()
+    ticks_u64 = max(1, int(args.ticks))
     run_root = (REPO_ROOT / str(args.out_dir)).resolve()
     run_root.mkdir(parents=True, exist_ok=True)
 
@@ -298,9 +300,8 @@ def main() -> None:
         ]
 
         schedule = [
-            (int(args.tick_base), "goal_epi_reduce_0001", "RSI_EPISTEMIC_REDUCE_V1"),
-            (int(args.tick_base) + 1, "goal_epi_reduce_0002", "RSI_EPISTEMIC_REDUCE_V1"),
-            (int(args.tick_base) + 2, "goal_epi_reduce_0003", "RSI_EPISTEMIC_REDUCE_V1"),
+            (int(args.tick_base) + idx, f"goal_epi_reduce_{idx + 1:04d}", "RSI_EPISTEMIC_REDUCE_V1")
+            for idx in range(ticks_u64)
         ]
 
         tick_runs: list[dict[str, Any]] = []
@@ -406,6 +407,7 @@ def main() -> None:
         "generated_at_utc": datetime.now(timezone.utc).isoformat(),
         "run_dir": evidence_dir.resolve().relative_to(REPO_ROOT.resolve()).as_posix(),
         "campaign_pack_rel": pack_path.resolve().relative_to(REPO_ROOT.resolve()).as_posix(),
+        "ticks_requested_u64": int(ticks_u64),
         "seeded_episode_ids": [str(row.get("episode_id", "")) for row in seeded_episodes],
         "ticks": tick_runs,
         "verification": {

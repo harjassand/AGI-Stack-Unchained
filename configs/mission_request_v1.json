@@ -1,0 +1,13 @@
+{
+  "schema_name": "mission_request_v1",
+  "schema_version": "v19_0",
+  "enabled_b": false,
+  "priority": "MED",
+  "objective_tags": [
+    "science"
+  ],
+  "allowed_capability_ids": [
+    "RSI_SAS_SCIENCE"
+  ],
+  "notes": "Set enabled_b=true to inject mission goals deterministically."
+}

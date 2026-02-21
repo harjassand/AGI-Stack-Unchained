@@ -1,0 +1,46 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v19_0/eval_report_v1",
+  "title": "Evaluation report v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_name",
+    "schema_version",
+    "report_id",
+    "tick_u64",
+    "mode",
+    "ek_hash",
+    "suite_hash",
+    "delta_j_q32",
+    "classification",
+    "metrics"
+  ],
+  "properties": {
+    "schema_name": {"const": "eval_report_v1"},
+    "schema_version": {"const": "v19_0"},
+    "report_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "tick_u64": {"type": "integer", "minimum": 0},
+    "mode": {"type": "string", "enum": ["CLASSIFY_ONLY", "HARD_REJECT"]},
+    "ek_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "suite_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "delta_j_q32": {"type": "integer"},
+    "classification": {"type": "string", "enum": ["IMPROVING", "FLAT_OR_REGRESS", "INSUFFICIENT_DATA"]},
+    "metrics": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "cap_frontier_u64",
+        "cap_frontier_delta_s64",
+        "promotion_success_rate_q32",
+        "invalid_rate_q32"
+      ],
+      "properties": {
+        "cap_frontier_u64": {"type": "integer", "minimum": 0},
+        "cap_frontier_delta_s64": {"type": "integer"},
+        "promotion_success_rate_q32": {"type": "integer", "minimum": 0},
+        "invalid_rate_q32": {"type": "integer", "minimum": 0}
+      }
+    }
+  }
+}

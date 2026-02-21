@@ -1158,15 +1158,14 @@ def _verify_policy_path(state_root: Path, snapshot: dict[str, Any]) -> None:
 
 def _verify_epistemic_path(state_root: Path, snapshot: dict[str, Any]) -> None:
     ledger_rows = _ledger_rows(state_root)
-    event_rows = [row for row in ledger_rows if str(row.get("event_type", "")).startswith("EPISTEMIC_")]
     capsule_event_rows = [row for row in ledger_rows if str(row.get("event_type", "")) == "EPISTEMIC_CAPSULE_V1"]
     capsule_rows = sorted(
         (state_root / "epistemic" / "capsules").glob("sha256_*.epistemic_capsule_v1.json"),
         key=lambda p: p.as_posix(),
     )
+    # Epistemic market events can exist without capsule production.
+    # Capsule checks are only mandatory when capsule events/artifacts are present.
     if not capsule_event_rows and not capsule_rows:
-        if event_rows:
-            fail_v18("NONDETERMINISTIC")
         return
     if capsule_rows and not capsule_event_rows:
         fail_v18("NONDETERMINISTIC")

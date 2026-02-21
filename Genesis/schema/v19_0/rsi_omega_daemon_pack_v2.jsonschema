@@ -44,6 +44,12 @@
     "predictor_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
     "objective_j_profile_rel": {"type": "string"},
     "objective_j_profile_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "long_run_profile_rel": {"type": "string"},
+    "long_run_profile_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "long_run_eval_kernel_rel": {"type": "string"},
+    "long_run_eval_kernel_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "long_run_eval_suite_rel": {"type": "string"},
+    "long_run_eval_suite_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
     "policy_vm_mode": {"type": "string", "enum": ["DECISION_ONLY", "DUAL", "PROPOSAL_ONLY"]},
     "policy_branch_id": {"type": "string"},
     "policy_round_u32": {"type": "integer", "minimum": 0},
@@ -115,6 +121,30 @@
     {
       "if": {"required": ["objective_j_profile_id"]},
       "then": {"required": ["objective_j_profile_rel"]}
+    },
+    {
+      "if": {"required": ["long_run_profile_rel"]},
+      "then": {"required": ["long_run_profile_id"]}
+    },
+    {
+      "if": {"required": ["long_run_profile_id"]},
+      "then": {"required": ["long_run_profile_rel"]}
+    },
+    {
+      "if": {"required": ["long_run_eval_kernel_rel"]},
+      "then": {"required": ["long_run_eval_kernel_id"]}
+    },
+    {
+      "if": {"required": ["long_run_eval_kernel_id"]},
+      "then": {"required": ["long_run_eval_kernel_rel"]}
+    },
+    {
+      "if": {"required": ["long_run_eval_suite_rel"]},
+      "then": {"required": ["long_run_eval_suite_id"]}
+    },
+    {
+      "if": {"required": ["long_run_eval_suite_id"]},
+      "then": {"required": ["long_run_eval_suite_rel"]}
     },
     {
       "if": {"required": ["policy_budget_spec_rel"]},

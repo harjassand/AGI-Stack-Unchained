@@ -111,6 +111,8 @@ from .goal_synthesizer_v1 import (
     suppressed_capability_ids_from_episodic_memory,
     synthesize_goal_queue,
 )
+from .eval_cadence_v1 import build_eval_report, should_emit_eval
+from .mission_goal_ingest_v1 import ingest_mission_goals
 from orchestrator.omega_v18_0.io_v1 import freeze_pack_config, load_goal_queue, write_goal_queue_effective
 from orchestrator.omega_v18_0.locks_v1 import acquire_lock
 from orchestrator.omega_v18_0.observer_v1 import observe, read_meta_core_active_manifest_hash
@@ -145,6 +147,7 @@ _Q32_ONE = 1 << 32
 _EPISTEMIC_LOW_CONF_THRESHOLD_Q32 = _Q32_ONE // 2
 _MAX_METRIC_SERIES_LEN_U64 = 64
 _FAILURE_KEY_RE = re.compile(r"[^a-z0-9_]+")
+_LANE_NAMES = {"BASELINE", "CANARY", "FRONTIER"}
 
 
 @contextmanager
@@ -1319,6 +1322,339 @@ def _merge_goals(prev_goals: dict[str, Any], goal_queue: dict[str, Any]) -> dict
             "last_tick_u64": 0,
         }
     return merged
+
+
+def _require_safe_relpath(path_value: Any) -> str:
+    rel = str(path_value).strip()
+    if not rel:
+        fail("SCHEMA_FAIL")
+    path = Path(rel)
+    if path.is_absolute() or ".." in path.parts or "\\" in rel:
+        fail("SCHEMA_FAIL")
+    return rel
+
+
+def _sorted_unique_strings(rows: Any) -> list[str]:
+    if not isinstance(rows, list):
+        fail("SCHEMA_FAIL")
+    out = sorted({str(row).strip() for row in rows if str(row).strip()})
+    return out
+
+
+def _load_optional_long_run_profile(*, config_dir: Path, pack: dict[str, Any]) -> tuple[dict[str, Any] | None, str | None]:
+    rel_raw = str(pack.get("long_run_profile_rel", "")).strip()
+    id_raw = str(pack.get("long_run_profile_id", "")).strip()
+    if not rel_raw and not id_raw:
+        return None, None
+    if bool(rel_raw) != bool(id_raw):
+        fail("SCHEMA_FAIL")
+    rel = _require_safe_relpath(rel_raw)
+    declared_id = ensure_sha256(id_raw, reason="PIN_HASH_MISMATCH")
+    path = config_dir / rel
+    if not path.exists() or not path.is_file():
+        fail("MISSING_STATE_INPUT")
+    payload = load_canon_dict(path)
+    validate_schema_v19(payload, "long_run_profile_v1")
+    profile_id = ensure_sha256(payload.get("profile_id"), reason="PIN_HASH_MISMATCH")
+    no_id = dict(payload)
+    no_id.pop("profile_id", None)
+    if canon_hash_obj(no_id) != profile_id:
+        fail("PIN_HASH_MISMATCH")
+    if profile_id != declared_id:
+        fail("PIN_HASH_MISMATCH")
+    return payload, declared_id
+
+
+def _load_long_run_eval_assets(
+    *,
+    config_dir: Path,
+    pack: dict[str, Any],
+    long_run_profile: dict[str, Any],
+) -> tuple[dict[str, Any], dict[str, Any]]:
+    eval_cfg = long_run_profile.get("evaluation")
+    if not isinstance(eval_cfg, dict):
+        fail("SCHEMA_FAIL")
+    ek_rel_profile = _require_safe_relpath(eval_cfg.get("ek_rel"))
+    suite_rel_profile = _require_safe_relpath(eval_cfg.get("suite_rel"))
+
+    ek_rel = _require_safe_relpath(pack.get("long_run_eval_kernel_rel"))
+    ek_id = ensure_sha256(pack.get("long_run_eval_kernel_id"), reason="PIN_HASH_MISMATCH")
+    suite_rel = _require_safe_relpath(pack.get("long_run_eval_suite_rel"))
+    suite_id = ensure_sha256(pack.get("long_run_eval_suite_id"), reason="PIN_HASH_MISMATCH")
+    if ek_rel != ek_rel_profile or suite_rel != suite_rel_profile:
+        fail("PIN_HASH_MISMATCH")
+
+    ek_payload = load_canon_dict(config_dir / ek_rel)
+    suite_payload = load_canon_dict(config_dir / suite_rel)
+    if canon_hash_obj(ek_payload) != ek_id:
+        fail("PIN_HASH_MISMATCH")
+    if canon_hash_obj(suite_payload) != suite_id:
+        fail("PIN_HASH_MISMATCH")
+    return ek_payload, suite_payload
+
+
+def _normalize_goal_rows(payload: dict[str, Any]) -> list[dict[str, str]]:
+    rows = payload.get("goals")
+    if not isinstance(rows, list):
+        fail("SCHEMA_FAIL")
+    out: list[dict[str, str]] = []
+    for row in rows:
+        if not isinstance(row, dict):
+            fail("SCHEMA_FAIL")
+        goal_id = str(row.get("goal_id", "")).strip()
+        capability_id = str(row.get("capability_id", "")).strip()
+        status = str(row.get("status", "PENDING")).strip()
+        if not goal_id or not capability_id or status not in _GOAL_STATUSES:
+            fail("SCHEMA_FAIL")
+        out.append(
+            {
+                "goal_id": goal_id,
+                "capability_id": capability_id,
+                "status": status,
+            }
+        )
+    return out
+
+
+def _lane_goal_rows(
+    *,
+    tick_u64: int,
+    lane_name: str,
+    capability_ids: list[str],
+) -> list[dict[str, str]]:
+    if lane_name not in _LANE_NAMES:
+        fail("SCHEMA_FAIL")
+    if lane_name == "BASELINE":
+        return []
+    prefix = "goal_auto_10_lane_canary_" if lane_name == "CANARY" else "goal_auto_90_lane_frontier_"
+    out: list[dict[str, str]] = []
+    for idx, capability_id in enumerate(sorted({str(row).strip() for row in capability_ids if str(row).strip()})):
+        token = re.sub(r"[^a-z0-9_]+", "_", capability_id.lower()).strip("_") or "x"
+        goal_id = f"{prefix}{token}_{int(tick_u64):06d}_{int(idx):02d}"
+        out.append(
+            {
+                "goal_id": goal_id,
+                "capability_id": capability_id,
+                "status": "PENDING",
+            }
+        )
+    return out
+
+
+def _merge_goal_rows(*, rows: list[dict[str, str]]) -> list[dict[str, str]]:
+    by_id: dict[str, dict[str, str]] = {}
+    for row in rows:
+        goal_id = str(row.get("goal_id", "")).strip()
+        capability_id = str(row.get("capability_id", "")).strip()
+        status = str(row.get("status", "PENDING")).strip()
+        if not goal_id or not capability_id or status not in _GOAL_STATUSES:
+            fail("SCHEMA_FAIL")
+        if goal_id not in by_id:
+            by_id[goal_id] = {
+                "goal_id": goal_id,
+                "capability_id": capability_id,
+                "status": status,
+            }
+    return [by_id[key] for key in sorted(by_id.keys())]
+
+
+def _filter_pending_goals_for_lane(*, rows: list[dict[str, str]], allowed_capability_ids: list[str]) -> list[dict[str, str]]:
+    allowed = set(allowed_capability_ids)
+    out: list[dict[str, str]] = []
+    for row in rows:
+        status = str(row["status"]).strip()
+        if status != "PENDING" or str(row["capability_id"]).strip() in allowed:
+            out.append(dict(row))
+    return out
+
+
+def _load_prev_health_window(*, prev_state_dir: Path | None, window_ticks_u64: int) -> dict[str, Any]:
+    out: dict[str, Any] = {
+        "schema_name": "long_run_health_window_v1",
+        "schema_version": "v19_0",
+        "window_ticks_u64": int(max(1, int(window_ticks_u64))),
+        "rows": [],
+    }
+    if prev_state_dir is None:
+        return out
+    health_dir = Path(prev_state_dir) / "long_run" / "health"
+    if not health_dir.exists() or not health_dir.is_dir():
+        return out
+    rows = sorted(health_dir.glob("sha256_*.long_run_health_window_v1.json"), key=lambda p: p.as_posix())
+    if not rows:
+        return out
+    payload = load_canon_dict(rows[-1])
+    if str(payload.get("schema_name", "")).strip() != "long_run_health_window_v1":
+        fail("SCHEMA_FAIL")
+    if str(payload.get("schema_version", "")).strip() != "v19_0":
+        fail("SCHEMA_FAIL")
+    window = max(1, int(payload.get("window_ticks_u64", out["window_ticks_u64"])))
+    raw_rows = payload.get("rows")
+    if not isinstance(raw_rows, list):
+        fail("SCHEMA_FAIL")
+    normalized_rows: list[dict[str, Any]] = []
+    for row in raw_rows:
+        if not isinstance(row, dict):
+            fail("SCHEMA_FAIL")
+        normalized_rows.append(
+            {
+                "tick_u64": int(max(0, int(row.get("tick_u64", 0)))),
+                "invalid_b": bool(row.get("invalid_b", False)),
+                "budget_exhaust_b": bool(row.get("budget_exhaust_b", False)),
+                "route_disabled_b": bool(row.get("route_disabled_b", False)),
+            }
+        )
+    if len(normalized_rows) > window:
+        normalized_rows = normalized_rows[-window:]
+    return {
+        "schema_name": "long_run_health_window_v1",
+        "schema_version": "v19_0",
+        "window_ticks_u64": int(window),
+        "rows": normalized_rows,
+    }
+
+
+def _health_counts(window_payload: dict[str, Any]) -> dict[str, int]:
+    rows = window_payload.get("rows")
+    if not isinstance(rows, list):
+        fail("SCHEMA_FAIL")
+    invalid_count = 0
+    budget_count = 0
+    route_count = 0
+    for row in rows:
+        if not isinstance(row, dict):
+            fail("SCHEMA_FAIL")
+        if bool(row.get("invalid_b", False)):
+            invalid_count += 1
+        if bool(row.get("budget_exhaust_b", False)):
+            budget_count += 1
+        if bool(row.get("route_disabled_b", False)):
+            route_count += 1
+    return {
+        "invalid_count_u64": int(invalid_count),
+        "budget_exhaust_count_u64": int(budget_count),
+        "route_disabled_count_u64": int(route_count),
+    }
+
+
+def _resolve_lane(
+    *,
+    tick_u64: int,
+    long_run_profile: dict[str, Any],
+    prev_health_window: dict[str, Any],
+) -> tuple[str, list[str], bool, list[str], dict[str, int]]:
+    cadence = long_run_profile.get("lane_cadence")
+    lanes = long_run_profile.get("lanes")
+    health_gate = long_run_profile.get("frontier_health_gate")
+    if not isinstance(cadence, dict) or not isinstance(lanes, dict) or not isinstance(health_gate, dict):
+        fail("SCHEMA_FAIL")
+
+    canary_every = max(1, int(cadence.get("canary_every_ticks_u64", 10)))
+    frontier_every = max(1, int(cadence.get("frontier_every_ticks_u64", 100)))
+    counts = _health_counts(prev_health_window)
+    frontier_gate_pass = (
+        int(counts["invalid_count_u64"]) <= int(max(0, int(health_gate.get("max_invalid_u64", 0))))
+        and int(counts["budget_exhaust_count_u64"]) <= int(max(0, int(health_gate.get("max_budget_exhaust_u64", 0))))
+        and int(counts["route_disabled_count_u64"]) <= int(max(0, int(health_gate.get("max_route_disabled_u64", 0))))
+    )
+
+    reasons: list[str] = []
+    forced = str(os.environ.get("OMEGA_LONG_RUN_FORCE_LANE", "")).strip().upper()
+    if forced in _LANE_NAMES:
+        lane_name = forced
+        reasons.append("FORCED_LANE_OVERRIDE")
+        if lane_name == "FRONTIER" and not frontier_gate_pass:
+            reasons.append("FORCED_FRONTIER_BYPASS_HEALTH")
+    else:
+        frontier_due = int(tick_u64) > 0 and (int(tick_u64) % int(frontier_every) == 0)
+        canary_due = int(tick_u64) > 0 and (int(tick_u64) % int(canary_every) == 0)
+        if frontier_due and frontier_gate_pass:
+            lane_name = "FRONTIER"
+            reasons.append("CADENCE_FRONTIER")
+        elif frontier_due and not frontier_gate_pass:
+            lane_name = "CANARY" if canary_due else "BASELINE"
+            reasons.append("FRONTIER_HEALTH_BLOCKED")
+        elif canary_due:
+            lane_name = "CANARY"
+            reasons.append("CADENCE_CANARY")
+        else:
+            lane_name = "BASELINE"
+            reasons.append("CADENCE_BASELINE")
+
+    lane_key = {
+        "BASELINE": "baseline_capability_ids",
+        "CANARY": "canary_capability_ids",
+        "FRONTIER": "frontier_capability_ids",
+    }[lane_name]
+    allowed = _sorted_unique_strings((lanes.get(lane_key) or []))
+    return lane_name, allowed, frontier_gate_pass, reasons, counts
+
+
+def _build_lane_decision_receipt(
+    *,
+    tick_u64: int,
+    lane_name: str,
+    forced_lane_override_b: bool,
+    frontier_gate_pass_b: bool,
+    reason_codes: list[str],
+    health_window_ticks_u64: int,
+    health_counts: dict[str, int],
+    allowed_capability_ids: list[str],
+) -> dict[str, Any]:
+    payload: dict[str, Any] = {
+        "schema_name": "lane_decision_receipt_v1",
+        "schema_version": "v19_0",
+        "receipt_id": "sha256:" + ("0" * 64),
+        "tick_u64": int(tick_u64),
+        "lane_name": lane_name,
+        "forced_lane_override_b": bool(forced_lane_override_b),
+        "frontier_gate_pass_b": bool(frontier_gate_pass_b),
+        "reason_codes": [str(row) for row in reason_codes],
+        "health_window": {
+            "window_ticks_u64": int(max(1, int(health_window_ticks_u64))),
+            "invalid_count_u64": int(max(0, int(health_counts.get("invalid_count_u64", 0)))),
+            "budget_exhaust_count_u64": int(max(0, int(health_counts.get("budget_exhaust_count_u64", 0)))),
+            "route_disabled_count_u64": int(max(0, int(health_counts.get("route_disabled_count_u64", 0))),
+            ),
+        },
+        "allowed_capability_ids": _sorted_unique_strings(list(allowed_capability_ids)),
+    }
+    no_id = dict(payload)
+    no_id.pop("receipt_id", None)
+    payload["receipt_id"] = canon_hash_obj(no_id)
+    validate_schema_v19(payload, "lane_decision_receipt_v1")
+    return payload
+
+
+def _next_health_window(
+    *,
+    prev_window: dict[str, Any],
+    tick_u64: int,
+    tick_outcome: dict[str, Any],
+    shadow_summary_payload: dict[str, Any],
+) -> dict[str, Any]:
+    window_ticks_u64 = int(max(1, int(prev_window.get("window_ticks_u64", 100))))
+    rows = prev_window.get("rows")
+    if not isinstance(rows, list):
+        fail("SCHEMA_FAIL")
+    next_rows = [dict(row) for row in rows if isinstance(row, dict)]
+    route_disabled_u64 = int(max(0, int(shadow_summary_payload.get("route_disabled_modules_u64", 0))))
+    next_rows.append(
+        {
+            "tick_u64": int(tick_u64),
+            "invalid_b": str(tick_outcome.get("subverifier_status", "")).strip() == "INVALID",
+            "budget_exhaust_b": str(tick_outcome.get("noop_reason", "")).strip() == "BUDGET",
+            "route_disabled_b": route_disabled_u64 > 0,
+        }
+    )
+    if len(next_rows) > window_ticks_u64:
+        next_rows = next_rows[-window_ticks_u64:]
+    return {
+        "schema_name": "long_run_health_window_v1",
+        "schema_version": "v19_0",
+        "window_ticks_u64": int(window_ticks_u64),
+        "rows": next_rows,
+    }
 
 
 def _activation_meta_verdict(dispatch_ctx: dict[str, Any] | None) -> str | None:
@@ -2677,6 +3013,10 @@ def tick_once(
         "shadow/tier_b",
         "shadow/readiness",
         "ledger/epistemic",
+        "long_run/mission",
+        "long_run/lane",
+        "long_run/eval",
+        "long_run/health",
     ]:
         (state_root / rel).mkdir(parents=True, exist_ok=True)
 
@@ -2722,6 +3062,15 @@ def tick_once(
         healthcheck_suite_hash = canon_hash_obj(healthcheck_suite)
 
         goal_queue, goal_queue_hash = load_goal_queue(config_dir)
+        long_run_profile, long_run_profile_hash = _load_optional_long_run_profile(config_dir=config_dir, pack=pack)
+        long_run_eval_kernel_payload: dict[str, Any] | None = None
+        long_run_eval_suite_payload: dict[str, Any] | None = None
+        if long_run_profile is not None:
+            long_run_eval_kernel_payload, long_run_eval_suite_payload = _load_long_run_eval_assets(
+                config_dir=config_dir,
+                pack=pack,
+                long_run_profile=long_run_profile,
+            )
 
         bid_market_cfg, bid_market_cfg_hash = load_optional_bid_market_config(config_dir)
         market_enabled = bid_market_enabled(bid_market_cfg)
@@ -2881,6 +3230,133 @@ def tick_once(
             goal_queue_fastpath_outcome = "SKIP"
         else:
             _, goal_queue, goal_queue_hash = write_goal_queue_effective(config_dir, goal_queue_effective)
+        lane_name = "BASELINE"
+        lane_allowed_capability_ids: list[str] = []
+        lane_decision_receipt_hash: str | None = None
+        mission_goal_receipt_hash: str | None = None
+        eval_report_hash: str | None = None
+        prev_health_window = _load_prev_health_window(prev_state_dir=prev_state_dir, window_ticks_u64=100)
+        if long_run_profile is not None:
+            health_cfg = long_run_profile.get("frontier_health_gate")
+            if not isinstance(health_cfg, dict):
+                fail("SCHEMA_FAIL")
+            prev_health_window = _load_prev_health_window(
+                prev_state_dir=prev_state_dir,
+                window_ticks_u64=int(max(1, int(health_cfg.get("window_ticks_u64", 100)))),
+            )
+            lane_name, lane_allowed_capability_ids, frontier_gate_pass_b, lane_reason_codes, lane_health_counts = _resolve_lane(
+                tick_u64=tick_u64,
+                long_run_profile=long_run_profile,
+                prev_health_window=prev_health_window,
+            )
+            lane_decision_receipt = _build_lane_decision_receipt(
+                tick_u64=tick_u64,
+                lane_name=lane_name,
+                forced_lane_override_b=str(os.environ.get("OMEGA_LONG_RUN_FORCE_LANE", "")).strip().upper() in _LANE_NAMES,
+                frontier_gate_pass_b=frontier_gate_pass_b,
+                reason_codes=lane_reason_codes,
+                health_window_ticks_u64=int(prev_health_window.get("window_ticks_u64", 100)),
+                health_counts=lane_health_counts,
+                allowed_capability_ids=lane_allowed_capability_ids,
+            )
+            _, _lane_decision_receipt, lane_decision_receipt_hash = _write_payload_atomic(
+                state_root / "long_run" / "lane",
+                "lane_decision_receipt_v1.json",
+                lane_decision_receipt,
+                id_field="receipt_id",
+            )
+
+            registry_caps = registry.get("capabilities")
+            if not isinstance(registry_caps, list):
+                fail("SCHEMA_FAIL")
+            registry_known = {
+                str(row.get("capability_id", "")).strip()
+                for row in registry_caps
+                if isinstance(row, dict) and str(row.get("capability_id", "")).strip()
+            }
+            lane_allowed_effective = sorted(set(lane_allowed_capability_ids).intersection(registry_known))
+
+            runtime_rows = _normalize_goal_rows(goal_queue)
+            runtime_rows = _filter_pending_goals_for_lane(
+                rows=runtime_rows,
+                allowed_capability_ids=lane_allowed_effective,
+            )
+            runtime_rows.extend(
+                _lane_goal_rows(
+                    tick_u64=tick_u64,
+                    lane_name=lane_name,
+                    capability_ids=lane_allowed_effective,
+                )
+            )
+
+            mission_cfg = long_run_profile.get("mission")
+            if not isinstance(mission_cfg, dict):
+                fail("SCHEMA_FAIL")
+            mission_rel = _require_safe_relpath(mission_cfg.get("mission_request_rel"))
+            mission_default_priority = str(mission_cfg.get("default_priority", "MED")).strip().upper()
+            mission_max_goals_u64 = int(max(0, int(mission_cfg.get("max_injected_goals_u64", 0))))
+            mission_goals, mission_receipt, mission_payload = ingest_mission_goals(
+                tick_u64=tick_u64,
+                lane_name=lane_name,
+                mission_path=repo_root() / mission_rel,
+                lane_allowed_capability_ids=lane_allowed_effective,
+                registry=registry,
+                default_priority=mission_default_priority,
+                max_injected_goals_u64=mission_max_goals_u64,
+            )
+            if isinstance(mission_payload, dict):
+                _, _mission_payload_obj, mission_payload_hash = _write_payload_atomic(
+                    state_root / "long_run" / "mission",
+                    "mission_request_v1.json",
+                    mission_payload,
+                )
+                if mission_receipt.get("mission_hash") != mission_payload_hash:
+                    fail("NONDETERMINISTIC")
+            runtime_rows.extend(mission_goals)
+            runtime_rows = _merge_goal_rows(rows=runtime_rows)
+            goal_queue = {
+                "schema_version": "omega_goal_queue_v1",
+                "goals": runtime_rows,
+            }
+            validate_schema(goal_queue, "omega_goal_queue_v1")
+            goal_queue_hash = canon_hash_obj(goal_queue)
+
+            _, _mission_receipt_obj, mission_goal_receipt_hash = _write_payload_atomic(
+                state_root / "long_run" / "mission",
+                "mission_goal_ingest_receipt_v1.json",
+                mission_receipt,
+                id_field="receipt_id",
+            )
+
+            eval_cfg = long_run_profile.get("evaluation")
+            if not isinstance(eval_cfg, dict):
+                fail("SCHEMA_FAIL")
+            eval_mode = str(eval_cfg.get("mode", "CLASSIFY_ONLY")).strip().upper()
+            eval_every_ticks_u64 = int(max(1, int(eval_cfg.get("eval_every_ticks_u64", 50))))
+            force_eval_b = str(os.environ.get("OMEGA_LONG_RUN_FORCE_EVAL", "0")).strip() == "1"
+            if should_emit_eval(
+                tick_u64=tick_u64,
+                eval_every_ticks_u64=eval_every_ticks_u64,
+                force_eval_b=force_eval_b,
+            ):
+                if long_run_eval_kernel_payload is None or long_run_eval_suite_payload is None:
+                    fail("MISSING_STATE_INPUT")
+                eval_report_payload = build_eval_report(
+                    tick_u64=tick_u64,
+                    mode=eval_mode,
+                    ek_payload=long_run_eval_kernel_payload,
+                    suite_payload=long_run_eval_suite_payload,
+                    observation_report=observation_report,
+                    previous_observation_report=prev_observation_report,
+                    run_scorecard=prev_run_scorecard,
+                    tick_stats=prev_tick_stats,
+                )
+                _, _eval_report_obj, eval_report_hash = _write_payload_atomic(
+                    state_root / "long_run" / "eval",
+                    "eval_report_v1.json",
+                    eval_report_payload,
+                    id_field="report_id",
+                )
         prev_state = dict(prev_state)
         prev_state["goals"] = _merge_goals(prev_state.get("goals") or {}, goal_queue)
 
@@ -4318,6 +4794,12 @@ def tick_once(
         _emit("STATE", state_hash)
         _emit("OBSERVATION", observation_hash)
         _emit("ISSUE", issue_hash)
+        if lane_decision_receipt_hash is not None:
+            _emit("LANE_DECISION", lane_decision_receipt_hash)
+        if mission_goal_receipt_hash is not None:
+            _emit("MISSION_GOAL_RECEIPT", mission_goal_receipt_hash)
+        if eval_report_hash is not None:
+            _emit("EVAL_REPORT", eval_report_hash)
         if market_enabled:
             if bid_settlement_receipt_hash is None or bid_market_state_hash is None or bid_set_hash is None or bid_selection_receipt_hash is None:
                 fail("MISSING_STATE_INPUT")
@@ -4500,6 +4982,9 @@ def tick_once(
                 "state_hash": state_hash,
                 "observation_report_hash": observation_hash,
                 "issue_bundle_hash": issue_hash,
+                "mission_goal_ingest_receipt_hash": mission_goal_receipt_hash,
+                "lane_decision_receipt_hash": lane_decision_receipt_hash,
+                "eval_report_hash": eval_report_hash,
                 "decision_plan_hash": decision_hash,
                 "dispatch_receipt_hash": dispatch_hash,
                 "subverifier_receipt_hash": subverifier_hash,
@@ -4605,6 +5090,19 @@ def tick_once(
             execution_mode=execution_mode,
         )
         write_tick_outcome(state_root / "perf", tick_outcome)
+        if long_run_profile is not None:
+            shadow_summary_payload = _shadow_summary_obj if isinstance(_shadow_summary_obj, dict) else {}
+            next_health_window = _next_health_window(
+                prev_window=prev_health_window,
+                tick_u64=tick_u64,
+                tick_outcome=tick_outcome,
+                shadow_summary_payload=shadow_summary_payload,
+            )
+            _, _health_window_obj, _health_window_hash = _write_payload_atomic(
+                state_root / "long_run" / "health",
+                "long_run_health_window_v1.json",
+                next_health_window,
+            )
 
         tick_stats_payload = build_tick_stats(
             tick_u64=tick_u64,
@@ -4659,6 +5157,11 @@ def tick_once(
             "tick_snapshot_hash": snapshot_hash,
             "action_kind": decision_plan.get("action_kind"),
             "safe_halt": safe_halt,
+            "lane_name": lane_name,
+            "lane_decision_receipt_hash": lane_decision_receipt_hash,
+            "mission_goal_ingest_receipt_hash": mission_goal_receipt_hash,
+            "eval_report_hash": eval_report_hash,
+            "long_run_profile_hash": long_run_profile_hash,
             "runaway_state": "ACTIVE" if runaway_active else "INACTIVE",
             "runaway_level_u64": int(runaway_level_u64),
             "runaway_reason": str(runaway_reason),

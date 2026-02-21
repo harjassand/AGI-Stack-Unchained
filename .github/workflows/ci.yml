@@ -32,3 +32,32 @@ jobs:
 
       - name: Test
         run: pytest -q
+
+  phase4c_epistemic_merge_gates:
+    name: phase4c-epistemic-merge-gates
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          token: ${{ secrets.SUBMODULES_TOKEN || github.token }}
+
+      - name: Setup Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r CDEL-v2/requirements.lock
+          pip install pytest
+
+      - name: Run Phase4C / Epistemic Merge Gates
+        run: |
+          pytest -q \
+            CDEL-v2/cdel/v19_0/tests_omega_daemon/test_phase4c_real_swap_drill_v1.py \
+            CDEL-v2/cdel/v19_0/tests_continuity/test_corpus_descriptor_v1.py \
+            CDEL-v2/cdel/v19_0/tests_continuity/test_shadow_airlock_v1.py \
+            CDEL-v2/cdel/v19_0/tests_omega_daemon/test_epistemic_airlock_v1.py

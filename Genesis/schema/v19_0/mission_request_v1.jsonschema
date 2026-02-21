@@ -1,0 +1,42 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v19_0/mission_request_v1",
+  "title": "Mission request v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_name", "schema_version"],
+  "properties": {
+    "schema_name": {"const": "mission_request_v1"},
+    "schema_version": {"const": "v19_0"},
+    "enabled_b": {"type": "boolean"},
+    "priority": {"type": "string", "enum": ["HIGH", "MED", "LOW"]},
+    "objective_tags": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": {"type": "string", "minLength": 1}
+    },
+    "domain": {"type": "string", "minLength": 1},
+    "max_ticks_u64": {"type": "integer", "minimum": 1},
+    "allowed_capability_ids": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": {"type": "string", "minLength": 1}
+    },
+    "budget_caps": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "max_cpu_cost_q32": {"type": "integer", "minimum": 0},
+        "max_build_cost_q32": {"type": "integer", "minimum": 0},
+        "max_verifier_cost_q32": {"type": "integer", "minimum": 0},
+        "max_disk_bytes_u64": {"type": "integer", "minimum": 0}
+      }
+    },
+    "notes": {"type": "string"}
+  },
+  "anyOf": [
+    {"required": ["objective_tags"]},
+    {"required": ["domain"]},
+    {"required": ["allowed_capability_ids"]}
+  ]
+}

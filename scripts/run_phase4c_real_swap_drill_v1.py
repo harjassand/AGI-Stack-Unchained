@@ -51,6 +51,11 @@ def _parse_args() -> argparse.Namespace:
         default=8100,
         help="Base tick for shadow/self-check daemon runs.",
     )
+    ap.add_argument(
+        "--simulate",
+        action="store_true",
+        help="Compatibility flag: drill execution is already forced to simulate activation.",
+    )
     return ap.parse_args()
 
 

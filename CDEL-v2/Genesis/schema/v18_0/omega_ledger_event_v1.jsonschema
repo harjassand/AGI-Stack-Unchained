@@ -55,6 +55,9 @@
         "EPISTEMIC_ACTION_MARKET_INPUTS_V1",
         "EPISTEMIC_MARKET_SETTLEMENT_V1",
         "SIP_INGESTION_L0",
+        "MISSION_GOAL_RECEIPT",
+        "LANE_DECISION",
+        "EVAL_REPORT",
         "SNAPSHOT",
         "SAFE_HALT"
       ],

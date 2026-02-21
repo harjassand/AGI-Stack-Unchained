@@ -1,0 +1,54 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v19_0/mission_goal_ingest_receipt_v1",
+  "title": "Mission goal ingest receipt v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_name",
+    "schema_version",
+    "receipt_id",
+    "tick_u64",
+    "status",
+    "reason_code",
+    "lane_name",
+    "mission_present_b",
+    "mission_hash",
+    "goal_count_u64",
+    "goals"
+  ],
+  "properties": {
+    "schema_name": {"const": "mission_goal_ingest_receipt_v1"},
+    "schema_version": {"const": "v19_0"},
+    "receipt_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "tick_u64": {"type": "integer", "minimum": 0},
+    "status": {
+      "type": "string",
+      "enum": ["MISSION_GOAL_ADDED", "MISSION_GOAL_SKIPPED", "MISSION_GOAL_REJECTED"]
+    },
+    "reason_code": {"type": "string", "minLength": 1},
+    "lane_name": {"type": "string", "enum": ["BASELINE", "CANARY", "FRONTIER"]},
+    "mission_present_b": {"type": "boolean"},
+    "mission_hash": {
+      "anyOf": [
+        {"type": "null"},
+        {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"}
+      ]
+    },
+    "mapping_table_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "goal_count_u64": {"type": "integer", "minimum": 0},
+    "goals": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["goal_id", "capability_id", "status"],
+        "properties": {
+          "goal_id": {"type": "string", "minLength": 1},
+          "capability_id": {"type": "string", "minLength": 1},
+          "status": {"type": "string", "enum": ["PENDING", "DONE", "FAILED"]}
+        }
+      }
+    }
+  }
+}

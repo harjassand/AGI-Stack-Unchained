@@ -33,6 +33,66 @@ def _patch_json(diff_text: str) -> str:
     return json.dumps({"unified_diff": diff_text}, sort_keys=True, separators=(",", ":"), ensure_ascii=True)
 
 
+def _install_fastpath_stubs(monkeypatch: pytest.MonkeyPatch, *, target_relpath: str, diff_text: str) -> None:
+    def _git_stub(repo_root: Path, args: list[str]) -> None:
+        if args[:3] == ["worktree", "add", "--detach"] and len(args) >= 4:
+            wt = Path(args[3])
+            src = repo_root / target_relpath
+            dst = wt / target_relpath
+            dst.parent.mkdir(parents=True, exist_ok=True)
+            dst.write_text(src.read_text(encoding="utf-8"), encoding="utf-8")
+            return
+        if args[:2] == ["worktree", "remove"]:
+            return
+        if args and args[0] == "apply":
+            if "--check" in args:
+                return
+            patch_path = Path(args[-1])
+            plus_rows = [
+                row[1:]
+                for row in patch_path.read_text(encoding="utf-8").splitlines()
+                if row.startswith("+") and not row.startswith("+++")
+            ]
+            if plus_rows:
+                dst = Path(repo_root) / target_relpath
+                dst.parent.mkdir(parents=True, exist_ok=True)
+                dst.write_text("\n".join(plus_rows) + "\n", encoding="utf-8")
+            return
+
+    monkeypatch.setattr(coord_mut, "_git", _git_stub)
+    monkeypatch.setattr(coord_mut, "_git_out", lambda _root, _args: "")
+    monkeypatch.setattr(coord_mut, "_canonical_patch_from_worktree", lambda **_kwargs: diff_text.encode("utf-8"))
+    monkeypatch.setattr(coord_mut, "_run_python_gate", lambda **_kwargs: None)
+    monkeypatch.setattr(
+        coord_mut,
+        "_micro_bench_gate",
+        lambda **_kwargs: {
+            "schema_version": "coordinator_mutator_micro_bench_receipt_v1",
+            "baseline_median_q32": 0,
+            "candidate_median_q32": 0,
+            "improvement_frac_f64": "0.000000000000",
+            "deterministic_timing_b": True,
+        },
+    )
+    monkeypatch.setattr(
+        coord_mut,
+        "_verify_divergence_artifact_chain",
+        lambda **_kwargs: {
+            "schema_version": "phase3_divergence_artifact_receipt_v1",
+            "native_runtime_stats_hash": "sha256:" + ("1" * 64),
+            "native_runtime_stats_path_rel": "daemon/rsi_omega_daemon_v19_0/state/ledger/native/sha256_"
+            + ("1" * 64)
+            + ".omega_native_runtime_stats_v1.json",
+            "phase3_receipt_hash": "sha256:" + ("2" * 64),
+            "phase3_receipt_path_rel": "daemon/rsi_omega_daemon_v19_0/state/shadow/readiness/sha256_"
+            + ("2" * 64)
+            + ".shadow_regime_readiness_receipt_v1.json",
+            "evidence_digest_match_b": True,
+            "pass_b": True,
+        },
+    )
+
+
 def test_phase3_coordinator_mutator_accepts_median_non_regression(monkeypatch, tmp_path: Path) -> None:
     repo_root = tmp_path / "repo"
     out_dir = tmp_path / "out"
@@ -86,8 +146,8 @@ def test_phase3_coordinator_mutator_accepts_median_non_regression(monkeypatch, t
         "+print('candidate')\n"
     )
     monkeypatch.setattr(coord_mut, "get_backend", lambda: _BackendStub(_patch_json(diff)))
-
-    monkeypatch.setattr(coord_mut, "_git", lambda _root, _args: None)
+    _install_fastpath_stubs(monkeypatch, target_relpath=target_relpath, diff_text=diff)
+    monkeypatch.setattr(coord_mut, "_patch_nontrivial_reason", lambda **_kwargs: None)
     monkeypatch.setattr(coord_mut, "_bench_median_of_5", lambda **_kwargs: ([], 0.0))
     monkeypatch.setattr(
         coord_mut,
@@ -152,7 +212,8 @@ def test_phase3_coordinator_mutator_hard_rejects_negative_two_percent(monkeypatc
         "+y\n"
     )
     monkeypatch.setattr(coord_mut, "get_backend", lambda: _BackendStub(_patch_json(diff)))
-    monkeypatch.setattr(coord_mut, "_git", lambda _root, _args: None)
+    _install_fastpath_stubs(monkeypatch, target_relpath=target_relpath, diff_text=diff)
+    monkeypatch.setattr(coord_mut, "_patch_nontrivial_reason", lambda **_kwargs: None)
     monkeypatch.setattr(coord_mut, "_bench_median_of_5", lambda **_kwargs: ([], -0.02))
 
     called = {"emit": 0}
@@ -206,7 +267,8 @@ def test_phase3_coordinator_mutator_requires_structural_before_emit(monkeypatch,
         "+y\n"
     )
     monkeypatch.setattr(coord_mut, "get_backend", lambda: _BackendStub(_patch_json(diff)))
-    monkeypatch.setattr(coord_mut, "_git", lambda _root, _args: None)
+    _install_fastpath_stubs(monkeypatch, target_relpath=target_relpath, diff_text=diff)
+    monkeypatch.setattr(coord_mut, "_patch_nontrivial_reason", lambda **_kwargs: None)
     monkeypatch.setattr(coord_mut, "_bench_median_of_5", lambda **_kwargs: ([], 0.0))
     monkeypatch.setattr(coord_mut.v19_replay_verifier, "verify", lambda *_args, **_kwargs: "VALID")
 
@@ -258,6 +320,7 @@ def test_phase3_coordinator_mutator_rejects_patch_touching_other_paths(monkeypat
     )
     monkeypatch.setattr(coord_mut, "get_backend", lambda: _BackendStub(_patch_json(diff)))
     monkeypatch.setattr(coord_mut, "_git", lambda _root, _args: None)
+    monkeypatch.setattr(coord_mut, "_git_out", lambda _root, _args: "")
     monkeypatch.setattr(coord_mut, "_bench_median_of_5", lambda **_kwargs: ([], 0.0))
     monkeypatch.setattr(coord_mut, "_structural_validate", lambda **_kwargs: ({"schema_version": "x"}, tmp_path / "state"))
     monkeypatch.setattr(coord_mut.v19_replay_verifier, "verify", lambda *_args, **_kwargs: "VALID")
@@ -298,6 +361,7 @@ def test_phase3_coordinator_mutator_death_injection_guard(monkeypatch, tmp_path:
     )
     monkeypatch.setattr(coord_mut, "get_backend", lambda: _BackendStub(_patch_json(diff)))
     monkeypatch.setattr(coord_mut, "_git", lambda _root, _args: None)
+    monkeypatch.setattr(coord_mut, "_git_out", lambda _root, _args: "")
     monkeypatch.setattr(coord_mut, "_bench_median_of_5", lambda **_kwargs: ([], 0.0))
     monkeypatch.setattr(coord_mut, "_structural_validate", lambda **_kwargs: ({"schema_version": "x"}, tmp_path / "state"))
     monkeypatch.setattr(coord_mut.v19_replay_verifier, "verify", lambda *_args, **_kwargs: "VALID")

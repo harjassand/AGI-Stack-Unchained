@@ -163,6 +163,28 @@
       "pattern": "^sha256:[0-9a-f]{64}$",
       "type": "string"
     },
+    "mission_goal_ingest_receipt_hash": {
+      "anyOf": [
+        {
+          "pattern": "^sha256:[0-9a-f]{64}$",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "lane_decision_receipt_hash": {
+      "anyOf": [
+        {
+          "pattern": "^sha256:[0-9a-f]{64}$",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
     "promotion_receipt_hash": {
       "anyOf": [
         {
@@ -208,6 +230,17 @@
       ]
     },
     "shadow_readiness_receipt_hash": {
+      "anyOf": [
+        {
+          "pattern": "^sha256:[0-9a-f]{64}$",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "eval_report_hash": {
       "anyOf": [
         {
           "pattern": "^sha256:[0-9a-f]{64}$",

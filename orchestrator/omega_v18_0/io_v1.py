@@ -39,6 +39,9 @@ _PACK_V2_REQUIRED_PINNED = [
 _PACK_V2_OPTIONAL_PINNED = [
     ("predictor_weights_rel", "predictor_id", "predictor_id"),
     ("objective_j_profile_rel", "objective_j_profile_id", "profile_id"),
+    ("long_run_profile_rel", "long_run_profile_id", "profile_id"),
+    ("long_run_eval_kernel_rel", "long_run_eval_kernel_id", None),
+    ("long_run_eval_suite_rel", "long_run_eval_suite_id", None),
     ("policy_budget_spec_rel", "policy_budget_spec_id", None),
     ("policy_determinism_contract_rel", "policy_determinism_contract_id", "determinism_contract_id"),
     ("policy_merge_policy_rel", "policy_merge_policy_id", "merge_policy_id"),

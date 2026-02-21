@@ -1,0 +1,53 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v19_0/lane_decision_receipt_v1",
+  "title": "Lane decision receipt v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_name",
+    "schema_version",
+    "receipt_id",
+    "tick_u64",
+    "lane_name",
+    "forced_lane_override_b",
+    "frontier_gate_pass_b",
+    "reason_codes",
+    "health_window",
+    "allowed_capability_ids"
+  ],
+  "properties": {
+    "schema_name": {"const": "lane_decision_receipt_v1"},
+    "schema_version": {"const": "v19_0"},
+    "receipt_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "tick_u64": {"type": "integer", "minimum": 0},
+    "lane_name": {"type": "string", "enum": ["BASELINE", "CANARY", "FRONTIER"]},
+    "forced_lane_override_b": {"type": "boolean"},
+    "frontier_gate_pass_b": {"type": "boolean"},
+    "reason_codes": {
+      "type": "array",
+      "items": {"type": "string", "minLength": 1}
+    },
+    "health_window": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "window_ticks_u64",
+        "invalid_count_u64",
+        "budget_exhaust_count_u64",
+        "route_disabled_count_u64"
+      ],
+      "properties": {
+        "window_ticks_u64": {"type": "integer", "minimum": 1},
+        "invalid_count_u64": {"type": "integer", "minimum": 0},
+        "budget_exhaust_count_u64": {"type": "integer", "minimum": 0},
+        "route_disabled_count_u64": {"type": "integer", "minimum": 0}
+      }
+    },
+    "allowed_capability_ids": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": {"type": "string", "minLength": 1}
+    }
+  }
+}

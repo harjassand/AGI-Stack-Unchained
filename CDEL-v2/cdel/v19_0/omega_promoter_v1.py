@@ -67,6 +67,38 @@ _HARD_TASK_METRIC_IDS: tuple[str, ...] = (
 )
 
 
+def _canonical_axis_gate_relpath(path_value: str) -> str:
+    raw = str(path_value).strip().replace("\\", "/")
+    if not raw:
+        fail("SCHEMA_ERROR", safe_halt=True)
+    parts: list[str] = []
+    for token in raw.split("/"):
+        part = str(token).strip()
+        if not part or part == ".":
+            continue
+        if part == "..":
+            fail("SCHEMA_ERROR", safe_halt=True)
+        parts.append(part)
+    if not parts:
+        fail("SCHEMA_ERROR", safe_halt=True)
+    rel = "/".join(parts)
+    path = Path(rel)
+    if path.is_absolute() or ".." in path.parts:
+        fail("SCHEMA_ERROR", safe_halt=True)
+    return rel
+
+
+def _canonical_axis_gate_relpaths(rows: list[str]) -> list[str]:
+    out: list[str] = []
+    seen: set[str] = set()
+    for row in rows:
+        rel = _canonical_axis_gate_relpath(str(row))
+        if rel not in seen:
+            out.append(rel)
+            seen.add(rel)
+    return sorted(out)
+
+
 def _premarathon_v63_enabled() -> bool:
     raw = str(os.environ.get("OMEGA_PREMARATHON_V63", "0")).strip().lower()
     return raw in {"1", "true", "yes", "on"}
@@ -105,13 +137,13 @@ def _parse_patch_touched_paths(patch_bytes: bytes) -> list[str]:
         if rel.startswith('"') and rel.endswith('"') and len(rel) >= 2:
             rel = rel[1:-1]
         try:
-            normalized = normalize_subrun_relpath(rel)
+            normalized = _canonical_axis_gate_relpath(normalize_subrun_relpath(rel))
         except Exception:
-            normalized = rel.replace("\\", "/").lstrip("./")
+            normalized = _canonical_axis_gate_relpath(rel)
         if normalized and normalized not in seen:
             touched.append(normalized)
             seen.add(normalized)
-    return touched
+    return sorted(touched)
 
 
 def _resolve_ccap_subrun_root_for_bundle(*, bundle_obj: dict[str, Any], bundle_path: Path) -> Path:
@@ -150,7 +182,7 @@ def _effective_touched_paths_for_axis_gate(*, bundle_obj: dict[str, Any], bundle
         if not patch_path.exists() or not patch_path.is_file():
             fail("MISSING_STATE_INPUT", safe_halt=True)
         return _parse_patch_touched_paths(patch_path.read_bytes())
-    return extract_touched_paths(bundle_obj)
+    return _canonical_axis_gate_relpaths(extract_touched_paths(bundle_obj))
 
 
 _AXIS_EXEMPTIONS_CACHE: tuple[list[str], str] | None = None
@@ -174,17 +206,15 @@ def _load_axis_gate_exemptions_config() -> tuple[list[str], str]:
     out: list[str] = []
     seen: set[str] = set()
     for row in rows:
-        rel = str(row).strip().replace("\\", "/").lstrip("./")
-        if not rel or Path(rel).is_absolute() or ".." in Path(rel).parts:
-            fail("SCHEMA_ERROR", safe_halt=True)
+        rel = _canonical_axis_gate_relpath(str(row))
         if rel not in seen:
             out.append(rel)
             seen.add(rel)
-    _AXIS_EXEMPTIONS_CACHE = (out, config_id)
+    _AXIS_EXEMPTIONS_CACHE = (sorted(out), config_id)
     return _AXIS_EXEMPTIONS_CACHE
 
 
-def _requires_axis_bundle(*, bundle_obj: dict[str, Any], bundle_path: Path) -> tuple[bool, list[str], list[str], list[str], str]:
+def _requires_axis_bundle(*, bundle_obj: dict[str, Any], bundle_path: Path) -> tuple[bool, bool, list[str], list[str], list[str], str]:
     touched = _effective_touched_paths_for_axis_gate(bundle_obj=bundle_obj, bundle_path=bundle_path)
     governed: list[str] = []
     for row in touched:
@@ -194,8 +224,64 @@ def _requires_axis_bundle(*, bundle_obj: dict[str, Any], bundle_path: Path) -> t
                 break
     exempt_relpaths, exemptions_id = _load_axis_gate_exemptions_config()
     exempt_set = set(exempt_relpaths)
-    needs_axis = bool(governed) and any(row not in exempt_set for row in governed)
-    return needs_axis, touched, governed, exempt_relpaths, exemptions_id
+    axis_gate_exempted_b = all(row in exempt_set for row in touched)
+    needs_axis = bool(governed) and not axis_gate_exempted_b
+    return needs_axis, axis_gate_exempted_b, touched, governed, exempt_relpaths, exemptions_id
+
+
+def _axis_gate_context_for_bundle(
+    *,
+    bundle_obj: dict[str, Any],
+    bundle_path: Path,
+) -> tuple[dict[str, Any], dict[str, Any] | None, dict[str, Any]]:
+    axis_bundle = _load_axis_bundle_from_bundle(bundle_obj=bundle_obj, bundle_path=bundle_path)
+    needs_axis, axis_exempted_b, touched, governed, exempt_relpaths, exemptions_id = _requires_axis_bundle(
+        bundle_obj=bundle_obj,
+        bundle_path=bundle_path,
+    )
+    axis_gate_axis_id: str | None = None
+    axis_gate_bundle_sha256: str | None = None
+    if isinstance(axis_bundle, dict):
+        axis_gate_axis_id_raw = axis_bundle.get("axis_bundle_id")
+        if isinstance(axis_gate_axis_id_raw, str) and axis_gate_axis_id_raw.strip():
+            axis_gate_axis_id = str(axis_gate_axis_id_raw).strip()
+        axis_gate_bundle_sha256 = canon_hash_obj(axis_bundle)
+    axis_gate_reason_code = "EXEMPTED" if axis_exempted_b else ("REQUIRED" if needs_axis else "NONE")
+    axis_gate_context = {
+        "axis_gate_required_b": bool(needs_axis),
+        "axis_gate_exempted_b": bool(axis_exempted_b),
+        "axis_gate_reason_code": str(axis_gate_reason_code),
+        "axis_gate_axis_id": axis_gate_axis_id,
+        "axis_gate_bundle_present_b": bool(axis_bundle is not None),
+        "axis_gate_bundle_sha256": axis_gate_bundle_sha256,
+        "axis_gate_checked_relpaths_v1": list(touched),
+    }
+    axis_gate_decision_payload = {
+        "schema_name": "axis_gate_decision_v1",
+        "schema_version": "v19_0",
+        "bundle_schema_version": str(bundle_obj.get("schema_version", "")).strip(),
+        "effective_touched_paths": list(touched),
+        "governed_touched_paths": list(governed),
+        "exempt_relpaths": list(exempt_relpaths),
+        "exemptions_config_id": str(exemptions_id),
+        "needs_axis_bundle_b": bool(needs_axis),
+        **axis_gate_context,
+    }
+    return axis_gate_context, axis_bundle, axis_gate_decision_payload
+
+
+def _axis_gate_reason_code_for_failure(*, message: str, gate_outcome: str, fallback: str) -> str:
+    text = str(message).strip().upper()
+    if text.startswith("SAFE_HALT:MISSING_ARTIFACT"):
+        return "MISSING_AXIS_BUNDLE"
+    if str(gate_outcome).strip() == "SAFE_SPLIT":
+        return "SAFE_SPLIT"
+    if text.startswith("SAFE_HALT:"):
+        return "SAFE_HALT"
+    fallback_norm = str(fallback).strip().upper()
+    if fallback_norm and fallback_norm != "NONE":
+        return fallback_norm
+    return "SAFE_HALT"
 
 
 def _is_artifact_ref(value: Any) -> bool:
@@ -505,35 +591,27 @@ def _verify_axis_bundle_gate(
     bundle_obj: dict[str, Any],
     bundle_path: Path,
     promotion_dir: Path,
-) -> None:
-    axis_bundle = _load_axis_bundle_from_bundle(bundle_obj=bundle_obj, bundle_path=bundle_path)
-    needs_axis, touched, governed, exempt_relpaths, exemptions_id = _requires_axis_bundle(
+) -> dict[str, Any]:
+    axis_gate_context, axis_bundle, axis_gate_decision_payload = _axis_gate_context_for_bundle(
         bundle_obj=bundle_obj,
         bundle_path=bundle_path,
     )
     write_canonical(
         promotion_dir / "axis_gate_decision_v1.json",
-        {
-            "schema_name": "axis_gate_decision_v1",
-            "schema_version": "v19_0",
-            "bundle_schema_version": str(bundle_obj.get("schema_version", "")).strip(),
-            "effective_touched_paths": list(touched),
-            "governed_touched_paths": list(governed),
-            "exempt_relpaths": list(exempt_relpaths),
-            "exemptions_config_id": str(exemptions_id),
-            "needs_axis_bundle_b": bool(needs_axis),
-            "axis_bundle_present_b": bool(axis_bundle is not None),
-        },
+        axis_gate_decision_payload,
     )
     # Axis validation is required only when governed touched paths are not exempt.
     # If the bundle carries an optional axis payload while `needs_axis` is false,
     # treat it as non-blocking and skip the expensive/strict checks.
-    if not needs_axis:
-        return
+    if bool(axis_gate_context.get("axis_gate_exempted_b", False)):
+        axis_gate_context = dict(axis_gate_context)
+        axis_gate_context["axis_gate_required_b"] = False
+        axis_gate_context["axis_gate_reason_code"] = "EXEMPTED"
+        return axis_gate_context
+    if not bool(axis_gate_context.get("axis_gate_required_b", False)):
+        return axis_gate_context
     if axis_bundle is None:
-        if needs_axis:
-            fail("MISSING_ARTIFACT", safe_halt=True)
-        return
+        fail("MISSING_ARTIFACT", safe_halt=True)
 
     validate_schema(axis_bundle, "axis_upgrade_bundle_v1")
     verify_declared_id(axis_bundle, "axis_bundle_id")
@@ -738,6 +816,7 @@ def _verify_axis_bundle_gate(
 
     write_canonical(promotion_dir / "objective_J_old_v1.json", j_old)
     write_canonical(promotion_dir / "objective_J_new_v1.json", j_new)
+    return axis_gate_context
 
 
 def _is_sha256(value: Any) -> bool:
@@ -1429,9 +1508,22 @@ def run_promotion(
     bundle_obj = load_canon_dict(bundle_path)
     promotion_bundle_hash = bundle_hash or canon_hash_obj(bundle_obj)
     promotion_dir = bundle_path.parent
-    axis_bundle_for_meta = _load_axis_bundle_from_bundle(bundle_obj=bundle_obj, bundle_path=bundle_path)
+    axis_gate_context: dict[str, Any] = {
+        "axis_gate_required_b": False,
+        "axis_gate_exempted_b": False,
+        "axis_gate_reason_code": "NONE",
+        "axis_gate_axis_id": None,
+        "axis_gate_bundle_present_b": False,
+        "axis_gate_bundle_sha256": None,
+        "axis_gate_checked_relpaths_v1": [],
+    }
+    axis_bundle_for_meta: dict[str, Any] | None = None
 
     try:
+        axis_gate_context, axis_bundle_for_meta, _ = _axis_gate_context_for_bundle(
+            bundle_obj=bundle_obj,
+            bundle_path=bundle_path,
+        )
         _verify_axis_bundle_gate(
             bundle_obj=bundle_obj,
             bundle_path=bundle_path,
@@ -1440,6 +1532,12 @@ def run_promotion(
     except ContinuityV19Error as exc:
         message = str(exc)
         gate_outcome = "SAFE_SPLIT" if message.startswith("SAFE_SPLIT:") else "SAFE_HALT"
+        axis_failure_context = dict(axis_gate_context)
+        axis_failure_context["axis_gate_reason_code"] = _axis_gate_reason_code_for_failure(
+            message=message,
+            gate_outcome=gate_outcome,
+            fallback=str(axis_gate_context.get("axis_gate_reason_code", "NONE")),
+        )
         write_canonical(
             promotion_dir / "axis_gate_failure_v1.json",
             {
@@ -1447,6 +1545,7 @@ def run_promotion(
                 "schema_version": "v19_0",
                 "outcome": gate_outcome,
                 "detail": message,
+                **axis_failure_context,
             },
         )
         receipt, _digest = _write_v18_reject(
@@ -1463,6 +1562,18 @@ def run_promotion(
             effect_class="EFFECT_REJECTED",
         )
     except Exception:
+        axis_failure_context = dict(axis_gate_context)
+        axis_failure_context["axis_gate_reason_code"] = "SAFE_HALT"
+        write_canonical(
+            promotion_dir / "axis_gate_failure_v1.json",
+            {
+                "schema_name": "axis_gate_failure_v1",
+                "schema_version": "v19_0",
+                "outcome": "SAFE_HALT",
+                "detail": "SAFE_HALT:UNKNOWN_EXCEPTION",
+                **axis_failure_context,
+            },
+        )
         receipt, _digest = _write_v18_reject(
             tick_u64=tick_u64,
             dispatch_ctx=dispatch_ctx,

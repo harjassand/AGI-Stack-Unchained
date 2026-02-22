@@ -221,6 +221,29 @@ def _attach_hard_lock_transition_telemetry(*, rows: list[dict[str, Any]], row: d
     )
 
 
+def _axis_gate_rejection_counts(*, rows: list[dict[str, Any]], window_u64: int | None = None) -> tuple[int, dict[str, int]]:
+    if window_u64 is None:
+        scope = list(rows)
+    else:
+        scope = list(rows[-int(max(1, int(window_u64))) :])
+    reason_counts: dict[str, int] = {}
+    rejected_u64 = 0
+    for row in scope:
+        reason = str(row.get("axis_gate_reason_code", "NONE")).strip().upper() or "NONE"
+        if reason == "NONE":
+            continue
+        rejected_u64 += 1
+        reason_counts[reason] = int(reason_counts.get(reason, 0) + 1)
+    return int(rejected_u64), {key: int(reason_counts[key]) for key in sorted(reason_counts.keys())}
+
+
+def _attach_axis_gate_telemetry(*, rows: list[dict[str, Any]], row: dict[str, Any]) -> None:
+    combined = [*rows, row]
+    rejected_u64, reason_counts = _axis_gate_rejection_counts(rows=combined, window_u64=None)
+    row["axis_gate_rejected_u64"] = int(rejected_u64)
+    row["axis_gate_reason_code_counts"] = reason_counts
+
+
 def _mandatory_frontier_guard_summary(*, rows: list[dict[str, Any]]) -> dict[str, int]:
     quality_counts_total = _frontier_attempt_quality_counts(rows=rows, window_u64=None)
     return {
@@ -365,6 +388,88 @@ def _latest_payload(dir_path: Path, suffix: str) -> tuple[dict[str, Any] | None,
     payload = load_canon_dict(rows[-1])
     digest = "sha256:" + rows[-1].name.split(".", 1)[0].split("_", 1)[1]
     return payload, digest
+
+
+def _canonical_axis_gate_relpath(path_value: Any) -> str:
+    raw = str(path_value).strip().replace("\\", "/")
+    parts: list[str] = []
+    for token in raw.split("/"):
+        part = str(token).strip()
+        if not part or part == ".":
+            continue
+        if part == "..":
+            return ""
+        parts.append(part)
+    if not parts:
+        return ""
+    return "/".join(parts)
+
+
+def _canonical_axis_gate_relpaths(rows: Any) -> list[str]:
+    if not isinstance(rows, list):
+        return []
+    out: list[str] = []
+    seen: set[str] = set()
+    for row in rows:
+        rel = _canonical_axis_gate_relpath(row)
+        if not rel:
+            continue
+        if rel not in seen:
+            out.append(rel)
+            seen.add(rel)
+    return sorted(out)
+
+
+def _axis_gate_index_fields(*, state_dir: Path, promotion_reason_code: str | None = None) -> dict[str, Any]:
+    out = {
+        "axis_gate_required_b": False,
+        "axis_gate_exempted_b": False,
+        "axis_gate_reason_code": "NONE",
+        "axis_gate_axis_id": None,
+        "axis_gate_bundle_present_b": False,
+        "axis_gate_bundle_sha256": None,
+        "axis_gate_checked_relpaths_v1": [],
+    }
+    if state_dir.exists() and state_dir.is_dir():
+        candidates = sorted(
+            [
+                *state_dir.glob("dispatch/*/promotion/axis_gate_failure_v1.json"),
+                *state_dir.glob("subruns/*/promotion/axis_gate_failure_v1.json"),
+            ],
+            key=lambda row: row.as_posix(),
+        )
+        if candidates:
+            payload = load_canon_dict(candidates[-1])
+            if isinstance(payload, dict):
+                out["axis_gate_required_b"] = bool(payload.get("axis_gate_required_b", False))
+                out["axis_gate_exempted_b"] = bool(payload.get("axis_gate_exempted_b", False))
+                reason_raw = str(payload.get("axis_gate_reason_code", "")).strip().upper()
+                out["axis_gate_reason_code"] = reason_raw if reason_raw else "NONE"
+                axis_gate_axis_id = payload.get("axis_gate_axis_id")
+                out["axis_gate_axis_id"] = (
+                    str(axis_gate_axis_id).strip()
+                    if isinstance(axis_gate_axis_id, str) and str(axis_gate_axis_id).strip()
+                    else None
+                )
+                out["axis_gate_bundle_present_b"] = bool(payload.get("axis_gate_bundle_present_b", False))
+                axis_gate_bundle_sha256 = payload.get("axis_gate_bundle_sha256")
+                out["axis_gate_bundle_sha256"] = (
+                    str(axis_gate_bundle_sha256).strip()
+                    if isinstance(axis_gate_bundle_sha256, str) and str(axis_gate_bundle_sha256).strip()
+                    else None
+                )
+                out["axis_gate_checked_relpaths_v1"] = _canonical_axis_gate_relpaths(
+                    payload.get("axis_gate_checked_relpaths_v1")
+                )
+    if out["axis_gate_reason_code"] == "NONE":
+        promo_reason = str(promotion_reason_code or "").strip().upper()
+        if promo_reason.startswith("AXIS_GATE_SAFE_HALT:"):
+            out["axis_gate_reason_code"] = "SAFE_HALT"
+            out["axis_gate_required_b"] = True
+        elif promo_reason.startswith("AXIS_GATE_SAFE_SPLIT:"):
+            out["axis_gate_reason_code"] = "SAFE_SPLIT"
+            out["axis_gate_required_b"] = True
+    return out
 
 
 def _build_subprocess_env(
@@ -952,6 +1057,11 @@ def run_tick(
     error_class = None
     if not status_ok_b:
         error_class = "TICK_STATE_MISSING" if not state_dir.exists() or not state_dir.is_dir() else "TICK_PROCESS_ERROR"
+    promotion_reason_value = (tick_outcome_payload or {}).get("promotion_reason_code")
+    axis_gate_fields = _axis_gate_index_fields(
+        state_dir=state_dir,
+        promotion_reason_code=(str(promotion_reason_value) if promotion_reason_value is not None else None),
+    )
     row = {
         "schema_name": "long_run_tick_index_row_v1",
         "schema_version": "v1",
@@ -970,7 +1080,7 @@ def run_tick(
         "eval_report_hash": (snapshot_payload or {}).get("eval_report_hash"),
         "subverifier_status": (tick_outcome_payload or {}).get("subverifier_status"),
         "promotion_status": (tick_outcome_payload or {}).get("promotion_status"),
-        "promotion_reason_code": (tick_outcome_payload or {}).get("promotion_reason_code"),
+        "promotion_reason_code": promotion_reason_value,
         "candidate_bundle_present_b": (tick_outcome_payload or {}).get("candidate_bundle_present_b"),
         "selected_capability_id": selected_capability_id,
         "declared_class": (tick_outcome_payload or {}).get("declared_class"),
@@ -986,6 +1096,13 @@ def run_tick(
             FRONTIER_DISPATCH_PRE_EVIDENCE_REASON_CODE if frontier_dispatch_failed_from_routing_b else None
         ),
         "frontier_attempt_counted_b": bool((tick_outcome_payload or {}).get("frontier_attempt_counted_b", False)),
+        "axis_gate_required_b": bool(axis_gate_fields["axis_gate_required_b"]),
+        "axis_gate_exempted_b": bool(axis_gate_fields["axis_gate_exempted_b"]),
+        "axis_gate_reason_code": str(axis_gate_fields["axis_gate_reason_code"]),
+        "axis_gate_axis_id": axis_gate_fields["axis_gate_axis_id"],
+        "axis_gate_bundle_present_b": bool(axis_gate_fields["axis_gate_bundle_present_b"]),
+        "axis_gate_bundle_sha256": axis_gate_fields["axis_gate_bundle_sha256"],
+        "axis_gate_checked_relpaths_v1": list(axis_gate_fields["axis_gate_checked_relpaths_v1"]),
         "error_class": error_class,
         "disk_bytes_u64": int(_dir_size_bytes(out_dir)) if out_dir.exists() else 0,
         "started_unix_s": int(started),
@@ -1177,6 +1294,7 @@ def run_loop(
 
         _attach_frontier_attempt_quality_telemetry(rows=live_rows, row=row)
         _attach_hard_lock_transition_telemetry(rows=live_rows, row=row)
+        _attach_axis_gate_telemetry(rows=live_rows, row=row)
 
         frontier_gate_pass_raw = row.get("lane_frontier_gate_pass_b")
         frontier_gate_pass = frontier_gate_pass_raw if isinstance(frontier_gate_pass_raw, bool) else None

@@ -523,6 +523,46 @@ def test_harness_frontier_attempt_quality_classifier_marks_schema_fail_invalid()
     assert row["frontier_attempt_quality_counts_total"]["frontier_attempt_invalid_total_u64"] == 1
 
 
+def test_harness_axis_gate_index_fields_emit_explicit_flags(tmp_path: Path) -> None:
+    state_dir = tmp_path / "state"
+    _write_json(
+        state_dir / "dispatch" / "abcd" / "promotion" / "axis_gate_failure_v1.json",
+        {
+            "schema_name": "axis_gate_failure_v1",
+            "schema_version": "v19_0",
+            "outcome": "SAFE_HALT",
+            "detail": "SAFE_HALT:MISSING_ARTIFACT",
+            "axis_gate_required_b": True,
+            "axis_gate_exempted_b": False,
+            "axis_gate_reason_code": "MISSING_AXIS_BUNDLE",
+            "axis_gate_axis_id": None,
+            "axis_gate_bundle_present_b": False,
+            "axis_gate_bundle_sha256": None,
+            "axis_gate_checked_relpaths_v1": ["./orchestrator/omega_v18_0/goal_synthesizer_v1.py"],
+        },
+    )
+    fields = long_harness._axis_gate_index_fields(state_dir=state_dir, promotion_reason_code=None)
+    assert fields["axis_gate_reason_code"] != "NONE"
+    assert isinstance(fields["axis_gate_required_b"], bool)
+    assert isinstance(fields["axis_gate_exempted_b"], bool)
+    assert isinstance(fields["axis_gate_bundle_present_b"], bool)
+    assert fields["axis_gate_checked_relpaths_v1"] == ["orchestrator/omega_v18_0/goal_synthesizer_v1.py"]
+
+
+def test_harness_axis_gate_aggregate_counts() -> None:
+    live_rows = [
+        {"axis_gate_reason_code": "NONE"},
+        {"axis_gate_reason_code": "SAFE_HALT"},
+    ]
+    row = {"axis_gate_reason_code": "MISSING_AXIS_BUNDLE"}
+    long_harness._attach_axis_gate_telemetry(rows=live_rows, row=row)
+    assert row["axis_gate_rejected_u64"] == 2
+    assert row["axis_gate_reason_code_counts"] == {
+        "MISSING_AXIS_BUNDLE": 1,
+        "SAFE_HALT": 1,
+    }
+
+
 def test_harness_hard_lock_transition_logs_pre_evidence_failure() -> None:
     live_rows = [
         {

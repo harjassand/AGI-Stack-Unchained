@@ -44,6 +44,8 @@ from orchestrator.native.runtime_stats_v1 import (
 
 _GE_SH1_CAMPAIGN_ID = "rsi_ge_symbiotic_optimizer_sh1_v0_1"
 _HEAVY_DECLARED_CLASSES = {"FRONTIER_HEAVY", "CANARY_HEAVY"}
+_AXIS_EXEMPTIONS_REL = "configs/omega_axis_gate_exemptions_v1.json"
+_AXIS_EXEMPTIONS_SET_CACHE: set[str] | None = None
 
 
 def _resolve_state_dir(path: Path) -> Path:
@@ -76,6 +78,83 @@ def _require_sha256(value: Any, *, reason: str = "SCHEMA_FAIL") -> str:
     if not _is_sha256(raw):
         fail_v18(reason)
     return raw
+
+
+def _canonical_axis_gate_relpath(path_value: Any) -> str:
+    raw = str(path_value).strip().replace("\\", "/")
+    if not raw:
+        fail_v18("SCHEMA_FAIL")
+    parts: list[str] = []
+    for token in raw.split("/"):
+        part = str(token).strip()
+        if not part or part == ".":
+            continue
+        if part == "..":
+            fail_v18("SCHEMA_FAIL")
+        parts.append(part)
+    if not parts:
+        fail_v18("SCHEMA_FAIL")
+    rel = "/".join(parts)
+    path = Path(rel)
+    if path.is_absolute() or ".." in path.parts:
+        fail_v18("SCHEMA_FAIL")
+    return rel
+
+
+def _canonical_axis_gate_relpaths(value: Any) -> list[str]:
+    if not isinstance(value, list):
+        return []
+    out: list[str] = []
+    seen: set[str] = set()
+    for row in value:
+        text = str(row).strip()
+        if not text:
+            continue
+        rel = _canonical_axis_gate_relpath(text)
+        if rel not in seen:
+            out.append(rel)
+            seen.add(rel)
+    return sorted(out)
+
+
+def _load_axis_gate_exemptions_set() -> set[str]:
+    global _AXIS_EXEMPTIONS_SET_CACHE
+    cached = _AXIS_EXEMPTIONS_SET_CACHE
+    if cached is not None:
+        return set(cached)
+    payload = _load_canon_json((repo_root_v18() / _AXIS_EXEMPTIONS_REL).resolve())
+    if str(payload.get("schema_version", "")).strip() != "omega_axis_gate_exemptions_v1":
+        fail_v18("SCHEMA_FAIL")
+    rows = payload.get("exempt_relpaths")
+    if not isinstance(rows, list) or not rows:
+        fail_v18("SCHEMA_FAIL")
+    out: set[str] = set()
+    for row in rows:
+        out.add(_canonical_axis_gate_relpath(row))
+    _AXIS_EXEMPTIONS_SET_CACHE = set(out)
+    return set(out)
+
+
+def _load_axis_gate_decision_for_dispatch(*, state_root: Path, subrun_root_rel: str) -> dict[str, Any] | None:
+    candidates: list[Path] = []
+    subrun_rel = Path(subrun_root_rel)
+    if not subrun_rel.is_absolute() and ".." not in subrun_rel.parts:
+        candidates.append((state_root / subrun_rel / "promotion" / "axis_gate_decision_v1.json").resolve())
+    candidates.extend(
+        sorted(
+            state_root.glob("dispatch/*/promotion/axis_gate_decision_v1.json"),
+            key=lambda row: row.as_posix(),
+        )
+    )
+    axis_path = next((path for path in candidates if path.exists() and path.is_file()), None)
+    if axis_path is None:
+        return None
+    payload = _load_canon_json(axis_path)
+    if str(payload.get("schema_name", "")).strip() != "axis_gate_decision_v1":
+        fail_v18("SCHEMA_FAIL")
+    if str(payload.get("schema_version", "")).strip() != "v19_0":
+        fail_v18("SCHEMA_FAIL")
+    return payload
 
 
 def _load_pinned_pack_payload(
@@ -1949,6 +2028,10 @@ def _verify_candidate_precheck_for_dispatch(*, state_root: Path, dispatch_payloa
     rel = Path(subrun_root_rel)
     if rel.is_absolute() or ".." in rel.parts:
         fail_v18("SCHEMA_FAIL")
+    axis_gate_decision_payload = _load_axis_gate_decision_for_dispatch(
+        state_root=state_root,
+        subrun_root_rel=subrun_root_rel,
+    )
     precheck_dir = state_root / rel / "precheck"
     rows = sorted(precheck_dir.glob("sha256_*.candidate_precheck_receipt_v1.json"), key=lambda row: row.as_posix())
     if not rows:
@@ -1981,8 +2064,12 @@ def _verify_candidate_precheck_for_dispatch(*, state_root: Path, dispatch_payloa
                 normalized_candidates.append(row)
         payload_for_validation["candidates"] = normalized_candidates
     forced_heavy_context = payload_for_validation.get("forced_heavy_context_v1")
+    forced_heavy_wiring_locus_relpath: str | None = None
     if isinstance(forced_heavy_context, dict):
         context_norm = dict(forced_heavy_context)
+        wiring_locus_raw = context_norm.get("wiring_locus_relpath")
+        if isinstance(wiring_locus_raw, str) and wiring_locus_raw.strip():
+            forced_heavy_wiring_locus_relpath = _canonical_axis_gate_relpath(wiring_locus_raw)
         context_norm.setdefault(
             "expected_wiring_delta_v1",
             {"require_call_edges": False, "require_control_flow": False, "require_data_flow": False},
@@ -2036,6 +2123,7 @@ def _verify_candidate_precheck_for_dispatch(*, state_root: Path, dispatch_payloa
         fail_v18("SCHEMA_FAIL")
     if int(payload_for_validation.get("candidate_count_u32", -1)) != len(candidates):
         fail_v18("NONDETERMINISTIC")
+    selected_for_ccap_touched_relpaths: list[str] = []
     for row in candidates:
         if not isinstance(row, dict):
             fail_v18("SCHEMA_FAIL")
@@ -2050,6 +2138,7 @@ def _verify_candidate_precheck_for_dispatch(*, state_root: Path, dispatch_payloa
             "SELECTED_FOR_CCAP",
             "DROPPED_INSUFFICIENT_WIRING_DELTA",
             "DROPPED_FORCED_HEAVY_NO_WIRING_EVIDENCE",
+            "DROPPED_FORCED_HEAVY_NONEXEMPT_TOUCH",
             "DROPPED_FORCED_HEAVY_PREDICTED_NO_HARD_GAIN",
             "DROPPED_REPEATED_FAILED_PATCH",
             "DROPPED_REPEATED_FAILED_SHAPE",
@@ -2076,6 +2165,14 @@ def _verify_candidate_precheck_for_dispatch(*, state_root: Path, dispatch_payloa
                 fail_v18("NONDETERMINISTIC")
         if decision == "DROPPED_FORCED_HEAVY_PREDICTED_NO_HARD_GAIN" and not forced_heavy_claimed_b:
             fail_v18("NONDETERMINISTIC")
+        if decision == "DROPPED_FORCED_HEAVY_NONEXEMPT_TOUCH":
+            if not forced_heavy_claimed_b:
+                fail_v18("NONDETERMINISTIC")
+            if forced_heavy_wiring_locus_relpath is None:
+                fail_v18("NONDETERMINISTIC")
+            touched_rows = _canonical_axis_gate_relpaths((cert or {}).get("touched_relpaths_v1"))
+            if touched_rows and all(rel == forced_heavy_wiring_locus_relpath for rel in touched_rows):
+                fail_v18("NONDETERMINISTIC")
         if forced_heavy_claimed_b and bool(row.get("selected_for_ccap_b", False)):
             target_relpaths = row.get("target_relpaths")
             if isinstance(target_relpaths, list):
@@ -2084,12 +2181,31 @@ def _verify_candidate_precheck_for_dispatch(*, state_root: Path, dispatch_payloa
                 targets = [str(row.get("target_relpath", "")).strip()]
             if not any(target.endswith(".py") for target in targets):
                 fail_v18("FORCED_HEAVY_NONPY_TARGET")
+            if forced_heavy_wiring_locus_relpath is not None:
+                targets_canon = [_canonical_axis_gate_relpath(target) for target in targets]
+                if any(target != forced_heavy_wiring_locus_relpath for target in targets_canon):
+                    fail_v18("NONDETERMINISTIC")
         if forced_heavy_claimed_b and isinstance(cert, dict):
-            touched_relpaths = cert.get("touched_relpaths_v1")
-            if isinstance(touched_relpaths, list) and touched_relpaths:
-                touched_rows = [str(item).strip() for item in touched_relpaths if str(item).strip()]
-                if touched_rows and not any(rel.endswith(".py") for rel in touched_rows):
+            touched_rows = _canonical_axis_gate_relpaths(cert.get("touched_relpaths_v1"))
+            if touched_rows:
+                if not any(rel.endswith(".py") for rel in touched_rows):
                     fail_v18("FORCED_HEAVY_NONPY_TOUCH")
+                if selected_for_ccap_b:
+                    selected_for_ccap_touched_relpaths = list(touched_rows)
+                if selected_for_ccap_b and forced_heavy_wiring_locus_relpath is not None:
+                    if any(rel != forced_heavy_wiring_locus_relpath for rel in touched_rows):
+                        fail_v18("NONDETERMINISTIC")
+            elif selected_for_ccap_b and forced_heavy_wiring_locus_relpath is not None:
+                fail_v18("NONDETERMINISTIC")
+
+    if forced_heavy_claimed_b and isinstance(axis_gate_decision_payload, dict):
+        if bool(axis_gate_decision_payload.get("axis_gate_exempted_b", False)):
+            exempt_set = _load_axis_gate_exemptions_set()
+            checked_relpaths = _canonical_axis_gate_relpaths(axis_gate_decision_payload.get("axis_gate_checked_relpaths_v1"))
+            if not checked_relpaths:
+                checked_relpaths = list(selected_for_ccap_touched_relpaths)
+            if any(rel not in exempt_set for rel in checked_relpaths):
+                fail_v18("NONDETERMINISTIC")
 
 
 def _verify_hardening_bindings(*, state_root: Path, config_dir: Path, snapshot: dict[str, Any]) -> None:

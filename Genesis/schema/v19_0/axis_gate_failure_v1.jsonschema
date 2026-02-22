@@ -8,7 +8,14 @@
     "schema_name",
     "schema_version",
     "outcome",
-    "detail"
+    "detail",
+    "axis_gate_required_b",
+    "axis_gate_exempted_b",
+    "axis_gate_reason_code",
+    "axis_gate_axis_id",
+    "axis_gate_bundle_present_b",
+    "axis_gate_bundle_sha256",
+    "axis_gate_checked_relpaths_v1"
   ],
   "properties": {
     "schema_name": {"const": "axis_gate_failure_v1"},
@@ -23,6 +30,30 @@
     "detail": {
       "type": "string",
       "minLength": 1
+    },
+    "axis_gate_required_b": {"type": "boolean"},
+    "axis_gate_exempted_b": {"type": "boolean"},
+    "axis_gate_reason_code": {
+      "type": "string",
+      "pattern": "^[A-Z0-9_]+$",
+      "minLength": 1
+    },
+    "axis_gate_axis_id": {
+      "anyOf": [
+        {"type": "string", "minLength": 1},
+        {"type": "null"}
+      ]
+    },
+    "axis_gate_bundle_present_b": {"type": "boolean"},
+    "axis_gate_bundle_sha256": {
+      "anyOf": [
+        {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+        {"type": "null"}
+      ]
+    },
+    "axis_gate_checked_relpaths_v1": {
+      "type": "array",
+      "items": {"type": "string"}
     }
   }
 }

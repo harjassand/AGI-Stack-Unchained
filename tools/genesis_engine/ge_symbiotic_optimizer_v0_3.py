@@ -85,6 +85,7 @@ _PRECHECK_DECISION_CODES = {
     "DROPPED_REPEATED_FAILED_PATCH",
     "DROPPED_REPEATED_FAILED_SHAPE",
     "DROPPED_FORCED_HEAVY_NO_WIRING_EVIDENCE",
+    "DROPPED_FORCED_HEAVY_NONEXEMPT_TOUCH",
     "DROPPED_FORCED_HEAVY_PREDICTED_NO_HARD_GAIN",
     "DROPPED_INSUFFICIENT_WIRING_DELTA",
     "DROPPED_SITE_NOT_FOUND",
@@ -147,6 +148,21 @@ def _normalize_relpath(path_value: str) -> str:
     if not rel or path.is_absolute() or ".." in path.parts:
         raise _invalid("SCHEMA_FAIL")
     return rel
+
+
+def _canonical_relpath_for_forced_heavy(path_value: str) -> str:
+    rel = _normalize_relpath(path_value)
+    parts: list[str] = []
+    for token in rel.split("/"):
+        part = str(token).strip()
+        if not part or part == ".":
+            continue
+        if part == "..":
+            raise _invalid("SCHEMA_FAIL")
+        parts.append(part)
+    if not parts:
+        raise _invalid("SCHEMA_FAIL")
+    return "/".join(parts)
 
 
 def _canonical_target_relpaths(*, target_relpaths: list[str], max_items_u32: int = 2) -> list[str]:
@@ -2521,6 +2537,16 @@ def main() -> None:
                 if isinstance(target_candidates, list) and target_candidates
                 else [target]
             )
+            if (
+                forced_heavy_b
+                and template_id == "CODE_REWRITE_AST"
+                and isinstance(wiring_locus_relpath, str)
+                and wiring_locus_relpath
+            ):
+                wiring_locus_canon = _canonical_relpath_for_forced_heavy(wiring_locus_relpath)
+                target = wiring_locus_canon
+                target_relpaths_base = [wiring_locus_canon]
+                candidate_targets = [wiring_locus_canon]
             if forced_heavy_b:
                 forced_heavy_debug_by_candidate_idx[int(idx)] = {
                     "expected_wiring_delta_v1": _forced_heavy_expected_wiring_delta_v1(archetype_id=archetype_id),
@@ -2649,19 +2675,21 @@ def main() -> None:
             selected_target = target
             selected_target_relpaths = list(target_relpaths_base)
             for target_candidate in candidate_targets:
-                candidate_target_relpaths = (
-                    _canonical_target_relpaths(
-                        target_relpaths=[str(target_candidate), str(wiring_locus_relpath)],
+                if (
+                    forced_heavy_b
+                    and template_id == "CODE_REWRITE_AST"
+                    and isinstance(wiring_locus_relpath, str)
+                    and wiring_locus_relpath
+                ):
+                    candidate_target_relpaths = _canonical_target_relpaths(
+                        target_relpaths=[str(wiring_locus_relpath)],
                         max_items_u32=2,
                     )
-                    if template_id == "CODE_REWRITE_AST" and isinstance(wiring_locus_relpath, str) and wiring_locus_relpath
-                    else _canonical_target_relpaths(
+                else:
+                    candidate_target_relpaths = _canonical_target_relpaths(
                         target_relpaths=[str(target_candidate)] + [row for row in target_relpaths_base if row != target],
                         max_items_u32=2,
                     )
-                )
-                if forced_heavy_b and template_id == "CODE_REWRITE_AST" and len(candidate_target_relpaths) < 2:
-                    continue
                 try:
                     patch_bytes = _build_patch_bytes_for_template(
                         template_id=template_id,
@@ -2741,6 +2769,47 @@ def main() -> None:
                 forced_heavy_debug["observed_wiring_delta_v1"] = _forced_heavy_observed_wiring_delta_v1(
                     cert=nontriviality_cert_v1
                 )
+                if (
+                    template_id == "CODE_REWRITE_AST"
+                    and isinstance(wiring_locus_relpath, str)
+                    and wiring_locus_relpath
+                ):
+                    wiring_locus_canon = _canonical_relpath_for_forced_heavy(wiring_locus_relpath)
+                    selected_target_canon = _canonical_relpath_for_forced_heavy(str(target))
+                    touched_relpaths_raw = (
+                        nontriviality_cert_v1.get("touched_relpaths_v1")
+                        if isinstance(nontriviality_cert_v1, dict)
+                        else None
+                    )
+                    touched_relpaths_canon: list[str] = []
+                    if isinstance(touched_relpaths_raw, list):
+                        for row in touched_relpaths_raw:
+                            text = str(row).strip()
+                            if not text:
+                                continue
+                            canonical = _canonical_relpath_for_forced_heavy(text)
+                            if canonical not in touched_relpaths_canon:
+                                touched_relpaths_canon.append(canonical)
+                    if selected_target_canon != wiring_locus_canon or any(
+                        rel != wiring_locus_canon for rel in touched_relpaths_canon
+                    ):
+                        precheck_rows.append(
+                            _candidate_precheck_row(
+                                candidate_idx_u32=idx,
+                                bucket=bucket,
+                                template_id=template_id,
+                                target_relpath=target,
+                                target_relpaths=selected_target_relpaths,
+                                selected_for_ccap_b=False,
+                                precheck_decision_code="DROPPED_FORCED_HEAVY_NONEXEMPT_TOUCH",
+                                patch_sha256=patch_sha256,
+                                ccap_id=None,
+                                archetype_id=archetype_id,
+                                nontriviality_cert_v1=nontriviality_cert_v1,
+                            )
+                        )
+                        global_slot += 1
+                        continue
                 if not _forced_heavy_wiring_evidence_ok(cert=nontriviality_cert_v1):
                     precheck_rows.append(
                         _candidate_precheck_row(

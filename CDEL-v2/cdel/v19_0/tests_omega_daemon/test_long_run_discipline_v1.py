@@ -672,13 +672,30 @@ def test_eval_cadence_and_report_shape() -> None:
         mode="CLASSIFY_ONLY",
         ek_payload={"schema_version": "evaluation_kernel_v1"},
         suite_payload={"schema_version": "omega_math_science_task_suite_v1"},
-        observation_report={"metrics": {"cap_frontier_u64": 5}},
-        previous_observation_report={"metrics": {"cap_frontier_u64": 4}},
+        observation_report={
+            "metrics": {
+                "cap_frontier_u64": 5,
+                "hard_task_code_correctness_q32": {"q": 200},
+                "hard_task_performance_q32": {"q": 250},
+                "hard_task_reasoning_q32": {"q": 300},
+                "hard_task_suite_score_q32": {"q": 250},
+            }
+        },
+        previous_observation_report={
+            "metrics": {
+                "cap_frontier_u64": 4,
+                "hard_task_code_correctness_q32": {"q": 100},
+                "hard_task_performance_q32": {"q": 200},
+                "hard_task_reasoning_q32": {"q": 250},
+                "hard_task_suite_score_q32": {"q": 180},
+            }
+        },
         run_scorecard={"promotion_success_rate_rat": {"num_u64": 1, "den_u64": 2}},
         tick_stats={"invalid_rate_rat": {"num_u64": 0, "den_u64": 1}},
     )
     assert report["schema_name"] == "eval_report_v1"
     assert report["classification"] == "IMPROVING"
+    assert int(report["delta_j_q32"]) == (1 << 32) + 270
     assert report["report_id"].startswith("sha256:")
 
 

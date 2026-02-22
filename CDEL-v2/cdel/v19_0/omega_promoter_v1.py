@@ -59,6 +59,12 @@ _HEAVY_DECLARED_CLASSES = {"FRONTIER_HEAVY", "CANARY_HEAVY"}
 _DECLARED_CLASSES = {"FRONTIER_HEAVY", "CANARY_HEAVY", "BASELINE_CORE", "MAINTENANCE"}
 _COMMENT_LINE_RE = re.compile(r"^(#|//|/\*|\*|\*/)")
 _SH1_CAPABILITY_ID = "RSI_GE_SH1_OPTIMIZER"
+_HARD_TASK_METRIC_IDS: tuple[str, ...] = (
+    "hard_task_code_correctness_q32",
+    "hard_task_performance_q32",
+    "hard_task_reasoning_q32",
+    "hard_task_suite_score_q32",
+)
 
 
 def _premarathon_v63_enabled() -> bool:
@@ -1024,6 +1030,74 @@ def _baseline_work_units_for_capability(
     return matched_work_units
 
 
+def _metric_q32(metrics: dict[str, Any], metric_id: str) -> int:
+    raw = metrics.get(metric_id)
+    if not isinstance(raw, dict):
+        return 0
+    if set(raw.keys()) != {"q"}:
+        return 0
+    return int(raw.get("q", 0))
+
+
+def _hard_task_observation_deltas(dispatch_ctx: dict[str, Any]) -> dict[str, Any]:
+    out: dict[str, Any] = {
+        "observation_hash": None,
+        "previous_observation_hash": None,
+        "gain_count_u64": 0,
+        "delta_by_metric": {metric_id: 0 for metric_id in _HARD_TASK_METRIC_IDS},
+    }
+    state_root_raw = dispatch_ctx.get("state_root")
+    if not isinstance(state_root_raw, (str, Path)):
+        return out
+    state_root = Path(state_root_raw).resolve()
+    obs_dir = state_root / "observations"
+    if not obs_dir.exists() or not obs_dir.is_dir():
+        return out
+
+    rows: list[tuple[int, str, dict[str, Any], str]] = []
+    for path in sorted(obs_dir.glob("sha256_*.omega_observation_report_v1.json"), key=lambda p: p.as_posix()):
+        payload = load_canon_dict(path)
+        if str(payload.get("schema_version", "")).strip() != "omega_observation_report_v1":
+            continue
+        digest = "sha256:" + path.name.split(".", 1)[0].split("_", 1)[1]
+        if canon_hash_obj(payload) != digest:
+            continue
+        tick_u64 = int(payload.get("tick_u64", -1))
+        if tick_u64 < 0:
+            continue
+        rows.append((tick_u64, path.as_posix(), payload, digest))
+    if not rows:
+        return out
+
+    rows.sort(key=lambda row: (int(row[0]), str(row[1])))
+    _tick_now, _path_now, now_payload, now_hash = rows[-1]
+    prev_payload: dict[str, Any] | None = None
+    prev_hash: str | None = None
+    if len(rows) >= 2:
+        _tick_prev, _path_prev, prev_payload, prev_hash = rows[-2]
+
+    now_metrics = now_payload.get("metrics")
+    prev_metrics = (prev_payload or {}).get("metrics")
+    if not isinstance(now_metrics, dict):
+        return out
+    if not isinstance(prev_metrics, dict):
+        prev_metrics = {}
+
+    deltas: dict[str, int] = {}
+    gain_count = 0
+    for metric_id in _HARD_TASK_METRIC_IDS:
+        delta_q32 = int(_metric_q32(now_metrics, metric_id)) - int(_metric_q32(prev_metrics, metric_id))
+        deltas[metric_id] = int(delta_q32)
+        if int(delta_q32) > 0:
+            gain_count += 1
+
+    out["observation_hash"] = str(now_hash)
+    out["previous_observation_hash"] = str(prev_hash) if isinstance(prev_hash, str) and prev_hash else None
+    out["gain_count_u64"] = int(gain_count)
+    out["delta_by_metric"] = dict(deltas)
+    return out
+
+
 def _signal_from_policy(
     *,
     signal_mode: str,
@@ -1427,11 +1501,28 @@ def run_promotion(
     stress_signal = str((heavy_policy or {}).get("stress_signal", "REQUIRE_PATCH_DELTA"))
     stress_threshold_u64 = int((heavy_policy or {}).get("stress_threshold_u64", 1))
     policy_artifact_relpath = str((heavy_policy or {}).get("policy_artifact_relpath", "")).strip() or None
+    require_hard_task_gain_b_raw = (heavy_policy or {}).get("require_hard_task_gain_b")
+    require_hard_task_gain_b = (
+        bool(require_hard_task_gain_b_raw) if isinstance(require_hard_task_gain_b_raw, bool) else True
+    )
+    hard_task_required_gain_count_u64 = max(1, int((heavy_policy or {}).get("hard_task_min_gain_count_u64", 1)))
+    hard_task_observation = _hard_task_observation_deltas(dispatch_ctx)
+    hard_task_delta_by_metric_raw = hard_task_observation.get("delta_by_metric")
+    hard_task_delta_by_metric = (
+        dict(hard_task_delta_by_metric_raw) if isinstance(hard_task_delta_by_metric_raw, dict) else {}
+    )
+    hard_task_code_delta_q32 = int(hard_task_delta_by_metric.get("hard_task_code_correctness_q32", 0))
+    hard_task_performance_delta_q32 = int(hard_task_delta_by_metric.get("hard_task_performance_q32", 0))
+    hard_task_reasoning_delta_q32 = int(hard_task_delta_by_metric.get("hard_task_reasoning_q32", 0))
+    hard_task_suite_delta_q32 = int(hard_task_delta_by_metric.get("hard_task_suite_score_q32", 0))
+    hard_task_gain_count_u64 = max(0, int(hard_task_observation.get("gain_count_u64", 0)))
+    hard_task_any_gain_b = int(hard_task_gain_count_u64) >= int(hard_task_required_gain_count_u64)
 
     signal_a_ok_b = True
     signal_b_ok_b = True
     utility_ok_b = True
     utility_reason_code = "UTILITY_OK"
+    hard_task_ok_b = True
 
     if declared_class in _HEAVY_DECLARED_CLASSES:
         if not runtime_source_match_b:
@@ -1471,6 +1562,11 @@ def run_promotion(
             utility_reason_code = "UTILITY_OK" if utility_ok_b else "NO_UTILITY_GAIN"
             if str(primary_signal).strip().upper() == "WORK_UNITS_REDUCTION" and baseline_work_units_u64 is None:
                 utility_reason_code = "PROBE_MISSING"
+            if require_hard_task_gain_b:
+                hard_task_ok_b = bool(hard_task_any_gain_b)
+                utility_ok_b = bool(utility_ok_b and hard_task_ok_b)
+                if not utility_ok_b and utility_reason_code == "UTILITY_OK":
+                    utility_reason_code = "NO_UTILITY_GAIN"
 
     utility_metrics = {
         "binary_artifact_delta_present_b": bool(binary_delta_b),
@@ -1478,12 +1574,31 @@ def run_promotion(
         "runtime_stats_source_match_b": bool(runtime_source_match_b),
         "runtime_total_work_units_u64": int(runtime_total_work_units_u64),
         "baseline_work_units_u64": (int(baseline_work_units_u64) if baseline_work_units_u64 is not None else None),
+        "hard_task_observation_hash": (
+            str(hard_task_observation.get("observation_hash"))
+            if isinstance(hard_task_observation.get("observation_hash"), str)
+            else None
+        ),
+        "hard_task_previous_observation_hash": (
+            str(hard_task_observation.get("previous_observation_hash"))
+            if isinstance(hard_task_observation.get("previous_observation_hash"), str)
+            else None
+        ),
+        "hard_task_code_correctness_delta_q32": int(hard_task_code_delta_q32),
+        "hard_task_performance_delta_q32": int(hard_task_performance_delta_q32),
+        "hard_task_reasoning_delta_q32": int(hard_task_reasoning_delta_q32),
+        "hard_task_suite_score_delta_q32": int(hard_task_suite_delta_q32),
+        "hard_task_gain_count_u64": int(hard_task_gain_count_u64),
+        "hard_task_any_gain_b": bool(hard_task_any_gain_b),
+        "hard_task_gate_ok_b": bool(hard_task_ok_b),
     }
     utility_thresholds = {
         "primary_signal": str(primary_signal),
         "primary_threshold_u64": int(primary_threshold_u64),
         "stress_signal": str(stress_signal),
         "stress_threshold_u64": int(stress_threshold_u64),
+        "require_hard_task_gain_b": bool(require_hard_task_gain_b),
+        "hard_task_min_gain_count_u64": int(hard_task_required_gain_count_u64),
     }
 
     effect_class = _compute_effect_class(

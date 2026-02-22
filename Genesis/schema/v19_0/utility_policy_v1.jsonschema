@@ -61,6 +61,8 @@
             ]
           },
           "stress_threshold_u64": {"type": "integer", "minimum": 0},
+          "require_hard_task_gain_b": {"type": "boolean"},
+          "hard_task_min_gain_count_u64": {"type": "integer", "minimum": 1},
           "policy_artifact_relpath": {"type": "string", "minLength": 1}
         }
       }

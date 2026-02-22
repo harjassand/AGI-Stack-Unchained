@@ -48,6 +48,40 @@
     },
     "stdout_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
     "stderr_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
-    "return_code": {"type": "integer"}
+    "return_code": {"type": "integer"},
+    "dispatch_env_overrides_v1": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "override_keys_v1",
+        "forced_heavy_b",
+        "forced_debt_key",
+        "wiring_locus_relpath",
+        "applied_env_overrides"
+      ],
+      "properties": {
+        "override_keys_v1": {
+          "type": "array",
+          "items": {"type": "string"}
+        },
+        "forced_heavy_b": {"type": "boolean"},
+        "forced_debt_key": {
+          "anyOf": [
+            {"type": "string", "minLength": 1},
+            {"type": "null"}
+          ]
+        },
+        "wiring_locus_relpath": {
+          "anyOf": [
+            {"type": "string", "minLength": 1},
+            {"type": "null"}
+          ]
+        },
+        "applied_env_overrides": {
+          "type": "object",
+          "additionalProperties": {"type": "string"}
+        }
+      }
+    }
   }
 }

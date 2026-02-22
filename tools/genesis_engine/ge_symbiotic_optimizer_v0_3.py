@@ -80,6 +80,7 @@ _PRECHECK_DECISION_CODES = {
     "DROPPED_POLICY_BLOCK",
     "DROPPED_CCAP_EMIT_FAIL",
     "DROPPED_FORCED_HEAVY_TEMPLATE_LOCK",
+    "DROPPED_FORCED_HEAVY_NONPY_TARGET",
     "DROPPED_REPEATED_FAILED_PATCH",
     "DROPPED_REPEATED_FAILED_SHAPE",
     "DROPPED_INSUFFICIENT_WIRING_DELTA",
@@ -161,6 +162,10 @@ def _canonical_target_relpaths(*, target_relpaths: list[str], max_items_u32: int
 
 def _target_relpaths_key(*, target_relpaths: list[str]) -> str:
     return "||".join(_canonical_target_relpaths(target_relpaths=target_relpaths, max_items_u32=2))
+
+
+def _is_python_relpath(relpath: str) -> bool:
+    return str(relpath).strip().endswith(".py")
 
 
 def _load_active_ek(repo_root: Path, ek_id: str) -> dict[str, Any]:
@@ -1665,6 +1670,9 @@ def _write_candidate_precheck_receipt(
     precheck_status_code: str,
     dispatch_error_code: str,
     candidates: list[dict[str, Any]],
+    forced_heavy_b: bool,
+    wiring_locus_relpath: str | None,
+    final_candidate_rows_v1: list[dict[str, Any]],
 ) -> tuple[Path, dict[str, Any], str]:
     status_code = str(precheck_status_code).strip()
     error_code = str(dispatch_error_code).strip()
@@ -1687,6 +1695,32 @@ def _write_candidate_precheck_receipt(
         "dispatch_error_code": error_code,
         "candidate_count_u32": int(len(rows)),
         "candidates": rows,
+        "forced_heavy_context_v1": {
+            "forced_heavy_b": bool(forced_heavy_b),
+            "wiring_locus_relpath": (
+                str(wiring_locus_relpath)
+                if isinstance(wiring_locus_relpath, str) and str(wiring_locus_relpath).strip()
+                else None
+            ),
+            "final_candidate_rows_v1": [
+                {
+                    "candidate_idx_u32": int(max(0, int(row.get("candidate_idx_u32", 0)))),
+                    "template_id": str(row.get("template_id", "")).strip(),
+                    "target_relpath": _normalize_relpath(str(row.get("target_relpath", "")).strip()),
+                    "target_relpaths": _canonical_target_relpaths(
+                        target_relpaths=(
+                            [str(item) for item in row.get("target_relpaths")]
+                            if isinstance(row.get("target_relpaths"), list) and row.get("target_relpaths")
+                            else [str(row.get("target_relpath", ""))]
+                        ),
+                        max_items_u32=2,
+                    ),
+                    "precheck_decision_code": str(row.get("precheck_decision_code", "")).strip(),
+                }
+                for row in final_candidate_rows_v1
+                if isinstance(row, dict)
+            ],
+        },
     }
     validate_schema_v19(payload, "candidate_precheck_receipt_v1")
     return write_hashed_json(
@@ -1897,11 +1931,17 @@ def main() -> None:
     precheck_written_b = False
     inputs_hash = ""
     emitted_ccaps: list[dict[str, Any]] = []
+    forced_heavy_b = False
+    forced_wiring_locus_relpath: str | None = None
 
     def _flush_candidate_precheck() -> None:
         nonlocal precheck_written_b
         if precheck_written_b:
             return
+        final_candidate_rows_v1 = sorted(
+            [dict(row) for row in precheck_rows if isinstance(row, dict)],
+            key=lambda row: int(max(0, int(row.get("candidate_idx_u32", 0)))),
+        )
         _write_candidate_precheck_receipt(
             out_dir=subrun_out_dir,
             tick_u64=tick_u64,
@@ -1909,6 +1949,9 @@ def main() -> None:
             precheck_status_code=str(precheck_status_code),
             dispatch_error_code=str(dispatch_error_code),
             candidates=precheck_rows,
+            forced_heavy_b=bool(forced_heavy_b),
+            wiring_locus_relpath=(str(forced_wiring_locus_relpath) if forced_wiring_locus_relpath else None),
+            final_candidate_rows_v1=final_candidate_rows_v1,
         )
         _write_site_not_found_repro(
             out_dir=subrun_out_dir,
@@ -1976,7 +2019,7 @@ def main() -> None:
         )
         forced_heavy_b = _env_bool("OMEGA_SH1_FORCED_HEAVY_B", default=False)
         forced_debt_key = str(os.environ.get("OMEGA_SH1_FORCED_DEBT_KEY", "")).strip()
-        forced_wiring_locus_relpath: str | None = None
+        forced_wiring_locus_relpath = None
         forced_wiring_locus_raw = str(os.environ.get(_FORCED_WIRING_LOCUS_ENV_KEY, "")).strip()
         if forced_heavy_b and forced_wiring_locus_raw:
             try:
@@ -1990,6 +2033,22 @@ def main() -> None:
             allowed_templates = sorted(set(forced_templates))
             if not forced_debt_key:
                 raise _invalid("SCHEMA_FAIL")
+        print(
+            json.dumps(
+                {
+                    "event": "GE_SH1_STARTUP_CONTEXT_V1",
+                    "forced_heavy_b": int(bool(forced_heavy_b)),
+                    "forced_debt_key_present_b": int(bool(forced_debt_key)),
+                    "wiring_locus_relpath": (
+                        str(forced_wiring_locus_relpath) if isinstance(forced_wiring_locus_relpath, str) else None
+                    ),
+                    "allowed_templates": list(allowed_templates),
+                },
+                separators=(",", ":"),
+                sort_keys=True,
+            ),
+            file=sys.stderr,
+        )
         failed_patch_ban_by_target = _parse_failed_patch_ban_env()
         failed_shape_ban_by_target = _parse_failed_shape_ban_env()
 
@@ -2303,6 +2362,31 @@ def main() -> None:
                 raise _invalid("SCHEMA_FAIL")
             if (not forced_heavy_b) and archetype_id:
                 archetype_id = None
+            target_candidates = row.get("target_candidates")
+            candidate_targets = (
+                [_normalize_relpath(str(item)) for item in target_candidates]
+                if isinstance(target_candidates, list) and target_candidates
+                else [target]
+            )
+            if forced_heavy_b:
+                print(
+                    json.dumps(
+                        {
+                            "event": "GE_SH1_FORCED_HEAVY_ATTEMPT_STARTED_V1",
+                            "candidate_idx_u32": int(idx),
+                            "forced_heavy_b": 1,
+                            "template_id": str(template_id),
+                            "target_relpath": str(target),
+                            "target_relpaths": list(target_relpaths_base),
+                            "wiring_locus_relpath": (
+                                str(wiring_locus_relpath) if isinstance(wiring_locus_relpath, str) else None
+                            ),
+                        },
+                        separators=(",", ":"),
+                        sort_keys=True,
+                    ),
+                    file=sys.stderr,
+                )
             if diagnostic_only_b:
                 precheck_rows.append(
                     _candidate_precheck_row(
@@ -2337,6 +2421,47 @@ def main() -> None:
                     )
                 )
                 continue
+            if forced_heavy_b:
+                forced_target_pool: list[str] = []
+                for rel in [*target_relpaths_base, *candidate_targets]:
+                    normalized = _normalize_relpath(str(rel))
+                    if normalized not in forced_target_pool:
+                        forced_target_pool.append(normalized)
+                if not any(_is_python_relpath(rel) for rel in forced_target_pool):
+                    precheck_rows.append(
+                        _candidate_precheck_row(
+                            candidate_idx_u32=idx,
+                            bucket=bucket,
+                            template_id=template_id,
+                            target_relpath=target,
+                            target_relpaths=target_relpaths_base,
+                            selected_for_ccap_b=False,
+                            precheck_decision_code="DROPPED_FORCED_HEAVY_NONPY_TARGET",
+                            patch_sha256=None,
+                            ccap_id=None,
+                            archetype_id=archetype_id,
+                            nontriviality_cert_v1=None,
+                        )
+                    )
+                    continue
+                candidate_targets = [row for row in candidate_targets if _is_python_relpath(str(row))]
+                if not candidate_targets:
+                    precheck_rows.append(
+                        _candidate_precheck_row(
+                            candidate_idx_u32=idx,
+                            bucket=bucket,
+                            template_id=template_id,
+                            target_relpath=target,
+                            target_relpaths=target_relpaths_base,
+                            selected_for_ccap_b=False,
+                            precheck_decision_code="DROPPED_FORCED_HEAVY_NONPY_TARGET",
+                            patch_sha256=None,
+                            ccap_id=None,
+                            archetype_id=archetype_id,
+                            nontriviality_cert_v1=None,
+                        )
+                    )
+                    continue
             if forced_heavy_b and template_id == "CODE_REWRITE_AST" and not wiring_locus_relpath:
                 precheck_rows.append(
                     _candidate_precheck_row(
@@ -2358,12 +2483,6 @@ def main() -> None:
             patch_bytes: bytes | None = None
             patch_sha256: str | None = None
             nontriviality_cert_v1: dict[str, Any] | None = None
-            target_candidates = row.get("target_candidates")
-            candidate_targets = (
-                [_normalize_relpath(str(item)) for item in target_candidates]
-                if isinstance(target_candidates, list) and target_candidates
-                else [target]
-            )
             build_exc: Exception | None = None
             site_not_found_seen_b = False
             selected_target = target
@@ -2412,6 +2531,23 @@ def main() -> None:
                         continue
                     break
             target = selected_target
+            if forced_heavy_b:
+                print(
+                    json.dumps(
+                        {
+                            "event": "GE_SH1_FORCED_HEAVY_ATTEMPT_FINAL_TARGET_V1",
+                            "candidate_idx_u32": int(idx),
+                            "forced_heavy_b": 1,
+                            "template_id": str(template_id),
+                            "target_relpath": str(target),
+                            "target_relpaths": list(selected_target_relpaths),
+                            "patch_ready_b": int(patch_bytes is not None and patch_sha256 is not None),
+                        },
+                        separators=(",", ":"),
+                        sort_keys=True,
+                    ),
+                    file=sys.stderr,
+                )
             if patch_bytes is None or patch_sha256 is None:
                 decision_code = "DROPPED_SITE_NOT_FOUND" if site_not_found_seen_b else "DROPPED_CCAP_EMIT_FAIL"
                 precheck_rows.append(

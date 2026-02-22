@@ -7,6 +7,7 @@ import hashlib
 import json
 import os
 import re
+import sys
 import time
 from pathlib import Path
 from typing import Any, Iterator
@@ -179,6 +180,7 @@ _FORCED_WIRING_LOCUS_ENV_KEY = "OMEGA_SH1_WIRING_LOCUS_RELPATH"
 _FAILED_PATCH_BAN_ENV_KEY = "OMEGA_SH1_FAILED_PATCH_BAN_JSON"
 _FAILED_SHAPE_BAN_ENV_KEY = "OMEGA_SH1_FAILED_SHAPE_BAN_JSON"
 _LAST_FAILURE_HINT_ENV_KEY = "OMEGA_SH1_LAST_FAILURE_HINT_JSON"
+_FORCED_WIRING_LOCUS_PRIMARY_RELPATH = "orchestrator/omega_v19_0/goal_synthesizer_v1.py"
 _MAX_FAILED_PATCH_BAN_PER_KEY = 8
 _MAX_FAILED_PATCH_BAN_KEYS = 128
 _MAX_FAILED_SHAPE_BAN_PER_KEY = 8
@@ -186,10 +188,16 @@ _MAX_FAILED_SHAPE_BAN_KEYS = 128
 _FAILED_PATCH_BAN_TTL_TICKS_U64 = 80
 _FAILED_SHAPE_BAN_TTL_TICKS_U64 = 80
 _FORCED_WIRING_LOCUS_FALLBACK_RELPATHS = (
-    "orchestrator/omega_v18_0/decider_v1.py",
     "orchestrator/omega_v18_0/goal_synthesizer_v1.py",
+    "orchestrator/omega_v18_0/decider_v1.py",
     "orchestrator/common/run_invoker_v1.py",
     "tools/omega/omega_overnight_runner_v1.py",
+)
+_HARD_TASK_METRIC_IDS: tuple[str, ...] = (
+    "hard_task_code_correctness_q32",
+    "hard_task_performance_q32",
+    "hard_task_reasoning_q32",
+    "hard_task_suite_score_q32",
 )
 
 
@@ -2361,31 +2369,20 @@ def _wiring_locus_candidates_for_debt_key(
     capability_id: str,
     last_failure_cert: dict[str, Any] | None,
 ) -> list[str]:
+    del tick_u64
+    del debt_key
+    del capability_id
+    del last_failure_cert
     candidates: list[str] = []
-    if isinstance(last_failure_cert, dict):
-        touched = _normalize_target_relpaths(last_failure_cert.get("touched_relpaths_v1"))
-        for rel in touched:
-            if rel not in candidates:
-                candidates.append(rel)
+    primary = _normalize_relpath(_FORCED_WIRING_LOCUS_PRIMARY_RELPATH)
+    if primary is not None and primary not in candidates:
+        candidates.append(primary)
     for rel in _FORCED_WIRING_LOCUS_FALLBACK_RELPATHS:
         normalized = _normalize_relpath(rel)
         if normalized is None or normalized in candidates:
             continue
         candidates.append(normalized)
-    if not candidates:
-        return []
-    seed = canon_hash_obj(
-        {
-            "schema_name": "wiring_locus_seed_v1",
-            "tick_u64": int(max(0, int(tick_u64))),
-            "debt_key": str(debt_key),
-            "capability_id": str(capability_id),
-            "candidate_count_u32": int(len(candidates)),
-        }
-    )
-    start = int(seed.split(":", 1)[1], 16) % len(candidates)
-    ordered = [*candidates[start:], *candidates[:start]]
-    return [str(row) for row in ordered]
+    return [str(row) for row in candidates]
 
 
 def _compute_wiring_locus_relpath(
@@ -3310,15 +3307,17 @@ def _compute_realized_delta_j_q32(
     observation_report: dict[str, Any],
     j_profile_payload: dict[str, Any] | None,
 ) -> int:
-    if not isinstance(prev_observation_report, dict) or not isinstance(j_profile_payload, dict):
+    if not isinstance(prev_observation_report, dict):
         return 0
     metrics_now = observation_report.get("metrics")
     metrics_prev = prev_observation_report.get("metrics")
-    weights = j_profile_payload.get("metric_weights")
-    if not isinstance(metrics_now, dict) or not isinstance(metrics_prev, dict) or not isinstance(weights, list):
+    if not isinstance(metrics_now, dict) or not isinstance(metrics_prev, dict):
         return 0
+    weights = j_profile_payload.get("metric_weights") if isinstance(j_profile_payload, dict) else []
+    if not isinstance(weights, list):
+        weights = []
     bias_now = 0
-    bias_obj = j_profile_payload.get("bias_q32")
+    bias_obj = j_profile_payload.get("bias_q32") if isinstance(j_profile_payload, dict) else None
     if isinstance(bias_obj, dict) and set(bias_obj.keys()) == {"q"} and isinstance(bias_obj.get("q"), int):
         bias_now = int(bias_obj.get("q"))
     j_now = int(bias_now)
@@ -3341,7 +3340,14 @@ def _compute_realized_delta_j_q32(
         w_q = int(weight.get("q"))
         j_now += q32_mul(now_q, w_q)
         j_prev += q32_mul(prev_q, w_q)
-    return int(j_now - j_prev)
+    hard_task_delta_q32 = 0
+    for metric_id in _HARD_TASK_METRIC_IDS:
+        now_metric = metrics_now.get(metric_id)
+        prev_metric = metrics_prev.get(metric_id)
+        now_q = int(now_metric.get("q", 0)) if isinstance(now_metric, dict) and isinstance(now_metric.get("q"), int) else 0
+        prev_q = int(prev_metric.get("q", 0)) if isinstance(prev_metric, dict) and isinstance(prev_metric.get("q"), int) else 0
+        hard_task_delta_q32 += int(now_q) - int(prev_q)
+    return int((j_now - j_prev) + int(hard_task_delta_q32))
 
 def _find_subrun_payload_by_id(
     *,
@@ -5716,6 +5722,29 @@ def tick_once(
                     )
             elif _premarathon_v63_enabled():
                 fail("PRECHECK_FAIL:UNBOUND_DEBT_KEY")
+        if selected_action_kind in {"RUN_CAMPAIGN", "RUN_GOAL_TASK"} and str(selected_capability_id).strip() == _SH1_CAPABILITY_ID:
+            normalized_overrides = {
+                str(key): str(value)
+                for key, value in sorted(dispatch_env_overrides.items(), key=lambda kv: str(kv[0]))
+            }
+            print(
+                json.dumps(
+                    {
+                        "event": "SH1_DISPATCH_ENV_OVERRIDES_V1",
+                        "tick_u64": int(tick_u64),
+                        "capability_id": str(selected_capability_id),
+                        "campaign_id": str(decision_plan.get("campaign_id", "")).strip() or None,
+                        "forced_heavy_b": int(normalized_overrides.get(_FORCED_HEAVY_ENV_KEY) == "1"),
+                        "forced_debt_key": normalized_overrides.get(_FORCED_DEBT_KEY_ENV_KEY),
+                        "wiring_locus_relpath": normalized_overrides.get(_FORCED_WIRING_LOCUS_ENV_KEY),
+                        "override_keys_v1": list(normalized_overrides.keys()),
+                        "env_overrides": normalized_overrides,
+                    },
+                    separators=(",", ":"),
+                    sort_keys=True,
+                ),
+                file=sys.stderr,
+            )
 
         safe_halt = decision_plan.get("action_kind") == "SAFE_HALT"
 

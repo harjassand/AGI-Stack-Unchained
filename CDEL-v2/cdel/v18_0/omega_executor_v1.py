@@ -35,6 +35,9 @@ _COPY_MATERIALIZE_CAMPAIGNS = {"rsi_sas_code_v12_0"}
 _SUBRUN_PRUNE_DIR_NAMES = ("__pycache__", ".pytest_cache", ".mypy_cache", ".ruff_cache")
 _SUBRUN_PRUNE_FILE_NAMES = (".DS_Store",)
 _SUBRUN_PRUNE_CAMPAIGN_ALLOWLIST: dict[str, tuple[str, ...]] = {}
+_FORCED_HEAVY_ENV_KEY = "OMEGA_SH1_FORCED_HEAVY_B"
+_FORCED_DEBT_KEY_ENV_KEY = "OMEGA_SH1_FORCED_DEBT_KEY"
+_FORCED_WIRING_LOCUS_ENV_KEY = "OMEGA_SH1_WIRING_LOCUS_RELPATH"
 
 
 def _pinned_pythonpath(root: Path | None = None) -> str:
@@ -177,6 +180,21 @@ def _guard_skip_verifier_env(overrides: dict[str, str]) -> dict[str, str]:
 
     fail("FORBIDDEN_SKIP_ENV")
     return {}
+
+
+def _dispatch_env_overrides_summary(*, env_overrides: dict[str, str]) -> dict[str, Any]:
+    normalized = {
+        str(key): str(value)
+        for key, value in sorted((env_overrides or {}).items(), key=lambda kv: str(kv[0]))
+        if str(key).strip()
+    }
+    return {
+        "override_keys_v1": list(normalized.keys()),
+        "forced_heavy_b": bool(normalized.get(_FORCED_HEAVY_ENV_KEY) == "1"),
+        "forced_debt_key": normalized.get(_FORCED_DEBT_KEY_ENV_KEY),
+        "wiring_locus_relpath": normalized.get(_FORCED_WIRING_LOCUS_ENV_KEY),
+        "applied_env_overrides": dict(normalized),
+    }
 
 
 def dispatch_campaign(
@@ -327,6 +345,9 @@ def dispatch_campaign(
         "stdout_hash": run_result["stdout_hash"],
         "stderr_hash": run_result["stderr_hash"],
         "return_code": int(run_result["return_code"]),
+        "dispatch_env_overrides_v1": _dispatch_env_overrides_summary(
+            env_overrides=(invocation_env_overrides or {}),
+        ),
     }
 
     require_no_absolute_paths(payload)

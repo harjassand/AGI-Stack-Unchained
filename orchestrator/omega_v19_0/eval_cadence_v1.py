@@ -8,6 +8,12 @@ from cdel.v18_0.omega_common_v1 import canon_hash_obj
 from cdel.v19_0.common_v1 import validate_schema as validate_schema_v19
 
 _Q32_ONE = 1 << 32
+_HARD_TASK_METRIC_IDS: tuple[str, ...] = (
+    "hard_task_code_correctness_q32",
+    "hard_task_performance_q32",
+    "hard_task_reasoning_q32",
+    "hard_task_suite_score_q32",
+)
 
 
 def _metric_u64(observation_report: dict[str, Any], metric_id: str) -> int:
@@ -19,6 +25,18 @@ def _metric_u64(observation_report: dict[str, Any], metric_id: str) -> int:
         return max(0, int(raw))
     if isinstance(raw, dict) and set(raw.keys()) == {"q"}:
         return max(0, int(raw.get("q", 0)))
+    return 0
+
+
+def _metric_q32(observation_report: dict[str, Any], metric_id: str) -> int:
+    metrics = observation_report.get("metrics")
+    if not isinstance(metrics, dict):
+        return 0
+    raw = metrics.get(metric_id, {"q": 0})
+    if isinstance(raw, dict) and set(raw.keys()) == {"q"}:
+        return int(raw.get("q", 0))
+    if isinstance(raw, int):
+        return int(raw)
     return 0
 
 
@@ -57,11 +75,17 @@ def build_eval_report(
 
     promotion_success_rate_q32 = _rat_to_q32((run_scorecard or {}).get("promotion_success_rate_rat"))
     invalid_rate_q32 = _rat_to_q32((tick_stats or {}).get("invalid_rate_rat"))
-    delta_j_q32 = int(cap_frontier_delta) * _Q32_ONE
+    hard_task_delta_q32 = 0
+    if isinstance(previous_observation_report, dict):
+        for metric_id in _HARD_TASK_METRIC_IDS:
+            hard_task_delta_q32 += int(_metric_q32(observation_report, metric_id)) - int(
+                _metric_q32(previous_observation_report, metric_id)
+            )
+    delta_j_q32 = int(cap_frontier_delta) * _Q32_ONE + int(hard_task_delta_q32)
 
     if previous_observation_report is None:
         classification = "INSUFFICIENT_DATA"
-    elif cap_frontier_delta > 0 or promotion_success_rate_q32 > invalid_rate_q32:
+    elif delta_j_q32 > 0 or promotion_success_rate_q32 > invalid_rate_q32:
         classification = "IMPROVING"
     else:
         classification = "FLAT_OR_REGRESS"

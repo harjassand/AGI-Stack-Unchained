@@ -44,6 +44,12 @@ _NON_CARRY_SERIES_KEYS = {
     "cap_enabled_u64",
     "cap_activated_u64",
 }
+_HARD_TASK_METRIC_IDS: tuple[str, ...] = (
+    "hard_task_code_correctness_q32",
+    "hard_task_performance_q32",
+    "hard_task_reasoning_q32",
+    "hard_task_suite_score_q32",
+)
 _LEGACY_SKILL_SOURCES: tuple[tuple[str, str, str, str], ...] = (
     (
         "omega_skill_transfer_report_v1",
@@ -963,6 +969,15 @@ def _maximize_speed_q32(previous_tick_total_ns_u64: int) -> int:
     return int(rat_q32(1_000_000_000, total_ns))
 
 
+def _metric_q32(metrics: dict[str, Any], metric_id: str) -> int:
+    raw = metrics.get(metric_id)
+    if not isinstance(raw, dict):
+        return 0
+    if set(raw.keys()) != {"q"}:
+        return 0
+    return max(0, int(raw.get("q", 0)))
+
+
 def observe(
     *,
     tick_u64: int,
@@ -1045,6 +1060,29 @@ def observe(
     capability_expansion_q32 = int(int(capability_frontier["cap_frontier_u64"]) << 32)
     maximize_science_q32 = _maximize_science_q32(science_q)
     maximize_speed_q32 = _maximize_speed_q32(previous_tick_total_ns_u64)
+    code_success_rate_rat = dict(code_metrics["code_success_rate_rat"])
+    hard_task_code_correctness_q32 = rat_q32(
+        max(0, int(code_success_rate_rat.get("num_u64", 0))),
+        max(1, int(code_success_rate_rat.get("den_u64", 1))),
+    )
+    hard_task_performance_q32 = int(maximize_speed_q32)
+    hard_task_reasoning_q32 = int(maximize_science_q32)
+    hard_task_suite_score_q32 = int(
+        (int(hard_task_code_correctness_q32) + int(hard_task_performance_q32) + int(hard_task_reasoning_q32)) // 3
+    )
+    hard_task_now_q32_by_metric = {
+        _HARD_TASK_METRIC_IDS[0]: int(hard_task_code_correctness_q32),
+        _HARD_TASK_METRIC_IDS[1]: int(hard_task_performance_q32),
+        _HARD_TASK_METRIC_IDS[2]: int(hard_task_reasoning_q32),
+        _HARD_TASK_METRIC_IDS[3]: int(hard_task_suite_score_q32),
+    }
+    hard_task_gain_count_u64 = 0
+    if isinstance(previous_observation_report, dict):
+        prev_metrics = previous_observation_report.get("metrics")
+        if isinstance(prev_metrics, dict):
+            for metric_id, now_q32 in sorted(hard_task_now_q32_by_metric.items()):
+                if int(now_q32) > int(_metric_q32(prev_metrics, metric_id)):
+                    hard_task_gain_count_u64 += 1
 
     sources: list[dict[str, str]] = [src_meta, src_hotloop, src_build, src_science]
     sources.extend(polymath_sources)
@@ -1088,7 +1126,12 @@ def observe(
             "build_link_fraction_q32": {"q": build_q},
             "system_build_link_fraction_q32": {"q": build_q},
             "science_rmse_q32": {"q": science_q},
-            "code_success_rate_rat": dict(code_metrics["code_success_rate_rat"]),
+            "code_success_rate_rat": code_success_rate_rat,
+            "hard_task_code_correctness_q32": {"q": int(hard_task_code_correctness_q32)},
+            "hard_task_performance_q32": {"q": int(hard_task_performance_q32)},
+            "hard_task_reasoning_q32": {"q": int(hard_task_reasoning_q32)},
+            "hard_task_suite_score_q32": {"q": int(hard_task_suite_score_q32)},
+            "hard_task_gain_count_u64": int(hard_task_gain_count_u64),
             "promotion_reject_rate_rat": promotion_reject_rate_rat,
             "subverifier_invalid_rate_rat": subverifier_invalid_rate_rat,
             "runaway_blocked_noop_rate_rat": runaway_blocked_noop_rate_rat,
@@ -1129,7 +1172,12 @@ def observe(
             "build_link_fraction_q32": [{"q": build_q}],
             "system_build_link_fraction_q32": [{"q": build_q}],
             "science_rmse_q32": [{"q": science_q}],
-            "code_success_rate_rat": [dict(code_metrics["code_success_rate_rat"])],
+            "code_success_rate_rat": [code_success_rate_rat],
+            "hard_task_code_correctness_q32": [{"q": int(hard_task_code_correctness_q32)}],
+            "hard_task_performance_q32": [{"q": int(hard_task_performance_q32)}],
+            "hard_task_reasoning_q32": [{"q": int(hard_task_reasoning_q32)}],
+            "hard_task_suite_score_q32": [{"q": int(hard_task_suite_score_q32)}],
+            "hard_task_gain_count_u64": [int(hard_task_gain_count_u64)],
             "promotion_reject_rate_rat": [promotion_reject_rate_rat],
             "subverifier_invalid_rate_rat": [subverifier_invalid_rate_rat],
             "runaway_blocked_noop_rate_rat": [runaway_blocked_noop_rate_rat],

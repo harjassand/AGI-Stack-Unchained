@@ -948,13 +948,17 @@ def run_tick(
             lane_invalid_count_u64 = lane_health.get("invalid_count_u64")
             lane_budget_exhaust_count_u64 = lane_health.get("budget_exhaust_count_u64")
             lane_route_disabled_count_u64 = lane_health.get("route_disabled_count_u64")
+    status_ok_b = bool(proc.returncode == 0 and state_dir.exists() and state_dir.is_dir())
+    error_class = None
+    if not status_ok_b:
+        error_class = "TICK_STATE_MISSING" if not state_dir.exists() or not state_dir.is_dir() else "TICK_PROCESS_ERROR"
     row = {
         "schema_name": "long_run_tick_index_row_v1",
         "schema_version": "v1",
         "tick_u64": int(tick_u64),
         "out_dir": str(out_dir),
         "state_dir": str(state_dir),
-        "status": "OK" if proc.returncode == 0 and state_dir.exists() else "ERROR",
+        "status": "OK" if status_ok_b else "ERROR",
         "exit_code": int(proc.returncode),
         "snapshot_hash": snapshot_hash,
         "lane_name": lane_name,
@@ -981,7 +985,8 @@ def run_tick(
         "frontier_dispatch_pre_evidence_reason_code": (
             FRONTIER_DISPATCH_PRE_EVIDENCE_REASON_CODE if frontier_dispatch_failed_from_routing_b else None
         ),
-        "frontier_attempt_counted_b": (tick_outcome_payload or {}).get("frontier_attempt_counted_b"),
+        "frontier_attempt_counted_b": bool((tick_outcome_payload or {}).get("frontier_attempt_counted_b", False)),
+        "error_class": error_class,
         "disk_bytes_u64": int(_dir_size_bytes(out_dir)) if out_dir.exists() else 0,
         "started_unix_s": int(started),
         "finished_unix_s": int(time.time()),
@@ -1135,6 +1140,7 @@ def run_loop(
             valid_b, state_verifier_reason_code = _state_verifier_outcome(state_dir)
             row["state_verifier_valid_b"] = bool(valid_b)
             row["state_verifier_reason_code"] = state_verifier_reason_code
+            row["error_class"] = None
             if valid_b:
                 prev_state_dir = state_dir
                 last_valid_state_dir = state_dir
@@ -1148,15 +1154,20 @@ def run_loop(
                 }
         else:
             row["state_verifier_valid_b"] = False
+            error_class = None
             if not state_dir.exists() or not state_dir.is_dir():
-                state_verifier_reason_code = "TICK_STATE_MISSING"
+                error_class = "TICK_STATE_MISSING"
                 if hard_stop_reason_code is None and bool(stop_on_error):
                     hard_stop_reason_code = "TICK_STATE_MISSING"
             else:
-                state_verifier_reason_code = "TICK_PROCESS_ERROR"
+                error_class = "TICK_PROCESS_ERROR"
                 if hard_stop_reason_code is None and bool(stop_on_error):
                     hard_stop_reason_code = "TICK_PROCESS_ERROR"
+            state_verifier_reason_code = str(error_class)
             row["state_verifier_reason_code"] = state_verifier_reason_code
+            row["error_class"] = error_class
+
+        row["frontier_attempt_counted_b"] = bool(row.get("frontier_attempt_counted_b", False))
 
         subverifier_status = str(row.get("subverifier_status", "")).strip()
         if subverifier_status == "INVALID":

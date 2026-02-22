@@ -79,6 +79,7 @@
               "DROPPED_POLICY_BLOCK",
               "DROPPED_CCAP_EMIT_FAIL",
               "DROPPED_FORCED_HEAVY_TEMPLATE_LOCK",
+              "DROPPED_FORCED_HEAVY_NONPY_TARGET",
               "DROPPED_REPEATED_FAILED_PATCH",
               "DROPPED_REPEATED_FAILED_SHAPE",
               "DROPPED_INSUFFICIENT_WIRING_DELTA",
@@ -215,6 +216,70 @@
             }
           }
         ]
+      }
+    },
+    "forced_heavy_context_v1": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "forced_heavy_b",
+        "wiring_locus_relpath",
+        "final_candidate_rows_v1"
+      ],
+      "properties": {
+        "forced_heavy_b": {"type": "boolean"},
+        "wiring_locus_relpath": {
+          "anyOf": [
+            {"type": "string", "minLength": 1},
+            {"type": "null"}
+          ]
+        },
+        "final_candidate_rows_v1": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "candidate_idx_u32",
+              "template_id",
+              "target_relpath",
+              "target_relpaths",
+              "precheck_decision_code"
+            ],
+            "properties": {
+              "candidate_idx_u32": {"type": "integer", "minimum": 0},
+              "template_id": {"type": "string"},
+              "target_relpath": {"type": "string"},
+              "target_relpaths": {
+                "type": "array",
+                "minItems": 1,
+                "maxItems": 2,
+                "uniqueItems": true,
+                "items": {"type": "string"}
+              },
+              "precheck_decision_code": {
+                "type": "string",
+                "enum": [
+                  "SELECTED_FOR_CCAP",
+                  "DROPPED_PARSE_FAIL",
+                  "DROPPED_APPLY_FAIL",
+                  "DROPPED_TRIVIAL",
+                  "DROPPED_REPAIR_EXHAUSTED",
+                  "DROPPED_INFLIGHT_BUSY",
+                  "DROPPED_POLICY_BLOCK",
+                  "DROPPED_CCAP_EMIT_FAIL",
+                  "DROPPED_FORCED_HEAVY_TEMPLATE_LOCK",
+                  "DROPPED_FORCED_HEAVY_NONPY_TARGET",
+                  "DROPPED_REPEATED_FAILED_PATCH",
+                  "DROPPED_REPEATED_FAILED_SHAPE",
+                  "DROPPED_INSUFFICIENT_WIRING_DELTA",
+                  "DROPPED_SITE_NOT_FOUND",
+                  "DROPPED_WIRING_LOCUS_UNAVAILABLE"
+                ]
+              }
+            }
+          }
+        }
       }
     }
   },

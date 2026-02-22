@@ -122,3 +122,8 @@ def test_observer_uses_index_fastpath(tmp_path, monkeypatch) -> None:
     assert "OBJ_EXPAND_CAPABILITIES" in report["metrics"]
     assert "OBJ_MAXIMIZE_SCIENCE" in report["metrics"]
     assert "OBJ_MAXIMIZE_SPEED" in report["metrics"]
+    assert "hard_task_code_correctness_q32" in report["metrics"]
+    assert "hard_task_performance_q32" in report["metrics"]
+    assert "hard_task_reasoning_q32" in report["metrics"]
+    assert "hard_task_suite_score_q32" in report["metrics"]
+    assert int(report["metrics"]["hard_task_gain_count_u64"]) == 0

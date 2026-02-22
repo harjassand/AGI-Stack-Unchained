@@ -168,6 +168,12 @@ _OBS_NON_CARRY_SERIES_KEYS = {
     "cap_enabled_u64",
     "cap_activated_u64",
 }
+_HARD_TASK_METRIC_IDS: tuple[str, ...] = (
+    "hard_task_code_correctness_q32",
+    "hard_task_performance_q32",
+    "hard_task_reasoning_q32",
+    "hard_task_suite_score_q32",
+)
 _GE_CAMPAIGN_ID = "rsi_ge_symbiotic_optimizer_sh1_v0_1"
 _CAPABILITY_FRONTIER_WINDOW_U64 = 512
 _HEX64 = set("0123456789abcdef")
@@ -191,6 +197,15 @@ def _normalize_optional_metric_value(value: Any) -> Any:
             }
     fail("SCHEMA_FAIL")
     return 0
+
+
+def _metric_q32(metrics: dict[str, Any], metric_id: str) -> int:
+    raw = metrics.get(metric_id)
+    if not isinstance(raw, dict):
+        return 0
+    if set(raw.keys()) != {"q"}:
+        return 0
+    return max(0, int(raw.get("q", 0)))
 
 
 def _is_sha256_prefixed(value: Any) -> bool:
@@ -1390,6 +1405,42 @@ def _recompute_observation_from_sources(
     capability_expansion_q32 = int(int(capability_frontier["cap_frontier_u64"]) << 32)
     maximize_science_q32 = _maximize_science_q32(int(by_schema["sas_science_promotion_bundle_v1"]))
     maximize_speed_q32 = _maximize_speed_q32(int(previous_tick_total_ns_u64))
+    hard_task_code_correctness_q32 = rat_q32(
+        max(0, int(code_success_rate_rat.get("num_u64", 0))),
+        max(1, int(code_success_rate_rat.get("den_u64", 1))),
+    )
+    hard_task_performance_q32 = int(maximize_speed_q32)
+    hard_task_reasoning_q32 = int(maximize_science_q32)
+    hard_task_suite_score_q32 = int(
+        (int(hard_task_code_correctness_q32) + int(hard_task_performance_q32) + int(hard_task_reasoning_q32)) // 3
+    )
+    hard_task_now_q32_by_metric = {
+        _HARD_TASK_METRIC_IDS[0]: int(hard_task_code_correctness_q32),
+        _HARD_TASK_METRIC_IDS[1]: int(hard_task_performance_q32),
+        _HARD_TASK_METRIC_IDS[2]: int(hard_task_reasoning_q32),
+        _HARD_TASK_METRIC_IDS[3]: int(hard_task_suite_score_q32),
+    }
+    hard_task_gain_count_u64 = 0
+    prev_metrics_for_hard_tasks: dict[str, Any] = {}
+    has_prev_hard_task_baseline = False
+    if isinstance(prev_observation, dict):
+        prev_metrics = prev_observation.get("metrics")
+        if isinstance(prev_metrics, dict):
+            prev_metrics_for_hard_tasks = prev_metrics
+            has_prev_hard_task_baseline = True
+        else:
+            # When the verifier derives t-1 from t.metric_series, `metrics` may be absent.
+            prev_series = prev_observation.get("metric_series")
+            if isinstance(prev_series, dict):
+                for metric_id in _HARD_TASK_METRIC_IDS:
+                    rows = prev_series.get(metric_id)
+                    if isinstance(rows, list) and rows:
+                        prev_metrics_for_hard_tasks[metric_id] = rows[-1]
+                has_prev_hard_task_baseline = bool(prev_metrics_for_hard_tasks)
+    if has_prev_hard_task_baseline:
+        for metric_id, now_q32 in sorted(hard_task_now_q32_by_metric.items()):
+            if int(now_q32) > int(_metric_q32(prev_metrics_for_hard_tasks, metric_id)):
+                hard_task_gain_count_u64 += 1
 
     payload: dict[str, Any] = {
         "schema_version": "omega_observation_report_v1",
@@ -1404,6 +1455,11 @@ def _recompute_observation_from_sources(
             "system_build_link_fraction_q32": {"q": int(by_schema["sas_system_perf_report_v1"])},
             "science_rmse_q32": {"q": int(by_schema["sas_science_promotion_bundle_v1"])},
             "code_success_rate_rat": code_success_rate_rat,
+            "hard_task_code_correctness_q32": {"q": int(hard_task_code_correctness_q32)},
+            "hard_task_performance_q32": {"q": int(hard_task_performance_q32)},
+            "hard_task_reasoning_q32": {"q": int(hard_task_reasoning_q32)},
+            "hard_task_suite_score_q32": {"q": int(hard_task_suite_score_q32)},
+            "hard_task_gain_count_u64": int(hard_task_gain_count_u64),
             "promotion_reject_rate_rat": promotion_reject_rate_rat,
             "subverifier_invalid_rate_rat": subverifier_invalid_rate_rat,
             "runaway_blocked_noop_rate_rat": runaway_blocked_noop_rate_rat,
@@ -1446,6 +1502,11 @@ def _recompute_observation_from_sources(
             "system_build_link_fraction_q32": [{"q": int(by_schema["sas_system_perf_report_v1"])}],
             "science_rmse_q32": [{"q": int(by_schema["sas_science_promotion_bundle_v1"])}],
             "code_success_rate_rat": [code_success_rate_rat],
+            "hard_task_code_correctness_q32": [{"q": int(hard_task_code_correctness_q32)}],
+            "hard_task_performance_q32": [{"q": int(hard_task_performance_q32)}],
+            "hard_task_reasoning_q32": [{"q": int(hard_task_reasoning_q32)}],
+            "hard_task_suite_score_q32": [{"q": int(hard_task_suite_score_q32)}],
+            "hard_task_gain_count_u64": [int(hard_task_gain_count_u64)],
             "promotion_reject_rate_rat": [promotion_reject_rate_rat],
             "subverifier_invalid_rate_rat": [subverifier_invalid_rate_rat],
             "runaway_blocked_noop_rate_rat": [runaway_blocked_noop_rate_rat],

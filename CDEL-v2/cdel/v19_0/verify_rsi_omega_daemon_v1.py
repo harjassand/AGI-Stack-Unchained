@@ -1985,6 +1985,17 @@ def _verify_candidate_precheck_for_dispatch(*, state_root: Path, dispatch_payloa
     if not bool(payload.get("dispatch_happened_b", False)):
         fail_v18("NONDETERMINISTIC")
 
+    invocation = dispatch_payload.get("invocation")
+    if not isinstance(invocation, dict):
+        fail_v18("SCHEMA_FAIL")
+    raw_env_overrides = invocation.get("env_overrides")
+    env_overrides: dict[str, str] = {}
+    if raw_env_overrides is not None:
+        if not isinstance(raw_env_overrides, dict):
+            fail_v18("SCHEMA_FAIL")
+        env_overrides = {str(k): str(v) for k, v in raw_env_overrides.items()}
+    forced_heavy_claimed_b = str(env_overrides.get("OMEGA_SH1_FORCED_HEAVY_B", "")).strip() == "1"
+
     candidates = payload_for_validation.get("candidates")
     if not isinstance(candidates, list):
         fail_v18("SCHEMA_FAIL")
@@ -2017,6 +2028,20 @@ def _verify_candidate_precheck_for_dispatch(*, state_root: Path, dispatch_payloa
             archetype_pass = cert.get("archetype_pass_b")
             if wiring_ok_b and (archetype_pass is not False):
                 fail_v18("NONDETERMINISTIC")
+        if forced_heavy_claimed_b and bool(row.get("selected_for_ccap_b", False)):
+            target_relpaths = row.get("target_relpaths")
+            if isinstance(target_relpaths, list):
+                targets = [str(item).strip() for item in target_relpaths if str(item).strip()]
+            else:
+                targets = [str(row.get("target_relpath", "")).strip()]
+            if not any(target.endswith(".py") for target in targets):
+                fail_v18("FORCED_HEAVY_NONPY_TARGET")
+        if forced_heavy_claimed_b and isinstance(cert, dict):
+            touched_relpaths = cert.get("touched_relpaths_v1")
+            if isinstance(touched_relpaths, list) and touched_relpaths:
+                touched_rows = [str(item).strip() for item in touched_relpaths if str(item).strip()]
+                if touched_rows and not any(rel.endswith(".py") for rel in touched_rows):
+                    fail_v18("FORCED_HEAVY_NONPY_TOUCH")
 
 
 def _verify_hardening_bindings(*, state_root: Path, config_dir: Path, snapshot: dict[str, Any]) -> None:

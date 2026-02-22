@@ -12,6 +12,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable
 
+from .runtime_stats_v1 import derive_work_units_from_row
+
 
 _ABI_VERSION = 1
 _ENV_DAEMON_STATE_ROOT = "OMEGA_DAEMON_STATE_ROOT"
@@ -169,6 +171,7 @@ def _record_stats(
                 "native_load_fail_u64": 0,
                 "native_invoke_fail_u64": 0,
                 "shadow_mismatch_u64": 0,
+                "work_units_u64": 0,
             }
             _stats_by_op[op_id] = row
         row["calls_u64"] = int(row.get("calls_u64", 0)) + 1
@@ -186,6 +189,7 @@ def _record_stats(
             row["native_invoke_fail_u64"] = int(row.get("native_invoke_fail_u64", 0)) + 1
         if shadow_mismatch:
             row["shadow_mismatch_u64"] = int(row.get("shadow_mismatch_u64", 0)) + 1
+        row["work_units_u64"] = int(derive_work_units_from_row(row))
 
 
 def drain_runtime_stats() -> list[dict[str, Any]]:

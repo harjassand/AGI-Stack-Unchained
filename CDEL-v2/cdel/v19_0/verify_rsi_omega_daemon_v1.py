@@ -14,6 +14,7 @@ from ..v18_0.omega_common_v1 import (
     fail as fail_v18,
     load_canon_dict,
     repo_root as repo_root_v18,
+    validate_schema as validate_schema_v18,
 )
 from ..v18_0.verify_rsi_omega_daemon_v1 import OmegaV18Error
 from ..v18_0.verify_rsi_omega_daemon_v1 import verify as verify_v18
@@ -35,6 +36,11 @@ from .epistemic.verify_epistemic_certs_v1 import verify_certs_bundle
 from .epistemic.verify_epistemic_capsule_v1 import verify_capsule_bundle
 from .epistemic.usable_index_v1 import load_usable_capsule_ids, load_usable_graph_ids, load_rows as load_usable_rows
 from .shadow_corpus_v1 import load_shadow_corpus_entries
+from orchestrator.native.runtime_stats_v1 import (
+    WORK_UNITS_FORMULA_ID,
+    derive_total_work_units,
+    derive_work_units_from_row,
+)
 
 
 def _resolve_state_dir(path: Path) -> Path:
@@ -1766,6 +1772,280 @@ def _verify_epistemic_path(state_root: Path, snapshot: dict[str, Any]) -> None:
             _rethrow_as_v18(exc)
 
 
+def _latest_tick_outcome_or_fail(perf_dir: Path) -> dict[str, Any]:
+    rows = sorted(perf_dir.glob("sha256_*.omega_tick_outcome_v1.json"), key=lambda row: row.as_posix())
+    if not rows:
+        fail_v18("MISSING_STATE_INPUT")
+    best_payload: dict[str, Any] | None = None
+    best_tick = -1
+    for row in rows:
+        payload = _load_canon_json(row)
+        tick = int(payload.get("tick_u64", -1))
+        if tick > best_tick:
+            best_tick = tick
+            best_payload = payload
+    if best_payload is None:
+        fail_v18("MISSING_STATE_INPUT")
+    return best_payload
+
+
+def _load_optional_utility_policy(*, config_dir: Path) -> dict[str, Any] | None:
+    profile_path = config_dir / "long_run_profile_v1.json"
+    if not profile_path.exists() or not profile_path.is_file():
+        return None
+    profile_payload = _load_canon_json(profile_path)
+    try:
+        validate_schema_v19(profile_payload, "long_run_profile_v1")
+    except Exception:
+        return None
+    profile_id = str(profile_payload.get("profile_id", "")).strip()
+    profile_no_id = dict(profile_payload)
+    profile_no_id.pop("profile_id", None)
+    if _is_sha256(profile_id) and canon_hash_obj(profile_no_id) != profile_id:
+        fail_v18("PIN_HASH_MISMATCH")
+    rel = str(profile_payload.get("utility_policy_rel", "")).strip()
+    declared_id = str(profile_payload.get("utility_policy_id", "")).strip()
+    if not rel and not declared_id:
+        return None
+    if bool(rel) != bool(declared_id):
+        fail_v18("SCHEMA_FAIL")
+    rel_path = Path(rel)
+    if rel_path.is_absolute() or ".." in rel_path.parts:
+        fail_v18("SCHEMA_FAIL")
+    path = config_dir / rel_path
+    if not path.exists() or not path.is_file():
+        fail_v18("MISSING_STATE_INPUT")
+    payload = _load_canon_json(path)
+    validate_schema_v19(payload, "utility_policy_v1")
+    observed_id = _require_sha256(payload.get("policy_id"), reason="PIN_HASH_MISMATCH")
+    payload_no_id = dict(payload)
+    payload_no_id.pop("policy_id", None)
+    if canon_hash_obj(payload_no_id) != observed_id:
+        fail_v18("PIN_HASH_MISMATCH")
+    if observed_id != _require_sha256(declared_id, reason="PIN_HASH_MISMATCH"):
+        fail_v18("PIN_HASH_MISMATCH")
+    return payload
+
+
+def _verify_runtime_stats_derivation(*, state_root: Path, utility_policy: dict[str, Any] | None) -> None:
+    native_dir = state_root / "ledger" / "native"
+    rows = sorted(native_dir.glob("sha256_*.omega_native_runtime_stats_v1.json"), key=lambda row: row.as_posix())
+    if not rows:
+        fail_v18("MISSING_STATE_INPUT")
+    payload = _load_canon_json(rows[-1])
+    if canon_hash_obj(payload) != "sha256:" + rows[-1].name.split(".", 1)[0].split("_", 1)[1]:
+        fail_v18("NONDETERMINISTIC")
+    if str(payload.get("schema_version", "")).strip() != "omega_native_runtime_stats_v1":
+        fail_v18("SCHEMA_FAIL")
+    if str(payload.get("work_units_formula_id", "")).strip() != WORK_UNITS_FORMULA_ID:
+        fail_v18("NONDETERMINISTIC")
+    expected_source_id = None
+    if isinstance(utility_policy, dict):
+        expected_source_id = str(utility_policy.get("runtime_stats_source_id", "")).strip() or None
+    observed_source_id = str(payload.get("runtime_stats_source_id", "")).strip()
+    if expected_source_id is not None and observed_source_id != expected_source_id:
+        fail_v18("NONDETERMINISTIC")
+    ops = payload.get("ops")
+    if not isinstance(ops, list):
+        fail_v18("SCHEMA_FAIL")
+    recomputed_rows: list[dict[str, Any]] = []
+    for row in ops:
+        if not isinstance(row, dict):
+            fail_v18("SCHEMA_FAIL")
+        recomputed = int(derive_work_units_from_row(row))
+        observed = int(row.get("work_units_u64", -1))
+        if recomputed != observed:
+            fail_v18("NONDETERMINISTIC")
+        recomputed_rows.append(dict(row))
+    recomputed_total = int(derive_total_work_units(recomputed_rows))
+    if recomputed_total != int(payload.get("total_work_units_u64", -1)):
+        fail_v18("NONDETERMINISTIC")
+
+
+def _frontier_attempt_evidence_satisfied(
+    *,
+    state_root: Path,
+    snapshot: dict[str, Any],
+    tick_outcome: dict[str, Any],
+    declared_class_tick: str,
+    candidate_bundle_present_b: bool,
+) -> bool:
+    action_kind = str(tick_outcome.get("action_kind", "")).strip()
+    if action_kind not in {"RUN_CAMPAIGN", "RUN_GOAL_TASK"}:
+        return False
+    if str(declared_class_tick).strip() != "FRONTIER_HEAVY":
+        return False
+    if not bool(candidate_bundle_present_b):
+        return False
+
+    dispatch_hash = snapshot.get("dispatch_receipt_hash")
+    subverifier_hash = snapshot.get("subverifier_receipt_hash")
+    if not _is_sha256(dispatch_hash) or not _is_sha256(subverifier_hash):
+        return False
+
+    dispatch_path = _find_nested_hash(state_root, str(dispatch_hash), "omega_dispatch_receipt_v1.json")
+    dispatch_payload = _load_canon_json(dispatch_path)
+    if canon_hash_obj(dispatch_payload) != str(dispatch_hash):
+        fail_v18("NONDETERMINISTIC")
+    validate_schema_v18(dispatch_payload, "omega_dispatch_receipt_v1")
+
+    subverifier_path = _find_nested_hash(state_root, str(subverifier_hash), "omega_subverifier_receipt_v1.json")
+    subverifier_payload = _load_canon_json(subverifier_path)
+    if canon_hash_obj(subverifier_payload) != str(subverifier_hash):
+        fail_v18("NONDETERMINISTIC")
+    validate_schema_v18(subverifier_payload, "omega_subverifier_receipt_v1")
+
+    dispatch_tick = int(max(0, int(dispatch_payload.get("tick_u64", -1))))
+    sub_tick = int(max(0, int(subverifier_payload.get("tick_u64", -1))))
+    if dispatch_tick != sub_tick:
+        return False
+
+    dispatch_campaign = str(dispatch_payload.get("campaign_id", "")).strip()
+    sub_campaign = str(subverifier_payload.get("campaign_id", "")).strip()
+    if not dispatch_campaign or not sub_campaign or dispatch_campaign != sub_campaign:
+        return False
+
+    sub_status = str(((subverifier_payload.get("result") or {}).get("status", ""))).strip().upper()
+    if sub_status not in {"VALID", "INVALID"}:
+        return False
+    return True
+
+
+def _verify_hardening_bindings(*, state_root: Path, config_dir: Path, snapshot: dict[str, Any]) -> None:
+    utility_policy = _load_optional_utility_policy(config_dir=config_dir)
+    _verify_runtime_stats_derivation(state_root=state_root, utility_policy=utility_policy)
+
+    tick_outcome = _latest_tick_outcome_or_fail(state_root / "perf")
+
+    promotion_payload: dict[str, Any] | None = None
+    promo_hash = snapshot.get("promotion_receipt_hash")
+    if _is_sha256(promo_hash):
+        promotion_path = _find_nested_hash(state_root, str(promo_hash), "omega_promotion_receipt_v1.json")
+        promotion_payload = _load_canon_json(promotion_path)
+        if canon_hash_obj(promotion_payload) != str(promo_hash):
+            fail_v18("NONDETERMINISTIC")
+
+    utility_hash_snap = snapshot.get("utility_proof_hash")
+    if utility_hash_snap is not None and not _is_sha256(utility_hash_snap):
+        fail_v18("SCHEMA_FAIL")
+    utility_hash_promo = None if promotion_payload is None else promotion_payload.get("utility_proof_hash")
+    if utility_hash_promo is not None and not _is_sha256(utility_hash_promo):
+        fail_v18("SCHEMA_FAIL")
+    if utility_hash_snap != utility_hash_promo:
+        if not (utility_hash_snap is None and utility_hash_promo is None):
+            fail_v18("NONDETERMINISTIC")
+
+    utility_payload: dict[str, Any] | None = None
+    if _is_sha256(utility_hash_snap):
+        utility_path = _find_nested_hash(state_root, str(utility_hash_snap), "utility_proof_receipt_v1.json")
+        utility_payload = _load_canon_json(utility_path)
+        if canon_hash_obj(utility_payload) != str(utility_hash_snap):
+            fail_v18("NONDETERMINISTIC")
+        validate_schema_v19(utility_payload, "utility_proof_receipt_v1")
+
+    bundle_hash = str((promotion_payload or {}).get("promotion_bundle_hash", "")).strip()
+    candidate_bundle_present_b = False
+    if _is_sha256(bundle_hash) and bundle_hash != ("sha256:" + ("0" * 64)):
+        bundle_path = _load_promotion_bundle_by_hash(state_root, bundle_hash)
+        if bundle_path is None:
+            fail_v18("MISSING_STATE_INPUT")
+        bundle_payload = _load_canon_json(bundle_path)
+        if canon_hash_obj(bundle_payload) != bundle_hash:
+            fail_v18("NONDETERMINISTIC")
+        candidate_bundle_present_b = True
+
+    probe_executed_b = False
+    if isinstance(utility_payload, dict):
+        primary = utility_payload.get("primary_probe")
+        stress = utility_payload.get("stress_probe")
+        if (
+            isinstance(primary, dict)
+            and isinstance(stress, dict)
+            and _is_sha256(primary.get("input_hash"))
+            and _is_sha256(primary.get("output_hash"))
+            and _is_sha256(stress.get("input_hash"))
+            and _is_sha256(stress.get("output_hash"))
+            and _is_sha256(utility_payload.get("baseline_ref_hash"))
+            and _is_sha256(utility_payload.get("candidate_bundle_hash"))
+            and str(utility_payload.get("probe_suite_id", "")).strip()
+            and str(utility_payload.get("stress_probe_suite_id", "")).strip()
+        ):
+            probe_executed_b = True
+        if bool(utility_payload.get("candidate_bundle_present_b", False)) != bool(candidate_bundle_present_b):
+            fail_v18("NONDETERMINISTIC")
+        if bool(utility_payload.get("probe_executed_b", False)) != bool(probe_executed_b):
+            fail_v18("NONDETERMINISTIC")
+
+    if bool(tick_outcome.get("candidate_bundle_present_b", False)) != bool(candidate_bundle_present_b):
+        fail_v18("NONDETERMINISTIC")
+    if bool(tick_outcome.get("probe_executed_b", False)) != bool(probe_executed_b):
+        fail_v18("NONDETERMINISTIC")
+
+    declared_class_tick = str(tick_outcome.get("declared_class", "")).strip()
+    effect_class_tick = str(tick_outcome.get("effect_class", "")).strip()
+    declared_class_promo = str((promotion_payload or {}).get("declared_class", "")).strip()
+    effect_class_promo = str((promotion_payload or {}).get("effect_class", "")).strip()
+    if declared_class_promo and declared_class_tick != declared_class_promo:
+        fail_v18("NONDETERMINISTIC")
+    if effect_class_promo and effect_class_tick != effect_class_promo:
+        fail_v18("NONDETERMINISTIC")
+    if isinstance(promotion_payload, dict):
+        result = promotion_payload.get("result")
+        if not isinstance(result, dict):
+            fail_v18("SCHEMA_FAIL")
+        if effect_class_promo == "EFFECT_HEAVY_NO_UTILITY":
+            if str(result.get("status", "")).strip() != "SKIPPED":
+                fail_v18("NONDETERMINISTIC")
+            if str(result.get("route", "")).strip() != "SHADOW":
+                fail_v18("NONDETERMINISTIC")
+
+    frontier_attempt_counted_b = bool(
+        _frontier_attempt_evidence_satisfied(
+            state_root=state_root,
+            snapshot=snapshot,
+            tick_outcome=tick_outcome,
+            declared_class_tick=declared_class_tick,
+            candidate_bundle_present_b=bool(candidate_bundle_present_b),
+        )
+    )
+    if bool(tick_outcome.get("frontier_attempt_counted_b", False)) != bool(frontier_attempt_counted_b):
+        fail_v18("NONDETERMINISTIC")
+
+    routing_hash = snapshot.get("dependency_routing_receipt_hash")
+    if routing_hash is not None:
+        if not _is_sha256(routing_hash):
+            fail_v18("SCHEMA_FAIL")
+        routing_payload = _load_hash_bound_payload(
+            dir_path=state_root / "long_run" / "debt",
+            digest=str(routing_hash),
+            suffix="dependency_routing_receipt_v1.json",
+            schema_version="v19_0",
+        )
+        if str(routing_payload.get("schema_name", "")) != "dependency_routing_receipt_v1":
+            fail_v18("SCHEMA_FAIL")
+        routing_payload.setdefault("blocks_debt_key", None)
+        routing_payload.setdefault("forced_frontier_debt_key", None)
+        validate_schema_v19(routing_payload, "dependency_routing_receipt_v1")
+
+    debt_hash = snapshot.get("dependency_debt_snapshot_hash")
+    if debt_hash is not None:
+        if not _is_sha256(debt_hash):
+            fail_v18("SCHEMA_FAIL")
+        debt_payload = _load_hash_bound_payload(
+            dir_path=state_root / "long_run" / "debt",
+            digest=str(debt_hash),
+            suffix="dependency_debt_state_v1.json",
+            schema_version="v19_0",
+        )
+        if str(debt_payload.get("schema_name", "")) != "dependency_debt_state_v1":
+            fail_v18("SCHEMA_FAIL")
+        debt_payload.setdefault("debt_by_key", {})
+        debt_payload.setdefault("ticks_without_frontier_attempt_by_key", {})
+        debt_payload.setdefault("first_debt_tick_by_key", {})
+        debt_payload.setdefault("last_frontier_attempt_debt_key", None)
+        debt_payload.setdefault("hard_lock_debt_key", None)
+        validate_schema_v19(debt_payload, "dependency_debt_state_v1")
+
 def verify(state_dir: Path, *, mode: str = "full") -> str:
     # Verifier replay is pinned-only; force network off regardless of caller env.
     os.environ["OMEGA_NET_LIVE_OK"] = "0"
@@ -1784,6 +2064,7 @@ def verify(state_dir: Path, *, mode: str = "full") -> str:
     _verify_shadow_path(state_root=state_root, config_dir=config_dir, snapshot=snapshot)
     _verify_epistemic_path(state_root, snapshot)
     _verify_long_run_ledger_bindings(state_root)
+    _verify_hardening_bindings(state_root=state_root, config_dir=config_dir, snapshot=snapshot)
 
     promo_hash = snapshot.get("promotion_receipt_hash")
     if promo_hash is None:

@@ -46,6 +46,12 @@
         "properties": {
           "goal_id": {"type": "string", "minLength": 1},
           "capability_id": {"type": "string", "minLength": 1},
+          "frontier_id": {
+            "anyOf": [
+              {"type": "string", "minLength": 1},
+              {"type": "null"}
+            ]
+          },
           "status": {"type": "string", "enum": ["PENDING", "DONE", "FAILED"]}
         }
       }

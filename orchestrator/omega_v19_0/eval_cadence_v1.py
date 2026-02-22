@@ -47,6 +47,7 @@ def build_eval_report(
     previous_observation_report: dict[str, Any] | None,
     run_scorecard: dict[str, Any] | None,
     tick_stats: dict[str, Any] | None,
+    accumulation_counters: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     cap_frontier_u64 = _metric_u64(observation_report, "cap_frontier_u64")
     prev_frontier_u64 = 0
@@ -65,6 +66,14 @@ def build_eval_report(
     else:
         classification = "FLAT_OR_REGRESS"
 
+    heavy_ok_count_by_capability = dict((accumulation_counters or {}).get("heavy_ok_count_by_capability") or {})
+    heavy_no_utility_count_by_capability = dict((accumulation_counters or {}).get("heavy_no_utility_count_by_capability") or {})
+    maintenance_count = int(max(0, int((accumulation_counters or {}).get("maintenance_count", 0))))
+    dependency_debt_snapshot_hash = (accumulation_counters or {}).get("dependency_debt_snapshot_hash")
+    if not isinstance(dependency_debt_snapshot_hash, str) or not dependency_debt_snapshot_hash.startswith("sha256:"):
+        dependency_debt_snapshot_hash = None
+    frontier_attempts_u64 = int(max(0, int((accumulation_counters or {}).get("frontier_attempts_u64", 0))))
+
     payload: dict[str, Any] = {
         "schema_name": "eval_report_v1",
         "schema_version": "v19_0",
@@ -75,6 +84,11 @@ def build_eval_report(
         "suite_hash": canon_hash_obj(suite_payload),
         "delta_j_q32": int(delta_j_q32),
         "classification": classification,
+        "heavy_ok_count_by_capability": heavy_ok_count_by_capability,
+        "heavy_no_utility_count_by_capability": heavy_no_utility_count_by_capability,
+        "maintenance_count": maintenance_count,
+        "dependency_debt_snapshot_hash": dependency_debt_snapshot_hash,
+        "frontier_attempts_u64": frontier_attempts_u64,
         "metrics": {
             "cap_frontier_u64": int(cap_frontier_u64),
             "cap_frontier_delta_s64": int(cap_frontier_delta),

@@ -17,6 +17,14 @@ from .omega_common_v1 import (
 _ACTION_KINDS = {"RUN_CAMPAIGN", "RUN_GOAL_TASK", "NOOP", "SAFE_HALT"}
 _SUBVERIFIER_STATUSES = {"VALID", "INVALID", "N/A"}
 _PROMOTION_STATUSES = {"PROMOTED", "REJECTED", "SKIPPED"}
+_DECLARED_CLASSES = {"FRONTIER_HEAVY", "CANARY_HEAVY", "BASELINE_CORE", "MAINTENANCE", "UNCLASSIFIED"}
+_EFFECT_CLASSES = {
+    "EFFECT_HEAVY_OK",
+    "EFFECT_HEAVY_NO_UTILITY",
+    "EFFECT_BASELINE_CORE_OK",
+    "EFFECT_MAINTENANCE_OK",
+    "EFFECT_REJECTED",
+}
 
 
 def build_tick_outcome(
@@ -27,6 +35,12 @@ def build_tick_outcome(
     subverifier_status: str,
     promotion_status: str,
     promotion_reason_code: str,
+    declared_class: str = "UNCLASSIFIED",
+    effect_class: str = "EFFECT_REJECTED",
+    candidate_bundle_present_b: bool = False,
+    probe_executed_b: bool = False,
+    frontier_attempt_counted_b: bool = False,
+    effective_change_b: bool = False,
     activation_success: bool,
     manifest_changed: bool,
     safe_halt: bool,
@@ -47,6 +61,14 @@ def build_tick_outcome(
     if not promotion_status_norm or promotion_status_norm == "N/A":
         promotion_status_norm = "SKIPPED"
     if promotion_status_norm not in _PROMOTION_STATUSES:
+        fail("SCHEMA_FAIL")
+
+    declared_class_norm = str(declared_class).strip().upper() or "UNCLASSIFIED"
+    if declared_class_norm not in _DECLARED_CLASSES:
+        fail("SCHEMA_FAIL")
+
+    effect_class_norm = str(effect_class).strip().upper() or "EFFECT_REJECTED"
+    if effect_class_norm not in _EFFECT_CLASSES:
         fail("SCHEMA_FAIL")
 
     promotion_reason_code_norm = str(promotion_reason_code).strip()
@@ -91,6 +113,12 @@ def build_tick_outcome(
         "subverifier_status": subverifier_status_norm,
         "promotion_status": promotion_status_norm,
         "promotion_reason_code": promotion_reason_code_norm,
+        "declared_class": declared_class_norm,
+        "effect_class": effect_class_norm,
+        "candidate_bundle_present_b": bool(candidate_bundle_present_b),
+        "probe_executed_b": bool(probe_executed_b),
+        "frontier_attempt_counted_b": bool(frontier_attempt_counted_b),
+        "effective_change_b": bool(effective_change_b),
         "execution_mode": execution_mode_norm,
         "activation_success": bool(activation_success),
         "activation_reasons": activation_reasons_norm,

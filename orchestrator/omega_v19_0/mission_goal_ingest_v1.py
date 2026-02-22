@@ -56,6 +56,13 @@ def _slug(value: str) -> str:
     return out or "x"
 
 
+def _stable_frontier_id(*, capability_id: str, explicit_frontier_id: Any = None) -> str:
+    explicit = str(explicit_frontier_id if explicit_frontier_id is not None else "").strip()
+    if explicit:
+        return explicit
+    return _slug(capability_id)
+
+
 def _registry_known_capability_ids(registry: dict[str, Any]) -> set[str]:
     rows = registry.get("capabilities")
     if not isinstance(rows, list):
@@ -89,8 +96,8 @@ def _goal_rows(
     capability_ids: list[str],
     priority: str,
     max_goals_u64: int,
-) -> list[dict[str, str]]:
-    out: list[dict[str, str]] = []
+) -> list[dict[str, Any]]:
+    out: list[dict[str, Any]] = []
     prefix = _PRIORITY_PREFIX[str(priority)]
     limit = max(0, int(max_goals_u64))
     for idx, capability_id in enumerate(capability_ids):
@@ -101,6 +108,7 @@ def _goal_rows(
             {
                 "goal_id": goal_id,
                 "capability_id": capability_id,
+                "frontier_id": _stable_frontier_id(capability_id=capability_id),
                 "status": "PENDING",
             }
         )
@@ -115,7 +123,7 @@ def _base_receipt(
     reason_code: str,
     mission_present_b: bool,
     mission_hash: str | None,
-    goals: list[dict[str, str]],
+    goals: list[dict[str, Any]],
 ) -> dict[str, Any]:
     payload: dict[str, Any] = {
         "schema_name": "mission_goal_ingest_receipt_v1",
@@ -147,7 +155,7 @@ def ingest_mission_goals(
     registry: dict[str, Any],
     default_priority: str,
     max_injected_goals_u64: int,
-) -> tuple[list[dict[str, str]], dict[str, Any], dict[str, Any] | None]:
+) -> tuple[list[dict[str, Any]], dict[str, Any], dict[str, Any] | None]:
     mission_present_b = mission_path.exists()
     lane_allowed = sorted({str(row).strip() for row in lane_allowed_capability_ids if str(row).strip()})
     registry_known = _registry_known_capability_ids(registry)

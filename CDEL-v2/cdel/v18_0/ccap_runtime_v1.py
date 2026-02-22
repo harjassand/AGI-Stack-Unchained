@@ -22,6 +22,55 @@ def _run_git(repo_root: Path, args: list[str]) -> subprocess.CompletedProcess[st
     )
 
 
+def _git_rows(stdout: str) -> list[str]:
+    return sorted({row.strip() for row in str(stdout).splitlines() if row.strip()})
+
+
+def _reason_token(value: Any) -> str:
+    text = str(value).strip()
+    text = text.replace("\n", " ").replace("\r", " ")
+    text = text.replace(":", "_").replace(",", "_")
+    while "__" in text:
+        text = text.replace("__", "_")
+    return text or "none"
+
+
+def _dirty_tree_reason_code(*, repo_root: Path, unstaged_paths: list[str]) -> str:
+    rows = sorted({str(row).strip() for row in unstaged_paths if str(row).strip()})
+    preview = ",".join(_reason_token(row) for row in rows[:16]) if rows else "none"
+    rows_hash = canon_hash_obj({"schema_version": "ccap_dirty_tree_paths_v1", "paths": rows})
+
+    diff_run = _run_git(repo_root, ["diff", "--binary"])
+    if diff_run.returncode != 0:
+        fail("MISSING_STATE_INPUT")
+    diff_hash = hashlib.sha256((diff_run.stdout or "").encode("utf-8")).hexdigest()
+
+    head_run = _run_git(repo_root, ["rev-parse", "--verify", "HEAD"])
+    head_hex = str((head_run.stdout or "")).strip() if head_run.returncode == 0 else ""
+
+    tree_run = _run_git(repo_root, ["write-tree"])
+    tree_hex = str((tree_run.stdout or "")).strip() if tree_run.returncode == 0 else ""
+
+    untracked_run = _run_git(repo_root, ["ls-files", "--others", "--exclude-standard"])
+    if untracked_run.returncode != 0:
+        fail("MISSING_STATE_INPUT")
+    untracked_rows = _git_rows(untracked_run.stdout or "")
+    untracked_hash = canon_hash_obj({"schema_version": "ccap_untracked_paths_v1", "paths": untracked_rows})
+
+    return (
+        "VERIFY_ERROR:DIRTY_TREE"
+        f":expected_git_diff_name_only={_reason_token('empty')}"
+        f":observed_count_u64={int(len(rows))}"
+        f":observed_paths_preview={preview}"
+        f":observed_paths_hash={_reason_token(rows_hash)}"
+        f":index_tree_hex={_reason_token(tree_hex or 'none')}"
+        f":head_hex={_reason_token(head_hex or 'none')}"
+        f":unstaged_diff_sha256_hex={_reason_token(diff_hash)}"
+        f":untracked_count_u64={int(len(untracked_rows))}"
+        f":untracked_paths_hash={_reason_token(untracked_hash)}"
+    )
+
+
 def _git_ls_files(repo_root: Path) -> list[str]:
     run = _run_git(repo_root, ["ls-files", "-z"])
     if run.returncode != 0:
@@ -56,8 +105,9 @@ def compute_repo_base_tree_id(repo_root: Path) -> str:
     unstaged = _run_git(repo_root, ["diff", "--name-only"])
     if unstaged.returncode != 0:
         fail("MISSING_STATE_INPUT")
-    if (unstaged.stdout or "").strip():
-        fail("VERIFY_ERROR")
+    unstaged_rows = _git_rows(unstaged.stdout or "")
+    if unstaged_rows:
+        fail(_dirty_tree_reason_code(repo_root=repo_root, unstaged_paths=unstaged_rows))
 
     tree = _run_git(repo_root, ["write-tree"])
     if tree.returncode != 0:
@@ -121,8 +171,9 @@ def materialize_repo_snapshot(repo_root: Path, out_dir: Path) -> None:
     unstaged = _run_git(repo_root, ["diff", "--name-only"])
     if unstaged.returncode != 0:
         fail("MISSING_STATE_INPUT")
-    if (unstaged.stdout or "").strip():
-        fail("VERIFY_ERROR")
+    unstaged_rows = _git_rows(unstaged.stdout or "")
+    if unstaged_rows:
+        fail(_dirty_tree_reason_code(repo_root=repo_root, unstaged_paths=unstaged_rows))
 
     # Export the index to the workspace directory.
     # checkout-index writes files with their correct modes and is far faster than Python copy loops.

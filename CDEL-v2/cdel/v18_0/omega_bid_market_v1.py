@@ -292,6 +292,7 @@ def settle_and_advance_market_state(
     prev_observation_hash: str | None,
     cur_observation_report: dict[str, Any],
     cur_observation_hash: str,
+    winner_effect_class: str | None = None,
 ) -> tuple[dict[str, Any], dict[str, Any]]:
     """Return (settlement_receipt, market_state_after)."""
 
@@ -368,6 +369,17 @@ def settle_and_advance_market_state(
 
         penalty_fraction = q32_mul(q32_mul(int(params["bankroll_penalty_rate_q32"]), int(conf)), int(error_norm))
         reward_fraction = q32_mul(q32_mul(int(params["bankroll_reward_rate_q32"]), int(conf)), int(accuracy))
+        effect_class = str(winner_effect_class or "").strip()
+        if effect_class == "EFFECT_HEAVY_NO_UTILITY":
+            reward_fraction = 0
+            penalty_fraction = min(int(Q32_ONE), int(penalty_fraction + int(Q32_ONE // 100)))
+            if cred_new > cred_old:
+                cred_new = int(cred_old)
+        elif effect_class == "EFFECT_REJECTED":
+            reward_fraction = 0
+            penalty_fraction = min(int(Q32_ONE), int(penalty_fraction + int(Q32_ONE // 200)))
+            if cred_new > cred_old:
+                cred_new = int(cred_old)
         factor = max(0, int(Q32_ONE - int(penalty_fraction) + int(reward_fraction)))
         bankroll_new = max(0, q32_mul(int(bankroll_old), int(factor)))
 

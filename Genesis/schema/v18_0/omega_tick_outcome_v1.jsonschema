@@ -29,6 +29,12 @@
     "subverifier_status",
     "promotion_status",
     "promotion_reason_code",
+    "declared_class",
+    "effect_class",
+    "candidate_bundle_present_b",
+    "probe_executed_b",
+    "frontier_attempt_counted_b",
+    "effective_change_b",
     "activation_success",
     "activation_reasons",
     "activation_meta_verdict",
@@ -50,6 +56,24 @@
     "subverifier_status": {"type": "string", "enum": ["VALID", "INVALID", "N/A"]},
     "promotion_status": {"type": "string", "enum": ["PROMOTED", "REJECTED", "SKIPPED"]},
     "promotion_reason_code": {"type": "string", "minLength": 1},
+    "declared_class": {
+      "type": "string",
+      "enum": ["FRONTIER_HEAVY", "CANARY_HEAVY", "BASELINE_CORE", "MAINTENANCE", "UNCLASSIFIED"]
+    },
+    "effect_class": {
+      "type": "string",
+      "enum": [
+        "EFFECT_HEAVY_OK",
+        "EFFECT_HEAVY_NO_UTILITY",
+        "EFFECT_BASELINE_CORE_OK",
+        "EFFECT_MAINTENANCE_OK",
+        "EFFECT_REJECTED"
+      ]
+    },
+    "candidate_bundle_present_b": {"type": "boolean"},
+    "probe_executed_b": {"type": "boolean"},
+    "frontier_attempt_counted_b": {"type": "boolean"},
+    "effective_change_b": {"type": "boolean"},
     "execution_mode": {"type": "string", "enum": ["STRICT", "BLACKBOX"]},
     "activation_success": {"type": "boolean"},
     "activation_reasons": {

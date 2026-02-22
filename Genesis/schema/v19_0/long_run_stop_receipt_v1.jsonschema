@@ -29,7 +29,10 @@
         "HEALTH_GATE_BUDGET_AND_ROUTE",
         "TICK_PROCESS_ERROR",
         "TICK_STATE_MISSING",
-        "STOP_ON_ERROR"
+        "STOP_ON_ERROR",
+        "PRECHECK_FAIL:NO_HARD_LOCK",
+        "PRECHECK_FAIL:NO_FORCED_FRONTIER",
+        "PRECHECK_FAIL:NO_COUNTED_FRONTIER_ATTEMPT"
       ]
     },
     "halt_tick_u64": {"type": "integer", "minimum": 0},

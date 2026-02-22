@@ -2,8 +2,11 @@
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
 from typing import Any
+
+from orchestrator.native.runtime_stats_v1 import RUNTIME_STATS_SOURCE_ID
 
 from ..v18_0 import omega_promoter_v1 as v18_promoter
 from ..v18_0.ccap_runtime_v1 import normalize_subrun_relpath
@@ -49,6 +52,10 @@ _MORPHISMS_REQUIRING_C_CONT = {"M_K", "M_E", "M_M", "M_C"}
 
 _AXIS_EXEMPTIONS_REL = "configs/omega_axis_gate_exemptions_v1.json"
 EXPECTED_AXIS_EXEMPTIONS_ID = "sha256:642fe65d716df82045833cecaf624202d90cf7ffd2edd394e7ffe781fe5f7d28"
+_SHA256_ZERO = "sha256:" + ("0" * 64)
+_HEAVY_DECLARED_CLASSES = {"FRONTIER_HEAVY", "CANARY_HEAVY"}
+_DECLARED_CLASSES = {"FRONTIER_HEAVY", "CANARY_HEAVY", "BASELINE_CORE", "MAINTENANCE"}
+_COMMENT_LINE_RE = re.compile(r"^(#|//|/\\*|\\*|\\*/)")
 
 
 def _load_axis_bundle_from_bundle(*, bundle_obj: dict[str, Any], bundle_path: Path) -> dict[str, Any] | None:
@@ -449,6 +456,9 @@ def _write_v18_reject(
         "promotion_bundle_hash": promotion_bundle_hash,
         "execution_mode": execution_mode,
         "meta_core_verifier_fingerprint": v18_promoter._meta_fingerprint(),
+        "utility_proof_hash": None,
+        "declared_class": None,
+        "effect_class": "EFFECT_REJECTED",
         "result": {
             "status": "REJECTED",
             "reason_code": reason if reason in {
@@ -466,6 +476,7 @@ def _write_v18_reject(
                 "CCAP_TOUCHED_PATHS_INVALID",
                 "EK_META_VERIFY_MISSING_OR_FAIL",
             } else "UNKNOWN",
+            "route": "NONE",
         },
         "active_manifest_hash_after": None,
     }
@@ -710,8 +721,519 @@ def _verify_axis_bundle_gate(
     write_canonical(promotion_dir / "objective_J_new_v1.json", j_new)
 
 
+def _is_sha256(value: Any) -> bool:
+    text = str(value).strip()
+    return text.startswith("sha256:") and len(text) == 71 and all(ch in "0123456789abcdef" for ch in text.split(":", 1)[1])
+
+
+def _config_dir_for_dispatch(dispatch_ctx: dict[str, Any]) -> Path | None:
+    state_root_raw = dispatch_ctx.get("state_root")
+    if not isinstance(state_root_raw, (str, Path)):
+        return None
+    state_root = Path(state_root_raw).resolve()
+    config_dir = state_root.parent / "config"
+    if config_dir.exists() and config_dir.is_dir():
+        return config_dir
+    return None
+
+
+def _load_long_run_profile_for_dispatch(dispatch_ctx: dict[str, Any]) -> dict[str, Any] | None:
+    config_dir = _config_dir_for_dispatch(dispatch_ctx)
+    if config_dir is None:
+        return None
+    candidates = [config_dir / "long_run_profile_v1.json"]
+    candidates.extend(sorted(config_dir.glob("**/long_run_profile_v1.json"), key=lambda p: p.as_posix()))
+    seen: set[str] = set()
+    for path in candidates:
+        key = str(path.resolve())
+        if key in seen:
+            continue
+        seen.add(key)
+        if not path.exists() or not path.is_file():
+            continue
+        try:
+            payload = load_canon_dict(path)
+            validate_schema(payload, "long_run_profile_v1")
+        except Exception:  # noqa: BLE001
+            continue
+        return payload
+    return None
+
+
+def _load_utility_policy_for_dispatch(dispatch_ctx: dict[str, Any]) -> dict[str, Any] | None:
+    profile = _load_long_run_profile_for_dispatch(dispatch_ctx)
+    if not isinstance(profile, dict):
+        return None
+    rel_raw = str(profile.get("utility_policy_rel", "")).strip()
+    declared_id = str(profile.get("utility_policy_id", "")).strip()
+    if not rel_raw or not declared_id:
+        return None
+    rel_path = Path(rel_raw)
+    if rel_path.is_absolute() or ".." in rel_path.parts:
+        return None
+    config_dir = _config_dir_for_dispatch(dispatch_ctx)
+    if config_dir is None:
+        return None
+    path = (config_dir / rel_path).resolve()
+    if not path.exists() or not path.is_file():
+        return None
+    payload = load_canon_dict(path)
+    validate_schema(payload, "utility_policy_v1")
+    policy_id = str(payload.get("policy_id", "")).strip()
+    payload_no_id = dict(payload)
+    payload_no_id.pop("policy_id", None)
+    if policy_id != canon_hash_obj_v19(payload_no_id):
+        fail("NONDETERMINISTIC", safe_halt=True)
+    if policy_id != declared_id:
+        fail("PIN_HASH_MISMATCH", safe_halt=True)
+    return payload
+
+
+def _capability_id_from_dispatch(dispatch_ctx: dict[str, Any]) -> str:
+    cap = dispatch_ctx.get("campaign_entry")
+    if not isinstance(cap, dict):
+        return ""
+    return str(cap.get("capability_id", "")).strip()
+
+
+def _declared_class_for_capability(dispatch_ctx: dict[str, Any], utility_policy: dict[str, Any] | None) -> str:
+    if isinstance(utility_policy, dict):
+        mapping = utility_policy.get("declared_class_by_capability")
+        if isinstance(mapping, dict):
+            capability_id = _capability_id_from_dispatch(dispatch_ctx)
+            mapped = str(mapping.get(capability_id, "")).strip().upper()
+            if mapped in _DECLARED_CLASSES:
+                return mapped
+    return "UNCLASSIFIED"
+
+
+def _baseline_ref_hash(meta_core_root: Path, active_binding: dict[str, Any] | None) -> str:
+    if isinstance(active_binding, dict):
+        promotion_bundle_hash = str(active_binding.get("promotion_bundle_hash", "")).strip()
+        if _is_sha256(promotion_bundle_hash):
+            return promotion_bundle_hash
+    try:
+        active_hex = str(v18_promoter._meta_core_active_bundle_hex(meta_core_root)).strip()  # type: ignore[attr-defined]
+    except Exception:  # noqa: BLE001
+        active_hex = ""
+    if len(active_hex) == 64 and all(ch in "0123456789abcdef" for ch in active_hex):
+        return f"sha256:{active_hex}"
+    return _SHA256_ZERO
+
+
+def _load_latest_runtime_stats(dispatch_ctx: dict[str, Any]) -> tuple[dict[str, Any] | None, str | None]:
+    state_root_raw = dispatch_ctx.get("state_root")
+    if not isinstance(state_root_raw, (str, Path)):
+        return None, None
+    ledger_dir = Path(state_root_raw).resolve() / "ledger" / "native"
+    if not ledger_dir.exists() or not ledger_dir.is_dir():
+        return None, None
+    rows = sorted(ledger_dir.glob("sha256_*.omega_native_runtime_stats_v1.json"), key=lambda p: p.as_posix())
+    if not rows:
+        return None, None
+    path = rows[-1]
+    payload = load_canon_dict(path)
+    validate_v18_schema(payload, "omega_native_runtime_stats_v1")
+    digest = "sha256:" + path.name.split(".", 1)[0].split("_", 1)[1]
+    if canon_hash_obj(payload) != digest:
+        fail("NONDETERMINISTIC", safe_halt=True)
+    return payload, digest
+
+
+def _bundle_binary_hash(bundle_obj: dict[str, Any]) -> str | None:
+    native_module = bundle_obj.get("native_module")
+    if not isinstance(native_module, dict):
+        return None
+    value = str(native_module.get("binary_sha256", "")).strip()
+    if _is_sha256(value):
+        return value
+    return None
+
+
+def _binary_artifact_delta_present(*, bundle_obj: dict[str, Any], active_binding: dict[str, Any] | None) -> bool:
+    candidate_binary = _bundle_binary_hash(bundle_obj)
+    if candidate_binary is None:
+        return False
+    if not isinstance(active_binding, dict):
+        return True
+    baseline_native = active_binding.get("native_module")
+    if not isinstance(baseline_native, dict):
+        return True
+    baseline_binary = str(baseline_native.get("binary_sha256", "")).strip()
+    if not _is_sha256(baseline_binary):
+        return True
+    return baseline_binary != candidate_binary
+
+
+def _nontrivial_delta_from_patch_bytes(patch_bytes: bytes) -> int:
+    count = 0
+    for raw_line in patch_bytes.decode("utf-8", errors="replace").splitlines():
+        if raw_line.startswith("+++") or raw_line.startswith("---") or raw_line.startswith("@@"):
+            continue
+        if not raw_line:
+            continue
+        if raw_line[0] not in {"+", "-"}:
+            continue
+        body = raw_line[1:].strip()
+        if not body:
+            continue
+        if _COMMENT_LINE_RE.match(body):
+            continue
+        count += 1
+    return int(count)
+
+
+def _nontrivial_delta_for_bundle(*, bundle_obj: dict[str, Any], bundle_path: Path) -> int:
+    if str(bundle_obj.get("schema_version", "")).strip() != "omega_promotion_bundle_ccap_v1":
+        return 0
+    patch_rel = normalize_subrun_relpath(str(bundle_obj.get("patch_relpath", "")).strip())
+    if not patch_rel:
+        return 0
+    subrun_root = _resolve_ccap_subrun_root_for_bundle(bundle_obj=bundle_obj, bundle_path=bundle_path)
+    patch_path = (subrun_root / patch_rel).resolve()
+    if not patch_path.exists() or not patch_path.is_file():
+        return 0
+    return _nontrivial_delta_from_patch_bytes(patch_path.read_bytes())
+
+
+def _rewrite_subverifier_receipt(
+    *,
+    dispatch_ctx: dict[str, Any],
+    receipt: dict[str, Any],
+    status: str,
+    reason_code: str | None,
+) -> tuple[dict[str, Any], str]:
+    out_dir = Path(dispatch_ctx["dispatch_dir"]) / "verifier"
+    payload = dict(receipt)
+    result = dict(payload.get("result") or {})
+    result["status"] = status
+    result["reason_code"] = reason_code
+    payload["result"] = result
+    _, new_receipt, digest = write_hashed_json(out_dir, "omega_subverifier_receipt_v1.json", payload, id_field="receipt_id")
+    validate_v18_schema(new_receipt, "omega_subverifier_receipt_v1")
+    return new_receipt, digest
+
+
+def _compute_effect_class(*, declared_class: str, correctness_ok_b: bool, utility_ok_b: bool) -> str:
+    if not correctness_ok_b:
+        return "EFFECT_REJECTED"
+    if declared_class in _HEAVY_DECLARED_CLASSES:
+        return "EFFECT_HEAVY_OK" if utility_ok_b else "EFFECT_HEAVY_NO_UTILITY"
+    if declared_class == "BASELINE_CORE":
+        return "EFFECT_BASELINE_CORE_OK"
+    if declared_class == "MAINTENANCE":
+        return "EFFECT_MAINTENANCE_OK"
+    return "EFFECT_REJECTED"
+
+
+def _candidate_bundle_present(
+    *,
+    dispatch_ctx: dict[str, Any],
+    promotion_bundle_hash: str,
+) -> tuple[bool, Path | None]:
+    if not _is_sha256(promotion_bundle_hash) or promotion_bundle_hash == _SHA256_ZERO:
+        return False, None
+    path, found_hash = v18_promoter._find_promotion_bundle(dispatch_ctx)  # type: ignore[attr-defined]
+    if path is None or found_hash is None:
+        return False, None
+    if found_hash != promotion_bundle_hash:
+        return False, None
+    return path.exists() and path.is_file(), path
+
+
+def _heavy_policy_for_capability(utility_policy: dict[str, Any] | None, capability_id: str) -> dict[str, Any] | None:
+    if not isinstance(utility_policy, dict):
+        return None
+    rows = utility_policy.get("heavy_policies")
+    if not isinstance(rows, dict):
+        return None
+    row = rows.get(str(capability_id))
+    if isinstance(row, dict):
+        return row
+    return None
+
+
+def _baseline_work_units_for_capability(
+    *,
+    dispatch_ctx: dict[str, Any],
+    capability_id: str,
+    baseline_ref_hash: str,
+) -> int | None:
+    if not _is_sha256(baseline_ref_hash) or baseline_ref_hash == _SHA256_ZERO:
+        return None
+    state_root_raw = dispatch_ctx.get("state_root")
+    if not isinstance(state_root_raw, (str, Path)):
+        return None
+    state_root = Path(state_root_raw).resolve()
+    rows = sorted(
+        state_root.glob("dispatch/*/promotion/sha256_*.utility_proof_receipt_v1.json"),
+        key=lambda p: p.as_posix(),
+    )
+    matched_tick = -1
+    matched_work_units: int | None = None
+    for path in rows:
+        payload = load_canon_dict(path)
+        try:
+            validate_schema(payload, "utility_proof_receipt_v1")
+        except Exception:
+            continue
+        if canon_hash_obj(payload) != ("sha256:" + path.name.split(".", 1)[0].split("_", 1)[1]):
+            continue
+        if str(payload.get("capability_id", "")).strip() != str(capability_id):
+            continue
+        if str(payload.get("candidate_bundle_hash", "")).strip() != str(baseline_ref_hash):
+            continue
+        metrics = payload.get("utility_metrics")
+        if not isinstance(metrics, dict):
+            continue
+        tick = int(payload.get("tick_u64", -1))
+        work_units = int(metrics.get("runtime_total_work_units_u64", 0))
+        if work_units < 0:
+            continue
+        if tick >= matched_tick:
+            matched_tick = tick
+            matched_work_units = work_units
+    return matched_work_units
+
+
+def _signal_from_policy(
+    *,
+    signal_mode: str,
+    threshold_u64: int,
+    binary_delta_b: bool,
+    nontrivial_delta_u64: int,
+    runtime_total_work_units_u64: int,
+    baseline_work_units_u64: int | None,
+    bundle_obj: dict[str, Any],
+    policy_artifact_relpath: str | None,
+    promotion_dir: Path,
+) -> bool:
+    mode = str(signal_mode).strip().upper()
+    if mode == "BINARY_ARTIFACT_DELTA":
+        return bool(binary_delta_b) and int(threshold_u64) <= 1
+    if mode == "NONTRIVIAL_DELTA":
+        return int(nontrivial_delta_u64) >= int(max(0, threshold_u64))
+    if mode == "CAPABILITY_GAIN":
+        capability_gain = 1 if (binary_delta_b or nontrivial_delta_u64 > 0) else 0
+        return capability_gain >= int(max(0, threshold_u64))
+    if mode == "WORK_UNITS_REDUCTION":
+        baseline = baseline_work_units_u64
+        if baseline is None or baseline <= 0:
+            return False
+        candidate = int(max(0, runtime_total_work_units_u64))
+        required_pct = int(max(0, threshold_u64))
+        if required_pct <= 0:
+            return candidate <= baseline
+        # Percentage threshold is integer percent, deterministic and wall-clock free.
+        required_delta = int((int(baseline) * int(required_pct) + 99) // 100)
+        target = max(0, int(baseline) - int(required_delta))
+        return candidate <= target
+    if mode == "REQUIRE_HEALTHCHECK_HASH":
+        native_module = bundle_obj.get("native_module")
+        if not isinstance(native_module, dict):
+            return False
+        value = str(native_module.get("healthcheck_receipt_hash", "")).strip()
+        return _is_sha256(value)
+    if mode == "REQUIRE_BINARY_ARTIFACT":
+        return bool(binary_delta_b) and int(threshold_u64) <= 1
+    if mode == "REQUIRE_PATCH_DELTA":
+        return int(nontrivial_delta_u64) >= int(max(0, threshold_u64))
+    if mode == "REQUIRE_POLICY_ARTIFACT":
+        if not policy_artifact_relpath:
+            return False
+        rel = Path(policy_artifact_relpath)
+        if rel.is_absolute() or ".." in rel.parts:
+            return False
+        candidate = (promotion_dir / rel).resolve()
+        return candidate.exists() and candidate.is_file()
+    return False
+
+
+def _write_utility_proof_receipt(
+    *,
+    tick_u64: int,
+    dispatch_ctx: dict[str, Any],
+    capability_id: str,
+    declared_class: str,
+    candidate_bundle_hash: str,
+    baseline_ref_hash: str,
+    correctness_ok_b: bool,
+    utility_ok_b: bool,
+    signal_a_ok_b: bool,
+    signal_b_ok_b: bool,
+    reason_code: str,
+    effect_class: str,
+    probe_suite_id: str,
+    stress_probe_suite_id: str,
+    runtime_stats_source_id: str,
+    runtime_stats_hash: str | None,
+    candidate_bundle_present_b: bool,
+    probe_executed_b: bool,
+    utility_metrics: dict[str, Any],
+    utility_thresholds: dict[str, Any],
+) -> tuple[dict[str, Any], str]:
+    out_dir = Path(dispatch_ctx["dispatch_dir"]) / "promotion"
+    out_dir.mkdir(parents=True, exist_ok=True)
+    primary_probe_input_hash = canon_hash_obj_v19(
+        {
+            "probe_suite_id": probe_suite_id,
+            "baseline_ref_hash": baseline_ref_hash,
+            "candidate_bundle_hash": candidate_bundle_hash,
+            "utility_metrics": utility_metrics,
+        }
+    )
+    primary_probe_output_hash = canon_hash_obj_v19(
+        {
+            "signal_a_ok_b": bool(signal_a_ok_b),
+            "reason_code": reason_code,
+        }
+    )
+    stress_probe_input_hash = canon_hash_obj_v19(
+        {
+            "stress_probe_suite_id": stress_probe_suite_id,
+            "baseline_ref_hash": baseline_ref_hash,
+            "candidate_bundle_hash": candidate_bundle_hash,
+            "utility_thresholds": utility_thresholds,
+        }
+    )
+    stress_probe_output_hash = canon_hash_obj_v19(
+        {
+            "signal_b_ok_b": bool(signal_b_ok_b),
+            "reason_code": reason_code,
+        }
+    )
+    payload = {
+        "schema_name": "utility_proof_receipt_v1",
+        "schema_version": "v19_0",
+        "receipt_id": _SHA256_ZERO,
+        "tick_u64": int(tick_u64),
+        "capability_id": str(capability_id),
+        "candidate_bundle_hash": candidate_bundle_hash,
+        "baseline_ref_hash": baseline_ref_hash,
+        "probe_suite_id": str(probe_suite_id),
+        "stress_probe_suite_id": str(stress_probe_suite_id),
+        "runtime_stats_source_id": str(runtime_stats_source_id),
+        "runtime_stats_hash": runtime_stats_hash,
+        "candidate_bundle_present_b": bool(candidate_bundle_present_b),
+        "probe_executed_b": bool(probe_executed_b),
+        "correctness_ok_b": bool(correctness_ok_b),
+        "utility_ok_b": bool(utility_ok_b),
+        "signal_a_ok_b": bool(signal_a_ok_b),
+        "signal_b_ok_b": bool(signal_b_ok_b),
+        "utility_metrics": dict(utility_metrics),
+        "utility_thresholds": dict(utility_thresholds),
+        "reason_code": str(reason_code),
+        "declared_class": str(declared_class),
+        "effect_class": str(effect_class),
+        "primary_probe": {
+            "input_hash": primary_probe_input_hash,
+            "output_hash": primary_probe_output_hash,
+        },
+        "stress_probe": {
+            "input_hash": stress_probe_input_hash,
+            "output_hash": stress_probe_output_hash,
+        },
+    }
+    validate_schema(payload, "utility_proof_receipt_v1")
+    _, receipt, digest = write_hashed_json(out_dir, "utility_proof_receipt_v1.json", payload, id_field="receipt_id")
+    validate_schema(receipt, "utility_proof_receipt_v1")
+    return receipt, digest
+
+
+def _write_promotion_receipt_v19(
+    *,
+    tick_u64: int,
+    dispatch_ctx: dict[str, Any],
+    promotion_bundle_hash: str,
+    status: str,
+    reason: str | None,
+    route: str,
+    active_manifest_hash_after: str | None,
+    utility_proof_hash: str | None,
+    declared_class: str,
+    effect_class: str,
+) -> tuple[dict[str, Any], str]:
+    out_dir = Path(dispatch_ctx["dispatch_dir"]) / "promotion"
+    out_dir.mkdir(parents=True, exist_ok=True)
+    payload = {
+        "schema_version": "omega_promotion_receipt_v1",
+        "receipt_id": _SHA256_ZERO,
+        "tick_u64": int(tick_u64),
+        "promotion_bundle_hash": promotion_bundle_hash if _is_sha256(promotion_bundle_hash) else _SHA256_ZERO,
+        "execution_mode": resolve_execution_mode(),
+        "meta_core_verifier_fingerprint": v18_promoter._meta_fingerprint(),
+        "native_module": None,
+        "native_runtime_contract_hash": None,
+        "native_healthcheck_vectors_hash": None,
+        "utility_proof_hash": utility_proof_hash if isinstance(utility_proof_hash, str) and _is_sha256(utility_proof_hash) else None,
+        "declared_class": declared_class if declared_class in _DECLARED_CLASSES else "UNCLASSIFIED",
+        "effect_class": effect_class,
+        "result": {
+            "status": status,
+            "reason_code": reason,
+            "route": route,
+        },
+        "active_manifest_hash_after": active_manifest_hash_after if _is_sha256(active_manifest_hash_after) else None,
+    }
+    require_no_absolute_paths(payload)
+    _, receipt, digest = write_hashed_json(out_dir, "omega_promotion_receipt_v1.json", payload, id_field="receipt_id")
+    validate_v18_schema(receipt, "omega_promotion_receipt_v1")
+    return receipt, digest
+
+
+def _augment_promotion_receipt_with_effect(
+    *,
+    dispatch_ctx: dict[str, Any],
+    promotion_receipt: dict[str, Any],
+    utility_proof_hash: str | None,
+    declared_class: str,
+    effect_class: str,
+) -> tuple[dict[str, Any], str]:
+    out_dir = Path(dispatch_ctx["dispatch_dir"]) / "promotion"
+    payload = dict(promotion_receipt)
+    payload["utility_proof_hash"] = utility_proof_hash if isinstance(utility_proof_hash, str) and _is_sha256(utility_proof_hash) else None
+    payload["declared_class"] = declared_class if declared_class in _DECLARED_CLASSES else "UNCLASSIFIED"
+    payload["effect_class"] = effect_class
+    result = dict(payload.get("result") or {})
+    route = str(result.get("route", "")).strip().upper()
+    if route not in {"ACTIVE", "SHADOW", "NONE"}:
+        route = "ACTIVE" if str(result.get("status", "")).strip() == "PROMOTED" else "NONE"
+    result["route"] = route
+    payload["result"] = result
+    require_no_absolute_paths(payload)
+    _, receipt, digest = write_hashed_json(out_dir, "omega_promotion_receipt_v1.json", payload, id_field="receipt_id")
+    validate_v18_schema(receipt, "omega_promotion_receipt_v1")
+    return receipt, digest
+
+
 def run_subverifier(*, tick_u64: int, dispatch_ctx: dict[str, Any] | None) -> tuple[dict[str, Any] | None, str | None]:
-    return v18_promoter.run_subverifier(tick_u64=tick_u64, dispatch_ctx=dispatch_ctx)
+    receipt, digest = v18_promoter.run_subverifier(tick_u64=tick_u64, dispatch_ctx=dispatch_ctx)
+    if dispatch_ctx is None or receipt is None:
+        return receipt, digest
+    status = str((receipt.get("result") or {}).get("status", "")).strip()
+    if status != "VALID":
+        return receipt, digest
+
+    utility_policy = _load_utility_policy_for_dispatch(dispatch_ctx)
+    declared_class = _declared_class_for_capability(dispatch_ctx, utility_policy)
+    if declared_class not in _HEAVY_DECLARED_CLASSES:
+        return receipt, digest
+
+    bundle_path, _bundle_hash = v18_promoter._find_promotion_bundle(dispatch_ctx)  # type: ignore[attr-defined]
+    if bundle_path is None:
+        return receipt, digest
+    bundle_obj = load_canon_dict(bundle_path)
+    active_binding = v18_promoter._read_active_binding(v18_promoter._meta_core_root())  # type: ignore[attr-defined]
+    binary_delta_b = _binary_artifact_delta_present(bundle_obj=bundle_obj, active_binding=active_binding)
+    nontrivial_delta_u64 = _nontrivial_delta_for_bundle(bundle_obj=bundle_obj, bundle_path=bundle_path)
+    if not (binary_delta_b or nontrivial_delta_u64 > 0):
+        return _rewrite_subverifier_receipt(
+            dispatch_ctx=dispatch_ctx,
+            receipt=receipt,
+            status="INVALID",
+            reason_code="VERIFY_ERROR:INSUFFICIENT_NONTRIVIAL_DELTA",
+        )
+    return receipt, digest
 
 
 def run_promotion(
@@ -724,25 +1246,53 @@ def run_promotion(
     if dispatch_ctx is None:
         return None, None
 
+    utility_policy = _load_utility_policy_for_dispatch(dispatch_ctx)
+    declared_class = _declared_class_for_capability(dispatch_ctx, utility_policy)
+    capability_id = _capability_id_from_dispatch(dispatch_ctx)
+
     subverifier_status = str((subverifier_receipt or {}).get("result", {}).get("status", "")).strip()
     if subverifier_receipt is None or subverifier_status != "VALID":
-        return v18_promoter.run_promotion(
+        receipt, digest = v18_promoter.run_promotion(
             tick_u64=tick_u64,
             dispatch_ctx=dispatch_ctx,
             subverifier_receipt=subverifier_receipt,
             allowlists=allowlists,
+        )
+        if receipt is None or digest is None:
+            return receipt, digest
+        return _augment_promotion_receipt_with_effect(
+            dispatch_ctx=dispatch_ctx,
+            promotion_receipt=receipt,
+            utility_proof_hash=None,
+            declared_class=declared_class,
+            effect_class="EFFECT_REJECTED",
         )
 
     bundle_path, bundle_hash = v18_promoter._find_promotion_bundle(dispatch_ctx)
     if bundle_path is None:
-        return v18_promoter.run_promotion(
+        receipt, digest = v18_promoter.run_promotion(
             tick_u64=tick_u64,
             dispatch_ctx=dispatch_ctx,
             subverifier_receipt=subverifier_receipt,
             allowlists=allowlists,
         )
+        if receipt is None or digest is None:
+            return receipt, digest
+        effect_class = _compute_effect_class(
+            declared_class=declared_class,
+            correctness_ok_b=True,
+            utility_ok_b=False,
+        )
+        return _augment_promotion_receipt_with_effect(
+            dispatch_ctx=dispatch_ctx,
+            promotion_receipt=receipt,
+            utility_proof_hash=None,
+            declared_class=declared_class,
+            effect_class=effect_class,
+        )
 
     bundle_obj = load_canon_dict(bundle_path)
+    promotion_bundle_hash = bundle_hash or canon_hash_obj(bundle_obj)
     promotion_dir = bundle_path.parent
     axis_bundle_for_meta = _load_axis_bundle_from_bundle(bundle_obj=bundle_obj, bundle_path=bundle_path)
 
@@ -764,19 +1314,164 @@ def run_promotion(
                 "detail": message,
             },
         )
-        return _write_v18_reject(
+        receipt, _digest = _write_v18_reject(
             tick_u64=tick_u64,
             dispatch_ctx=dispatch_ctx,
-            promotion_bundle_hash=bundle_hash or canon_hash_obj(bundle_obj),
+            promotion_bundle_hash=promotion_bundle_hash,
             reason="UNKNOWN",
+        )
+        return _augment_promotion_receipt_with_effect(
+            dispatch_ctx=dispatch_ctx,
+            promotion_receipt=receipt,
+            utility_proof_hash=None,
+            declared_class=declared_class,
+            effect_class="EFFECT_REJECTED",
         )
     except Exception:
-        return _write_v18_reject(
+        receipt, _digest = _write_v18_reject(
             tick_u64=tick_u64,
             dispatch_ctx=dispatch_ctx,
-            promotion_bundle_hash=bundle_hash or canon_hash_obj(bundle_obj),
+            promotion_bundle_hash=promotion_bundle_hash,
             reason="UNKNOWN",
         )
+        return _augment_promotion_receipt_with_effect(
+            dispatch_ctx=dispatch_ctx,
+            promotion_receipt=receipt,
+            utility_proof_hash=None,
+            declared_class=declared_class,
+            effect_class="EFFECT_REJECTED",
+        )
+
+    meta_core_root = v18_promoter._meta_core_root()  # type: ignore[attr-defined]
+    active_binding = v18_promoter._read_active_binding(meta_core_root)  # type: ignore[attr-defined]
+    baseline_ref_hash = _baseline_ref_hash(meta_core_root, active_binding)
+    runtime_stats_payload, runtime_stats_hash = _load_latest_runtime_stats(dispatch_ctx)
+    runtime_stats_source_id = str((utility_policy or {}).get("runtime_stats_source_id", RUNTIME_STATS_SOURCE_ID)).strip() or RUNTIME_STATS_SOURCE_ID
+    observed_runtime_source_id = str((runtime_stats_payload or {}).get("runtime_stats_source_id", runtime_stats_source_id)).strip() or runtime_stats_source_id
+    runtime_source_match_b = runtime_stats_source_id == observed_runtime_source_id
+
+    binary_delta_b = _binary_artifact_delta_present(bundle_obj=bundle_obj, active_binding=active_binding)
+    nontrivial_delta_u64 = _nontrivial_delta_for_bundle(bundle_obj=bundle_obj, bundle_path=bundle_path)
+    candidate_bundle_present_b, _candidate_bundle_path = _candidate_bundle_present(
+        dispatch_ctx=dispatch_ctx,
+        promotion_bundle_hash=promotion_bundle_hash,
+    )
+    runtime_total_work_units_u64 = int((runtime_stats_payload or {}).get("total_work_units_u64", 0))
+    baseline_work_units_u64 = _baseline_work_units_for_capability(
+        dispatch_ctx=dispatch_ctx,
+        capability_id=capability_id,
+        baseline_ref_hash=baseline_ref_hash,
+    )
+
+    heavy_policy = _heavy_policy_for_capability(utility_policy, capability_id)
+    probe_suite_id = str((heavy_policy or {}).get("probe_suite_id", "utility_probe_suite_default_v1"))
+    stress_probe_suite_id = str((heavy_policy or {}).get("stress_probe_suite_id", "utility_stress_probe_suite_default_v1"))
+    primary_signal = str((heavy_policy or {}).get("primary_signal", "NONTRIVIAL_DELTA"))
+    primary_threshold_u64 = int((heavy_policy or {}).get("primary_threshold_u64", 1))
+    stress_signal = str((heavy_policy or {}).get("stress_signal", "REQUIRE_PATCH_DELTA"))
+    stress_threshold_u64 = int((heavy_policy or {}).get("stress_threshold_u64", 1))
+    policy_artifact_relpath = str((heavy_policy or {}).get("policy_artifact_relpath", "")).strip() or None
+
+    signal_a_ok_b = True
+    signal_b_ok_b = True
+    utility_ok_b = True
+    utility_reason_code = "UTILITY_OK"
+
+    if declared_class in _HEAVY_DECLARED_CLASSES:
+        if not runtime_source_match_b:
+            signal_a_ok_b = False
+            signal_b_ok_b = False
+            utility_ok_b = False
+            utility_reason_code = "RUNTIME_STATS_SOURCE_MISMATCH"
+        elif not isinstance(heavy_policy, dict):
+            signal_a_ok_b = False
+            signal_b_ok_b = False
+            utility_ok_b = False
+            utility_reason_code = "POLICY_MISSING"
+        else:
+            signal_a_ok_b = _signal_from_policy(
+                signal_mode=primary_signal,
+                threshold_u64=primary_threshold_u64,
+                binary_delta_b=binary_delta_b,
+                nontrivial_delta_u64=nontrivial_delta_u64,
+                runtime_total_work_units_u64=runtime_total_work_units_u64,
+                baseline_work_units_u64=baseline_work_units_u64,
+                bundle_obj=bundle_obj,
+                policy_artifact_relpath=policy_artifact_relpath,
+                promotion_dir=promotion_dir,
+            )
+            signal_b_ok_b = _signal_from_policy(
+                signal_mode=stress_signal,
+                threshold_u64=stress_threshold_u64,
+                binary_delta_b=binary_delta_b,
+                nontrivial_delta_u64=nontrivial_delta_u64,
+                runtime_total_work_units_u64=runtime_total_work_units_u64,
+                baseline_work_units_u64=baseline_work_units_u64,
+                bundle_obj=bundle_obj,
+                policy_artifact_relpath=policy_artifact_relpath,
+                promotion_dir=promotion_dir,
+            )
+            utility_ok_b = bool(signal_a_ok_b and signal_b_ok_b)
+            utility_reason_code = "UTILITY_OK" if utility_ok_b else "NO_UTILITY_GAIN"
+            if str(primary_signal).strip().upper() == "WORK_UNITS_REDUCTION" and baseline_work_units_u64 is None:
+                utility_reason_code = "PROBE_MISSING"
+
+    utility_metrics = {
+        "binary_artifact_delta_present_b": bool(binary_delta_b),
+        "non_ws_non_comment_delta_u64": int(nontrivial_delta_u64),
+        "runtime_stats_source_match_b": bool(runtime_source_match_b),
+        "runtime_total_work_units_u64": int(runtime_total_work_units_u64),
+        "baseline_work_units_u64": (int(baseline_work_units_u64) if baseline_work_units_u64 is not None else None),
+    }
+    utility_thresholds = {
+        "primary_signal": str(primary_signal),
+        "primary_threshold_u64": int(primary_threshold_u64),
+        "stress_signal": str(stress_signal),
+        "stress_threshold_u64": int(stress_threshold_u64),
+    }
+
+    effect_class = _compute_effect_class(
+        declared_class=declared_class,
+        correctness_ok_b=True,
+        utility_ok_b=utility_ok_b,
+    )
+    _utility_receipt, utility_proof_hash = _write_utility_proof_receipt(
+        tick_u64=tick_u64,
+        dispatch_ctx=dispatch_ctx,
+        capability_id=capability_id,
+        declared_class=declared_class if declared_class in _DECLARED_CLASSES else "UNCLASSIFIED",
+        candidate_bundle_hash=promotion_bundle_hash if _is_sha256(promotion_bundle_hash) else _SHA256_ZERO,
+        baseline_ref_hash=baseline_ref_hash,
+        correctness_ok_b=True,
+        utility_ok_b=utility_ok_b,
+        signal_a_ok_b=signal_a_ok_b,
+        signal_b_ok_b=signal_b_ok_b,
+        reason_code=utility_reason_code,
+        effect_class=effect_class,
+        probe_suite_id=probe_suite_id,
+        stress_probe_suite_id=stress_probe_suite_id,
+        runtime_stats_source_id=runtime_stats_source_id,
+        runtime_stats_hash=runtime_stats_hash,
+        candidate_bundle_present_b=bool(candidate_bundle_present_b),
+        probe_executed_b=True,
+        utility_metrics=utility_metrics,
+        utility_thresholds=utility_thresholds,
+    )
+
+    if declared_class in _HEAVY_DECLARED_CLASSES and not utility_ok_b:
+        return _write_promotion_receipt_v19(
+            tick_u64=tick_u64,
+            dispatch_ctx=dispatch_ctx,
+            promotion_bundle_hash=promotion_bundle_hash,
+            status="SKIPPED",
+            reason="NO_UTILITY_GAIN_SHADOW",
+            route="SHADOW",
+            active_manifest_hash_after=None,
+            utility_proof_hash=utility_proof_hash,
+            declared_class=declared_class,
+            effect_class="EFFECT_HEAVY_NO_UTILITY",
+        )
+
     original_build_meta_bundle = v18_promoter._build_meta_core_promotion_bundle
 
     def _build_meta_bundle_with_continuity(
@@ -800,11 +1495,31 @@ def run_promotion(
 
     v18_promoter._build_meta_core_promotion_bundle = _build_meta_bundle_with_continuity
     try:
-        return v18_promoter.run_promotion(
+        receipt, digest = v18_promoter.run_promotion(
             tick_u64=tick_u64,
             dispatch_ctx=dispatch_ctx,
             subverifier_receipt=subverifier_receipt,
             allowlists=allowlists,
+        )
+        if receipt is None or digest is None:
+            return receipt, digest
+        promotion_status = str((receipt.get("result") or {}).get("status", "")).strip()
+        if promotion_status == "REJECTED":
+            final_effect_class = "EFFECT_REJECTED"
+        elif declared_class in _HEAVY_DECLARED_CLASSES:
+            final_effect_class = "EFFECT_HEAVY_OK"
+        elif declared_class == "BASELINE_CORE":
+            final_effect_class = "EFFECT_BASELINE_CORE_OK"
+        elif declared_class == "MAINTENANCE":
+            final_effect_class = "EFFECT_MAINTENANCE_OK"
+        else:
+            final_effect_class = "EFFECT_REJECTED"
+        return _augment_promotion_receipt_with_effect(
+            dispatch_ctx=dispatch_ctx,
+            promotion_receipt=receipt,
+            utility_proof_hash=utility_proof_hash,
+            declared_class=declared_class,
+            effect_class=final_effect_class,
         )
     finally:
         v18_promoter._build_meta_core_promotion_bundle = original_build_meta_bundle

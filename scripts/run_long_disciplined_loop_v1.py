@@ -52,6 +52,14 @@ ENV_ALLOWLIST = (
     "OMEGA_RUN_SEED_U64",
     "OMEGA_LONG_RUN_FORCE_LANE",
     "OMEGA_LONG_RUN_FORCE_EVAL",
+    "OMEGA_LONG_RUN_LAUNCH_MANIFEST_HASH",
+    "OMEGA_LONG_RUN_LOOP_BREAKER_SCOPE_MODE",
+    "OMEGA_LONG_VALIDATE_FRONTIER",
+    "OMEGA_LONG_VALIDATE_WINDOW_TICKS",
+    "OMEGA_LONG_VALIDATE_MIN_HARDLOCKS",
+    "OMEGA_LONG_VALIDATE_MIN_FORCED",
+    "OMEGA_LONG_VALIDATE_MIN_COUNTED",
+    "ORCH_LLM_BACKEND",
 )
 
 
@@ -80,6 +88,61 @@ def _load_jsonl(path: Path) -> list[dict[str, Any]]:
     return out
 
 
+def _env_bool(name: str, *, default: bool = False) -> bool:
+    raw = str(os.environ.get(name, "1" if default else "0")).strip().lower()
+    return raw in {"1", "true", "yes", "on"}
+
+
+def _env_u64(name: str, *, default: int, minimum: int = 0) -> int:
+    raw = str(os.environ.get(name, str(int(default)))).strip()
+    value = int(raw)
+    return int(max(int(minimum), value))
+
+
+def _count_true(rows: list[dict[str, Any]], key: str) -> int:
+    return int(sum(1 for row in rows if row.get(key) is True))
+
+
+def _frontier_precheck_summary(
+    *,
+    rows: list[dict[str, Any]],
+    window_ticks_u64: int,
+    min_hardlocks_u64: int,
+    min_forced_u64: int,
+    min_counted_u64: int,
+) -> dict[str, Any]:
+    tail = list(rows[-int(max(1, window_ticks_u64)) :])
+    hardlocks = _count_true(tail, "hard_lock_active_b")
+    forced = _count_true(tail, "forced_frontier_attempt_b")
+    counted = _count_true(tail, "frontier_attempt_counted_b")
+    return {
+        "window_rows_u64": int(len(tail)),
+        "hard_lock_count_u64": int(hardlocks),
+        "forced_frontier_count_u64": int(forced),
+        "counted_frontier_attempt_count_u64": int(counted),
+        "min_hard_locks_u64": int(min_hardlocks_u64),
+        "min_forced_u64": int(min_forced_u64),
+        "min_counted_u64": int(min_counted_u64),
+    }
+
+
+def _frontier_precheck_reason(summary: dict[str, Any]) -> tuple[str | None, list[str]]:
+    missing: list[str] = []
+    if int(summary.get("hard_lock_count_u64", 0)) < int(summary.get("min_hard_locks_u64", 0)):
+        missing.append("hard_lock")
+    if int(summary.get("forced_frontier_count_u64", 0)) < int(summary.get("min_forced_u64", 0)):
+        missing.append("forced_frontier")
+    if int(summary.get("counted_frontier_attempt_count_u64", 0)) < int(summary.get("min_counted_u64", 0)):
+        missing.append("counted_frontier_attempt")
+    if "hard_lock" in missing:
+        return "PRECHECK_FAIL:NO_HARD_LOCK", missing
+    if "forced_frontier" in missing:
+        return "PRECHECK_FAIL:NO_FORCED_FRONTIER", missing
+    if "counted_frontier_attempt" in missing:
+        return "PRECHECK_FAIL:NO_COUNTED_FRONTIER_ATTEMPT", missing
+    return None, missing
+
+
 def _dir_size_bytes(path: Path) -> int:
     total = 0
     for root, _dirs, files in os.walk(path):
@@ -103,7 +166,12 @@ def _latest_payload(dir_path: Path, suffix: str) -> tuple[dict[str, Any] | None,
     return payload, digest
 
 
-def _build_subprocess_env(*, force_lane: str | None, force_eval: bool) -> dict[str, str]:
+def _build_subprocess_env(
+    *,
+    force_lane: str | None,
+    force_eval: bool,
+    launch_manifest_hash: str | None = None,
+) -> dict[str, str]:
     env: dict[str, str] = {}
     for key in ("PATH", "HOME", "LANG", "LC_ALL"):
         value = os.environ.get(key)
@@ -123,6 +191,8 @@ def _build_subprocess_env(*, force_lane: str | None, force_eval: bool) -> dict[s
         env["OMEGA_LONG_RUN_FORCE_EVAL"] = "1"
     else:
         env.pop("OMEGA_LONG_RUN_FORCE_EVAL", None)
+    if isinstance(launch_manifest_hash, str) and launch_manifest_hash:
+        env["OMEGA_LONG_RUN_LAUNCH_MANIFEST_HASH"] = launch_manifest_hash
     return env
 
 
@@ -609,6 +679,7 @@ def run_tick(
     prev_state_dir: Path | None,
     force_lane: str | None,
     force_eval: bool,
+    launch_manifest_hash: str | None,
 ) -> dict[str, Any]:
     out_dir = run_root / f"tick_{int(tick_u64):06d}"
     if out_dir.exists():
@@ -628,7 +699,11 @@ def run_tick(
     ]
     if prev_state_dir is not None:
         cmd.extend(["--prev_state_dir", str(prev_state_dir)])
-    env = _build_subprocess_env(force_lane=force_lane, force_eval=force_eval)
+    env = _build_subprocess_env(
+        force_lane=force_lane,
+        force_eval=force_eval,
+        launch_manifest_hash=launch_manifest_hash,
+    )
     started = int(time.time())
     proc = subprocess.run(
         cmd,
@@ -641,6 +716,8 @@ def run_tick(
     state_dir = out_dir / "daemon" / "rsi_omega_daemon_v19_0" / "state"
     snapshot_payload, snapshot_hash = _latest_payload(state_dir / "snapshot", "omega_tick_snapshot_v1.json")
     tick_outcome_payload, _tick_outcome_hash = _latest_payload(state_dir / "perf", "omega_tick_outcome_v1.json")
+    debt_payload, _debt_hash = _latest_payload(state_dir / "long_run" / "debt", "dependency_debt_state_v1.json")
+    routing_payload, _routing_hash = _latest_payload(state_dir / "long_run" / "debt", "dependency_routing_receipt_v1.json")
     lane_name = None
     lane_frontier_gate_pass_b = None
     lane_invalid_count_u64 = None
@@ -673,6 +750,9 @@ def run_tick(
         "eval_report_hash": (snapshot_payload or {}).get("eval_report_hash"),
         "subverifier_status": (tick_outcome_payload or {}).get("subverifier_status"),
         "promotion_reason_code": (tick_outcome_payload or {}).get("promotion_reason_code"),
+        "hard_lock_active_b": (debt_payload or {}).get("hard_lock_active_b"),
+        "forced_frontier_attempt_b": (routing_payload or {}).get("forced_frontier_attempt_b"),
+        "frontier_attempt_counted_b": (tick_outcome_payload or {}).get("frontier_attempt_counted_b"),
         "disk_bytes_u64": int(_dir_size_bytes(out_dir)) if out_dir.exists() else 0,
         "started_unix_s": int(started),
         "finished_unix_s": int(time.time()),
@@ -701,7 +781,13 @@ def run_loop(
     run_root.mkdir(parents=True, exist_ok=True)
     index_dir = run_root / "index"
     index_dir.mkdir(parents=True, exist_ok=True)
-    env_receipt = _env_receipt(env=_build_subprocess_env(force_lane=force_lane, force_eval=force_eval))
+    env_receipt = _env_receipt(
+        env=_build_subprocess_env(
+            force_lane=force_lane,
+            force_eval=force_eval,
+            launch_manifest_hash=None,
+        )
+    )
     _write_json(run_root / ENV_RECEIPT_NAME, env_receipt)
     launch_manifest_path, launch_manifest_payload, launch_manifest_hash = _load_or_create_launch_manifest(
         campaign_pack=campaign_pack,
@@ -719,6 +805,11 @@ def run_loop(
     print(f"launch_manifest_hash={launch_manifest_hash}")
     pins_hash_initial = _authority_pins_hash()
     health_gate_thresholds = _load_health_gate_thresholds(campaign_pack)
+    validate_frontier_b = _env_bool("OMEGA_LONG_VALIDATE_FRONTIER", default=False)
+    validate_window_ticks_u64 = _env_u64("OMEGA_LONG_VALIDATE_WINDOW_TICKS", default=150, minimum=1)
+    validate_min_hardlocks_u64 = _env_u64("OMEGA_LONG_VALIDATE_MIN_HARDLOCKS", default=1, minimum=0)
+    validate_min_forced_u64 = _env_u64("OMEGA_LONG_VALIDATE_MIN_FORCED", default=1, minimum=0)
+    validate_min_counted_u64 = _env_u64("OMEGA_LONG_VALIDATE_MIN_COUNTED", default=1, minimum=0)
     manifest_relpath = str(launch_manifest_payload.get("manifest_relpath", _repo_relpath(launch_manifest_path)))
 
     tick_rows, pruned_ticks = _read_indexes(index_dir)
@@ -781,6 +872,7 @@ def run_loop(
             prev_state_dir=prev_state_dir,
             force_lane=force_lane,
             force_eval=force_eval,
+            launch_manifest_hash=launch_manifest_hash,
         )
         hard_stop_reason_code: str | None = None
         hard_stop_detail: dict[str, Any] = {}
@@ -866,6 +958,26 @@ def run_loop(
             hard_stop_detail = {
                 "exit_code": int(row.get("exit_code", 0)),
             }
+
+        if hard_stop_reason_code is None and validate_frontier_b:
+            ticks_seen_this_invocation = int(ticks_run + 1)
+            if ticks_seen_this_invocation >= int(validate_window_ticks_u64):
+                validation_rows = [*live_rows, row]
+                summary = _frontier_precheck_summary(
+                    rows=validation_rows,
+                    window_ticks_u64=int(validate_window_ticks_u64),
+                    min_hardlocks_u64=int(validate_min_hardlocks_u64),
+                    min_forced_u64=int(validate_min_forced_u64),
+                    min_counted_u64=int(validate_min_counted_u64),
+                )
+                reason, missing = _frontier_precheck_reason(summary)
+                if reason is not None:
+                    hard_stop_reason_code = reason
+                    hard_stop_detail = {
+                        "validation_window_ticks_u64": int(validate_window_ticks_u64),
+                        **summary,
+                        "missing_conditions": [str(item) for item in missing],
+                    }
 
         row["hard_stop_reason_code"] = hard_stop_reason_code
         if hard_stop_reason_code is not None:

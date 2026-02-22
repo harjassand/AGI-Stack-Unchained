@@ -79,6 +79,37 @@
         "suite_rel": {"type": "string", "minLength": 1}
       }
     },
+    "utility_policy_rel": {"type": "string", "minLength": 1},
+    "utility_policy_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "loop_breaker_scope_mode": {
+      "type": "string",
+      "enum": ["RESET_ON_LAUNCH", "GLOBAL"]
+    },
+    "dependency_debt": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["debt_limit_u64", "max_ticks_without_frontier_attempt_u64"],
+      "properties": {
+        "debt_limit_u64": {"type": "integer", "minimum": 1},
+        "max_ticks_without_frontier_attempt_u64": {"type": "integer", "minimum": 1}
+      }
+    },
+    "anti_monopoly": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "consecutive_no_output_limit_u64",
+        "window_ticks_u64",
+        "low_diversity_campaign_limit_u64",
+        "cooldown_for_ticks_u64"
+      ],
+      "properties": {
+        "consecutive_no_output_limit_u64": {"type": "integer", "minimum": 1},
+        "window_ticks_u64": {"type": "integer", "minimum": 1},
+        "low_diversity_campaign_limit_u64": {"type": "integer", "minimum": 1},
+        "cooldown_for_ticks_u64": {"type": "integer", "minimum": 1}
+      }
+    },
     "mission": {
       "type": "object",
       "additionalProperties": false,
@@ -89,5 +120,15 @@
         "max_injected_goals_u64": {"type": "integer", "minimum": 0}
       }
     }
-  }
+  },
+  "allOf": [
+    {
+      "if": {"required": ["utility_policy_rel"]},
+      "then": {"required": ["utility_policy_id"]}
+    },
+    {
+      "if": {"required": ["utility_policy_id"]},
+      "then": {"required": ["utility_policy_rel"]}
+    }
+  ]
 }

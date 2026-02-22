@@ -4,11 +4,22 @@
   "title": "Omega native runtime stats v1",
   "type": "object",
   "additionalProperties": false,
-  "required": ["schema_version", "stats_id", "tick_u64", "ops"],
+  "required": [
+    "schema_version",
+    "stats_id",
+    "tick_u64",
+    "runtime_stats_source_id",
+    "work_units_formula_id",
+    "total_work_units_u64",
+    "ops"
+  ],
   "properties": {
     "schema_version": {"const": "omega_native_runtime_stats_v1"},
     "stats_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
     "tick_u64": {"type": "integer", "minimum": 0},
+    "runtime_stats_source_id": {"type": "string", "minLength": 1},
+    "work_units_formula_id": {"type": "string", "minLength": 1},
+    "total_work_units_u64": {"type": "integer", "minimum": 0},
     "ops": {
       "type": "array",
       "items": {
@@ -24,7 +35,8 @@
           "active_binary_sha256",
           "native_load_fail_u64",
           "native_invoke_fail_u64",
-          "shadow_mismatch_u64"
+          "shadow_mismatch_u64",
+          "work_units_u64"
         ],
         "properties": {
           "op_id": {"type": "string", "minLength": 1},
@@ -41,10 +53,10 @@
           },
           "native_load_fail_u64": {"type": "integer", "minimum": 0},
           "native_invoke_fail_u64": {"type": "integer", "minimum": 0},
-          "shadow_mismatch_u64": {"type": "integer", "minimum": 0}
+          "shadow_mismatch_u64": {"type": "integer", "minimum": 0},
+          "work_units_u64": {"type": "integer", "minimum": 0}
         }
       }
     }
   }
 }
-

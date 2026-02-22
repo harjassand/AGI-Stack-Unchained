@@ -14,7 +14,12 @@
     "suite_hash",
     "delta_j_q32",
     "classification",
-    "metrics"
+    "metrics",
+    "heavy_ok_count_by_capability",
+    "heavy_no_utility_count_by_capability",
+    "maintenance_count",
+    "dependency_debt_snapshot_hash",
+    "frontier_attempts_u64"
   ],
   "properties": {
     "schema_name": {"const": "eval_report_v1"},
@@ -26,6 +31,22 @@
     "suite_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
     "delta_j_q32": {"type": "integer"},
     "classification": {"type": "string", "enum": ["IMPROVING", "FLAT_OR_REGRESS", "INSUFFICIENT_DATA"]},
+    "heavy_ok_count_by_capability": {
+      "type": "object",
+      "additionalProperties": {"type": "integer", "minimum": 0}
+    },
+    "heavy_no_utility_count_by_capability": {
+      "type": "object",
+      "additionalProperties": {"type": "integer", "minimum": 0}
+    },
+    "maintenance_count": {"type": "integer", "minimum": 0},
+    "dependency_debt_snapshot_hash": {
+      "anyOf": [
+        {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+        {"type": "null"}
+      ]
+    },
+    "frontier_attempts_u64": {"type": "integer", "minimum": 0},
     "metrics": {
       "type": "object",
       "additionalProperties": false,

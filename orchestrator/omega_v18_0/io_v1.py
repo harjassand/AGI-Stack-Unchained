@@ -186,6 +186,47 @@ def _copy_optional_relfile_from_pack(
     write_canon_json(config_dir / rel, payload)
 
 
+def _copy_utility_policy_from_long_run_profile(
+    *,
+    source_root: Path,
+    config_dir: Path,
+    pack: dict[str, Any],
+) -> None:
+    profile_rel_raw = str(pack.get("long_run_profile_rel", "")).strip()
+    profile_id_raw = str(pack.get("long_run_profile_id", "")).strip()
+    if not profile_rel_raw and not profile_id_raw:
+        return
+    if bool(profile_rel_raw) != bool(profile_id_raw):
+        fail("SCHEMA_FAIL")
+    profile_rel = require_relpath(profile_rel_raw)
+    profile_src = source_root / profile_rel
+    if not profile_src.exists() or not profile_src.is_file():
+        fail("MISSING_STATE_INPUT")
+    profile_payload = load_canon_dict(profile_src)
+
+    utility_rel_raw = str(profile_payload.get("utility_policy_rel", "")).strip()
+    utility_id_raw = str(profile_payload.get("utility_policy_id", "")).strip()
+    if not utility_rel_raw and not utility_id_raw:
+        return
+    if bool(utility_rel_raw) != bool(utility_id_raw):
+        fail("SCHEMA_FAIL")
+
+    utility_rel = require_relpath(utility_rel_raw)
+    declared_policy_id = ensure_sha256(utility_id_raw, reason="PIN_HASH_MISMATCH")
+    utility_src = source_root / utility_rel
+    if not utility_src.exists() or not utility_src.is_file():
+        fail("MISSING_STATE_INPUT")
+    utility_payload = load_canon_dict(utility_src)
+    observed_policy_id = ensure_sha256(utility_payload.get("policy_id"), reason="PIN_HASH_MISMATCH")
+    utility_no_id = dict(utility_payload)
+    utility_no_id.pop("policy_id", None)
+    if canon_hash_obj(utility_no_id) != observed_policy_id:
+        fail("PIN_HASH_MISMATCH")
+    if observed_policy_id != declared_policy_id:
+        fail("PIN_HASH_MISMATCH")
+    write_canon_json(config_dir / utility_rel, utility_payload)
+
+
 def _copy_shadow_corpus_entry_manifests_from_descriptor(
     *,
     source_root: Path,
@@ -321,6 +362,11 @@ def freeze_pack_config(*, campaign_pack: Path, config_dir: Path) -> tuple[dict[s
                 pack=pack,
                 rel_key=rel_key,
             )
+        _copy_utility_policy_from_long_run_profile(
+            source_root=source_root,
+            config_dir=config_dir,
+            pack=pack,
+        )
 
     write_canon_json(config_dir / "rsi_omega_daemon_pack_v1.json", pack)
     return pack, canon_hash_obj(pack)

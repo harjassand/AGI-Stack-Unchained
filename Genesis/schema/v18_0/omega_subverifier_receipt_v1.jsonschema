@@ -54,6 +54,7 @@
                 "MISSING_STATE_INPUT",
                 "NONDETERMINISTIC",
                 "MODE_UNSUPPORTED",
+                "VERIFY_ERROR:INSUFFICIENT_NONTRIVIAL_DELTA",
                 "VERIFY_ERROR",
                 "UNKNOWN"
               ]

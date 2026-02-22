@@ -77,9 +77,10 @@
     "result": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["status", "reason_code"],
+      "required": ["status", "reason_code", "route"],
       "properties": {
         "status": {"type": "string", "enum": ["PROMOTED", "REJECTED", "SKIPPED"]},
+        "route": {"type": "string", "enum": ["ACTIVE", "SHADOW", "NONE"]},
         "reason_code": {
           "anyOf": [
             {"type": "null"},
@@ -98,12 +99,40 @@
                 "CCAP_RECEIPT_REJECTED",
                 "CCAP_APPLY_MISMATCH",
                 "CCAP_TOUCHED_PATHS_INVALID",
-                "EK_META_VERIFY_MISSING_OR_FAIL"
+                "EK_META_VERIFY_MISSING_OR_FAIL",
+                "NO_UTILITY_GAIN_SHADOW"
               ]
             }
           ]
         }
       }
+    },
+    "utility_proof_hash": {
+      "anyOf": [
+        {"type": "null"},
+        {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"}
+      ]
+    },
+    "declared_class": {
+      "anyOf": [
+        {"type": "null"},
+        {"type": "string", "enum": ["FRONTIER_HEAVY", "CANARY_HEAVY", "BASELINE_CORE", "MAINTENANCE", "UNCLASSIFIED"]}
+      ]
+    },
+    "effect_class": {
+      "anyOf": [
+        {"type": "null"},
+        {
+          "type": "string",
+          "enum": [
+            "EFFECT_HEAVY_OK",
+            "EFFECT_HEAVY_NO_UTILITY",
+            "EFFECT_BASELINE_CORE_OK",
+            "EFFECT_MAINTENANCE_OK",
+            "EFFECT_REJECTED"
+          ]
+        }
+      ]
     },
     "active_manifest_hash_after": {
       "anyOf": [

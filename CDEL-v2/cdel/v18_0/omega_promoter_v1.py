@@ -56,6 +56,7 @@ _SUBVERIFIER_REASON_CODES = {
     "MISSING_STATE_INPUT",
     "NONDETERMINISTIC",
     "MODE_UNSUPPORTED",
+    "VERIFY_ERROR:INSUFFICIENT_NONTRIVIAL_DELTA",
     "VERIFY_ERROR",
     "UNKNOWN",
 }
@@ -1285,7 +1286,16 @@ def run_promotion(
             raise RuntimeError(f"SCHEMA_FAIL:{field}")
         return text
 
-    def _write_promotion_receipt(*, status: str, reason: str | None, active_after_hash: str | None) -> tuple[dict[str, Any], str]:
+    def _write_promotion_receipt(
+        *,
+        status: str,
+        reason: str | None,
+        active_after_hash: str | None,
+        route: str | None = None,
+    ) -> tuple[dict[str, Any], str]:
+        route_value = str(route or ("ACTIVE" if status == "PROMOTED" else "NONE")).strip().upper()
+        if route_value not in {"ACTIVE", "SHADOW", "NONE"}:
+            route_value = "NONE"
         payload = {
             "schema_version": "omega_promotion_receipt_v1",
             "receipt_id": "sha256:" + "0" * 64,
@@ -1296,9 +1306,13 @@ def run_promotion(
             "native_module": native_module_for_receipt if status == "PROMOTED" else None,
             "native_runtime_contract_hash": native_runtime_contract_hash_for_receipt if status == "PROMOTED" else None,
             "native_healthcheck_vectors_hash": native_healthcheck_vectors_hash_for_receipt if status == "PROMOTED" else None,
+            "utility_proof_hash": None,
+            "declared_class": None,
+            "effect_class": None,
             "result": {
                 "status": status,
                 "reason_code": reason,
+                "route": route_value,
             },
             "active_manifest_hash_after": active_after_hash,
         }

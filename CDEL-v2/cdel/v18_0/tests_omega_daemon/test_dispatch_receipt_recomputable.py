@@ -8,6 +8,7 @@ def test_dispatch_receipt_recomputable(tmp_path) -> None:
     payload = {
         "schema_version": "omega_dispatch_receipt_v1",
         "receipt_id": "sha256:" + "0" * 64,
+        "dispatch_attempted_b": True,
         "tick_u64": 7,
         "campaign_id": "rsi_sas_val_v17_0",
         "capability_id": "RSI_SAS_VAL",

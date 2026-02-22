@@ -2,7 +2,7 @@
 
 ## A Complete Reconstruction Manual for the System's Mental Model
 
-**Version**: v19.0 (Super-Unified) | **Generated**: 2026-02-20 | **Scope**: Full Codebase  
+**Version**: v19.0 (Super-Unified) | **Generated**: 2026-02-22 | **Scope**: Full Codebase  
 **Word Count Target**: 35,000+ words  
 **Purpose**: Enable an external intelligence to reconstruct the project's mental model — its intent, architecture, and hidden mechanics — without access to the raw source files.
 
@@ -6749,3 +6749,935 @@ That posture is compatible with strong autonomy and constitutional safety at the
 ---
 
 *End Appendix Q.*
+
+
+# Appendix R: Last 24h Delta (2026-02-21 to 2026-02-22)
+
+This appendix captures every material source-of-truth impact from the last full day of repo movement, including both committed and uncommitted deltas. The committed chain includes `55ce658` (manifests and phase4c hardening), `4734de4` (preflight checks scaffolding), `b9e39dd` (preflight hardening pass), and `f109b05` (the most recent hardening batch). In addition, the working tree currently contains a larger follow-on batch of runtime/scheme/campaign and meta-core staging changes that are not yet in a commit and are therefore represented as “active local delta.”
+
+The objective of this update is to prevent drift between:
+
+1. code reality now,
+2. contract intent in Genesis and source-of-truth prose,
+3. and governance assumptions in operation.
+
+The major design outcome is that the platform moved from “preflight readiness groundwork” to “fully wired frontier-control + preflight observability + staged bundle operationalization,” while preserving the RE1/RE2 hard-fail posture.
+
+## R.1 Commit and Delta Timeline
+
+The timeline for the last day can be interpreted through timestamps and scope:
+
+`55ce658` at 2026-02-21 13:52:33 introduced a large epistemic stack formalization across v19 verifier and campaign surfaces, including manifest-backed shadow replay and phase4c drill hardening.
+
+`4734de4` at 2026-02-21 16:02:05 extended preflight surfaces and CI gating, with initial schema additions for long-run observability and launch manifest state.
+
+`b9e39dd` at 2026-02-21 16:27:52 intensified preflight strictness and tied longer-range checks into run scripts.
+
+`f109b05` at 2026-02-22 12:44:32 completed a broad hardening pass across verifiers, orchestrators, and long-run discipline.
+
+Immediately after these commits, the workspace also shows additional active files in `CDEL-v2/`, `Genesis/`, `campaigns/`, `meta-core/`, `orchestrator/`, and `tools/` that continue the same hardening arc but are not yet committed.
+
+The uncommitted delta should be treated as operationally real because it changes runtime behavior, and therefore must be reflected in the source-of-truth now.
+
+## R.2 Strategic Summary of the Day
+
+The biggest shift is no longer at the “feature discovery” layer. The change set is mostly in:
+
+1. stronger contract surfaces,
+2. stronger evidence-carrying preflight and long-run telemetry,
+3. stronger frontier/debt governance,
+4. stronger verifier branching around shadow and utility readiness,
+5. more explicit bundle-level constitutional staging,
+6. and broader test coverage for these exact boundaries.
+
+The repository now contains a richer deterministic governance loop that links:
+
+- capability policy,
+- debt routing receipts,
+- utility proof receipts,
+- promotion receipts and subverifier receipts,
+- and RE1 bundle artifacts.
+
+This creates a “cross-layer evidence chain” that can be audited with less ambiguity than before. In practice, if one wants to understand why a run changed behavior, the new architecture expects a chain of receipts rather than a raw log guess:
+
+mission ingestion state -> decision lane routing -> dependency debt state updates -> utility policy constraints -> verification receipts -> promotion decision -> canary/commit evidence in meta-core.
+
+The net governance move is that frontier pressure no longer relies on ad hoc conditions; it is represented in explicit state and receipts that are now schemaed and replay-sensitive.
+
+## R.3 Verification and Proof Layer Expansion
+
+The v18 and v19 verifier stacks changed from incremental edits into a coordinated hardening wave.
+
+In `CDEL-v2/cdel/v18_0/verify_rsi_omega_daemon_v1.py` and `CDEL-v2/cdel/v19_0/verify_rsi_omega_daemon_v1.py`, tick and evidence validation logic was updated in the same window as schema and promoter changes. This matters because these verifiers are the boundary between the daemon tick logic and constitutional trust. Any field-shape change in long-run reports or receipts now has to pass through verifier normalization, and that is where many of today’s failures are prevented before they reach activation.
+
+The CCAP runtime chain (`CDEL-v2/cdel/v18_0/ccap_runtime_v1.py`, `verify_ccap_v1.py`, `omega_promoter_v1.py`, and `CDEL-v2/cdel/v18_0/omega_bid_market_v1.py`) saw edits supporting stricter checks around bundle acceptance, reason attribution, and frontier/registry compatibility when proposals route through policy or bidding.
+
+`CDEL-v2/cdel/v18_0/tests_omega_daemon/test_ccap_rollout_registry_v1.py` and `CDEL-v2/cdel/v18_0/tests_omega_daemon/test_promotion_no_bundle_reason_v1.py` indicate explicit regression pressure on bundle rollout semantics, especially around missing bundle reasons and rollout registry consistency.
+
+The same direction appears in v19 additions of epistemic verification families and shadow-specific tests under:
+
+- `CDEL-v2/cdel/v19_0/epistemic/*`
+- `CDEL-v2/cdel/v19_0/tests_continuity/test_shadow_airlock_v1.py`
+- `CDEL-v2/cdel/v19_0/tests_continuity/test_shadow_tiers_v1.py`
+- `CDEL-v2/cdel/v19_0/tests_omega_daemon/test_phase4c_real_swap_drill_v1.py`.
+
+These additions matter because phase4c swap drills and epistemic continuity can now be treated as replay-evaluable gates instead of informal process.
+
+## R.4 Schema Surface Expansion and Contract Drift Control
+
+Commit activity introduced many new schema files and touched a large legacy set. The critical implication is: long-run frontier governance is now represented by strongly typed artifacts instead of implicit behavior.
+
+### R.4.1 New/updated v19 runtime governance schemas
+
+- `Genesis/schema/v19_0/dependency_debt_state_v1.jsonschema` (introduced/updated with frontier debt memory fields)
+- `Genesis/schema/v19_0/dependency_routing_receipt_v1.jsonschema` (explicit forced-routing, frontier debt, reason-code channel)
+- `Genesis/schema/v19_0/utility_policy_v1.jsonschema` (class and heavy policy mapping)
+- `Genesis/schema/v19_0/utility_proof_receipt_v1.jsonschema` (frontier/utility proof contracts)
+- `Genesis/schema/v19_0/anti_monopoly_state_v1.jsonschema` (additional anti-monopoly continuity checkpoint)
+
+These files are the operational centerpieces for frontier scheduling behavior in the last day window.
+
+### R.4.2 v18 governance schemas that became stricter
+
+Changes to v18 schema files now align with v19 behavior so replay continuity is preserved across versions. `omega_goal_queue_v1`, `omega_ledger_event_v1`, `omega_native_runtime_stats_v1`, `omega_promotion_receipt_v1`, `omega_subverifier_receipt_v1`, `omega_tick_outcome_v1`, and `omega_tick_snapshot_v1` were updated in ways consistent with stronger failure reporting and runtime evidence capture.
+
+`CDEL-v2/Genesis/schema/v18_0/omega_promotion_receipt_v1.jsonschema` was also changed in working tree. That creates one of the strongest consistency risks in this release: if promotion reasons and receipts are not schema-aligned between CDEL and orchestrator runtime, verifier acceptance and orchestrator reporting can diverge. This is now under direct review through v19 evidence.
+
+### R.4.3 New data-plane assets and mission contracts
+
+`Genesis/schema/v19_0/eval_report_v1.jsonschema`, `long_run_profile_v1.jsonschema`, `mission_goal_ingest_receipt_v1.jsonschema`, and `mission_request_v1` updates indicate that long-run mission behavior now has broader traceability around mission admission and policy profile configuration.
+
+The working tree also contains uncommitted additions in:
+
+- `Genesis/schema/v19_0/long_run_stop_receipt_v1.jsonschema`
+- `Genesis/schema/v19_0/utility_policy_v1.jsonschema`
+- `Genesis/schema/v19_0/utility_proof_receipt_v1.jsonschema`
+- `Genesis/schema/v19_0/anti_monopoly_state_v1.jsonschema`
+- `Genesis/schema/v19_0/dependency_debt_state_v1.jsonschema`
+- `Genesis/schema/v19_0/dependency_routing_receipt_v1.jsonschema`.
+
+This is strong evidence that schema-level contract completion is still ongoing and should be captured in any closeout compliance checklist.
+
+## R.5 Frontier Control and Debt Routing Maturation
+
+The most important functional change across the day is the formalization of frontier debt routing semantics.
+
+In orchestrator and CDEL, debt routing now has a denser data path. `orchestrator/omega_v19_0/microkernel_v1.py` and `orchestrator/omega_v19_0/mission_goal_ingest_v1.py` are the core state engines receiving changes. The debt state object was reified through `dependency_debt_state_v1`, and receipts now track blocked frontier attempts and forced frontier attempts in a machine-readable way.
+
+The working files in `tools/` and the debug analysis notes show several conceptual alignments:
+
+- frontier debt keys and thresholds now drive pre-evidence forced routing decisions;
+- hard lock activation is preserved in state and surfaced as routing reason;
+- maintenance/utility failures update debt counters to prevent silent starvation;
+- frontier lane behavior remains policy-driven via `utility_policy_v1`.
+
+The debug traces in `debug_3.md` and `debug_4.md` provide concrete examples of how debt counters and hard-lock flags should be interpreted over time. This clarifies that frontier pressure is no longer ad hoc logic; it is now expected to persist as auditable per-tick state and be replay-verifiable.
+
+## R.6 Campaign and Registry Evolution
+
+The campaign layer changed broadly, and these edits are important because they alter capability governance without changing the root trust assumptions. Modified packs include:
+
+- `campaigns/rsi_omega_daemon_v19_0_long_run_v1/goals/omega_goal_queue_v1.json`
+- `campaigns/rsi_omega_daemon_v19_0_long_run_v1/long_run_profile_v1.json`
+- `campaigns/rsi_omega_daemon_v19_0_long_run_v1/omega_capability_registry_v2.json`
+- `campaigns/rsi_omega_daemon_v19_0_long_run_v1/rsi_omega_daemon_pack_v1.json`
+- `campaigns/rsi_omega_daemon_v19_0_long_run_v1/utility/omega_utility_policy_v1.json`
+- `campaigns/rsi_omega_daemon_v19_0_phase3_bench/omega_capability_registry_v2.json`
+- `campaigns/rsi_omega_daemon_v19_0_phase3_market_toy/omega_capability_registry_v2.json`
+- `campaigns/rsi_omega_daemon_v19_0_phase4b_native_transpiler_v1/omega_capability_registry_v2.json`
+- `campaigns/rsi_omega_daemon_v19_0_super_unified/omega_capability_registry_v2.json`
+- `campaigns/rsi_omega_daemon_v19_0_unified/omega_capability_registry_v2.json`
+- phase0/phase4/survival variations for v18 and v19 capability registries.
+
+Several campaign surfaces also have supporting artifacts updated:
+
+- capability runaways,
+- objectives and policy IR,
+- allowlist entries,
+- healthcheck suitepacks,
+- baseline metrics and coordinator opcode/program inputs.
+
+The consequence is that operational strategy is now more tightly coupled to explicit lane and policy parameters per pack. Packs are becoming policy templates rather than opaque bundles.
+
+`campaigns/rsi_epistemic_reduce_v1` and phase4d epistemic campaign packs were added/updated in previous commits and are now part of the larger governance arc. Their presence means epistemic reduction and shadow mechanisms can be run under long-run packs with same chain-of-evidence expectations as other campaigns.
+
+## R.7 Native Runtime and Instrumentation Path
+
+The day’s work also extended native-runtime observability and invocation mechanics.
+
+`orchestrator/native/native_router_v1.py`, `orchestrator/native/runtime_stats_v1.py`, and `orchestrator/omega_bid_market_v1.py` were updated, indicating tighter integration for routed capability execution and deterministic runtime telemetry around native modules.
+
+`orchestrator/common/run_invoker_v1.py` and `scripts/run_long_disciplined_loop_v1.py` got changes that matter operationally:
+
+1. invocation orchestration now carries stronger preconditions and evidence expectations,
+2. failure/retry behavior is more strictly surfaced to long-run loops,
+3. tick discipline is increasingly script-driven and reproducible.
+
+`orchestrator/omega_v18_0/io_v1.py` and `orchestrator/omega_v19_0/goal_synthesizer_v1.py`/`coordinator_v1.py` were also involved in this period of consistency updates. This suggests that not only governance layers but also core IO and planning surfaces were updated to align with the same stronger preflight contract.
+
+There are two notable script-side additions:
+
+- `scripts/preflight_long_run_v1.py` (hardening and readiness checks),
+- `scripts/run_epistemic_airlock_closure_v1.py` and `scripts/run_phase4c_real_swap_drill_v1.py` (close-loop operational paths).
+
+These indicate a strong move toward fully scripted, deterministic run phases with explicit evidence handoff.
+
+## R.8 Meta-Core Stage/Active Bundle Reconfiguration
+
+The most concrete RE1-level indicator of this day’s hardening is the active bundle transition visible in:
+
+- `meta-core/active/ACTIVE_BUNDLE`
+- `meta-core/active/PREV_ACTIVE_BUNDLE`
+- `meta-core/active/ACTIVE_NEXT_BUNDLE`
+- `meta-core/active/work/canary_receipt.json`
+- `meta-core/active/work/receipt.json`
+- `meta-core/active/work/stage.json`.
+
+More significant are the new staged and stored bundle artifacts under:
+
+- `meta-core/stage/bundles/518179d5a11f5b727461a568510905e6df878d3f788dd462f13aecb7144b2a87/...`
+- `meta-core/store/bundles/518179d5a11f5b727461a568510905e6df878d3f788dd462f13aecb7144b2a87/...`.
+
+The added JSON artifacts include `constitution.manifest.json`, `kernel_receipt.json`, `omega/omega_activation_binding_v1.json`, `proofs/dominance_witness.json`, `proofs/proof_bundle.manifest.json`, and `ruleset/{accept.ir.json,costvec.ir.json,migrate.ir.json}`.
+
+This addition is important because it demonstrates that bundle-level proof material, kernel rulesets, and dominance-witness structure are being staged as concrete evidence rather than conceptual notes. In source-of-truth terms, this marks the beginning of a stronger “constitutional upgrade lifecycle” as operationally normal, not exceptional.
+
+Any post-hoc governance explanation should now expect stage and store consistency checks to mention bundle IDs and proofs directly.
+
+## R.9 Long-Run Discipline and Safety Harnesses
+
+Long-run control became a central focus. The files modified include both execution and evaluation surfaces:
+
+- `orchestrator/omega_v19_0/microkernel_v1.py`
+- `orchestrator/omega_v19_0/eval_cadence_v1.py`
+- `orchestrator/omega_v19_0/mission_goal_ingest_v1.py`
+- `scripts/run_long_disciplined_loop_v1.py`
+- `scripts/preflight_long_run_v1.py`
+- `LONG_RUN_PREFLIGHT_SUMMARY_v1.json`.
+
+The changes also extended run profile artifacts (`long_run_profile_v1`) and mission request/receipt schemas. The combined effect is to make run discipline reproducible and auditable at four boundaries:
+
+1. mission admission and profile selection;
+2. tick scheduling and dependency routing;
+3. evidence and proof generation during operation;
+4. preflight summary and summary persistence.
+
+In this architecture, preflight is no longer just a launch guard; it is part of the same evidence ledger. This is key to reducing false-positive stability claims and to making rollback decisions machine-checkable.
+
+## R.10 Epistemic and Shadow Infrastructure Consolidation
+
+The earlier feature cluster in `55ce658` introduced a broad epistemic package and shadow machinery. Since then, the operational side has continued this direction:
+
+- `CDEL-v2/cdel/v19_0/epistemic` packages cover instruction strip, action market, certs, reduction, retention, and proof/verify loops.
+- `campaigns/rsi_omega_daemon_v19_0_phase4d_epistemic_airlock/*` files introduce the concrete campaign payloads needed to execute shadow readiness and invariance regimes.
+- `tools/omega/epistemics/*` implementations expanded with capture, segment, inference, and ingestion components for model outputs.
+
+This is now not an “experimental branch.” It is integrated into:
+
+- verifier registration,
+- campaign pack configuration,
+- script orchestration,
+- and output schema validation.
+
+One implication is that epistemic artifacts should now be assumed to carry governance relevance. Missing or malformed epistemic receipts are no longer a warning-only condition; they should be treated as evidence that long-run safety transitions cannot be trusted.
+
+## R.11 Test Coverage Growth and Failure Semantics
+
+Test additions are broad and targeted to the new gates:
+
+Committed and working-tree changes include:
+
+- `CDEL-v2/cdel/v19_0/tests_omega_daemon/test_long_run_discipline_v1.py`
+- `CDEL-v2/cdel/v18_0/tests_omega_daemon/test_campaign_ge_sh1_patch_registry_detection_v1.py`
+- `CDEL-v2/cdel/v18_0/tests_omega_daemon/test_ccap_rollout_registry_v1.py`
+- `CDEL-v2/cdel/v18_0/tests_omega_daemon/test_promotion_no_bundle_reason_v1.py`
+- `tools/genesis_engine/tests/test_ge_llm_selector_replay_path_v1.py`
+- pre-existing but now tightened phase3/phase4 tests in continuity and airlock domains.
+
+This is a meaningful signal: tests are being moved from “do we have the shape?” toward “did the governance semantics hold under constrained transition paths?”. The same logic appears in `scripts/run_epistemic_airlock_closure_v1.py` and long-run preflight gating.
+
+Given CI changes in `.github/workflows/ci.yml` and the new `CI_FULL_GREEN_SUMMARY_v1.json`, validation now has an explicit success artifact and likely a stricter required pass map.
+
+## R.12 Genesis Engine, Tooling, and Automation Progress
+
+The Genesis engine layer also changed with both runtime and test-facing updates:
+
+- `tools/genesis_engine/ge_symbiotic_optimizer_v0_3.py`
+- `scripts/generate_ceiling_report_v1.py`
+- `scripts/generate_epistemic_canary_bundle_v1.py`
+- `scripts/generate_phase3b_phase4_evidence_v1.py`
+- `scripts/run_epistemic_airlock_closure_v1.py`.
+
+This reflects a shift where self-improvement workflows are expected to run through the same audit surfaces as normal campaign operations. The system is converging on evidence-first automation rather than manual interpretation.
+
+The uncommitted `debug_*.md` files also suggest that operator-facing documentation and protocol reasoning are being built in parallel with code changes. Treat these as part of the source-of-truth update, because governance operations will need those interpretations to remain consistent.
+
+## R.13 Operationally Relevant Risk Register (After the Delta)
+
+1) Schema/proof synchronization risk  
+Large edits in schema sets can create short windows where one layer emits a field another layer does not accept. Because this happened in a single day, any run should pin compatible schema versions and validate end-to-end manifest bundles before full lane activation.
+
+2) Frontier debt semantics risk  
+`dependency_debt_state_v1` and `dependency_routing_receipt_v1` now encode frontier forcing. Incorrect threshold configuration (especially `debt_limit_u64` and `max_ticks_without_frontier_attempt_u64`) can trigger heavy locking behavior. All frontier-heavy lanes should include explicit receipts inspection in closeout.
+
+3) Registry lock-in risk  
+Many capability registries were changed simultaneously across v18/v19 and phase variants. This enables breadth but increases accidental policy divergence. Keep diffs reviewed per pack type (`phase4b`, `phase4d`, `phase3_market_toy`, `super_unified`, `unified`, `v19_0_long_run_v1`) before promoting to default.
+
+4) Meta-core state-risk  
+The active/next bundle transition and new bundle objects are likely correct but raise the cost of rollback mistakes. Rollback drills should be rerun after every new active bundle chain write.
+
+5) Testing and CI expectation risk  
+CI hardening increases false-negative noise for local runs if required preflight files are stale. The delta indicates stricter environment requirements around preflight outputs and evidence artifacts.
+
+## R.14 What Changed in Operator Practice
+
+For the closeout window, the updated practice should be:
+
+1. verify that long-run mission and dependency profiles are using the new schema shape (`long_run_profile_v1`, `dependency_debt_state_v1`, `dependency_routing_receipt_v1`);
+2. verify that frontier debt counters and hard-lock fields are being written every tick and included in evidence review;
+3. verify that every long-run frontier operation has preflight evidence (`LONG_RUN_PREFLIGHT_SUMMARY_v1.json` and script outputs);
+4. verify that meta-core stage/work artifacts match `ACTIVE_BUNDLE`/`ACTIVE_NEXT_BUNDLE` pointers before operational interpretation;
+5. verify CCAP rollout conditions around patch registry detection and no-bundle reasons using the dedicated tests before enabling new capabilities in frontier lanes;
+6. verify epistemic continuity paths via phase4c drills and shadow airlock scripts when native or utility policy transitions are involved.
+
+The important point is not only that functionality exists, but that the operator can now tie each transition to verifiable artifacts.
+
+## R.15 Final Cross-Layer Contract Mapping
+
+The last-day changes effectively reinforce an end-to-end contract:
+
+- Genesis contracts now define additional frontier and utility behavior in `Genesis/schema/v19_0/*` and update v18 event/receipt schemas.
+- Verifiers in `CDEL-v2/cdel` and `CDEL-v2/Genesis/schema` now consume and emit those contracts with stronger checks.
+- Orchestrators in `orchestrator/*` now drive run behavior using that contract and persist receipts.
+- Campaign packs in `campaigns/*` now encode concrete policy and capability selection intent for each phase and lane.
+- meta-core artifacts now stage explicit proof packages to move the system across generations only after acceptance gates.
+- Genesis engine tooling and test scripts now generate and validate the evidence needed for deterministic replay and post-hoc review.
+
+This is the source-of-truth alignment for 2026-02-22. Future changes should keep this sequence intact and avoid bypassing any one boundary.
+
+## R.16 Evidence Chain Deep-Dive
+
+To keep this update operationally useful for closeout review, the following is a concrete artifact-by-artifact map for the last-day path from raw event to activation.
+
+### R.16.1 Canonical Evidence Spine
+
+At the beginning of a run, the observable system state is still anchored by canonicalized state artifacts and content-addressed references. In practice, this means:
+
+1. campaign pack and mission request files are resolved from registries and profile inputs.
+2. mission and long-run policy inputs are validated as schema-bound objects.
+3. tick lifecycle code executes and emits raw intermediate state updates.
+4. verifier contracts validate outcomes and produce CCAP/tick/receipt artifacts.
+5. mutation and promotion layers generate one or more binding artifacts that now include stronger required fields.
+6. preflight and disciplined-loop scripts read both live and historical artifacts, generating summary outputs.
+7. meta-core staging/verification stages only consume fully materialized and bound artifacts.
+
+The new files in this sequence (`dependency_debt_state_v1`, `dependency_routing_receipt_v1`, `utility_proof_receipt_v1`, and utility policy additions) are now not peripheral. They are the points where ambiguity is removed.
+
+### R.16.2 Frontier Debt Memory as the Deterministic Anti-Stall Switch
+
+The debt memory object update is now persistent and visible every tick through `dependency_debt_state_v1`. This object is not simply accounting; it is the mechanism that keeps frontier pressure explicit and replayable.
+
+The new state flow expresses four distinct facts per tick:
+
+1. frontier pressure accumulation via debt counters.
+2. timing of missed or delayed frontier attempts via `ticks_without_frontier_attempt_by_key`.
+3. forced frontier activation status via hard-lock fields and debt keys.
+4. evidence-level reasoning via dependency routing reason codes and per-tick deltas.
+
+Hard-lock semantics matter for operator interpretation. `hard_lock_active_b` plus debt keys gives a one-line diagnosis of whether a front-loading constraint is a policy choice or a forcing result. That distinction is now machine-detectable and is part of the evidence loop.
+
+### R.16.3 CCAP and Patch Governance Signal Tightening
+
+The CCAP path now has stronger gate points around touched paths, registry state, and non-bundle failure reasons. Changes in:
+
+- `CDEL-v2/cdel/v18_0/verify_ccap_v1.py`
+- `CDEL-v2/cdel/v18_0/ccap_runtime_v1.py`
+- `CDEL-v2/cdel/v18_0/omega_promoter_v1.py`
+- `CDEL-v2/cdel/v18_0/tests_omega_daemon/test_campaign_ge_sh1_patch_registry_detection_v1.py`
+- `CDEL-v2/cdel/v18_0/tests_omega_daemon/test_ccap_rollout_registry_v1.py`
+- `CDEL-v2/cdel/v18_0/tests_omega_daemon/test_promotion_no_bundle_reason_v1.py`
+
+all point to a stricter interpretation of proposal legitimacy. The practical implication is that a proposal is less likely to pass with missing patch context.
+
+That does not necessarily reduce throughput when the toolchain is clean; it reduces silent ambiguity. If this introduces extra reject signals, the corrective action should be improved patch metadata, not permissive verification.
+
+### R.16.4 Native and Utility Path Tightening
+
+Native routing and utility policy additions are a path where capability enablement is now coupled to proof readiness and receipt completeness. Relevant files include:
+
+- `campaigns/rsi_omega_daemon_v19_0_phase4b_native_transpiler_v1/omega_capability_registry_v2.json`
+- `campaigns/rsi_omega_daemon_v19_0_long_run_v1/utility/omega_utility_policy_v1.json`
+- `orchestrator/native/native_router_v1.py`
+- `orchestrator/native/runtime_stats_v1.py`
+- `orchestrator/omega_bid_market_v1.py`
+- `scripts/run_epistemic_airlock_closure_v1.py`
+- `scripts/preflight_long_run_v1.py`
+
+The new requirement profile is:
+
+1. capability registration must align with policy.
+2. utility policy must define required stress/probe signals.
+3. runtime stats and telemetry must be present.
+4. preflight checks must certify reproducibility and deterministic mode before transition.
+
+If any step is missing, lane promotion should stop at verification and remain in fail-closed posture.
+
+### R.16.5 Epistemic Shadow Chain
+
+The epistemic additions and shadow campaign scaffolds now form a durable chain across generation, verification, and activation boundaries:
+
+- epistemic campaign verifiers and utilities in `CDEL-v2/cdel/v19_0/epistemic`
+- shadow airlock and shadow corpus modules in both verifier and campaign layers
+- shadow tiers and readiness tests in continuity suites
+- phase4d campaign manifests for airlock readiness and invariance.
+
+This chain means epistemic runs have stronger operational expectations: if receipts or invariance checks are absent, the chain should not be interpreted as policy-compliant.
+
+### R.16.6 Meta-Core Bundle Evidence Normalization
+
+The newly staged and stored bundle data under the fixed hash path:
+
+- `meta-core/stage/bundles/518179d5a11f5b727461a568510905e6df878d3f788dd462f13aecb7144b2a87/...`
+- `meta-core/store/bundles/518179d5a11f5b727461a568510905e6df878d3f788dd462f13aecb7144b2a87/...`
+
+is not only a runtime convenience path. It is the concrete representation of constitutional evolution:
+
+- explicit constitution manifest,
+- kernel proof receipt,
+- dominance witness,
+- ruleset files for verification behavior.
+
+This confirms that constitutional updates are no longer abstract; they are now first-class artifacts with explicit hash-addressed provenance.
+
+### R.16.7 Preflight as Always-On Safety Layer
+
+Because preflight artifacts and CI summaries are now tightly coupled to script execution, preflight should be treated as a permanent gate:
+
+- `scripts/preflight_long_run_v1.py` should complete with machine-readable artifacts.
+- `scripts/run_long_disciplined_loop_v1.py` should fail closed when preflight assumptions are not met.
+- `CI_FULL_GREEN_SUMMARY_v1.json` now acts as a compact acceptance marker for this flow.
+
+The operational sequence for long-run work now is:
+
+1. preflight input validation,
+2. deterministic dispatch,
+3. evidence artifact generation,
+4. verifier/receipt validation,
+5. staged transition,
+6. rollback rehearsal.
+
+Any run missing that sequence should be interpreted as incomplete, even if individual tasks return nominal completion.
+
+## R.17 Extended File Surface Map by Runtime Layer
+
+This list groups recently touched files into the layer they impact for faster incident-level triage.
+
+### R.17.1 RE2 Verification Layer
+
+- `CDEL-v2/Genesis/schema/v18_0/omega_goal_queue_v1.jsonschema`
+- `CDEL-v2/Genesis/schema/v18_0/omega_ledger_event_v1.jsonschema`
+- `CDEL-v2/Genesis/schema/v18_0/omega_native_runtime_stats_v1.jsonschema`
+- `CDEL-v2/Genesis/schema/v18_0/omega_promotion_receipt_v1.jsonschema`
+- `CDEL-v2/Genesis/schema/v18_0/omega_subverifier_receipt_v1.jsonschema`
+- `CDEL-v2/Genesis/schema/v18_0/omega_tick_outcome_v1.jsonschema`
+- `CDEL-v2/Genesis/schema/v18_0/omega_tick_snapshot_v1.jsonschema`
+- `CDEL-v2/cdel/v18_0/campaign_ge_symbiotic_optimizer_sh1_v0_1.py`
+- `CDEL-v2/cdel/v18_0/ccap_runtime_v1.py`
+- `CDEL-v2/cdel/v18_0/omega_bid_market_v1.py`
+- `CDEL-v2/cdel/v18_0/omega_promoter_v1.py`
+- `CDEL-v2/cdel/v18_0/omega_tick_outcome_v1.py`
+- `CDEL-v2/cdel/v18_0/verify_rsi_omega_daemon_v1.py`
+- `CDEL-v2/cdel/v18_0/verify_ccap_v1.py`
+- `CDEL-v2/cdel/v19_0/omega_promoter_v1.py`
+- `CDEL-v2/cdel/v19_0/tests_omega_daemon/test_long_run_discipline_v1.py`
+- `CDEL-v2/cdel/v19_0/verify_rsi_omega_daemon_v1.py`.
+
+### R.17.2 RE4 Specification Layer
+
+- `Genesis/schema/v18_0/omega_goal_queue_v1.jsonschema`
+- `Genesis/schema/v18_0/omega_ledger_event_v1.jsonschema`
+- `Genesis/schema/v18_0/omega_native_runtime_stats_v1.jsonschema`
+- `Genesis/schema/v18_0/omega_promotion_receipt_v1.jsonschema`
+- `Genesis/schema/v18_0/omega_subverifier_receipt_v1.jsonschema`
+- `Genesis/schema/v18_0/omega_tick_outcome_v1.jsonschema`
+- `Genesis/schema/v18_0/omega_tick_snapshot_v1.jsonschema`
+- `Genesis/schema/v19_0/anti_monopoly_state_v1.jsonschema`
+- `Genesis/schema/v19_0/dependency_debt_state_v1.jsonschema`
+- `Genesis/schema/v19_0/dependency_routing_receipt_v1.jsonschema`
+- `Genesis/schema/v19_0/eval_report_v1.jsonschema`
+- `Genesis/schema/v19_0/long_run_profile_v1.jsonschema`
+- `Genesis/schema/v19_0/long_run_stop_receipt_v1.jsonschema`
+- `Genesis/schema/v19_0/mission_goal_ingest_receipt_v1.jsonschema`
+- `Genesis/schema/v19_0/mission_request_v1.jsonschema`
+- `Genesis/schema/v19_0/utility_policy_v1.jsonschema`
+- `Genesis/schema/v19_0/utility_proof_receipt_v1.jsonschema`.
+
+### R.17.3 RE3 Campaign and Operational Layer
+
+- `campaigns/rsi_omega_daemon_v18_0/omega_capability_registry_v2.json`
+- `campaigns/rsi_omega_daemon_v18_0_prod/omega_capability_registry_v2.json`
+- `campaigns/rsi_omega_daemon_v19_0/omega_capability_registry_v2.json`
+- `campaigns/rsi_omega_daemon_v19_0_llm_enabled/omega_capability_registry_v2.json`
+- `campaigns/rsi_omega_daemon_v19_0_long_run_v1/omega_capability_registry_v2.json`
+- `campaigns/rsi_omega_daemon_v19_0_long_run_v1/goals/omega_goal_queue_v1.json`
+- `campaigns/rsi_omega_daemon_v19_0_long_run_v1/long_run_profile_v1.json`
+- `campaigns/rsi_omega_daemon_v19_0_long_run_v1/rsi_omega_daemon_pack_v1.json`
+- `campaigns/rsi_omega_daemon_v19_0_long_run_v1/utility/omega_utility_policy_v1.json`
+- `campaigns/rsi_omega_daemon_phase0_kernel_autonomy_v1/omega_capability_registry_v2.json`
+- `campaigns/rsi_omega_daemon_survival_drill_v1/omega_capability_registry_v2.json`
+- `campaigns/rsi_omega_daemon_v19_0_phase4b_native_transpiler_v1/omega_capability_registry_v2.json`
+- `campaigns/rsi_omega_daemon_v19_0_phase3_bench/omega_capability_registry_v2.json`
+- `campaigns/rsi_omega_daemon_v19_0_phase3_market_toy/omega_capability_registry_v2.json`
+- `campaigns/rsi_omega_daemon_v19_0_super_unified/omega_capability_registry_v2.json`
+- `campaigns/rsi_omega_daemon_v19_0_unified/omega_capability_registry_v2.json`
+- `campaigns/rsi_omega_daemon_v19_0_phase4d_epistemic_airlock/*`.
+
+### R.17.4 Runtime and Orchestration Layer
+
+- `orchestrator/common/run_invoker_v1.py`
+- `orchestrator/native/native_router_v1.py`
+- `orchestrator/native/runtime_stats_v1.py`
+- `orchestrator/omega_bid_market_v1.py`
+- `orchestrator/omega_v18_0/coordinator_v1.py`
+- `orchestrator/omega_v18_0/goal_synthesizer_v1.py`
+- `orchestrator/omega_v18_0/io_v1.py`
+- `orchestrator/omega_v19_0/coordinator_v1.py`
+- `orchestrator/omega_v19_0/goal_synthesizer_v1.py`
+- `orchestrator/omega_v19_0/eval_cadence_v1.py`
+- `orchestrator/omega_v19_0/io_v1.py`
+- `orchestrator/omega_v19_0/microkernel_v1.py`
+- `orchestrator/omega_v19_0/mission_goal_ingest_v1.py`
+- `orchestrator/rsi_coordinator_mutator_v1.py`
+- `orchestrator/rsi_market_rules_mutator_v1.py`.
+
+### R.17.5 Evidence and Tooling Layer
+
+- `scripts/preflight_long_run_v1.py`
+- `scripts/run_long_disciplined_loop_v1.py`
+- `scripts/run_epistemic_airlock_closure_v1.py`
+- `scripts/run_phase4c_real_swap_drill_v1.py`
+- `scripts/generate_ceiling_report_v1.py`
+- `scripts/generate_epistemic_canary_bundle_v1.py`
+- `scripts/generate_phase3b_phase4_evidence_v1.py`
+- `tools/genesis_engine/ge_symbiotic_optimizer_v0_3.py`
+- `tools/genesis_engine/tests/test_ge_llm_selector_replay_path_v1.py`
+- `tools/omega/epistemics/*`
+- `.github/workflows/ci.yml`
+- `CI_FULL_GREEN_SUMMARY_v1.json`.
+
+### R.17.6 Constitutional Layer
+
+- `meta-core/active/ACTIVE_BUNDLE`
+- `meta-core/active/ACTIVE_NEXT_BUNDLE`
+- `meta-core/active/PREV_ACTIVE_BUNDLE`
+- `meta-core/active/work/canary_receipt.json`
+- `meta-core/active/work/receipt.json`
+- `meta-core/active/work/stage.json`
+- `meta-core/stage/bundles/518179d5a11f5b727461a568510905e6df878d3f788dd462f13aecb7144b2a87/*`
+- `meta-core/store/bundles/518179d5a11f5b727461a568510905e6df878d3f788dd462f13aecb7144b2a87/*`.
+
+## R.18 Guidance for the Next Day's Update
+
+The next source-of-truth increment should include three mandatory diffs:
+
+- a dedicated section on any `v19_0` schema backward-compatibility migration decisions;
+- a full list of new reason codes introduced in verifiers and routing receipts;
+- any changes to `ACTIVE_*` and `meta-core` bundle id transitions.
+
+Without these, continuity across governance decisions becomes ambiguous because hardening updates can change what “ready,” “forced,” or “rejected” mean in practice.
+
+For consistency, include in each update:
+
+1. every changed schema file, not only new campaign files.
+2. the producing and consuming module mapping for each schema.
+3. all new reason-code strings and the modules that emit them.
+
+This keeps source-of-truth and operational decisioning synchronized.
+
+## R.19 Closing Governance Model Update
+
+To make the last-day changes durable in governance practice, this release should be interpreted as a transition from “feature-specific correctness” to “transition-specific correctness.” Earlier hardening often focused on making one checker stronger. This update made transitions themselves observable and constrained.
+
+There are four explicit governance checks now visible in practice:
+
+1. structural schema congruence across v18/v19 verifier boundaries,
+2. behavioral forcing state in long-run debt and frontier routing,
+3. proof-chain completeness in preflight and disciplined-loop scripts,
+4. bundle-level constitutional consistency in meta-core.
+
+When all four checks succeed together, the system can progress from exploratory lanes into production lanes with lower rollback risk. Missing any one check should be treated as a hard stop, even if immediate runtime telemetry appears healthy.
+
+The update also narrows the interpretation of “policy intent.” Capability intent now lives in at least three places:
+
+- registries indicate which capabilities are legally selectable in a pack,
+- profiles declare when and why those capabilities are admissible,
+- receipts prove whether the run respected those constraints under observed state.
+
+This creates a robust three-way contract. If a capability appears enabled in a registry but is not represented in profile lanes, the outcome may still appear plausible at the runtime layer until a routing receipt or debt state shows a contradiction. If policy intent and profile intent align but receipts fail, the issue is execution governance and not capability definition.
+
+From a closeout perspective, this implies that every incident or anomaly report should include:
+
+- the pack selection snapshot,
+- the profile and profile version used,
+- the dependency state row for the affected tick,
+- the subverifier, utility proof, and promotion receipts,
+- and the meta-core stage receipt if a transition was attempted.
+
+That evidence set reduces ambiguity and speeds failure attribution.
+
+One practical benefit of this release is that it gives operators a deterministic escalation path for frontier-heavy behavior:
+
+1. allow the frontier to stall and collect debt,
+2. inspect debt and lock state,
+3. inspect route reason codes and utility proof receipts,
+4. force frontier attempt only if deterministic predicates say so,
+5. if forced attempt fails, reject transition and re-run preflight.
+
+This replaces trial-and-error runbook habits with deterministic, auditable steps.
+
+The residual governance debt after this update is mostly integration hygiene:
+
+- remove any accidental divergence between old and new schema expectations across run products,
+- normalize log naming for the newly added frontier and utility proof receipts,
+- ensure CI and preflight scripts fail with explicit code-level reasons instead of generic shell errors,
+- and make the RE1 bundle path part of normal operational checklists.
+
+The target state for the next 24-hour cycle is therefore not more gates. It is cleaner gate interpretation and fewer hidden assumptions.
+
+## R.20 What the Current Diff Actually Changes in Runtime Behavior
+
+This section translates the worktree diff into operational behavior. The change set is no longer "new feature" centered; it is mostly **policy-control hardening**.
+
+### Frontier Control Becomes State-Machine Driven
+
+`orchestrator/omega_v19_0/microkernel_v1.py` and the new `dependency_*` schema set now do three concrete things:
+
+1. **Track frontier pressure explicitly** in state artifacts (`dependency_debt_state_v1`):
+   - debt counters by key,
+   - hard-lock indicators,
+   - pending frontier goals,
+   - last frontier attempts,
+   - failed-patch and failed-shape ban maps.
+
+2. **Drive deterministic routing decisions** for every tick:
+   - `routing_selector_id` is now persisted in decision receipts,
+   - forced-heavy dispatch can be explicitly signaled and checked later,
+   - frontier attempts and counts are replay-coupled to policy rationale.
+
+3. **Preserve failure memory** to prevent repeated blind retries:
+   - failed patches and failed nontriviality shapes are propagated into dispatch-time skip filters,
+   - repeated candidate families can be blocked from re-entry automatically.
+
+In practical terms, this converts many “soft” heuristics into materialized state transitions.
+
+### CCAP Path Now Requires Stronger Evidence of Substantial Changes
+
+`tools/genesis_engine/ge_symbiotic_optimizer_v0_3.py`, `CDEL-v2/cdel/v19_0/omega_promoter_v1.py`, and `CDEL-v2/cdel/v19_0/verify_rsi_omega_daemon_v1.py` now treat candidate proposal quality as an auditable artifact, not a best-effort signal.
+
+- SH-1 now emits a **candidate precheck receipt** per dispatch (`candidate_precheck_receipt_v1`) with:
+  - selected-for-ccap decision,
+  - drop reason (policy/shape/parse/threshold/repeat),
+  - candidate ordering/hash details.
+- SH-1 computes and attaches a **nontriviality certificate** (`nontriviality_cert_v1`) for selected candidates.
+- `omega_promoter_v1.py` rewrites subverifier receipts to include that certificate and rejects frontier-heavy selections that do not provide required nontrivial deltas.
+- v19 verifier now checks the candidate precheck receipt before accepting promotion input, so an omitted/invalid precheck is a hard verifier failure.
+
+Net effect: accepted frontier proposals must now carry both routing context and structural evidence.
+
+### Long-Run Discipline Gets Hard Preconditions and Telemetry
+
+`scripts/preflight_long_run_v1.py` and `scripts/run_long_disciplined_loop_v1.py` now enforce and record concrete governance gates:
+
+- preflight now reports repo cleanliness, activation mode safety, frontier registry integrity, and frontier-lane wiring preconditions;
+- replay validation now reports failure classes explicitly instead of only aggregate pass/fail;
+- frontier rows are scored with attempt-quality classes (heavy OK / valid but no utility / invalid);
+- hard-lock and forced-frontier events are serialized into tick summaries for post-run audit;
+- strict “must-have” signals were added for frontier promotion pipeline presence and counted frontier attempts.
+
+This creates deterministic preconditions for auto-run campaigns and a fixed signal schema for postmortems.
+
+### CCAP/Tx Verification Tolerance + Fail-Fast Paths
+
+`CDEL-v2/cdel/v18_0/ccap_runtime_v1.py`, `CDEL-v2/cdel/v18_0/verify_ccap_v1.py`, and `orchestrator/common/run_invoker_v1.py` now support `OMEGA_CCAP_ALLOW_DIRTY_TREE` as a controlled behavior switch.
+
+- In tolerant mode, snapshotting uses tracked workspace files instead of index-only state.
+- CCAP verifier computes base-tree with tolerant logic when explicitly enabled.
+- If base-tree hashing fails, CCAP returns an explicit `BASE_TREE_UNAVAILABLE` refutation instead of continuing.
+- Invocation plumbing now carries this env var through subrun environments.
+
+That is an operator control, not a default bypass: it relaxes snapshot strictness only when intentionally set.
+
+### SH-1 / Mutator Reliability Improvements
+
+`orchestrator/rsi_coordinator_mutator_v1.py` and `orchestrator/rsi_market_rules_mutator_v1.py` now move failure modes from silent exits to recoverable outputs.
+
+- mutators can fallback to deterministic template patch generation on backend failures,
+- base-tree identity is computed with tolerant mode,
+- parse/apply mismatches are written into failure artifacts instead of returning partial/noisy state,
+- patch touched-path mismatches can be repaired with a template fallback.
+
+This reduces stochastic failure behavior in frontier-heavy mutation runs and makes post-run diagnosis deterministic.
+
+### RE1 Bundle Activity Became a Real-Time Governance Signal
+
+`meta-core/active/*` and the newly present staged/store bundle IDs indicate a live constitutional transition path with proof material:
+
+- new dominance witnesses,
+- rule sets and proof manifests,
+- new active/next pointers and work receipts.
+
+In this update, activation is no longer only an operator abstraction; it is represented as concrete hash-bound proof artifacts and audit points.
+
+### Practical Effect on Decision-Making
+
+The operator-facing behavior changed from:
+
+- "Run produced status X"
+
+to:
+
+- "Run produced status X, along with explicit frontier debt, routing selector, quality class, precheck reasons, and verifier receipts that are replay-comparable."
+
+That is the main effect: every frontier-heavy action now has a deterministic paper trail from decision to activation.
+
+*End Appendix R.*
+
+---
+
+# Appendix Z: Repository Coverage Addendum (2026-02-22)
+
+This addendum captures repository surfaces that were present in the codebase but not explicitly represented in prior Source of Truth sections. It prioritizes operationally relevant assets and excludes cache-only noise (`__pycache__`, `.pytest_cache`, transient workdirs).
+
+## Z.1 Governance and Authority Surfaces Added
+
+- `authority/boundary_event_sets/boundary_event_set_omega_v1.json`
+- `authority/build_recipes/build_recipes_v1.json`
+- `authority/dsbx_profiles/dsbx_profile_core_v1.json`
+- `authority/gir_integrators/gir_active_set_v1.json`
+
+These are part of executable governance semantics (boundary events, build realization, sandbox profile identity, GIR active set selection) and should be treated as trust-adjacent configuration.
+
+## Z.2 Runtime Config Surfaces Added
+
+- `configs/mission_request_v1.json`
+- `configs/mission_request_v1.jsonschema`
+- `configs/omega_axis_gate_exemptions_v1.json`
+- `configs/sealed_thermo_fixture_v1.toml`
+- `configs/sealed_thermo_grand_challenge_heldout.toml`
+- `configs/sealed_thermo_live_capture_v1.toml`
+
+These files materially influence mission admission, gate behavior, and thermo fixture modes.
+
+## Z.3 Genesis API/Extensions Surfaces Added
+
+- `Genesis/api/evaluate_v1.openapi.yaml`
+- `Genesis/extensions/caoe_v1_1/`
+- `Genesis/extensions/code_patch_v1/`
+- `Genesis/scripts/run_ccai_conformance_all.sh`
+- `Genesis/receipt_examples/pass_receipt.json`
+
+These expand the RE4 layer beyond schemas/docs/conformance vectors by adding API contracts and extension specs used by adjacent tooling.
+
+## Z.4 CDEL-v2 Support Assets Added
+
+- `CDEL-v2/spec/schemas/constraint_spec.v1.schema.json`
+- `CDEL-v2/suitepacks/` (including `grand_challenge_heldout_v1.suitepack`, `omega_dev_v1.suitepack`)
+- `CDEL-v2/sealed_suites/`
+- `CDEL-v2/analysis/`
+- `CDEL-v2/bench/`
+
+These are not primary verifier entrypoints, but they are important verifier-adjacent assets for analysis, benchmark workflows, and sealed evaluation bundles.
+
+## Z.5 Legacy/Parallel Orchestrator and Daemon Lines Added
+
+- `orchestrator/metasearch_v16_1/`
+- `orchestrator/sas_code_v12_0/`
+- `orchestrator/sas_science_v13_0/`
+- `orchestrator/val_v17_0/`
+- `orchestrator/tools/`
+- `daemon/rsi_sas_kernel_v15_0/`
+- `daemon/rsi_sas_kernel_v15_1/`
+- `daemon/rsi_sas_metasearch_v16_0/`
+
+These directories preserve operational lineage and are relevant for replay and historical campaign compatibility.
+
+## Z.6 Additional Tooling Surfaces Added
+
+- `tools/math_checker_v1/checker.py`
+- `tools/v19_hypothesis/run_ladder.py`
+- `tools/v19_hypothesis/scan_axis_bundle_coverage.py`
+
+These are utility surfaces used in diagnostics/hypothesis workflows and should be considered part of the practical operator toolbox.
+
+## Z.7 Evidence, Baseline, and Legacy Forensics Packs Added
+
+- `baselines/pi0_grand_challenge_v1/baseline_report_v1.json`
+- `smoking_gun_v11_0_2026-02-04/README.md`
+- `smoking_gun_v11_0_2026-02-04/arch_synthesis_toolchain_manifest_v1.json`
+- `smoking_gun_v11_0_2026-02-04/state/`
+- `docs/ENDGAME_EVIDENCE_PACK_v1.md`
+- `docs/eudrs_u/EUDRS_U_v1_0_SCIENTIST_HANDOFF.md`
+- `docs/eudrs_u/EUDRS_U_v1_0_SPEC_OUTLINE.md`
+- `docs/llm_backends.md`
+- `docs/phase1_native_module_pipeline_v0_1_proof.md`
+- `docs/phase3_nuisance_v1_2_results.md`
+- `docs/phase_u2_4_swarm_scaling_plan.md`
+
+These artifacts are not transient notes; they encode reproducibility, handoff, and hardening evidence with operational relevance.
+
+## Z.8 Test Harness and Root Test Coverage Added
+
+Core test wiring:
+
+- `conftest.py`
+- `pytest.ini`
+
+Unlisted root tests now explicitly tracked:
+
+- `test_native_module_pipeline_v0_1.py`
+- `test_orchestrator_bid_market_parity_v1.py`
+- `test_v19_axis_gate_ccap_effective_touched_paths.py`
+- `test_v19_axis_gate_propagation.py`
+- `test_v19_gate_matrix_e2e.py`
+- `test_v19_ladder_evidence_pipeline_v1.py`
+- `test_v19_ladder_harness.py`
+- `test_v19_phase1_native_modules_pack_e2e.py`
+- `test_v19_predation_market_e2e_determinism.py`
+- `test_v19_promotion_cwd_subrun_required.py`
+- `test_v19_real_run_uses_subrun_cwd.py`
+- `test_v19_tick_gate_matrix_e2e.py`
+- `test_v19_tier2_determinism.py`
+- `test_v19_wiring_smoke.py`
+- `test_vision_stage0_e2e.py`
+- `test_vision_stage1_e2e.py`
+- `test_vision_stage2_e2e.py`
+
+## Z.9 Campaign Inventory Delta (Legacy + Specialized Packs)
+
+The campaign surface extends significantly beyond the previously summarized set. Additional directories with operational/history value include:
+
+- `campaigns/grand_challenges`
+- `campaigns/rsi_agi_orchestrator_llm_v1`
+- `campaigns/rsi_alignment_v7_0`
+- `campaigns/rsi_alignment_v8_0`
+- `campaigns/rsi_alignment_v9_0`
+- `campaigns/rsi_arch_synthesis_v11_0`
+- `campaigns/rsi_boundless_math_v8_0`
+- `campaigns/rsi_boundless_science_v9_0`
+- `campaigns/rsi_coordinator_mutator_v1`
+- `campaigns/rsi_daemon_v6_0`
+- `campaigns/rsi_daemon_v7_0`
+- `campaigns/rsi_daemon_v8_0_math`
+- `campaigns/rsi_eudrs_u_dmpl_plan_v1`
+- `campaigns/rsi_eudrs_u_eval_cac_v1`
+- `campaigns/rsi_eudrs_u_index_rebuild_v1`
+- `campaigns/rsi_eudrs_u_ontology_update_v1`
+- `campaigns/rsi_eudrs_u_qxrl_train_v1`
+- `campaigns/rsi_eudrs_u_train_v1`
+- `campaigns/rsi_eudrs_u_vision_index_build_v1`
+- `campaigns/rsi_eudrs_u_vision_perception_v1`
+- `campaigns/rsi_ge_symbiotic_optimizer_sh1_v0_1`
+- `campaigns/rsi_market_rules_mutator_v1`
+- `campaigns/rsi_model_genesis_v10_0`
+- `campaigns/rsi_omega_apply_shadow_proposal_v1`
+- `campaigns/rsi_omega_daemon_v18_0_phase1_native_modules_v1`
+- `campaigns/rsi_omega_daemon_v19_0_phase1_native_modules_v1`
+- `campaigns/rsi_omega_daemon_v19_0_phase3_death_test`
+- `campaigns/rsi_omega_daemon_v19_0_phase3_market_mutator`
+- `campaigns/rsi_omega_daemon_v19_0_phase3_mutator`
+- `campaigns/rsi_omega_native_module_v0_1`
+- `campaigns/rsi_omega_phase0_immune_repair_ccap_v0_1`
+- `campaigns/rsi_omega_phase0_victim_ccap_v0_1`
+- `campaigns/rsi_omega_self_optimize_core_v1`
+- `campaigns/rsi_omega_skill_alignment_v1`
+- `campaigns/rsi_omega_skill_boundless_math_v1`
+- `campaigns/rsi_omega_skill_boundless_science_v1`
+- `campaigns/rsi_omega_skill_eff_flywheel_v1`
+- `campaigns/rsi_omega_skill_model_genesis_v1`
+- `campaigns/rsi_omega_skill_ontology_v1`
+- `campaigns/rsi_omega_skill_persistence_v1`
+- `campaigns/rsi_omega_skill_swarm_v1`
+- `campaigns/rsi_omega_skill_thermo_v1`
+- `campaigns/rsi_omega_skill_transfer_v1`
+- `campaigns/rsi_polymath_conquer_domain_v1`
+- `campaigns/rsi_polymath_sip_ingestion_l0_v1`
+- `campaigns/rsi_real_csi_v2_2`
+- `campaigns/rsi_real_demon_v3`
+- `campaigns/rsi_real_demon_v4`
+- `campaigns/rsi_real_demon_v5_autonomy`
+- `campaigns/rsi_real_demon_v6_efficiency`
+- `campaigns/rsi_real_demon_v8_csi`
+- `campaigns/rsi_real_demon_v9_hardening`
+- `campaigns/rsi_real_flywheel_v2_0`
+- `campaigns/rsi_real_hardening_v2_3`
+- `campaigns/rsi_real_ignite_v1`
+- `campaigns/rsi_real_integrity_v1`
+- `campaigns/rsi_real_omega_v4_0`
+- `campaigns/rsi_real_onto_v2`
+- `campaigns/rsi_real_portfolio_v1`
+- `campaigns/rsi_real_recursive_ontology_v2_1`
+- `campaigns/rsi_real_recursive_ontology_v2_1_source`
+- `campaigns/rsi_real_recursive_ontology_v2_1_target`
+- `campaigns/rsi_real_science_v1`
+- `campaigns/rsi_real_swarm_v3_0`
+- `campaigns/rsi_real_swarm_v3_1`
+- `campaigns/rsi_real_swarm_v3_2`
+- `campaigns/rsi_real_swarm_v3_3`
+- `campaigns/rsi_real_thermo_v5_0`
+- `campaigns/rsi_real_transfer_v1`
+- `campaigns/rsi_sas_code_v12_0`
+- `campaigns/rsi_sas_kernel_v15_0`
+- `campaigns/rsi_sas_kernel_v15_1`
+- `campaigns/rsi_sas_math_v11_0`
+- `campaigns/rsi_sas_math_v11_1`
+- `campaigns/rsi_sas_math_v11_2`
+- `campaigns/rsi_sas_math_v11_3`
+- `campaigns/rsi_sas_metasearch_v16_0`
+- `campaigns/rsi_sas_metasearch_v16_1`
+- `campaigns/rsi_sas_science_v13_0`
+- `campaigns/rsi_sas_system_demon_v14_0`
+- `campaigns/rsi_sas_system_v14_0`
+- `campaigns/rsi_sas_val_v17_0`
+
+## Z.10 Explicitly Excluded As Non-Canonical/Transient
+
+To keep Source of Truth focused, the following remain intentionally excluded from primary architectural mapping unless needed for incident analysis:
+
+- cache/transient directories: `__pycache__`, `.pytest_cache`, `.omega_v18_exec_workspace`, `tmp_ek_meta`
+- local/debug scratch docs not part of protocol/state contracts: `debugging_1.md`, `debug_2.md`, `master_debug.md`
+
+This exclusion is documentation scope control, not a claim that those files never matter operationally.
+
+## Z.11 Worktree Delta (Current Local Changes)
+
+As-of `2026-02-22`, the working tree contains changes that materially alter how frontier-heavy long-run behavior is decided, proved, and rejected. This is now more than refactoring: it is a control-surface upgrade.
+
+### What the changed modules do
+
+- `orchestrator/omega_v19_0/microkernel_v1.py`: turns long-run frontier decisions into first-class state. It records debt and hard-lock state (`dependency_debt_state_v1`), tracks frontier attempts, and can force heavy SH-1 dispatch deterministically with explicit reasons when frontier progress stalls.
+
+- `tools/genesis_engine/ge_symbiotic_optimizer_v0_3.py`: expands SH-1 from “generate patch” to “generate verifiable evidence for a patch.” It now writes per-candidate precheck receipts (`candidate_precheck_receipt_v1`) and nontriviality certificates for frontier candidates, so failed or low-signal patch shapes are filtered before they reach promotion as much as possible.
+
+- `CDEL-v2/cdel/v19_0/omega_promoter_v1.py` and `CDEL-v2/cdel/v18_0/omega_promoter_v1.py`: tighten promotion rejection semantics for mutator dispatches. They infer explicit `NO_BUNDLE_*` reason codes instead of collapsing failures into generic no-promotion outcomes, and include nontriviality evidence in subverifier receipts.
+
+- `CDEL-v2/cdel/v18_0/verify_ccap_v1.py` + `CDEL-v2/cdel/v18_0/ccap_runtime_v1.py`: add controlled tolerance for dirty working trees (`OMEGA_CCAP_ALLOW_DIRTY_TREE`). When enabled, CCAP can hash/validate from repository working contents instead of strict git-index-only tree IDs. If that cannot be computed, it now emits `BASE_TREE_UNAVAILABLE` as a typed refutation.
+
+- `orchestrator/common/run_invoker_v1.py`: ensures that CCAP-specific env controls (for example `OMEGA_CCAP_ALLOW_DIRTY_TREE`) are carried to invocations, so verifier and execution agree on how the snapshot is interpreted.
+
+- `CDEL-v2/cdel/v18_0/verify_rsi_omega_daemon_v1.py` + `CDEL-v2/cdel/v19_0/verify_rsi_omega_daemon_v1.py`: harden replay checks by allowing a bounded set of extra environment keys and by validating frontier/utility control artifacts explicitly (forced frontier overrides, utility policy IDs, and runtime stat source linkage).
+
+- `scripts/preflight_long_run_v1.py`: adds stronger startup and replay-time hard stops for long-run mode (activation mode, dirty-tree acceptance, frontier wiring integrity, required frontier signal rows, and stronger ledger/reason checks).
+
+- `scripts/run_long_disciplined_loop_v1.py`: turns frontier long-run behavior into measurable telemetry: hard-lock transitions, frontier attempt quality classes, and explicit stop reasons for failed frontier progression.
+
+- `CDEL-v2/Genesis/schema/v18_0/*` and `Genesis/schema/v19_0/*`: add/extend contracts to match the runtime logic above, including `candidate_precheck_receipt_v1`, `nontriviality_cert_v1`, `dependency_debt_state_v1`, `utility_policy_v1`, `dependency_routing_receipt_v1`, and expanded reason-code enums.
+
+- Campaign and profile updates in `campaigns/rsi_omega_daemon_v19_0_long_run_v1/*`, plus `omega_capability_registry_v2.json` edits across daemon packs: they wire the new long-run control policy (frontier lanes, utility classing, and hard-lock routing) into executable runtime configuration.
+
+- `meta-core/active` and bundle artifacts under `meta-core/stage|store/bundles/*`: reflect an attempted deterministic constitutional transition path with newly generated proof material and dominance/witness artifacts.
+
+### Why this section exists
+
+This section intentionally diverges from the architectural “static” appendices by tracking **operational state**: what is currently staged or changed in this workspace, including transitional activation artifacts and policy updates that are still under active iteration. Use `git status` for exact path-level truth; this section is the human-readable index.
+
+*End Appendix Z.*

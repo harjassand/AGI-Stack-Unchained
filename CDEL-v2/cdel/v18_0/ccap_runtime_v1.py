@@ -26,6 +26,11 @@ def _git_rows(stdout: str) -> list[str]:
     return sorted({row.strip() for row in str(stdout).splitlines() if row.strip()})
 
 
+def _dirty_tree_allowed_from_env() -> bool:
+    raw = str(os.environ.get("OMEGA_CCAP_ALLOW_DIRTY_TREE", "0")).strip().lower()
+    return raw in {"1", "true", "yes", "on"}
+
+
 def _reason_token(value: Any) -> str:
     text = str(value).strip()
     text = text.replace("\n", " ").replace("\r", " ")
@@ -145,18 +150,14 @@ def compute_repo_base_tree_id_tolerant(repo_root: Path) -> str:
     head_run = _run_git(repo_root, ["rev-parse", "--verify", "HEAD"])
     head_hex = str((head_run.stdout or "")).strip() if head_run.returncode == 0 else ""
 
-    diff_run = _run_git(repo_root, ["diff", "--binary"])
-    if diff_run.returncode != 0:
-        fail("MISSING_STATE_INPUT")
-    diff_raw = (diff_run.stdout or "").encode("utf-8")
-    diff_hash = f"sha256:{hashlib.sha256(diff_raw).hexdigest()}" if diff_raw else "sha256:" + ("0" * 64)
-
+    # Keep tolerant IDs stable across unstaged working-tree drift by binding to
+    # git identity (HEAD + index tree) only. This is required for long-running
+    # replay in dirty trees where runtime artifacts can mutate tracked files.
     return canon_hash_obj(
         {
             "schema_version": "ccap_base_tree_git_index_v1_tolerant",
             "head": head_hex,
             "tree": tree_hex,
-            "unstaged_diff_hash": diff_hash,
         }
     )
 
@@ -172,8 +173,20 @@ def materialize_repo_snapshot(repo_root: Path, out_dir: Path) -> None:
     if unstaged.returncode != 0:
         fail("MISSING_STATE_INPUT")
     unstaged_rows = _git_rows(unstaged.stdout or "")
-    if unstaged_rows:
+    if unstaged_rows and not _dirty_tree_allowed_from_env():
         fail(_dirty_tree_reason_code(repo_root=repo_root, unstaged_paths=unstaged_rows))
+
+    # Dirty-tree tolerant mode snapshots tracked files from the working tree.
+    # This preserves patch applicability for generators that diff against unstaged edits.
+    if unstaged_rows and _dirty_tree_allowed_from_env():
+        for rel in tracked_files(repo_root):
+            src = (repo_root / rel).resolve()
+            if not src.exists() or not src.is_file() or src.is_symlink():
+                fail("MISSING_STATE_INPUT")
+            dst = out_dir / rel
+            dst.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(src, dst)
+        return
 
     # Export the index to the workspace directory.
     # checkout-index writes files with their correct modes and is far faster than Python copy loops.

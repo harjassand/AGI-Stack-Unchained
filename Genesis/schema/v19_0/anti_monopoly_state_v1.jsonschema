@@ -1,0 +1,64 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v19_0/anti_monopoly_state_v1",
+  "title": "Anti monopoly state v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_name",
+    "schema_version",
+    "state_id",
+    "tick_u64",
+    "window_ticks_u64",
+    "consecutive_no_output_limit_u64",
+    "low_diversity_campaign_limit_u64",
+    "cooldown_for_ticks_u64",
+    "campaign_cooldowns",
+    "history_rows",
+    "last_reason_code"
+  ],
+  "properties": {
+    "schema_name": {"const": "anti_monopoly_state_v1"},
+    "schema_version": {"const": "v19_0"},
+    "state_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "tick_u64": {"type": "integer", "minimum": 0},
+    "window_ticks_u64": {"type": "integer", "minimum": 1},
+    "consecutive_no_output_limit_u64": {"type": "integer", "minimum": 1},
+    "low_diversity_campaign_limit_u64": {"type": "integer", "minimum": 1},
+    "cooldown_for_ticks_u64": {"type": "integer", "minimum": 1},
+    "campaign_cooldowns": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["until_tick_u64", "reason_code"],
+        "properties": {
+          "until_tick_u64": {"type": "integer", "minimum": 0},
+          "reason_code": {"type": "string", "minLength": 1}
+        }
+      }
+    },
+    "history_rows": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "tick_u64",
+          "campaign_id",
+          "candidate_bundle_present_b",
+          "effective_change_b",
+          "effect_class"
+        ],
+        "properties": {
+          "tick_u64": {"type": "integer", "minimum": 0},
+          "campaign_id": {"type": "string", "minLength": 1},
+          "candidate_bundle_present_b": {"type": "boolean"},
+          "effective_change_b": {"type": "boolean"},
+          "effect_class": {"type": "string", "minLength": 1}
+        }
+      }
+    },
+    "last_reason_code": {"type": "string", "minLength": 1}
+  }
+}

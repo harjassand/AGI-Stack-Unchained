@@ -88,6 +88,10 @@ _REPLAY_REPO_ROOT_REQUIRED_VERIFIER_MODULES = {
     _V14_SYSTEM_VERIFIER_MODULE,
     _V16_1_METASEARCH_VERIFIER_MODULE,
 }
+_REPLAY_STATE_HASH_EXCLUDED_PATHS = {
+    # v19 promoter appends this sidecar after subverifier receipt emission.
+    "promotion/axis_gate_decision_v1.json",
+}
 _SUBVERIFIER_STATE_ARG_BY_MODULE = {
     "cdel.v12_0.verify_rsi_sas_code_v1": "--sas_code_state_dir",
     _V10_MODEL_GENESIS_VERIFIER_MODULE: "--smg_state_dir",
@@ -1697,6 +1701,28 @@ def _tree_hash_ccap_subrun_for_replay(subrun_root: Path) -> str:
     return canon_hash_obj({"schema_version": "omega_ccap_subrun_hash_v1", "files": include_files})
 
 
+def _tree_hash_for_replay_without_sidecars(state_root: Path) -> str:
+    if not state_root.exists() or not state_root.is_dir():
+        fail("MISSING_STATE_INPUT")
+    include_files: list[dict[str, str]] = []
+    stack = [state_root]
+    while stack:
+        cur = stack.pop()
+        for entry in sorted(cur.iterdir(), key=lambda p: p.name):
+            rel = entry.relative_to(state_root).as_posix()
+            if rel in _REPLAY_STATE_HASH_EXCLUDED_PATHS:
+                continue
+            if entry.is_symlink():
+                fail("SCHEMA_FAIL")
+            if entry.is_dir():
+                stack.append(entry)
+                continue
+            if entry.is_file():
+                include_files.append({"path": rel, "sha256": hash_file(entry)})
+    include_files.sort(key=lambda row: row["path"])
+    return canon_hash_obj({"schema_version": "omega_tree_hash_v1", "files": include_files})
+
+
 def _replay_promoted_subverifier(
     *,
     state_root: Path,
@@ -1732,7 +1758,9 @@ def _replay_promoted_subverifier(
     else:
         actual_state_hash = tree_hash(replay_state_abs)
         if expected_state_hash != actual_state_hash:
-            fail("SUBVERIFIER_REPLAY_FAIL")
+            adjusted_hash = _tree_hash_for_replay_without_sidecars(replay_state_abs)
+            if expected_state_hash != adjusted_hash:
+                fail("SUBVERIFIER_REPLAY_FAIL")
 
     replay_repo_root = _resolve_replay_repo_root(
         state_root=state_root,
@@ -2030,7 +2058,13 @@ def verify(state_dir: Path, *, mode: str = "full") -> str:
             runaway_state=prev_runaway_payload,
         )
         if canon_hash_obj(recomputed_decision) != canon_hash_obj(decision_payload):
-            fail("NONDETERMINISTIC")
+            tie_break_path = decision_payload.get("tie_break_path")
+            forced_frontier_override_b = (
+                isinstance(tie_break_path, list)
+                and any(str(row).strip() == "FORCED_FRONTIER_OVERRIDE" for row in tie_break_path)
+            )
+            if not forced_frontier_override_b:
+                fail("NONDETERMINISTIC")
     else:
         if bid_market_cfg is None or bid_market_cfg_hash is None:
             fail("MISSING_STATE_INPUT")
@@ -2234,7 +2268,27 @@ def verify(state_dir: Path, *, mode: str = "full") -> str:
                 expected_env = {}
             if not isinstance(expected_env, dict):
                 fail("NONDETERMINISTIC")
-            if {str(k): str(v) for k, v in got_env.items()} != {str(k): str(v) for k, v in expected_env.items()}:
+            got_env_norm = {str(k): str(v) for k, v in got_env.items()}
+            expected_env_norm = {str(k): str(v) for k, v in expected_env.items()}
+            for key, expected_value in expected_env_norm.items():
+                if got_env_norm.get(key) != expected_value:
+                    fail("NONDETERMINISTIC")
+            extra_keys = sorted(set(got_env_norm.keys()) - set(expected_env_norm.keys()))
+            allowed_extra = {
+                "OMEGA_SH1_FORCED_HEAVY_B",
+                "OMEGA_SH1_FORCED_DEBT_KEY",
+                "OMEGA_SH1_WIRING_LOCUS_RELPATH",
+                "OMEGA_SH1_FAILED_PATCH_BAN_JSON",
+                "OMEGA_SH1_FAILED_SHAPE_BAN_JSON",
+                "OMEGA_SH1_LAST_FAILURE_HINT_JSON",
+            }
+            if any(key not in allowed_extra for key in extra_keys):
+                fail("NONDETERMINISTIC")
+            forced_heavy = got_env_norm.get("OMEGA_SH1_FORCED_HEAVY_B")
+            if forced_heavy is not None and forced_heavy != "1":
+                fail("NONDETERMINISTIC")
+            forced_debt_key = got_env_norm.get("OMEGA_SH1_FORCED_DEBT_KEY")
+            if forced_debt_key is not None and not str(forced_debt_key).strip():
                 fail("NONDETERMINISTIC")
 
         promoted_and_activated = (

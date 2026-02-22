@@ -8,6 +8,7 @@ import copy
 import hashlib
 import json
 import os
+import re
 import subprocess
 import sys
 from datetime import UTC, datetime
@@ -24,9 +25,17 @@ for candidate in (REPO_ROOT, REPO_ROOT / "CDEL-v2"):
 
 from cdel.v1_7r.canon import canon_bytes, write_canon_json
 from cdel.v18_0.authority.authority_hash_v1 import auth_hash, load_authority_pins
-from cdel.v18_0.ccap_runtime_v1 import ccap_payload_id, compute_repo_base_tree_id
-from cdel.v18_0.omega_common_v1 import canon_hash_obj, rat_q32, validate_schema
+from cdel.v18_0.ccap_runtime_v1 import ccap_payload_id, compute_repo_base_tree_id_tolerant
+from cdel.v18_0.omega_common_v1 import canon_hash_obj, rat_q32, validate_schema, write_hashed_json
 from cdel.v18_0.patch_diff_v1 import build_unified_patch_bytes
+from cdel.v19_0.common_v1 import validate_schema as validate_schema_v19
+from cdel.v19_0.nontriviality_cert_v1 import (
+    FORCED_HEAVY_ARCHETYPE_CALL_EDGE,
+    FORCED_HEAVY_ARCHETYPE_CONTROL_FLOW,
+    FORCED_HEAVY_ARCHETYPE_HELPER_REPLACE,
+    FORCED_HEAVY_ARCHETYPE_IDS,
+    build_nontriviality_cert_v1,
+)
 
 from tools.genesis_engine.sh1_pd_v1 import build_pd_from_patch_bytes, touched_paths_hash_for_paths, touched_paths_hash_prefix_hex
 from tools.genesis_engine.sh1_xs_v1 import build_xs_snapshot, load_ge_config
@@ -39,6 +48,7 @@ _BUDGET_HINT_MAX_Q32 = 1 << 34
 _SUPPORTED_TEMPLATE_IDS = {
     "COMMENT_APPEND",
     "CODE_FASTPATH_GUARD",
+    "CODE_REWRITE_AST",
     "JSON_TWEAK_COOLDOWN",
     "JSON_TWEAK_COOLDOWN_MINUS_1",
     "JSON_TWEAK_BUDGET_HINT",
@@ -52,6 +62,34 @@ _SPEEDUP_TARGET_RELPATHS = {
 }
 _MODEL_GENESIS_TARGET_HINT = "model_genesis"
 _LLM_REPLAY_SCHEMA_VERSION = "orch_llm_replay_row_v1"
+_PRECHECK_STATUS_CODES = {"OK", "DISPATCH_ERROR"}
+_DISPATCH_ERROR_CODES = {
+    "NONE",
+    "BACKEND_INIT_FAIL",
+    "PARSE_FAIL_PRE_CANDIDATES",
+    "EARLY_RETURN",
+    "UNEXPECTED_EXCEPTION",
+}
+_PRECHECK_DECISION_CODES = {
+    "SELECTED_FOR_CCAP",
+    "DROPPED_PARSE_FAIL",
+    "DROPPED_APPLY_FAIL",
+    "DROPPED_TRIVIAL",
+    "DROPPED_REPAIR_EXHAUSTED",
+    "DROPPED_INFLIGHT_BUSY",
+    "DROPPED_POLICY_BLOCK",
+    "DROPPED_CCAP_EMIT_FAIL",
+    "DROPPED_FORCED_HEAVY_TEMPLATE_LOCK",
+    "DROPPED_REPEATED_FAILED_PATCH",
+    "DROPPED_REPEATED_FAILED_SHAPE",
+    "DROPPED_INSUFFICIENT_WIRING_DELTA",
+    "DROPPED_SITE_NOT_FOUND",
+    "DROPPED_WIRING_LOCUS_UNAVAILABLE",
+}
+_FORCED_HEAVY_TEMPLATE_IDS = ("CODE_REWRITE_AST",)
+_FAILED_SHAPE_BAN_ENV_KEY = "OMEGA_SH1_FAILED_SHAPE_BAN_JSON"
+_FORCED_WIRING_LOCUS_ENV_KEY = "OMEGA_SH1_WIRING_LOCUS_RELPATH"
+_CODE_REWRITE_AST_SITE_LOCATOR_RULE = "python:first_function_return_site(def->return)"
 
 
 class _LLMReplayMissError(RuntimeError):
@@ -69,12 +107,60 @@ def _sha256_prefixed(data: bytes) -> str:
     return f"sha256:{hashlib.sha256(data).hexdigest()}"
 
 
+def _site_not_found_reason(exc: Exception) -> str:
+    text = str(exc)
+    if text.startswith("INVALID:"):
+        text = text[len("INVALID:") :]
+    if "SITE_NOT_FOUND" not in text:
+        return "SITE_NOT_FOUND:UNKNOWN"
+    if ":" not in text:
+        return "SITE_NOT_FOUND:UNKNOWN"
+    head, tail = text.split(":", 1)
+    if head != "SITE_NOT_FOUND":
+        return "SITE_NOT_FOUND:UNKNOWN"
+    detail = str(tail).strip().upper()
+    if not detail:
+        detail = "UNKNOWN"
+    return f"SITE_NOT_FOUND:{detail}"
+
+
+def _site_locator_rule_for_template(*, template_id: str) -> str:
+    template = str(template_id).strip()
+    if template == "CODE_REWRITE_AST":
+        return _CODE_REWRITE_AST_SITE_LOCATOR_RULE
+    if template == "CODE_FASTPATH_GUARD":
+        return "python:exact_fastpath_guard_pattern"
+    if template.startswith("JSON_TWEAK_"):
+        return "json:deterministic_first_matching_path"
+    if template == "COMMENT_APPEND":
+        return "text:append_eof_comment"
+    return "locator:unknown"
+
+
 def _normalize_relpath(path_value: str) -> str:
     rel = str(path_value).strip().replace("\\", "/")
     path = Path(rel)
     if not rel or path.is_absolute() or ".." in path.parts:
         raise _invalid("SCHEMA_FAIL")
     return rel
+
+
+def _canonical_target_relpaths(*, target_relpaths: list[str], max_items_u32: int = 2) -> list[str]:
+    rows: list[str] = []
+    for row in target_relpaths:
+        rel = _normalize_relpath(str(row))
+        if rel not in rows:
+            rows.append(rel)
+    rows = sorted(rows)
+    if not rows:
+        raise _invalid("SCHEMA_FAIL")
+    if len(rows) > int(max_items_u32):
+        raise _invalid("SCHEMA_FAIL")
+    return rows
+
+
+def _target_relpaths_key(*, target_relpaths: list[str]) -> str:
+    return "||".join(_canonical_target_relpaths(target_relpaths=target_relpaths, max_items_u32=2))
 
 
 def _load_active_ek(repo_root: Path, ek_id: str) -> dict[str, Any]:
@@ -139,7 +225,7 @@ def _build_eval_stage_list(active_ek: dict[str, Any]) -> list[dict[str, Any]]:
 
 def _base_tree_id_best_effort(repo_root: Path) -> str:
     try:
-        return compute_repo_base_tree_id(repo_root)
+        return compute_repo_base_tree_id_tolerant(repo_root)
     except Exception:  # noqa: BLE001
         pass
 
@@ -170,14 +256,42 @@ def _base_tree_id_best_effort(repo_root: Path) -> str:
 def _build_unified_patch(*, target_relpath: str, before: str, after: str) -> bytes:
     patch_bytes = build_unified_patch_bytes(relpath=target_relpath, before_text=before, after_text=after)
     if not patch_bytes:
-        raise _invalid("SITE_NOT_FOUND")
+        raise _invalid("SITE_NOT_FOUND:UNIFIED_DIFF_EMPTY")
     return patch_bytes
+
+
+def _build_multi_file_unified_patch(*, file_deltas: list[dict[str, str]]) -> bytes:
+    if not isinstance(file_deltas, list) or not file_deltas:
+        raise _invalid("SCHEMA_FAIL")
+    if len(file_deltas) > 2:
+        raise _invalid("SCHEMA_FAIL")
+    keyed: list[tuple[str, str, str]] = []
+    for row in file_deltas:
+        if not isinstance(row, dict):
+            raise _invalid("SCHEMA_FAIL")
+        rel = _normalize_relpath(str(row.get("target_relpath", "")).strip())
+        before = row.get("before")
+        after = row.get("after")
+        if not isinstance(before, str) or not isinstance(after, str):
+            raise _invalid("SCHEMA_FAIL")
+        keyed.append((rel, before, after))
+    keyed.sort(key=lambda item: item[0])
+    dedup_relpaths = [row[0] for row in keyed]
+    if len(set(dedup_relpaths)) != len(dedup_relpaths):
+        raise _invalid("SCHEMA_FAIL")
+    chunks: list[bytes] = []
+    for rel, before, after in keyed:
+        chunk = _build_unified_patch(target_relpath=rel, before=before, after=after)
+        chunks.append(chunk.rstrip(b"\n"))
+    if not chunks:
+        raise _invalid("SITE_NOT_FOUND:UNIFIED_DIFF_EMPTY")
+    return (b"\n".join(chunks) + b"\n")
 
 
 def _build_comment_patch(*, target_relpath: str, marker: str, repo_root: Path) -> bytes:
     target_path = (repo_root / target_relpath).resolve()
     if not target_path.exists() or not target_path.is_file():
-        raise _invalid("SITE_NOT_FOUND")
+        raise _invalid("SITE_NOT_FOUND:TARGET_PATH_MISSING")
     before = target_path.read_text(encoding="utf-8")
     line = f"# ge_symbiotic_optimizer_v0_3:{marker}"
     if before.endswith("\n"):
@@ -272,13 +386,13 @@ def _build_json_tweak_patch(*, target_relpath: str, marker: str, template_id: st
         raise _invalid("SCHEMA_FAIL")
     target_path = (repo_root / target_relpath).resolve()
     if not target_path.exists() or not target_path.is_file():
-        raise _invalid("SITE_NOT_FOUND")
+        raise _invalid("SITE_NOT_FOUND:TARGET_PATH_MISSING")
 
     before_text = target_path.read_text(encoding="utf-8")
     try:
         payload = json.loads(before_text)
     except Exception as exc:  # noqa: BLE001
-        raise _invalid("SITE_NOT_FOUND") from exc
+        raise _invalid("SITE_NOT_FOUND:JSON_PARSE_FAILED") from exc
     root = copy.deepcopy(payload)
 
     if template_id == "JSON_TWEAK_COOLDOWN_MINUS_1":
@@ -290,11 +404,11 @@ def _build_json_tweak_patch(*, target_relpath: str, marker: str, template_id: st
                 selected = ("capabilities", idx, "cooldown_ticks_u64")
                 break
         if selected is None:
-            raise _invalid("SITE_NOT_FOUND")
+            raise _invalid("SITE_NOT_FOUND:NO_COOLDOWN_PATH")
         current = int(_json_get(root, selected))
         candidate = max(1, current - 1)
         if candidate == current:
-            raise _invalid("SITE_NOT_FOUND")
+            raise _invalid("SITE_NOT_FOUND:NO_COOLDOWN_DELTA")
         _json_set(root, selected, int(candidate))
     elif template_id == "JSON_TWEAK_BUDGET_HINT_MINUS_1STEP":
         selected = None
@@ -305,17 +419,17 @@ def _build_json_tweak_patch(*, target_relpath: str, marker: str, template_id: st
                 selected = ("capabilities", idx, "budget_cost_hint_q32", "q")
                 break
         if selected is None:
-            raise _invalid("SITE_NOT_FOUND")
+            raise _invalid("SITE_NOT_FOUND:NO_BUDGET_HINT_PATH")
         current = int(_json_get(root, selected))
         candidate = max(_BUDGET_HINT_MIN_Q32, current - _BUDGET_HINT_STEP_Q32)
         if candidate == current:
-            raise _invalid("SITE_NOT_FOUND")
+            raise _invalid("SITE_NOT_FOUND:NO_BUDGET_HINT_DELTA")
         _json_set(root, selected, int(candidate))
     elif template_id == "JSON_TWEAK_COOLDOWN":
         candidate_paths: list[tuple[Any, ...]] = []
         _json_walk_cooldown_paths(root, tuple(), candidate_paths)
         if not candidate_paths:
-            raise _invalid("SITE_NOT_FOUND")
+            raise _invalid("SITE_NOT_FOUND:NO_COOLDOWN_PATH")
         candidate_paths = sorted(candidate_paths, key=_json_path_key)
         selected = candidate_paths[0]
         current = int(_json_get(root, selected))
@@ -324,13 +438,13 @@ def _build_json_tweak_patch(*, target_relpath: str, marker: str, template_id: st
         if candidate == current:
             candidate = max(1, min(50, current - step))
         if candidate == current:
-            raise _invalid("SITE_NOT_FOUND")
+            raise _invalid("SITE_NOT_FOUND:NO_COOLDOWN_DELTA")
         _json_set(root, selected, int(candidate))
     else:
         candidate_paths = []
         _json_walk_budget_hint_paths(root, tuple(), candidate_paths)
         if not candidate_paths:
-            raise _invalid("SITE_NOT_FOUND")
+            raise _invalid("SITE_NOT_FOUND:NO_BUDGET_HINT_PATH")
         candidate_paths = sorted(candidate_paths, key=_json_path_key)
         selected = candidate_paths[0]
         current = int(_json_get(root, selected))
@@ -341,7 +455,7 @@ def _build_json_tweak_patch(*, target_relpath: str, marker: str, template_id: st
             candidate = current - (direction * _BUDGET_HINT_STEP_Q32)
             candidate = max(_BUDGET_HINT_MIN_Q32, min(_BUDGET_HINT_MAX_Q32, candidate))
         if candidate == current:
-            raise _invalid("SITE_NOT_FOUND")
+            raise _invalid("SITE_NOT_FOUND:NO_BUDGET_HINT_DELTA")
         _json_set(root, selected, int(candidate))
 
     after_text = json.dumps(root, sort_keys=True, separators=(",", ":")) + "\n"
@@ -352,10 +466,10 @@ def _build_json_tweak_patch(*, target_relpath: str, marker: str, template_id: st
 
 def _build_code_fastpath_guard_patch(*, target_relpath: str, repo_root: Path) -> bytes:
     if target_relpath != _CODE_FASTPATH_TARGET_RELPATH:
-        raise _invalid("SITE_NOT_FOUND")
+        raise _invalid("SITE_NOT_FOUND:TARGET_PATH_NOT_ALLOWED")
     target_path = (repo_root / target_relpath).resolve()
     if not target_path.exists() or not target_path.is_file():
-        raise _invalid("SITE_NOT_FOUND")
+        raise _invalid("SITE_NOT_FOUND:TARGET_PATH_MISSING")
     before = target_path.read_text(encoding="utf-8")
     after = before.replace(
         "    output_dir.mkdir(parents=True, exist_ok=True)\n    stdout_path.write_text(proc.stdout, encoding=\"utf-8\")\n",
@@ -366,8 +480,184 @@ def _build_code_fastpath_guard_patch(*, target_relpath: str, repo_root: Path) ->
         "    stderr_path.write_text(proc.stderr, encoding=\"utf-8\")\n",
     )
     if after == before:
-        raise _invalid("SITE_NOT_FOUND")
+        raise _invalid("SITE_NOT_FOUND:FASTPATH_PATTERN_NOT_FOUND")
     return _build_unified_patch(target_relpath=target_relpath, before=before, after=after)
+
+
+_DEF_RE = re.compile(r"^(\s*)def\s+([A-Za-z_][A-Za-z0-9_]*)\s*\(")
+_RETURN_RE = re.compile(r"^(\s*)return\s+(.+)$")
+
+
+def _first_function_return_site(lines: list[str]) -> tuple[int, int, str, str] | None:
+    current_fn_name = ""
+    current_fn_indent = ""
+    for idx, line in enumerate(lines):
+        match_def = _DEF_RE.match(line)
+        if match_def is not None:
+            current_fn_indent = str(match_def.group(1))
+            current_fn_name = str(match_def.group(2))
+            continue
+        if not current_fn_name:
+            continue
+        if line.strip() and not line.startswith(current_fn_indent + " "):
+            current_fn_name = ""
+            current_fn_indent = ""
+            continue
+        match_return = _RETURN_RE.match(line)
+        if match_return is None:
+            continue
+        return idx, len(current_fn_indent), current_fn_name, str(match_return.group(2)).strip()
+    return None
+
+
+def _append_python_helper(lines: list[str], *, helper_name: str, marker: str) -> list[str]:
+    out = list(lines)
+    while out and not out[-1].strip():
+        out.pop()
+    out.extend(
+        [
+            "",
+            f"# ge_code_rewrite_ast:{marker}",
+            f"def {helper_name}(value):",
+            "    return value",
+        ]
+    )
+    return out
+
+
+def _rewrite_for_archetype(
+    *,
+    before: str,
+    marker: str,
+    archetype_id: str,
+) -> str:
+    lines = before.splitlines()
+    site = _first_function_return_site(lines)
+    if site is None:
+        raise _invalid("SITE_NOT_FOUND:FUNCTION_RETURN_SITE_MISSING")
+    return_idx, _fn_indent_u32, _fn_name, return_expr = site
+    return_match = _RETURN_RE.match(lines[return_idx])
+    if return_match is None:
+        raise _invalid("SITE_NOT_FOUND:RETURN_NODE_KIND_MISMATCH")
+    return_indent = str(return_match.group(1))
+    helper_suffix = marker.replace("-", "_")[:16]
+    if archetype_id == FORCED_HEAVY_ARCHETYPE_CALL_EDGE:
+        helper_name = f"_ge_wire_call_edge_{helper_suffix}"
+        lines[return_idx] = f"{return_indent}return {helper_name}({return_expr})"
+        out = _append_python_helper(lines, helper_name=helper_name, marker=marker)
+    elif archetype_id == FORCED_HEAVY_ARCHETYPE_CONTROL_FLOW:
+        replacement = [
+            f"{return_indent}if True:",
+            f"{return_indent}    return {return_expr}",
+            f"{return_indent}return {return_expr}",
+        ]
+        out = [*lines[:return_idx], *replacement, *lines[return_idx + 1 :]]
+    elif archetype_id == FORCED_HEAVY_ARCHETYPE_HELPER_REPLACE:
+        helper_name = f"_ge_wire_helper_{helper_suffix}"
+        temp_name = f"_ge_tmp_{helper_suffix}"
+        replacement = [
+            f"{return_indent}{temp_name} = {return_expr}",
+            f"{return_indent}return {helper_name}({temp_name})",
+        ]
+        out = [*lines[:return_idx], *replacement, *lines[return_idx + 1 :]]
+        out = _append_python_helper(out, helper_name=helper_name, marker=marker)
+    else:
+        raise _invalid("SCHEMA_FAIL")
+    rewritten = "\n".join(out)
+    if before.endswith("\n"):
+        rewritten += "\n"
+    return rewritten
+
+
+def _build_code_rewrite_ast_patch(
+    *,
+    target_relpath: str | None = None,
+    target_relpaths: list[str] | None = None,
+    marker: str,
+    repo_root: Path,
+    archetype_id: str | None = None,
+) -> bytes:
+    # Forced-heavy must be unified-diff-first and never depend on mutable AST site IDs.
+    relpaths: list[str] = []
+    if isinstance(target_relpaths, list) and target_relpaths:
+        relpaths = [str(row) for row in target_relpaths]
+    elif isinstance(target_relpath, str) and str(target_relpath).strip():
+        relpaths = [str(target_relpath)]
+    relpaths = _canonical_target_relpaths(target_relpaths=relpaths, max_items_u32=2)
+    mode = str(archetype_id or FORCED_HEAVY_ARCHETYPE_HELPER_REPLACE).strip()
+    deltas: list[dict[str, str]] = []
+    for idx, rel in enumerate(relpaths):
+        target_path = (repo_root / rel).resolve()
+        if not target_path.exists() or not target_path.is_file():
+            raise _invalid("SITE_NOT_FOUND:TARGET_PATH_MISSING")
+        if not str(rel).endswith(".py"):
+            raise _invalid("SITE_NOT_FOUND:TARGET_NOT_PY")
+        before = target_path.read_text(encoding="utf-8")
+        marker_for_file = marker if len(relpaths) == 1 else f"{marker}_{idx}"
+        after = _rewrite_for_archetype(before=before, marker=marker_for_file, archetype_id=mode)
+        if after == before:
+            raise _invalid("SITE_NOT_FOUND:NO_EFFECTIVE_DELTA")
+        deltas.append(
+            {
+                "target_relpath": rel,
+                "before": before,
+                "after": after,
+            }
+        )
+    return _build_multi_file_unified_patch(file_deltas=deltas)
+
+
+def _code_rewrite_ast_target_patchable(*, repo_root: Path, target_relpath: str) -> bool:
+    rel = str(target_relpath).strip()
+    if not rel.endswith(".py"):
+        return False
+    target_path = (repo_root / rel).resolve()
+    if not target_path.exists() or not target_path.is_file():
+        return False
+    try:
+        text = target_path.read_text(encoding="utf-8")
+    except Exception:
+        return False
+    return _first_function_return_site(text.splitlines()) is not None
+
+
+def _build_patch_bytes_for_template(
+    *,
+    template_id: str,
+    target_relpath: str,
+    target_relpaths: list[str] | None = None,
+    marker: str,
+    repo_root: Path,
+    archetype_id: str | None = None,
+) -> bytes:
+    if template_id == "COMMENT_APPEND":
+        return _build_comment_patch(target_relpath=target_relpath, marker=marker, repo_root=repo_root)
+    if template_id in {
+        "JSON_TWEAK_COOLDOWN",
+        "JSON_TWEAK_BUDGET_HINT",
+        "JSON_TWEAK_COOLDOWN_MINUS_1",
+        "JSON_TWEAK_BUDGET_HINT_MINUS_1STEP",
+    }:
+        return _build_json_tweak_patch(
+            target_relpath=target_relpath,
+            marker=marker,
+            template_id=template_id,
+            repo_root=repo_root,
+        )
+    if template_id == "CODE_FASTPATH_GUARD":
+        return _build_code_fastpath_guard_patch(
+            target_relpath=target_relpath,
+            repo_root=repo_root,
+        )
+    if template_id == "CODE_REWRITE_AST":
+        return _build_code_rewrite_ast_patch(
+            target_relpath=target_relpath,
+            target_relpaths=target_relpaths,
+            marker=marker,
+            repo_root=repo_root,
+            archetype_id=archetype_id,
+        )
+    raise _invalid("SCHEMA_FAIL")
 
 
 def _collect_prompt_trace(ge_config: dict[str, Any]) -> tuple[list[dict[str, str]], list[str], bool]:
@@ -507,12 +797,32 @@ def _lookup_replay_response(*, replay_path: Path, provider: str, model: str, pro
 
 
 def _selector_backend_response(*, backend: str, model: str, prompt: str) -> tuple[str, str]:
+    backend_key = str(backend).strip().lower()
+    if backend_key == "mlx":
+        previous_backend = os.environ.get("ORCH_LLM_BACKEND")
+        previous_model = os.environ.get("ORCH_MLX_MODEL")
+        os.environ["ORCH_LLM_BACKEND"] = "mlx"
+        model_id = str(model).strip() or str(previous_model or "").strip() or "mlx-community/Qwen2.5-Coder-14B-Instruct-4bit"
+        os.environ["ORCH_MLX_MODEL"] = model_id
+        try:
+            from orchestrator.llm_backend import get_backend  # local import keeps SH-1 usable without orchestration extras
+            response = get_backend().generate(prompt)
+        finally:
+            if previous_backend is None:
+                os.environ.pop("ORCH_LLM_BACKEND", None)
+            else:
+                os.environ["ORCH_LLM_BACKEND"] = previous_backend
+            if previous_model is None:
+                os.environ.pop("ORCH_MLX_MODEL", None)
+            else:
+                os.environ["ORCH_MLX_MODEL"] = previous_model
+        return str(response), model_id
+
     replay_path_raw = str(os.environ.get("ORCH_LLM_REPLAY_PATH", "")).strip()
     if not replay_path_raw:
         raise RuntimeError("LLM_REPLAY_PATH_MISSING")
     replay_path = Path(replay_path_raw).expanduser().resolve()
 
-    backend_key = str(backend).strip()
     if backend_key in {"openai_replay", "openai_harvest"}:
         provider = "openai"
         model_id = _validate_openai_model(model)
@@ -625,7 +935,18 @@ def _parse_selector_response(response_text: str) -> list[dict[str, str]]:
     payload = json.loads(response_text)
     rows: Any = payload
     if isinstance(payload, dict):
-        rows = payload.get("selections")
+        selections = payload.get("selections")
+        if isinstance(selections, list):
+            rows = selections
+        else:
+            # Some models echo the schema envelope as {"type":"array","items":[...]}.
+            # Accept this deterministically instead of failing closed on shape-only drift.
+            items = payload.get("items")
+            payload_type = str(payload.get("type", "")).strip().lower()
+            if isinstance(items, list) and payload_type in {"", "array"}:
+                rows = items
+            else:
+                rows = selections
     if not isinstance(rows, list):
         raise RuntimeError("LLM_SELECTOR_INVALID")
     out: list[dict[str, str]] = []
@@ -655,7 +976,21 @@ def _select_with_llm_selector(
     backend = str(selector_cfg.get("backend", "")).strip()
     model = str(selector_cfg.get("model", "")).strip()
     max_proposals_u64 = max(1, int(selector_cfg.get("max_proposals_u64", 8)))
+    fallback_on_error_b = bool(selector_cfg.get("fallback_on_error_b", False))
     candidate_pool = list(candidates[:max_proposals_u64])
+
+    def _fallback_rows(*, resolved_model: str | None = None) -> list[dict[str, str]]:
+        model_value = str(resolved_model or model).strip()
+        return [
+            {
+                "bucket": str(row.get("bucket", "")),
+                "template_id": str(row.get("template_id", "")),
+                "target_relpath": str(row.get("target_relpath", "")),
+                "model": model_value,
+            }
+            for row in candidate_pool[:max_ccaps]
+        ]
+
     if not candidate_pool:
         return [], [], "LLM_SELECTOR_EMPTY_POOL"
 
@@ -671,8 +1006,12 @@ def _select_with_llm_selector(
     try:
         response, resolved_model = _selector_backend_response(backend=backend, model=model, prompt=prompt)
     except _LLMReplayMissError:
+        if fallback_on_error_b:
+            return _fallback_rows(), [], None
         return [], [], "LLM_REPLAY_MISS"
     except Exception as exc:  # noqa: BLE001
+        if fallback_on_error_b:
+            return _fallback_rows(), [], None
         return [], [], f"LLM_SELECTOR_ERROR:{exc}"
 
     response_hash = _sha256_prefixed(response.encode("utf-8"))
@@ -681,6 +1020,8 @@ def _select_with_llm_selector(
     try:
         parsed = _parse_selector_response(response)
     except Exception:  # noqa: BLE001
+        if fallback_on_error_b:
+            return _fallback_rows(resolved_model=resolved_model), prompt_rows, None
         return [], prompt_rows, "LLM_SELECTOR_INVALID"
 
     candidate_map = {
@@ -706,6 +1047,8 @@ def _select_with_llm_selector(
         if len(selected) >= max_ccaps:
             break
     if not selected:
+        if fallback_on_error_b:
+            return _fallback_rows(resolved_model=resolved_model), prompt_rows, None
         return [], prompt_rows, "LLM_SELECTOR_EMPTY_SELECTION"
     return selected, prompt_rows, None
 
@@ -1106,6 +1449,8 @@ def _template_supports_target(*, template_id: str, target_relpath: str) -> bool:
         return str(target_relpath).endswith(".json")
     if template_id == "CODE_FASTPATH_GUARD":
         return str(target_relpath).strip() == _CODE_FASTPATH_TARGET_RELPATH
+    if template_id == "CODE_REWRITE_AST":
+        return str(target_relpath).endswith(".py")
     return True
 
 
@@ -1157,6 +1502,245 @@ def _write_json(path: Path, payload: dict[str, Any]) -> None:
     write_canon_json(path, payload)
 
 
+def _tick_u64() -> int:
+    raw = str(os.environ.get("OMEGA_TICK_U64", "")).strip()
+    if not raw:
+        return 0
+    try:
+        return int(max(0, int(raw)))
+    except Exception:
+        return 0
+
+
+def _env_bool(name: str, *, default: bool = False) -> bool:
+    raw = str(os.environ.get(name, "1" if default else "0")).strip().lower()
+    return raw in {"1", "true", "yes", "on"}
+
+
+def _normalize_sha256(value: Any) -> str | None:
+    text = str(value or "").strip()
+    if not text.startswith("sha256:"):
+        return None
+    digest = text.split(":", 1)[1]
+    if len(digest) != 64 or any(ch not in "0123456789abcdef" for ch in digest):
+        return None
+    return f"sha256:{digest}"
+
+
+def _target_key_from_ban_row(row: dict[str, Any]) -> str:
+    key_raw = row.get("target_relpaths_key")
+    if isinstance(key_raw, str) and key_raw.strip():
+        return str(key_raw).strip()
+    relpaths_raw = row.get("target_relpaths")
+    if isinstance(relpaths_raw, list) and relpaths_raw:
+        return _target_relpaths_key(target_relpaths=[str(item) for item in relpaths_raw])
+    return _target_relpaths_key(target_relpaths=[str(row.get("target_relpath", "")).strip()])
+
+
+def _parse_failed_patch_ban_env() -> dict[str, set[str]]:
+    raw = str(os.environ.get("OMEGA_SH1_FAILED_PATCH_BAN_JSON", "")).strip()
+    if not raw:
+        return {}
+    try:
+        payload = json.loads(raw)
+    except Exception:
+        raise _invalid("SCHEMA_FAIL")
+    if not isinstance(payload, list):
+        raise _invalid("SCHEMA_FAIL")
+    out: dict[str, set[str]] = {}
+    for row in payload:
+        if not isinstance(row, dict):
+            raise _invalid("SCHEMA_FAIL")
+        target = _target_key_from_ban_row(row)
+        patch_sha256 = _normalize_sha256(row.get("patch_sha256"))
+        if patch_sha256 is None:
+            raise _invalid("SCHEMA_FAIL")
+        out.setdefault(target, set()).add(patch_sha256)
+    return out
+
+
+def _parse_failed_shape_ban_env() -> dict[str, set[str]]:
+    raw = str(os.environ.get(_FAILED_SHAPE_BAN_ENV_KEY, "")).strip()
+    if not raw:
+        return {}
+    try:
+        payload = json.loads(raw)
+    except Exception:
+        raise _invalid("SCHEMA_FAIL")
+    if not isinstance(payload, list):
+        raise _invalid("SCHEMA_FAIL")
+    out: dict[str, set[str]] = {}
+    for row in payload:
+        if not isinstance(row, dict):
+            raise _invalid("SCHEMA_FAIL")
+        target = _target_key_from_ban_row(row)
+        shape_id = _normalize_sha256(row.get("shape_id"))
+        if shape_id is None:
+            raise _invalid("SCHEMA_FAIL")
+        out.setdefault(target, set()).add(shape_id)
+    return out
+
+
+def _forced_heavy_archetype_for_candidate(*, tick_u64: int, debt_key: str, candidate_idx_u32: int) -> str:
+    seed = f"{int(tick_u64)}|{str(debt_key)}|{int(candidate_idx_u32)}".encode("utf-8")
+    start = int(hashlib.sha256(seed).hexdigest(), 16) % len(FORCED_HEAVY_ARCHETYPE_IDS)
+    return str(FORCED_HEAVY_ARCHETYPE_IDS[(start + int(candidate_idx_u32)) % len(FORCED_HEAVY_ARCHETYPE_IDS)])
+
+
+def _deterministic_target_order(
+    *,
+    targets: list[str],
+    tick_u64: int,
+    debt_key: str,
+    candidate_idx_u32: int,
+    archetype_id: str,
+) -> list[str]:
+    rows = [str(target) for target in targets if str(target).strip()]
+    if not rows:
+        return []
+    seed = f"{int(tick_u64)}|{str(debt_key)}|{int(candidate_idx_u32)}|{str(archetype_id)}".encode("utf-8")
+    start = int(hashlib.sha256(seed).hexdigest(), 16) % len(rows)
+    return [*rows[start:], *rows[:start]]
+
+
+def _dispatch_error_code_for_exception(exc: Exception) -> str:
+    if isinstance(exc, json.JSONDecodeError):
+        return "PARSE_FAIL_PRE_CANDIDATES"
+    text = str(exc)
+    if "BACKEND_INIT_FAILED" in text or "BACKEND_INIT_FAIL" in text:
+        return "BACKEND_INIT_FAIL"
+    if text.startswith("INVALID:"):
+        return "EARLY_RETURN"
+    return "UNEXPECTED_EXCEPTION"
+
+
+def _candidate_precheck_row(
+    *,
+    candidate_idx_u32: int,
+    bucket: str,
+    template_id: str,
+    target_relpath: str,
+    target_relpaths: list[str] | None = None,
+    selected_for_ccap_b: bool,
+    precheck_decision_code: str,
+    patch_sha256: str | None,
+    ccap_id: str | None,
+    archetype_id: str | None = None,
+    nontriviality_cert_v1: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    code = str(precheck_decision_code).strip()
+    if code not in _PRECHECK_DECISION_CODES:
+        raise _invalid("SCHEMA_FAIL")
+    row = {
+        "candidate_idx_u32": int(max(0, int(candidate_idx_u32))),
+        "bucket": str(bucket),
+        "template_id": str(template_id),
+        "target_relpath": _normalize_relpath(str(target_relpath)),
+        "target_relpaths": _canonical_target_relpaths(
+            target_relpaths=(
+                [str(item) for item in target_relpaths]
+                if isinstance(target_relpaths, list) and target_relpaths
+                else [str(target_relpath)]
+            ),
+            max_items_u32=2,
+        ),
+        "selected_for_ccap_b": bool(selected_for_ccap_b),
+        "precheck_decision_code": code,
+        "patch_sha256": str(patch_sha256) if isinstance(patch_sha256, str) and patch_sha256.strip() else None,
+        "ccap_id": str(ccap_id) if isinstance(ccap_id, str) and ccap_id.strip() else None,
+        "archetype_id": (str(archetype_id) if isinstance(archetype_id, str) and archetype_id.strip() else None),
+        "nontriviality_cert_v1": (dict(nontriviality_cert_v1) if isinstance(nontriviality_cert_v1, dict) else None),
+    }
+    row["target_relpaths_key"] = _target_relpaths_key(target_relpaths=list(row["target_relpaths"]))
+    if bool(row["selected_for_ccap_b"]) != (row["precheck_decision_code"] == "SELECTED_FOR_CCAP"):
+        raise _invalid("SCHEMA_FAIL")
+    return row
+
+
+def _write_candidate_precheck_receipt(
+    *,
+    out_dir: Path,
+    tick_u64: int,
+    dispatch_happened_b: bool,
+    precheck_status_code: str,
+    dispatch_error_code: str,
+    candidates: list[dict[str, Any]],
+) -> tuple[Path, dict[str, Any], str]:
+    status_code = str(precheck_status_code).strip()
+    error_code = str(dispatch_error_code).strip()
+    if status_code not in _PRECHECK_STATUS_CODES:
+        raise _invalid("SCHEMA_FAIL")
+    if error_code not in _DISPATCH_ERROR_CODES:
+        raise _invalid("SCHEMA_FAIL")
+    if status_code == "OK" and error_code != "NONE":
+        raise _invalid("SCHEMA_FAIL")
+    if status_code == "DISPATCH_ERROR" and error_code == "NONE":
+        raise _invalid("SCHEMA_FAIL")
+    rows = [dict(row) for row in candidates if isinstance(row, dict)]
+    payload = {
+        "schema_name": "candidate_precheck_receipt_v1",
+        "schema_version": "v19_0",
+        "receipt_id": "sha256:" + ("0" * 64),
+        "tick_u64": int(max(0, int(tick_u64))),
+        "dispatch_happened_b": bool(dispatch_happened_b),
+        "precheck_status_code": status_code,
+        "dispatch_error_code": error_code,
+        "candidate_count_u32": int(len(rows)),
+        "candidates": rows,
+    }
+    validate_schema_v19(payload, "candidate_precheck_receipt_v1")
+    return write_hashed_json(
+        out_dir / "precheck",
+        "candidate_precheck_receipt_v1.json",
+        payload,
+        id_field="receipt_id",
+    )
+
+
+def _write_site_not_found_repro(
+    *,
+    out_dir: Path,
+    tick_u64: int,
+    rows: list[dict[str, Any]],
+) -> None:
+    if not rows:
+        return
+    dedup: dict[tuple[str, str, str, str], dict[str, Any]] = {}
+    for row in rows:
+        if not isinstance(row, dict):
+            continue
+        target_relpath = _normalize_relpath(str(row.get("target_relpath", "")).strip())
+        template_id = str(row.get("template_id", "")).strip()
+        locator_rule = str(row.get("site_locator_rule", "")).strip()
+        reason_code = str(row.get("reason_code", "")).strip()
+        if not template_id or not locator_rule or not reason_code:
+            continue
+        key = (target_relpath, template_id, locator_rule, reason_code)
+        dedup[key] = {
+            "target_relpath": target_relpath,
+            "template_id": template_id,
+            "archetype_id": (
+                str(row.get("archetype_id", "")).strip()
+                if isinstance(row.get("archetype_id"), str) and str(row.get("archetype_id", "")).strip()
+                else None
+            ),
+            "site_locator_rule": locator_rule,
+            "reason_code": reason_code,
+        }
+    if not dedup:
+        return
+    ordered_rows = [dedup[key] for key in sorted(dedup.keys())]
+    _write_json(
+        out_dir / "precheck" / "site_not_found_repro_v1.json",
+        {
+            "schema_name": "site_not_found_repro_v1",
+            "schema_version": "v1",
+            "tick_u64": int(max(0, int(tick_u64))),
+            "records": ordered_rows,
+        },
+    )
+
+
 def _emit_ccap(
     *,
     repo_root: Path,
@@ -1171,29 +1755,18 @@ def _emit_ccap(
     size_buckets_bytes_u64: list[int],
     bucket: str,
     template_id: str,
+    patch_bytes: bytes | None = None,
+    archetype_id: str | None = None,
 ) -> dict[str, Any]:
-    if template_id == "COMMENT_APPEND":
-        patch_bytes = _build_comment_patch(target_relpath=target_relpath, marker=marker, repo_root=repo_root)
-    elif template_id in {
-        "JSON_TWEAK_COOLDOWN",
-        "JSON_TWEAK_BUDGET_HINT",
-        "JSON_TWEAK_COOLDOWN_MINUS_1",
-        "JSON_TWEAK_BUDGET_HINT_MINUS_1STEP",
-    }:
-        patch_bytes = _build_json_tweak_patch(
+    patch_bytes_effective = patch_bytes
+    if patch_bytes_effective is None:
+        patch_bytes_effective = _build_patch_bytes_for_template(
+            template_id=template_id,
             target_relpath=target_relpath,
             marker=marker,
-            template_id=template_id,
             repo_root=repo_root,
         )
-    elif template_id == "CODE_FASTPATH_GUARD":
-        patch_bytes = _build_code_fastpath_guard_patch(
-            target_relpath=target_relpath,
-            repo_root=repo_root,
-        )
-    else:
-        raise _invalid("SCHEMA_FAIL")
-    patch_blob_id = _sha256_prefixed(patch_bytes)
+    patch_blob_id = _sha256_prefixed(patch_bytes_effective)
 
     payload = {
         "kind": "PATCH",
@@ -1262,13 +1835,13 @@ def _emit_ccap(
     blobs_dir.mkdir(parents=True, exist_ok=True)
 
     patch_path = blobs_dir / f"sha256_{patch_blob_id.split(':', 1)[1]}.patch"
-    patch_path.write_bytes(patch_bytes)
+    patch_path.write_bytes(patch_bytes_effective)
 
     ccap_path = ccap_dir / f"sha256_{ccap_hex}.ccap_v1.json"
     _write_json(ccap_path, ccap_obj)
 
     pd_payload, _pd_features = build_pd_from_patch_bytes(
-        patch_bytes=patch_bytes,
+        patch_bytes=patch_bytes_effective,
         base_tree_id=base_tree_id,
         ek_id=str(pins["active_ek_id"]),
         op_pool_id=str(op_pool_ids[0]),
@@ -1279,6 +1852,7 @@ def _emit_ccap(
     return {
         "bucket": bucket,
         "template_id": template_id,
+        "archetype_id": (str(archetype_id) if isinstance(archetype_id, str) and archetype_id.strip() else None),
         "ccap_id": ccap_id,
         "ccap_relpath": ccap_path.relative_to(out_dir).as_posix(),
         "patch_blob_id": patch_blob_id,
@@ -1313,229 +1887,635 @@ def main() -> None:
     seed = max(0, int(args.seed))
     model_id = str(args.model_id).strip() or "ge-v0_3"
     max_ccaps = max(1, min(8, int(args.max_ccaps)))
-
-    ge_config = load_ge_config(ge_config_path)
-    validate_schema(ge_config, "ge_config_v1")
-
-    # The CLI allows explicit pin paths but governance authority remains a single, explicit payload.
-    # In survival drill runs we allow a drill-only pins file (selected via OMEGA_AUTHORITY_PINS_REL)
-    # while keeping the check fail-closed: the caller must pass the exact resolved path.
-    pins_rel = str(os.environ.get("OMEGA_AUTHORITY_PINS_REL", "authority/authority_pins_v1.json")).strip()
-    if not pins_rel:
-        pins_rel = "authority/authority_pins_v1.json"
-    expected_authority_path = (repo_root / pins_rel).resolve()
-    if authority_pins_path != expected_authority_path:
-        raise _invalid("SCHEMA_FAIL")
-    pins = load_authority_pins(repo_root)
-    authority_pins_hash = _sha256_prefixed(canon_bytes(pins))
-    auth_hash_value = auth_hash(pins)
-
-    xs_snapshot, xs_events = build_xs_snapshot(
-        recent_runs_root=recent_runs_root,
-        ge_config=ge_config,
-        authority_pins_hash=authority_pins_hash,
-    )
-
     subrun_out_dir.mkdir(parents=True, exist_ok=True)
-    _write_json(subrun_out_dir / "ge_xs_snapshot_v1.json", xs_snapshot)
-
-    ge_state_root.mkdir(parents=True, exist_ok=True)
-    xs_hex = str(xs_snapshot["xs_id"]).split(":", 1)[1]
-    _write_json(ge_state_root / "ge_xs_snapshot_v1.json", xs_snapshot)
-    _write_json(ge_state_root / "snapshots" / f"sha256_{xs_hex}.ge_xs_snapshot_v1.json", xs_snapshot)
-
-    trace_prompt_rows, _trace_prompt_hashes, _has_trace = _collect_prompt_trace(ge_config)
-    latest_observation = _latest_observation_payload(repo_root=repo_root, recent_runs_root=recent_runs_root)
-    skill_policy = _derive_skill_policy_from_observation_payload(latest_observation)
-    skill_policy_hash = canon_hash_obj(skill_policy)
-
-    proposal_cfg = ge_config.get("proposal_space_patch")
-    if not isinstance(proposal_cfg, dict):
-        raise _invalid("SCHEMA_FAIL")
-    allowed_targets_raw = proposal_cfg.get("allowed_target_relpaths")
-    if not isinstance(allowed_targets_raw, list) or not allowed_targets_raw:
-        raise _invalid("SCHEMA_FAIL")
-    allowed_targets = [_normalize_relpath(str(row)) for row in allowed_targets_raw]
-
-    size_buckets = proposal_cfg.get("size_buckets_bytes_u64")
-    if not isinstance(size_buckets, list) or not size_buckets:
-        raise _invalid("SCHEMA_FAIL")
-    size_buckets_u64 = [int(row) for row in size_buckets]
-    templates_cfg = proposal_cfg.get("templates")
-    if not isinstance(templates_cfg, list):
-        raise _invalid("SCHEMA_FAIL")
-    allowed_templates = sorted(
-        {
-            str(row.get("template_id", "")).strip()
-            for row in templates_cfg
-            if isinstance(row, dict) and str(row.get("template_id", "")).strip() in _SUPPORTED_TEMPLATE_IDS
-        }
-    )
-
-    llm_selector_cfg_raw = ge_config.get("llm_selector")
-    if llm_selector_cfg_raw is None:
-        llm_selector_cfg: dict[str, Any] = {
-            "enabled_b": False,
-            "backend": "",
-            "model": "",
-            "max_proposals_u64": 8,
-        }
-    elif isinstance(llm_selector_cfg_raw, dict):
-        llm_selector_cfg = dict(llm_selector_cfg_raw)
-    else:
-        raise _invalid("SCHEMA_FAIL")
-
-    target_stats = _target_stats_from_events(events=xs_events, allowed_targets=allowed_targets)
-    bucket_plan = _bucket_plan(ge_config=ge_config, max_ccaps=max_ccaps)
-    bucket_plan = _apply_skill_policy_to_bucket_plan(bucket_plan=bucket_plan, skill_policy=skill_policy)
-
-    hard_avoid_prefixes = _hard_avoid_prefixes(xs_snapshot)
-
-    active_ek = _load_active_ek(repo_root, str(pins["active_ek_id"]))
-    recipes = _load_build_recipes(repo_root)
-    build_recipe_id = _resolve_default_recipe_id(recipes)
-    base_tree_id = _base_tree_id_best_effort(repo_root)
-
-    planned_candidates: list[dict[str, str]] = []
-    for bucket in ("opt", "nov", "grow"):
-        target_count = int(bucket_plan.get(bucket, 0))
-        if target_count <= 0:
-            continue
-        template_id = _template_for_bucket(ge_config=ge_config, bucket=bucket)
-        if template_id is None:
-            continue
-
-        ranked_targets = _ranked_targets_for_bucket(
-            bucket=bucket,
-            allowed_targets=allowed_targets,
-            target_stats=target_stats,
-        )
-        ranked_targets = _prioritize_targets_for_speedup(
-            targets=ranked_targets,
-            speedup_mode_b=bool(skill_policy.get("thermo_worsened_b", False)) and bucket == "opt",
-        )
-        ranked_targets = _prioritize_targets_for_model_genesis(
-            targets=ranked_targets,
-            dataset_refresh_needed_b=bool(skill_policy.get("dataset_refresh_needed_b", False)),
-        )
-        eligible_targets = [
-            target
-            for target in ranked_targets
-            if _eligible_target(
-                target_relpath=target,
-                repo_root=repo_root,
-                ge_config=ge_config,
-                hard_avoid_prefixes=hard_avoid_prefixes,
-            )
-            and _template_supports_target(template_id=template_id, target_relpath=target)
-        ]
-        if template_id in {"JSON_TWEAK_COOLDOWN", "JSON_TWEAK_BUDGET_HINT"}:
-            eligible_targets = sorted(
-                eligible_targets,
-                key=lambda target: (
-                    int(target_stats.get(target, _empty_target_stats()).get("seen_u64", 0)),
-                    target,
-                ),
-            )
-
-        for target in eligible_targets[:target_count]:
-            planned_candidates.append(
-                {
-                    "bucket": bucket,
-                    "template_id": template_id,
-                    "target_relpath": target,
-                }
-            )
-
-    selector_prompt_rows: list[dict[str, str]] = []
-    selector_error_reason: str | None = None
-    selected_candidates: list[dict[str, str]]
-    if bool(llm_selector_cfg.get("enabled_b", False)):
-        selected_candidates, selector_prompt_rows, selector_error_reason = _select_with_llm_selector(
-            selector_cfg=llm_selector_cfg,
-            candidates=planned_candidates,
-            allowed_targets=allowed_targets,
-            allowed_templates=allowed_templates,
-            max_ccaps=max_ccaps,
-            latest_observation=latest_observation,
-        )
-    else:
-        selected_candidates = list(planned_candidates[:max_ccaps])
-
-    prompt_rows = [*trace_prompt_rows, *selector_prompt_rows]
-    prompt_hashes = [str(row.get("prompt_hash", "")) for row in prompt_rows]
-    fingerprint_inputs = {
-        "schema_version": "ge_run_inputs_fingerprint_inputs_v2",
-        "seed": seed,
-        "model_id": model_id,
-        "prompt_hashes": prompt_hashes,
-        "prompt_response_rows": prompt_rows,
-        "ge_config_id": str(ge_config.get("ge_config_id", "")),
-        "authority_pins_hash": authority_pins_hash,
-        "receipt_stream_hash": str(xs_snapshot.get("receipt_stream_hash", "")),
-        "xs_id": str(xs_snapshot.get("xs_id", "")),
-        "skill_policy_hash": skill_policy_hash,
-    }
-    inputs_hash = _sha256_prefixed(canon_bytes(fingerprint_inputs))
-
-    fingerprint = {
-        "schema_version": "ge_run_inputs_fingerprint_v2",
-        "inputs_hash": inputs_hash,
-        "seed": seed,
-        "model_id": model_id,
-        "prompt_hashes": prompt_hashes,
-        "prompt_response_rows": prompt_rows,
-        "ge_config_id": str(ge_config.get("ge_config_id", "")),
-        "authority_pins_hash": authority_pins_hash,
-        "receipt_stream_hash": str(xs_snapshot.get("receipt_stream_hash", "")),
-        "xs_id": str(xs_snapshot.get("xs_id", "")),
-        "skill_policy_hash": skill_policy_hash,
-    }
-    _write_json(subrun_out_dir / "ge_run_inputs_fingerprint_v2.json", fingerprint)
-
-    if prompt_rows:
-        _write_json(
-            subrun_out_dir / "ge_prompt_response_hashes_v1.json",
-            {
-                "schema_version": "ge_prompt_response_hashes_v1",
-                "inputs_hash": inputs_hash,
-                "rows": prompt_rows,
-            },
-        )
-
-    diagnostic_reason_code: str | None = None
-    if bool(skill_policy.get("persistence_unhealthy_b", False)):
-        diagnostic_reason_code = "PERSISTENCE_HEALTH_DROP"
-    elif selector_error_reason is not None:
-        diagnostic_reason_code = str(selector_error_reason)
-
+    dispatch_happened_b = True
+    tick_u64 = _tick_u64()
+    precheck_status_code = "DISPATCH_ERROR"
+    dispatch_error_code = "UNEXPECTED_EXCEPTION"
+    precheck_rows: list[dict[str, Any]] = []
+    site_not_found_rows: list[dict[str, Any]] = []
+    precheck_written_b = False
+    inputs_hash = ""
     emitted_ccaps: list[dict[str, Any]] = []
-    global_slot = 0
-    diagnostic_only_b = diagnostic_reason_code is not None
-    if diagnostic_only_b:
-        _write_json(
-            subrun_out_dir / "ge_diagnostic_only_v1.json",
-            {
-                "schema_version": "ge_diagnostic_only_v1",
-                "inputs_hash": inputs_hash,
-                "skill_policy_hash": skill_policy_hash,
-                "reason_code": str(diagnostic_reason_code),
-                "bucket_plan": {
-                    "opt_u64": int(bucket_plan["opt"]),
-                    "nov_u64": int(bucket_plan["nov"]),
-                    "grow_u64": int(bucket_plan["grow"]),
-                },
-                "ccap_count_u64": 0,
-            },
+
+    def _flush_candidate_precheck() -> None:
+        nonlocal precheck_written_b
+        if precheck_written_b:
+            return
+        _write_candidate_precheck_receipt(
+            out_dir=subrun_out_dir,
+            tick_u64=tick_u64,
+            dispatch_happened_b=bool(dispatch_happened_b),
+            precheck_status_code=str(precheck_status_code),
+            dispatch_error_code=str(dispatch_error_code),
+            candidates=precheck_rows,
         )
-    else:
-        for row in selected_candidates:
+        _write_site_not_found_repro(
+            out_dir=subrun_out_dir,
+            tick_u64=tick_u64,
+            rows=site_not_found_rows,
+        )
+        precheck_written_b = True
+
+    try:
+        ge_config = load_ge_config(ge_config_path)
+        validate_schema(ge_config, "ge_config_v1")
+
+        # The CLI allows explicit pin paths but governance authority remains a single, explicit payload.
+        # In survival drill runs we allow a drill-only pins file (selected via OMEGA_AUTHORITY_PINS_REL)
+        # while keeping the check fail-closed: the caller must pass the exact resolved path.
+        pins_rel = str(os.environ.get("OMEGA_AUTHORITY_PINS_REL", "authority/authority_pins_v1.json")).strip()
+        if not pins_rel:
+            pins_rel = "authority/authority_pins_v1.json"
+        expected_authority_path = (repo_root / pins_rel).resolve()
+        if authority_pins_path != expected_authority_path:
+            raise _invalid("SCHEMA_FAIL")
+        pins = load_authority_pins(repo_root)
+        authority_pins_hash = _sha256_prefixed(canon_bytes(pins))
+        auth_hash_value = auth_hash(pins)
+
+        xs_snapshot, xs_events = build_xs_snapshot(
+            recent_runs_root=recent_runs_root,
+            ge_config=ge_config,
+            authority_pins_hash=authority_pins_hash,
+        )
+
+        _write_json(subrun_out_dir / "ge_xs_snapshot_v1.json", xs_snapshot)
+
+        ge_state_root.mkdir(parents=True, exist_ok=True)
+        xs_hex = str(xs_snapshot["xs_id"]).split(":", 1)[1]
+        _write_json(ge_state_root / "ge_xs_snapshot_v1.json", xs_snapshot)
+        _write_json(ge_state_root / "snapshots" / f"sha256_{xs_hex}.ge_xs_snapshot_v1.json", xs_snapshot)
+
+        trace_prompt_rows, _trace_prompt_hashes, _has_trace = _collect_prompt_trace(ge_config)
+        latest_observation = _latest_observation_payload(repo_root=repo_root, recent_runs_root=recent_runs_root)
+        skill_policy = _derive_skill_policy_from_observation_payload(latest_observation)
+        skill_policy_hash = canon_hash_obj(skill_policy)
+
+        proposal_cfg = ge_config.get("proposal_space_patch")
+        if not isinstance(proposal_cfg, dict):
+            raise _invalid("SCHEMA_FAIL")
+        allowed_targets_raw = proposal_cfg.get("allowed_target_relpaths")
+        if not isinstance(allowed_targets_raw, list) or not allowed_targets_raw:
+            raise _invalid("SCHEMA_FAIL")
+        allowed_targets = [_normalize_relpath(str(row)) for row in allowed_targets_raw]
+
+        size_buckets = proposal_cfg.get("size_buckets_bytes_u64")
+        if not isinstance(size_buckets, list) or not size_buckets:
+            raise _invalid("SCHEMA_FAIL")
+        size_buckets_u64 = [int(row) for row in size_buckets]
+        templates_cfg = proposal_cfg.get("templates")
+        if not isinstance(templates_cfg, list):
+            raise _invalid("SCHEMA_FAIL")
+        allowed_templates = sorted(
+            {
+                str(row.get("template_id", "")).strip()
+                for row in templates_cfg
+                if isinstance(row, dict) and str(row.get("template_id", "")).strip() in _SUPPORTED_TEMPLATE_IDS
+            }
+        )
+        forced_heavy_b = _env_bool("OMEGA_SH1_FORCED_HEAVY_B", default=False)
+        forced_debt_key = str(os.environ.get("OMEGA_SH1_FORCED_DEBT_KEY", "")).strip()
+        forced_wiring_locus_relpath: str | None = None
+        forced_wiring_locus_raw = str(os.environ.get(_FORCED_WIRING_LOCUS_ENV_KEY, "")).strip()
+        if forced_heavy_b and forced_wiring_locus_raw:
+            try:
+                forced_wiring_locus_relpath = _normalize_relpath(forced_wiring_locus_raw)
+            except Exception:
+                forced_wiring_locus_relpath = None
+        if forced_heavy_b:
+            forced_templates = [template_id for template_id in _FORCED_HEAVY_TEMPLATE_IDS if template_id in _SUPPORTED_TEMPLATE_IDS]
+            if not forced_templates:
+                raise _invalid("SCHEMA_FAIL")
+            allowed_templates = sorted(set(forced_templates))
+            if not forced_debt_key:
+                raise _invalid("SCHEMA_FAIL")
+        failed_patch_ban_by_target = _parse_failed_patch_ban_env()
+        failed_shape_ban_by_target = _parse_failed_shape_ban_env()
+
+        llm_selector_cfg_raw = ge_config.get("llm_selector")
+        if llm_selector_cfg_raw is None:
+            llm_selector_cfg: dict[str, Any] = {
+                "enabled_b": False,
+                "backend": "",
+                "model": "",
+                "max_proposals_u64": 8,
+            }
+        elif isinstance(llm_selector_cfg_raw, dict):
+            llm_selector_cfg = dict(llm_selector_cfg_raw)
+        else:
+            raise _invalid("SCHEMA_FAIL")
+        env_llm_backend = str(os.environ.get("ORCH_LLM_BACKEND", "")).strip().lower()
+        if env_llm_backend == "mlx":
+            llm_selector_cfg["enabled_b"] = True
+            llm_selector_cfg["backend"] = "mlx"
+            selector_model = str(llm_selector_cfg.get("model", "")).strip()
+            if not selector_model or selector_model.startswith(("gpt-", "claude-")):
+                llm_selector_cfg["model"] = str(
+                    os.environ.get("ORCH_MLX_MODEL", "mlx-community/Qwen2.5-Coder-14B-Instruct-4bit")
+                ).strip() or "mlx-community/Qwen2.5-Coder-14B-Instruct-4bit"
+
+        target_stats = _target_stats_from_events(events=xs_events, allowed_targets=allowed_targets)
+        bucket_plan = _bucket_plan(ge_config=ge_config, max_ccaps=max_ccaps)
+        bucket_plan = _apply_skill_policy_to_bucket_plan(bucket_plan=bucket_plan, skill_policy=skill_policy)
+
+        hard_avoid_prefixes = _hard_avoid_prefixes(xs_snapshot)
+
+        active_ek = _load_active_ek(repo_root, str(pins["active_ek_id"]))
+        recipes = _load_build_recipes(repo_root)
+        build_recipe_id = _resolve_default_recipe_id(recipes)
+        base_tree_id = _base_tree_id_best_effort(repo_root)
+
+        planned_candidates: list[dict[str, Any]] = []
+        if forced_heavy_b:
+            ranked_targets = _ranked_targets_for_bucket(
+                bucket="grow",
+                allowed_targets=allowed_targets,
+                target_stats=target_stats,
+            )
+            ranked_targets = _prioritize_targets_for_model_genesis(
+                targets=ranked_targets,
+                dataset_refresh_needed_b=bool(skill_policy.get("dataset_refresh_needed_b", False)),
+            )
+            eligible_py_targets = [
+                target
+                for target in ranked_targets
+                if _eligible_target(
+                    target_relpath=target,
+                    repo_root=repo_root,
+                    ge_config=ge_config,
+                    hard_avoid_prefixes=hard_avoid_prefixes,
+                )
+                and _template_supports_target(template_id="CODE_REWRITE_AST", target_relpath=target)
+                and _code_rewrite_ast_target_patchable(repo_root=repo_root, target_relpath=target)
+            ]
+            wiring_locus_available_b = bool(
+                isinstance(forced_wiring_locus_relpath, str)
+                and forced_wiring_locus_relpath
+                and _eligible_target(
+                    target_relpath=forced_wiring_locus_relpath,
+                    repo_root=repo_root,
+                    ge_config=ge_config,
+                    hard_avoid_prefixes=hard_avoid_prefixes,
+                )
+                and _template_supports_target(template_id="CODE_REWRITE_AST", target_relpath=forced_wiring_locus_relpath)
+                and _code_rewrite_ast_target_patchable(repo_root=repo_root, target_relpath=forced_wiring_locus_relpath)
+            )
+            primary_candidates = (
+                [target for target in eligible_py_targets if target != str(forced_wiring_locus_relpath)]
+                if wiring_locus_available_b
+                else list(eligible_py_targets)
+            )
+            forced_count = min(3, int(max_ccaps))
+            for candidate_idx in range(forced_count):
+                archetype_id = _forced_heavy_archetype_for_candidate(
+                    tick_u64=tick_u64,
+                    debt_key=forced_debt_key,
+                    candidate_idx_u32=int(candidate_idx),
+                )
+                target_candidates = _deterministic_target_order(
+                    targets=primary_candidates,
+                    tick_u64=tick_u64,
+                    debt_key=forced_debt_key,
+                    candidate_idx_u32=int(candidate_idx),
+                    archetype_id=archetype_id,
+                )
+                if not target_candidates:
+                    continue
+                row_target_relpaths = (
+                    [str(target_candidates[0]), str(forced_wiring_locus_relpath)]
+                    if wiring_locus_available_b and isinstance(forced_wiring_locus_relpath, str) and forced_wiring_locus_relpath
+                    else [str(target_candidates[0])]
+                )
+                planned_candidates.append(
+                    {
+                        "bucket": "grow",
+                        "template_id": "CODE_REWRITE_AST",
+                        "target_relpath": str(target_candidates[0]),
+                        "target_relpaths": _canonical_target_relpaths(target_relpaths=row_target_relpaths, max_items_u32=2),
+                        "target_candidates": [str(row) for row in target_candidates],
+                        "archetype_id": str(archetype_id),
+                        "wiring_locus_relpath": (
+                            str(forced_wiring_locus_relpath)
+                            if wiring_locus_available_b and isinstance(forced_wiring_locus_relpath, str) and forced_wiring_locus_relpath
+                            else None
+                        ),
+                    }
+                )
+            if not planned_candidates:
+                fallback_targets = [
+                    str(target)
+                    for target in ranked_targets
+                    if str(target).endswith(".py")
+                    and _template_supports_target(template_id="CODE_REWRITE_AST", target_relpath=str(target))
+                ]
+                if fallback_targets:
+                    archetype_id = _forced_heavy_archetype_for_candidate(
+                        tick_u64=tick_u64,
+                        debt_key=forced_debt_key,
+                        candidate_idx_u32=0,
+                    )
+                    planned_candidates.append(
+                        {
+                            "bucket": "grow",
+                            "template_id": "CODE_REWRITE_AST",
+                            "target_relpath": str(fallback_targets[0]),
+                            "target_relpaths": [str(fallback_targets[0])],
+                            "target_candidates": [str(row) for row in fallback_targets],
+                            "archetype_id": str(archetype_id),
+                            "wiring_locus_relpath": None,
+                        }
+                    )
+        else:
+            for bucket in ("opt", "nov", "grow"):
+                target_count = int(bucket_plan.get(bucket, 0))
+                if target_count <= 0:
+                    continue
+                template_id = _template_for_bucket(ge_config=ge_config, bucket=bucket)
+                if template_id is None:
+                    continue
+
+                ranked_targets = _ranked_targets_for_bucket(
+                    bucket=bucket,
+                    allowed_targets=allowed_targets,
+                    target_stats=target_stats,
+                )
+                ranked_targets = _prioritize_targets_for_speedup(
+                    targets=ranked_targets,
+                    speedup_mode_b=bool(skill_policy.get("thermo_worsened_b", False)) and bucket == "opt",
+                )
+                ranked_targets = _prioritize_targets_for_model_genesis(
+                    targets=ranked_targets,
+                    dataset_refresh_needed_b=bool(skill_policy.get("dataset_refresh_needed_b", False)),
+                )
+                eligible_targets = [
+                    target
+                    for target in ranked_targets
+                    if _eligible_target(
+                        target_relpath=target,
+                        repo_root=repo_root,
+                        ge_config=ge_config,
+                        hard_avoid_prefixes=hard_avoid_prefixes,
+                    )
+                    and _template_supports_target(template_id=template_id, target_relpath=target)
+                    and (
+                        template_id != "CODE_REWRITE_AST"
+                        or _code_rewrite_ast_target_patchable(repo_root=repo_root, target_relpath=target)
+                    )
+                ]
+                if template_id in {"JSON_TWEAK_COOLDOWN", "JSON_TWEAK_BUDGET_HINT"}:
+                    eligible_targets = sorted(
+                        eligible_targets,
+                        key=lambda target: (
+                            int(target_stats.get(target, _empty_target_stats()).get("seen_u64", 0)),
+                            target,
+                        ),
+                    )
+
+                for target in eligible_targets[:target_count]:
+                    planned_candidates.append(
+                        {
+                            "bucket": bucket,
+                            "template_id": template_id,
+                            "target_relpath": target,
+                        }
+                    )
+
+        selector_prompt_rows: list[dict[str, str]] = []
+        selector_error_reason: str | None = None
+        selected_candidates: list[dict[str, Any]]
+        if forced_heavy_b:
+            selected_candidates = list(planned_candidates[:max_ccaps])
+        elif bool(llm_selector_cfg.get("enabled_b", False)):
+            selected_candidates, selector_prompt_rows, selector_error_reason = _select_with_llm_selector(
+                selector_cfg=llm_selector_cfg,
+                candidates=planned_candidates,
+                allowed_targets=allowed_targets,
+                allowed_templates=allowed_templates,
+                max_ccaps=max_ccaps,
+                latest_observation=latest_observation,
+            )
+        else:
+            selected_candidates = list(planned_candidates[:max_ccaps])
+
+        prompt_rows = [*trace_prompt_rows, *selector_prompt_rows]
+        prompt_hashes = [str(row.get("prompt_hash", "")) for row in prompt_rows]
+        fingerprint_inputs = {
+            "schema_version": "ge_run_inputs_fingerprint_inputs_v2",
+            "seed": seed,
+            "model_id": model_id,
+            "prompt_hashes": prompt_hashes,
+            "prompt_response_rows": prompt_rows,
+            "ge_config_id": str(ge_config.get("ge_config_id", "")),
+            "authority_pins_hash": authority_pins_hash,
+            "receipt_stream_hash": str(xs_snapshot.get("receipt_stream_hash", "")),
+            "xs_id": str(xs_snapshot.get("xs_id", "")),
+            "skill_policy_hash": skill_policy_hash,
+            "forced_heavy_b": bool(forced_heavy_b),
+            "forced_wiring_locus_relpath": (str(forced_wiring_locus_relpath) if forced_wiring_locus_relpath else None),
+            "failed_patch_ban_by_target": {
+                str(target): sorted(list(hashes))
+                for target, hashes in sorted(failed_patch_ban_by_target.items(), key=lambda kv: str(kv[0]))
+            },
+            "failed_shape_ban_by_target": {
+                str(target): sorted(list(hashes))
+                for target, hashes in sorted(failed_shape_ban_by_target.items(), key=lambda kv: str(kv[0]))
+            },
+        }
+        inputs_hash = _sha256_prefixed(canon_bytes(fingerprint_inputs))
+
+        fingerprint = {
+            "schema_version": "ge_run_inputs_fingerprint_v2",
+            "inputs_hash": inputs_hash,
+            "seed": seed,
+            "model_id": model_id,
+            "prompt_hashes": prompt_hashes,
+            "prompt_response_rows": prompt_rows,
+            "ge_config_id": str(ge_config.get("ge_config_id", "")),
+            "authority_pins_hash": authority_pins_hash,
+            "receipt_stream_hash": str(xs_snapshot.get("receipt_stream_hash", "")),
+            "xs_id": str(xs_snapshot.get("xs_id", "")),
+            "skill_policy_hash": skill_policy_hash,
+            "forced_heavy_b": bool(forced_heavy_b),
+        }
+        _write_json(subrun_out_dir / "ge_run_inputs_fingerprint_v2.json", fingerprint)
+
+        if prompt_rows:
+            _write_json(
+                subrun_out_dir / "ge_prompt_response_hashes_v1.json",
+                {
+                    "schema_version": "ge_prompt_response_hashes_v1",
+                    "inputs_hash": inputs_hash,
+                    "rows": prompt_rows,
+                },
+            )
+
+        diagnostic_reason_code: str | None = None
+        if bool(skill_policy.get("persistence_unhealthy_b", False)):
+            diagnostic_reason_code = "PERSISTENCE_HEALTH_DROP"
+        elif selector_error_reason is not None:
+            diagnostic_reason_code = str(selector_error_reason)
+
+        emitted_ccaps = []
+        global_slot = 0
+        diagnostic_only_b = diagnostic_reason_code is not None
+        if diagnostic_only_b:
+            _write_json(
+                subrun_out_dir / "ge_diagnostic_only_v1.json",
+                {
+                    "schema_version": "ge_diagnostic_only_v1",
+                    "inputs_hash": inputs_hash,
+                    "skill_policy_hash": skill_policy_hash,
+                    "reason_code": str(diagnostic_reason_code),
+                    "bucket_plan": {
+                        "opt_u64": int(bucket_plan["opt"]),
+                        "nov_u64": int(bucket_plan["nov"]),
+                        "grow_u64": int(bucket_plan["grow"]),
+                    },
+                    "ccap_count_u64": 0,
+                },
+            )
+
+        for idx, row in enumerate(selected_candidates):
             bucket = str(row.get("bucket", "")).strip()
             template_id = str(row.get("template_id", "")).strip()
             target = _normalize_relpath(str(row.get("target_relpath", "")).strip())
+            target_relpaths_base_raw = row.get("target_relpaths")
+            target_relpaths_base = _canonical_target_relpaths(
+                target_relpaths=(
+                    [str(item) for item in target_relpaths_base_raw]
+                    if isinstance(target_relpaths_base_raw, list) and target_relpaths_base_raw
+                    else [target]
+                ),
+                max_items_u32=2,
+            )
+            wiring_locus_relpath = (
+                _normalize_relpath(str(row.get("wiring_locus_relpath", "")).strip())
+                if isinstance(row.get("wiring_locus_relpath"), str) and str(row.get("wiring_locus_relpath", "")).strip()
+                else None
+            )
+            archetype_id = (
+                str(row.get("archetype_id", "")).strip()
+                if isinstance(row.get("archetype_id"), str)
+                else None
+            )
+            if archetype_id and archetype_id not in FORCED_HEAVY_ARCHETYPE_IDS:
+                raise _invalid("SCHEMA_FAIL")
+            if (not forced_heavy_b) and archetype_id:
+                archetype_id = None
+            if diagnostic_only_b:
+                precheck_rows.append(
+                    _candidate_precheck_row(
+                        candidate_idx_u32=idx,
+                        bucket=bucket,
+                        template_id=template_id,
+                        target_relpath=target,
+                        target_relpaths=target_relpaths_base,
+                        selected_for_ccap_b=False,
+                        precheck_decision_code="DROPPED_POLICY_BLOCK",
+                        patch_sha256=None,
+                        ccap_id=None,
+                        archetype_id=archetype_id,
+                        nontriviality_cert_v1=None,
+                    )
+                )
+                continue
+            if forced_heavy_b and template_id not in _FORCED_HEAVY_TEMPLATE_IDS:
+                precheck_rows.append(
+                    _candidate_precheck_row(
+                        candidate_idx_u32=idx,
+                        bucket=bucket,
+                        template_id=template_id,
+                        target_relpath=target,
+                        target_relpaths=target_relpaths_base,
+                        selected_for_ccap_b=False,
+                        precheck_decision_code="DROPPED_FORCED_HEAVY_TEMPLATE_LOCK",
+                        patch_sha256=None,
+                        ccap_id=None,
+                        archetype_id=archetype_id,
+                        nontriviality_cert_v1=None,
+                    )
+                )
+                continue
+            if forced_heavy_b and template_id == "CODE_REWRITE_AST" and not wiring_locus_relpath:
+                precheck_rows.append(
+                    _candidate_precheck_row(
+                        candidate_idx_u32=idx,
+                        bucket=bucket,
+                        template_id=template_id,
+                        target_relpath=target,
+                        target_relpaths=target_relpaths_base,
+                        selected_for_ccap_b=False,
+                        precheck_decision_code="DROPPED_WIRING_LOCUS_UNAVAILABLE",
+                        patch_sha256=None,
+                        ccap_id=None,
+                        archetype_id=archetype_id,
+                        nontriviality_cert_v1=None,
+                    )
+                )
+                continue
             marker = f"{bucket}_{seed:016x}_{global_slot:04d}_{inputs_hash.split(':', 1)[1][:12]}"
-            emitted_ccaps.append(
-                _emit_ccap(
+            patch_bytes: bytes | None = None
+            patch_sha256: str | None = None
+            nontriviality_cert_v1: dict[str, Any] | None = None
+            target_candidates = row.get("target_candidates")
+            candidate_targets = (
+                [_normalize_relpath(str(item)) for item in target_candidates]
+                if isinstance(target_candidates, list) and target_candidates
+                else [target]
+            )
+            build_exc: Exception | None = None
+            site_not_found_seen_b = False
+            selected_target = target
+            selected_target_relpaths = list(target_relpaths_base)
+            for target_candidate in candidate_targets:
+                candidate_target_relpaths = (
+                    _canonical_target_relpaths(
+                        target_relpaths=[str(target_candidate), str(wiring_locus_relpath)],
+                        max_items_u32=2,
+                    )
+                    if template_id == "CODE_REWRITE_AST" and isinstance(wiring_locus_relpath, str) and wiring_locus_relpath
+                    else _canonical_target_relpaths(
+                        target_relpaths=[str(target_candidate)] + [row for row in target_relpaths_base if row != target],
+                        max_items_u32=2,
+                    )
+                )
+                if forced_heavy_b and template_id == "CODE_REWRITE_AST" and len(candidate_target_relpaths) < 2:
+                    continue
+                try:
+                    patch_bytes = _build_patch_bytes_for_template(
+                        template_id=template_id,
+                        target_relpath=target_candidate,
+                        target_relpaths=candidate_target_relpaths,
+                        marker=marker,
+                        repo_root=repo_root,
+                        archetype_id=archetype_id,
+                    )
+                    patch_sha256 = _sha256_prefixed(patch_bytes)
+                    selected_target = target_candidate
+                    selected_target_relpaths = candidate_target_relpaths
+                    break
+                except Exception as exc:
+                    build_exc = exc
+                    if "SITE_NOT_FOUND" in str(exc):
+                        site_not_found_seen_b = True
+                        site_not_found_rows.append(
+                            {
+                                "target_relpath": target_candidate,
+                                "target_relpaths": candidate_target_relpaths,
+                                "template_id": template_id,
+                                "archetype_id": archetype_id,
+                                "site_locator_rule": _site_locator_rule_for_template(template_id=template_id),
+                                "reason_code": _site_not_found_reason(exc),
+                            }
+                        )
+                        continue
+                    break
+            target = selected_target
+            if patch_bytes is None or patch_sha256 is None:
+                decision_code = "DROPPED_SITE_NOT_FOUND" if site_not_found_seen_b else "DROPPED_CCAP_EMIT_FAIL"
+                precheck_rows.append(
+                    _candidate_precheck_row(
+                        candidate_idx_u32=idx,
+                        bucket=bucket,
+                        template_id=template_id,
+                        target_relpath=target,
+                        target_relpaths=selected_target_relpaths,
+                        selected_for_ccap_b=False,
+                        precheck_decision_code=decision_code,
+                        patch_sha256=None,
+                        ccap_id=None,
+                        archetype_id=archetype_id,
+                        nontriviality_cert_v1=None,
+                    )
+                )
+                global_slot += 1
+                continue
+            if build_exc is not None and "SITE_NOT_FOUND" in str(build_exc):
+                # Deterministic retarget succeeded after site lookup failure on earlier targets.
+                pass
+            nontriviality_cert_v1 = build_nontriviality_cert_v1(
+                repo_root=repo_root,
+                patch_bytes=patch_bytes,
+                archetype_id=archetype_id,
+            )
+            if forced_heavy_b:
+                if not bool((nontriviality_cert_v1 or {}).get("wiring_class_ok_b", False)):
+                    precheck_rows.append(
+                        _candidate_precheck_row(
+                            candidate_idx_u32=idx,
+                            bucket=bucket,
+                            template_id=template_id,
+                            target_relpath=target,
+                            target_relpaths=selected_target_relpaths,
+                            selected_for_ccap_b=False,
+                            precheck_decision_code="DROPPED_INSUFFICIENT_WIRING_DELTA",
+                            patch_sha256=patch_sha256,
+                            ccap_id=None,
+                            archetype_id=archetype_id,
+                            nontriviality_cert_v1=nontriviality_cert_v1,
+                        )
+                    )
+                    global_slot += 1
+                    continue
+                if archetype_id and bool((nontriviality_cert_v1 or {}).get("archetype_pass_b", False)) is not True:
+                    precheck_rows.append(
+                        _candidate_precheck_row(
+                            candidate_idx_u32=idx,
+                            bucket=bucket,
+                            template_id=template_id,
+                            target_relpath=target,
+                            target_relpaths=selected_target_relpaths,
+                            selected_for_ccap_b=False,
+                            precheck_decision_code="DROPPED_INSUFFICIENT_WIRING_DELTA",
+                            patch_sha256=patch_sha256,
+                            ccap_id=None,
+                            archetype_id=archetype_id,
+                            nontriviality_cert_v1=nontriviality_cert_v1,
+                        )
+                    )
+                    global_slot += 1
+                    continue
+            target_key = _target_relpaths_key(target_relpaths=selected_target_relpaths)
+            if patch_sha256 in failed_patch_ban_by_target.get(target_key, set()):
+                precheck_rows.append(
+                    _candidate_precheck_row(
+                        candidate_idx_u32=idx,
+                        bucket=bucket,
+                        template_id=template_id,
+                        target_relpath=target,
+                        target_relpaths=selected_target_relpaths,
+                        selected_for_ccap_b=False,
+                        precheck_decision_code="DROPPED_REPEATED_FAILED_PATCH",
+                        patch_sha256=patch_sha256,
+                        ccap_id=None,
+                        archetype_id=archetype_id,
+                        nontriviality_cert_v1=nontriviality_cert_v1,
+                    )
+                )
+                global_slot += 1
+                continue
+            shape_id = _normalize_sha256((nontriviality_cert_v1 or {}).get("shape_id"))
+            if shape_id is not None and shape_id in failed_shape_ban_by_target.get(target_key, set()):
+                precheck_rows.append(
+                    _candidate_precheck_row(
+                        candidate_idx_u32=idx,
+                        bucket=bucket,
+                        template_id=template_id,
+                        target_relpath=target,
+                        target_relpaths=selected_target_relpaths,
+                        selected_for_ccap_b=False,
+                        precheck_decision_code="DROPPED_REPEATED_FAILED_SHAPE",
+                        patch_sha256=patch_sha256,
+                        ccap_id=None,
+                        archetype_id=archetype_id,
+                        nontriviality_cert_v1=nontriviality_cert_v1,
+                    )
+                )
+                global_slot += 1
+                continue
+            try:
+                emitted = _emit_ccap(
                     repo_root=repo_root,
                     out_dir=subrun_out_dir,
                     pins=pins,
@@ -1548,27 +2528,71 @@ def main() -> None:
                     size_buckets_bytes_u64=size_buckets_u64,
                     bucket=bucket,
                     template_id=template_id,
+                    patch_bytes=patch_bytes,
+                    archetype_id=archetype_id,
+                )
+            except Exception:
+                precheck_rows.append(
+                    _candidate_precheck_row(
+                        candidate_idx_u32=idx,
+                        bucket=bucket,
+                        template_id=template_id,
+                        target_relpath=target,
+                        target_relpaths=selected_target_relpaths,
+                        selected_for_ccap_b=False,
+                        precheck_decision_code="DROPPED_CCAP_EMIT_FAIL",
+                        patch_sha256=None,
+                        ccap_id=None,
+                        archetype_id=archetype_id,
+                        nontriviality_cert_v1=nontriviality_cert_v1,
+                    )
+                )
+                global_slot += 1
+                continue
+            emitted_ccaps.append(emitted)
+            precheck_rows.append(
+                _candidate_precheck_row(
+                    candidate_idx_u32=idx,
+                    bucket=bucket,
+                    template_id=template_id,
+                    target_relpath=target,
+                    target_relpaths=selected_target_relpaths,
+                    selected_for_ccap_b=True,
+                    precheck_decision_code="SELECTED_FOR_CCAP",
+                    patch_sha256=patch_sha256 or str(emitted.get("patch_blob_id", "")),
+                    ccap_id=str(emitted.get("ccap_id", "")),
+                    archetype_id=archetype_id,
+                    nontriviality_cert_v1=nontriviality_cert_v1,
                 )
             )
             global_slot += 1
 
-    summary = {
-        "schema_version": "ge_symbiotic_optimizer_summary_v0_3",
-        "inputs_hash": inputs_hash,
-        "auth_hash": auth_hash_value,
-        "ge_config_id": str(ge_config.get("ge_config_id", "")),
-        "skill_policy_hash": skill_policy_hash,
-        "skill_policy_mode": str(skill_policy.get("mode", "DEFAULT")),
-        "skill_policy": skill_policy,
-        "bucket_plan": {
-            "opt_u64": int(bucket_plan["opt"]),
-            "nov_u64": int(bucket_plan["nov"]),
-            "grow_u64": int(bucket_plan["grow"]),
-        },
-        "diagnostic_only_b": bool(diagnostic_only_b),
-        "ccaps": emitted_ccaps,
-    }
-    _write_json(subrun_out_dir / "ge_symbiotic_optimizer_summary_v0_3.json", summary)
+        summary = {
+            "schema_version": "ge_symbiotic_optimizer_summary_v0_3",
+            "inputs_hash": inputs_hash,
+            "auth_hash": auth_hash_value,
+            "ge_config_id": str(ge_config.get("ge_config_id", "")),
+            "skill_policy_hash": skill_policy_hash,
+            "skill_policy_mode": str(skill_policy.get("mode", "DEFAULT")),
+            "skill_policy": skill_policy,
+            "forced_heavy_b": bool(forced_heavy_b),
+            "bucket_plan": {
+                "opt_u64": int(bucket_plan["opt"]),
+                "nov_u64": int(bucket_plan["nov"]),
+                "grow_u64": int(bucket_plan["grow"]),
+            },
+            "diagnostic_only_b": bool(diagnostic_only_b),
+            "ccaps": emitted_ccaps,
+        }
+        _write_json(subrun_out_dir / "ge_symbiotic_optimizer_summary_v0_3.json", summary)
+        precheck_status_code = "OK"
+        dispatch_error_code = "NONE"
+    except Exception as exc:
+        precheck_status_code = "DISPATCH_ERROR"
+        dispatch_error_code = _dispatch_error_code_for_exception(exc)
+        raise
+    finally:
+        _flush_candidate_precheck()
 
     print(
         json.dumps(

@@ -1,0 +1,69 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v19_0/utility_policy_v1",
+  "title": "Utility policy v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_name",
+    "schema_version",
+    "policy_id",
+    "runtime_stats_source_id",
+    "declared_class_by_capability",
+    "heavy_policies"
+  ],
+  "properties": {
+    "schema_name": {"const": "utility_policy_v1"},
+    "schema_version": {"const": "v19_0"},
+    "policy_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "runtime_stats_source_id": {"type": "string", "minLength": 1},
+    "declared_class_by_capability": {
+      "type": "object",
+      "minProperties": 1,
+      "additionalProperties": {
+        "type": "string",
+        "enum": ["FRONTIER_HEAVY", "CANARY_HEAVY", "BASELINE_CORE", "MAINTENANCE"]
+      }
+    },
+    "heavy_policies": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "probe_suite_id",
+          "stress_probe_suite_id",
+          "primary_signal",
+          "primary_threshold_u64",
+          "stress_signal",
+          "stress_threshold_u64"
+        ],
+        "properties": {
+          "probe_suite_id": {"type": "string", "minLength": 1},
+          "stress_probe_suite_id": {"type": "string", "minLength": 1},
+          "primary_signal": {
+            "type": "string",
+            "enum": [
+              "WORK_UNITS_REDUCTION",
+              "BINARY_ARTIFACT_DELTA",
+              "NONTRIVIAL_DELTA",
+              "CAPABILITY_GAIN"
+            ]
+          },
+          "primary_threshold_u64": {"type": "integer", "minimum": 0},
+          "stress_signal": {
+            "type": "string",
+            "enum": [
+              "REQUIRE_HEALTHCHECK_HASH",
+              "REQUIRE_BINARY_ARTIFACT",
+              "REQUIRE_PATCH_DELTA",
+              "REQUIRE_POLICY_ARTIFACT"
+            ]
+          },
+          "stress_threshold_u64": {"type": "integer", "minimum": 0},
+          "policy_artifact_relpath": {"type": "string", "minLength": 1}
+        }
+      }
+    }
+  }
+}

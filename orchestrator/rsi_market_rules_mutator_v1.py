@@ -22,7 +22,7 @@ from typing import Any
 
 from cdel.v1_7r.canon import write_canon_json
 from cdel.v18_0.authority.authority_hash_v1 import auth_hash, load_authority_pins
-from cdel.v18_0.ccap_runtime_v1 import ccap_payload_id, compute_repo_base_tree_id
+from cdel.v18_0.ccap_runtime_v1 import ccap_payload_id, compute_repo_base_tree_id_tolerant
 from cdel.v18_0.omega_common_v1 import canon_hash_obj, fail, load_canon_dict, require_no_absolute_paths
 from orchestrator.llm_backend import get_backend
 
@@ -949,7 +949,7 @@ def _emit_ccap(
     out_dir = out_dir.resolve()
     pins = load_authority_pins(repo_root)
     base_tree_root = Path(base_tree_repo_root).resolve() if base_tree_repo_root is not None else repo_root
-    base_tree_id = compute_repo_base_tree_id(base_tree_root)
+    base_tree_id = compute_repo_base_tree_id_tolerant(base_tree_root)
     build_recipe_id = _first_build_recipe_id(repo_root)
 
     patch_hex = hashlib.sha256(patch_bytes).hexdigest()

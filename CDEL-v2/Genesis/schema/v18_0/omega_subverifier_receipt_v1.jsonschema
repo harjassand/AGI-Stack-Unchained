@@ -54,6 +54,7 @@
                 "MISSING_STATE_INPUT",
                 "NONDETERMINISTIC",
                 "MODE_UNSUPPORTED",
+                "VERIFY_ERROR:INSUFFICIENT_NONTRIVIAL_DELTA",
                 "VERIFY_ERROR",
                 "UNKNOWN"
               ]
@@ -61,6 +62,88 @@
           ]
         }
       }
+    },
+    "nontriviality_cert_v1": {
+      "anyOf": [
+        {"type": "null"},
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "schema_name",
+            "schema_version",
+            "policy_id",
+            "threshold_profile_id",
+            "thresholds_v1",
+            "patch_parse_ok_b",
+            "ast_parse_ok_b",
+            "touched_paths_u32",
+            "ast_nodes_changed_u32",
+            "control_flow_changed_b",
+            "call_edges_changed_b",
+            "data_flow_changed_b",
+            "public_api_changed_b",
+            "lines_added_u32",
+            "lines_deleted_u32",
+            "wiring_class_ok_b",
+            "archetype_id",
+            "archetype_pass_b",
+            "shape_id",
+            "failed_threshold_code"
+          ],
+          "properties": {
+            "schema_name": {"const": "nontriviality_cert_v1"},
+            "schema_version": {"const": "v1"},
+            "policy_id": {"type": "string", "minLength": 1},
+            "threshold_profile_id": {"type": "string", "minLength": 1},
+            "thresholds_v1": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["wiring_ast_nodes_min_u32"],
+              "properties": {
+                "wiring_ast_nodes_min_u32": {"type": "integer", "minimum": 0}
+              }
+            },
+            "patch_parse_ok_b": {"type": "boolean"},
+            "ast_parse_ok_b": {"type": "boolean"},
+            "touched_paths_u32": {"type": "integer", "minimum": 0},
+            "touched_relpaths_v1": {
+              "type": "array",
+              "minItems": 1,
+              "maxItems": 2,
+              "uniqueItems": true,
+              "items": {"type": "string", "minLength": 1}
+            },
+            "ast_nodes_changed_u32": {"type": "integer", "minimum": 0},
+            "control_flow_changed_b": {"type": "boolean"},
+            "call_edges_changed_b": {"type": "boolean"},
+            "data_flow_changed_b": {"type": "boolean"},
+            "public_api_changed_b": {"type": "boolean"},
+            "lines_added_u32": {"type": "integer", "minimum": 0},
+            "lines_deleted_u32": {"type": "integer", "minimum": 0},
+            "wiring_class_ok_b": {"type": "boolean"},
+            "archetype_id": {
+              "anyOf": [
+                {"type": "string", "minLength": 1},
+                {"type": "null"}
+              ]
+            },
+            "archetype_pass_b": {
+              "anyOf": [
+                {"type": "boolean"},
+                {"type": "null"}
+              ]
+            },
+            "shape_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+            "failed_threshold_code": {
+              "anyOf": [
+                {"type": "null"},
+                {"type": "string", "pattern": "^[A-Z0-9_]+$"}
+              ]
+            }
+          }
+        }
+      ]
     },
     "stdout_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
     "stderr_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"}

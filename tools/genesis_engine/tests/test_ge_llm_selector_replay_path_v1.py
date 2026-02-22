@@ -136,6 +136,80 @@ def test_ge_llm_selector_replay_path_deterministic(tmp_path: Path, monkeypatch: 
     assert prompt_rows_a[0]["response_hash"] == _sha256_prefixed(response)
 
 
+def test_ge_llm_selector_accepts_items_envelope(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    replay_path = tmp_path / "selector_replay_items_envelope.jsonl"
+    selector_cfg = {
+        "enabled_b": True,
+        "backend": "openai_replay",
+        "model": "gpt-4.1",
+        "max_proposals_u64": 8,
+    }
+    candidates = [
+        {
+            "bucket": "nov",
+            "template_id": "JSON_TWEAK_COOLDOWN_MINUS_1",
+            "target_relpath": "campaigns/rsi_omega_daemon_v18_0/omega_capability_registry_v2.json",
+        }
+    ]
+    allowed_targets = ["campaigns/rsi_omega_daemon_v18_0/omega_capability_registry_v2.json"]
+    allowed_templates = ["JSON_TWEAK_COOLDOWN_MINUS_1"]
+    max_ccaps = 1
+    latest_observation = {"metrics": {}}
+
+    prompt = _selector_prompt_for_test(
+        candidates=candidates,
+        max_proposals_u64=8,
+        max_ccaps=max_ccaps,
+        latest_observation=latest_observation,
+        allowed_targets=allowed_targets,
+        allowed_templates=allowed_templates,
+    )
+    response = json.dumps(
+        {
+            "type": "array",
+            "items": [
+                {
+                    "template_id": "JSON_TWEAK_COOLDOWN_MINUS_1",
+                    "target_relpath": "campaigns/rsi_omega_daemon_v18_0/omega_capability_registry_v2.json",
+                }
+            ],
+        },
+        sort_keys=True,
+        separators=(",", ":"),
+    )
+    replay_row = {
+        "schema_version": "orch_llm_replay_row_v1",
+        "backend": "openai",
+        "model": "gpt-4.1",
+        "prompt_sha256": _sha256_prefixed(prompt),
+        "response_sha256": _sha256_prefixed(response),
+        "prompt": prompt,
+        "response": response,
+        "created_at_utc": "2026-02-11T00:00:00Z",
+    }
+    replay_path.write_text(json.dumps(replay_row, sort_keys=True, separators=(",", ":")) + "\n", encoding="utf-8")
+    monkeypatch.setenv("ORCH_LLM_REPLAY_PATH", str(replay_path))
+
+    selected, _prompt_rows, error_reason = ge_v0_3._select_with_llm_selector(  # noqa: SLF001
+        selector_cfg=selector_cfg,
+        candidates=candidates,
+        allowed_targets=allowed_targets,
+        allowed_templates=allowed_templates,
+        max_ccaps=max_ccaps,
+        latest_observation=latest_observation,
+    )
+
+    assert error_reason is None
+    assert selected == [
+        {
+            "bucket": "nov",
+            "template_id": "JSON_TWEAK_COOLDOWN_MINUS_1",
+            "target_relpath": "campaigns/rsi_omega_daemon_v18_0/omega_capability_registry_v2.json",
+            "model": "gpt-4.1",
+        }
+    ]
+
+
 def test_ge_llm_selector_replay_miss_is_fail_closed(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     replay_path = tmp_path / "missing_selector_replay.jsonl"
     replay_path.write_text("", encoding="utf-8")

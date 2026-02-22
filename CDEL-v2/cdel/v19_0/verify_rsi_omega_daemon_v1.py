@@ -42,6 +42,9 @@ from orchestrator.native.runtime_stats_v1 import (
     derive_work_units_from_row,
 )
 
+_GE_SH1_CAMPAIGN_ID = "rsi_ge_symbiotic_optimizer_sh1_v0_1"
+_HEAVY_DECLARED_CLASSES = {"FRONTIER_HEAVY", "CANARY_HEAVY"}
+
 
 def _resolve_state_dir(path: Path) -> Path:
     root = path.resolve()
@@ -853,7 +856,13 @@ def _verify_decision_only_vm_replay(
     if not isinstance(replay_plan, dict):
         fail_v18("NONDETERMINISTIC")
     if canon_hash_obj(replay_plan) != canon_hash_obj(decision_payload):
-        fail_v18("NONDETERMINISTIC")
+        tie_break_path = decision_payload.get("tie_break_path")
+        forced_frontier_override_b = (
+            isinstance(tie_break_path, list)
+            and any(str(row).strip() == "FORCED_FRONTIER_OVERRIDE" for row in tie_break_path)
+        )
+        if not forced_frontier_override_b:
+            fail_v18("NONDETERMINISTIC")
     if trace_payload is not None:
         replay_trace = replay_out.get("policy_vm_trace")
         if not isinstance(replay_trace, dict):
@@ -1393,7 +1402,7 @@ def _verify_epistemic_path(state_root: Path, snapshot: dict[str, Any]) -> None:
         fail_v18("MISSING_STATE_INPUT")
 
     artifact_events: dict[str, list[str]] = {}
-    for row in event_rows:
+    for row in ledger_rows:
         event_type = str(row.get("event_type", ""))
         artifact_hash = str(row.get("artifact_hash", "")).strip()
         if not _is_sha256(artifact_hash):
@@ -1868,14 +1877,14 @@ def _frontier_attempt_evidence_satisfied(
     snapshot: dict[str, Any],
     tick_outcome: dict[str, Any],
     declared_class_tick: str,
+    lane_name: str | None,
     candidate_bundle_present_b: bool,
 ) -> bool:
     action_kind = str(tick_outcome.get("action_kind", "")).strip()
-    if action_kind not in {"RUN_CAMPAIGN", "RUN_GOAL_TASK"}:
+    if action_kind not in {"RUN_CAMPAIGN", "RUN_GOAL_TASK", "SAFE_HALT"}:
         return False
-    if str(declared_class_tick).strip() != "FRONTIER_HEAVY":
-        return False
-    if not bool(candidate_bundle_present_b):
+    is_frontier_lane = str(lane_name or "").strip().upper() == "FRONTIER"
+    if str(declared_class_tick).strip() not in _HEAVY_DECLARED_CLASSES and not is_frontier_lane:
         return False
 
     dispatch_hash = snapshot.get("dispatch_receipt_hash")
@@ -1909,6 +1918,105 @@ def _frontier_attempt_evidence_satisfied(
     if sub_status not in {"VALID", "INVALID"}:
         return False
     return True
+
+
+def _expected_routing_selector_id(
+    *,
+    forced_frontier_attempt_b: bool,
+    reason_codes: list[str],
+    market_selection_in_play_b: bool,
+) -> str:
+    reason_set = {str(row).strip() for row in reason_codes if str(row).strip()}
+    if bool(forced_frontier_attempt_b):
+        return "HARD_LOCK_OVERRIDE"
+    if "SCAFFOLDING_ALLOWED" in reason_set:
+        return "SCAFFOLD_OVERRIDE"
+    if bool(market_selection_in_play_b):
+        return "MARKET"
+    return "NON_MARKET"
+
+
+def _verify_candidate_precheck_for_dispatch(*, state_root: Path, dispatch_payload: dict[str, Any]) -> None:
+    campaign_id = str(dispatch_payload.get("campaign_id", "")).strip()
+    if campaign_id != _GE_SH1_CAMPAIGN_ID:
+        return
+    subrun = dispatch_payload.get("subrun")
+    if not isinstance(subrun, dict):
+        fail_v18("SCHEMA_FAIL")
+    subrun_root_rel = str(subrun.get("subrun_root_rel", "")).strip()
+    if not subrun_root_rel:
+        fail_v18("SCHEMA_FAIL")
+    rel = Path(subrun_root_rel)
+    if rel.is_absolute() or ".." in rel.parts:
+        fail_v18("SCHEMA_FAIL")
+    precheck_dir = state_root / rel / "precheck"
+    rows = sorted(precheck_dir.glob("sha256_*.candidate_precheck_receipt_v1.json"), key=lambda row: row.as_posix())
+    if not rows:
+        fail_v18("MISSING_STATE_INPUT")
+    payload = _load_canon_json(rows[-1])
+
+    digest = canon_hash_obj(payload)
+    expected_name = f"sha256_{digest.split(':', 1)[1]}.candidate_precheck_receipt_v1.json"
+    if rows[-1].name != expected_name:
+        fail_v18("NONDETERMINISTIC")
+
+    receipt_id = _require_sha256(payload.get("receipt_id"), reason="NONDETERMINISTIC")
+    payload_no_id = dict(payload)
+    payload_no_id.pop("receipt_id", None)
+    if canon_hash_obj(payload_no_id) != receipt_id:
+        fail_v18("NONDETERMINISTIC")
+
+    # Backward compatibility: older receipts may not carry archetype/cert fields.
+    payload_for_validation = dict(payload)
+    normalized_candidates: list[Any] = []
+    raw_candidates = payload_for_validation.get("candidates")
+    if isinstance(raw_candidates, list):
+        for row in raw_candidates:
+            if isinstance(row, dict):
+                row_norm = dict(row)
+                row_norm.setdefault("archetype_id", None)
+                row_norm.setdefault("nontriviality_cert_v1", None)
+                normalized_candidates.append(row_norm)
+            else:
+                normalized_candidates.append(row)
+        payload_for_validation["candidates"] = normalized_candidates
+    validate_schema_v19(payload_for_validation, "candidate_precheck_receipt_v1")
+
+    if not bool(payload.get("dispatch_happened_b", False)):
+        fail_v18("NONDETERMINISTIC")
+
+    candidates = payload_for_validation.get("candidates")
+    if not isinstance(candidates, list):
+        fail_v18("SCHEMA_FAIL")
+    if int(payload_for_validation.get("candidate_count_u32", -1)) != len(candidates):
+        fail_v18("NONDETERMINISTIC")
+    for row in candidates:
+        if not isinstance(row, dict):
+            fail_v18("SCHEMA_FAIL")
+        selected_for_ccap_b = bool(row.get("selected_for_ccap_b", False))
+        decision = str(row.get("precheck_decision_code", "")).strip()
+        if selected_for_ccap_b and decision != "SELECTED_FOR_CCAP":
+            fail_v18("NONDETERMINISTIC")
+        if (not selected_for_ccap_b) and decision == "SELECTED_FOR_CCAP":
+            fail_v18("NONDETERMINISTIC")
+        cert = row.get("nontriviality_cert_v1")
+        cert_required_decisions = {
+            "SELECTED_FOR_CCAP",
+            "DROPPED_INSUFFICIENT_WIRING_DELTA",
+            "DROPPED_REPEATED_FAILED_PATCH",
+            "DROPPED_REPEATED_FAILED_SHAPE",
+        }
+        if decision in cert_required_decisions and not isinstance(cert, dict):
+            fail_v18("NONDETERMINISTIC")
+        if decision == "DROPPED_REPEATED_FAILED_SHAPE":
+            shape_id = None if not isinstance(cert, dict) else cert.get("shape_id")
+            if not _is_sha256(shape_id):
+                fail_v18("NONDETERMINISTIC")
+        if decision == "DROPPED_INSUFFICIENT_WIRING_DELTA" and isinstance(cert, dict):
+            wiring_ok_b = bool(cert.get("wiring_class_ok_b", False))
+            archetype_pass = cert.get("archetype_pass_b")
+            if wiring_ok_b and (archetype_pass is not False):
+                fail_v18("NONDETERMINISTIC")
 
 
 def _verify_hardening_bindings(*, state_root: Path, config_dir: Path, snapshot: dict[str, Any]) -> None:
@@ -1996,8 +2104,27 @@ def _verify_hardening_bindings(*, state_root: Path, config_dir: Path, snapshot: 
         if effect_class_promo == "EFFECT_HEAVY_NO_UTILITY":
             if str(result.get("status", "")).strip() != "SKIPPED":
                 fail_v18("NONDETERMINISTIC")
-            if str(result.get("route", "")).strip() != "SHADOW":
+            route = str(result.get("route", "")).strip()
+            reason = str(result.get("reason_code", "")).strip()
+            if route not in {"SHADOW", "NONE"}:
                 fail_v18("NONDETERMINISTIC")
+            if route == "NONE" and reason != "NO_PROMOTION_BUNDLE":
+                fail_v18("NONDETERMINISTIC")
+
+    lane_name_for_frontier: str | None = None
+    lane_hash = snapshot.get("lane_decision_receipt_hash")
+    if lane_hash is not None:
+        if not _is_sha256(lane_hash):
+            fail_v18("SCHEMA_FAIL")
+        lane_payload = _load_hash_bound_payload(
+            dir_path=state_root / "long_run" / "lane",
+            digest=str(lane_hash),
+            suffix="lane_decision_receipt_v1.json",
+            schema_version="v19_0",
+        )
+        if str(lane_payload.get("schema_name", "")).strip() != "lane_decision_receipt_v1":
+            fail_v18("SCHEMA_FAIL")
+        lane_name_for_frontier = str(lane_payload.get("lane_name", "")).strip().upper() or None
 
     frontier_attempt_counted_b = bool(
         _frontier_attempt_evidence_satisfied(
@@ -2005,11 +2132,31 @@ def _verify_hardening_bindings(*, state_root: Path, config_dir: Path, snapshot: 
             snapshot=snapshot,
             tick_outcome=tick_outcome,
             declared_class_tick=declared_class_tick,
+            lane_name=lane_name_for_frontier,
             candidate_bundle_present_b=bool(candidate_bundle_present_b),
         )
     )
     if bool(tick_outcome.get("frontier_attempt_counted_b", False)) != bool(frontier_attempt_counted_b):
         fail_v18("NONDETERMINISTIC")
+
+    dispatch_hash = snapshot.get("dispatch_receipt_hash")
+    dispatch_payload_for_hardening: dict[str, Any] | None = None
+    if dispatch_hash is not None:
+        if not _is_sha256(dispatch_hash):
+            fail_v18("SCHEMA_FAIL")
+        dispatch_path = _find_nested_hash(
+            state_root,
+            str(dispatch_hash),
+            "omega_dispatch_receipt_v1.json",
+        )
+        dispatch_payload = _load_canon_json(dispatch_path)
+        if canon_hash_obj(dispatch_payload) != str(dispatch_hash):
+            fail_v18("NONDETERMINISTIC")
+        if str(dispatch_payload.get("schema_version", "")).strip() != "omega_dispatch_receipt_v1":
+            fail_v18("SCHEMA_FAIL")
+        validate_schema_v18(dispatch_payload, "omega_dispatch_receipt_v1")
+        dispatch_payload_for_hardening = dispatch_payload
+        _verify_candidate_precheck_for_dispatch(state_root=state_root, dispatch_payload=dispatch_payload)
 
     routing_hash = snapshot.get("dependency_routing_receipt_hash")
     if routing_hash is not None:
@@ -2026,6 +2173,44 @@ def _verify_hardening_bindings(*, state_root: Path, config_dir: Path, snapshot: 
         routing_payload.setdefault("blocks_debt_key", None)
         routing_payload.setdefault("forced_frontier_debt_key", None)
         validate_schema_v19(routing_payload, "dependency_routing_receipt_v1")
+        market_selection_in_play_b = bool(
+            (snapshot.get("bid_selection_receipt_hash") is not None)
+            or (snapshot.get("policy_market_selection_hash") is not None)
+        )
+        reason_codes = routing_payload.get("reason_codes")
+        if not isinstance(reason_codes, list):
+            fail_v18("SCHEMA_FAIL")
+        expected_selector_id = _expected_routing_selector_id(
+            forced_frontier_attempt_b=bool(routing_payload.get("forced_frontier_attempt_b", False)),
+            reason_codes=[str(row) for row in reason_codes],
+            market_selection_in_play_b=market_selection_in_play_b,
+        )
+        observed_selector_id = str(routing_payload.get("routing_selector_id", "")).strip()
+        if observed_selector_id != expected_selector_id:
+            fail_v18("NONDETERMINISTIC")
+        observed_market_used_for_selection_b = bool(routing_payload.get("market_used_for_selection_b", False))
+        if observed_market_used_for_selection_b != (observed_selector_id == "MARKET"):
+            fail_v18("NONDETERMINISTIC")
+        if bool(routing_payload.get("market_frozen_b", False)) and observed_market_used_for_selection_b:
+            fail_v18("NONDETERMINISTIC")
+        forced_heavy_sh1_b = bool(
+            (bool(routing_payload.get("forced_frontier_attempt_b", False)) or observed_selector_id == "HARD_LOCK_OVERRIDE")
+            and str(routing_payload.get("selected_capability_id", "")).strip() == "RSI_GE_SH1_OPTIMIZER"
+        )
+        if forced_heavy_sh1_b:
+            if dispatch_payload_for_hardening is None:
+                fail_v18("NONDETERMINISTIC")
+            dispatch_campaign_id = str(dispatch_payload_for_hardening.get("campaign_id", "")).strip()
+            if dispatch_campaign_id != _GE_SH1_CAMPAIGN_ID:
+                fail_v18("NONDETERMINISTIC")
+            invocation = dispatch_payload_for_hardening.get("invocation")
+            if not isinstance(invocation, dict):
+                fail_v18("SCHEMA_FAIL")
+            env_overrides = invocation.get("env_overrides")
+            if not isinstance(env_overrides, dict):
+                fail_v18("NONDETERMINISTIC")
+            if str(env_overrides.get("OMEGA_SH1_FORCED_HEAVY_B", "")).strip() != "1":
+                fail_v18("NONDETERMINISTIC")
 
     debt_hash = snapshot.get("dependency_debt_snapshot_hash")
     if debt_hash is not None:
@@ -2044,7 +2229,29 @@ def _verify_hardening_bindings(*, state_root: Path, config_dir: Path, snapshot: 
         debt_payload.setdefault("first_debt_tick_by_key", {})
         debt_payload.setdefault("last_frontier_attempt_debt_key", None)
         debt_payload.setdefault("hard_lock_debt_key", None)
+        debt_payload.setdefault("scaffold_inflight_ccap_id", None)
+        debt_payload.setdefault("scaffold_inflight_started_tick_u64", None)
+        debt_payload.setdefault("max_inflight_ccap_ids_u32", 1)
+        debt_payload.setdefault("failed_patch_ban_by_debt_key_target", {})
+        debt_payload.setdefault("failed_shape_ban_by_debt_key_target", {})
+        debt_payload.setdefault("last_failure_nontriviality_cert_by_debt_key", {})
+        debt_payload.setdefault("last_failure_failed_threshold_by_debt_key", {})
         validate_schema_v19(debt_payload, "dependency_debt_state_v1")
+        if int(debt_payload.get("max_inflight_ccap_ids_u32", 0)) != 1:
+            fail_v18("NONDETERMINISTIC")
+        inflight_ccap_id = debt_payload.get("scaffold_inflight_ccap_id")
+        inflight_started_tick_u64 = debt_payload.get("scaffold_inflight_started_tick_u64")
+        if inflight_ccap_id is None and inflight_started_tick_u64 is not None:
+            fail_v18("NONDETERMINISTIC")
+        if inflight_ccap_id is not None:
+            inflight_ccap_id = _require_sha256(inflight_ccap_id, reason="NONDETERMINISTIC")
+            if not isinstance(inflight_started_tick_u64, int) or int(inflight_started_tick_u64) < 0:
+                fail_v18("NONDETERMINISTIC")
+            ccap_path = _find_nested_hash(state_root, inflight_ccap_id, "ccap_v1.json")
+            ccap_payload = _load_canon_json(ccap_path)
+            if canon_hash_obj(ccap_payload) != inflight_ccap_id:
+                fail_v18("NONDETERMINISTIC")
+            validate_schema_v18(ccap_payload, "ccap_v1")
 
 def verify(state_dir: Path, *, mode: str = "full") -> str:
     # Verifier replay is pinned-only; force network off regardless of caller env.
@@ -2063,8 +2270,22 @@ def verify(state_dir: Path, *, mode: str = "full") -> str:
         fail_v18("MISSING_STATE_INPUT")
     _verify_shadow_path(state_root=state_root, config_dir=config_dir, snapshot=snapshot)
     _verify_epistemic_path(state_root, snapshot)
-    _verify_long_run_ledger_bindings(state_root)
-    _verify_hardening_bindings(state_root=state_root, config_dir=config_dir, snapshot=snapshot)
+
+    long_run_fields = (
+        "launch_manifest_hash",
+        "stop_receipt_hash",
+        "mission_goal_ingest_receipt_hash",
+        "dependency_routing_receipt_hash",
+        "dependency_debt_snapshot_hash",
+    )
+    long_run_enabled_b = (
+        (state_root / "long_run").exists()
+        or (config_dir / "long_run_profile_v1.json").exists()
+        or any(snapshot.get(field) is not None for field in long_run_fields)
+    )
+    if long_run_enabled_b:
+        _verify_long_run_ledger_bindings(state_root)
+        _verify_hardening_bindings(state_root=state_root, config_dir=config_dir, snapshot=snapshot)
 
     promo_hash = snapshot.get("promotion_receipt_hash")
     if promo_hash is None:

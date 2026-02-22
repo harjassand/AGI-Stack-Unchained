@@ -7,6 +7,7 @@
   "required": [
     "schema_version",
     "receipt_id",
+    "dispatch_attempted_b",
     "tick_u64",
     "campaign_id",
     "capability_id",
@@ -19,6 +20,7 @@
   "properties": {
     "schema_version": {"const": "omega_dispatch_receipt_v1"},
     "receipt_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "dispatch_attempted_b": {"type": "boolean", "const": true},
     "tick_u64": {"type": "integer", "minimum": 0},
     "campaign_id": {"type": "string"},
     "capability_id": {"type": "string"},

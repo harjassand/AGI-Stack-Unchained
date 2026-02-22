@@ -156,6 +156,7 @@ _FAILURE_KEY_RE = re.compile(r"[^a-z0-9_]+")
 _LANE_NAMES = {"BASELINE", "CANARY", "FRONTIER"}
 _HEAVY_DECLARED_CLASSES = {"FRONTIER_HEAVY", "CANARY_HEAVY"}
 _DECLARED_CLASSES = {"FRONTIER_HEAVY", "CANARY_HEAVY", "BASELINE_CORE", "MAINTENANCE"}
+_ROUTING_SELECTOR_IDS = {"MARKET", "NON_MARKET", "SCAFFOLD_OVERRIDE", "HARD_LOCK_OVERRIDE"}
 _EFFECT_CLASSES = {
     "EFFECT_HEAVY_OK",
     "EFFECT_HEAVY_NO_UTILITY",
@@ -164,12 +165,32 @@ _EFFECT_CLASSES = {
     "EFFECT_REJECTED",
 }
 _DEFAULT_DEBT_LIMIT_U64 = 3
-_DEFAULT_MAX_TICKS_WITHOUT_FRONTIER_ATTEMPT_U64 = 50
+_DEFAULT_MAX_TICKS_WITHOUT_FRONTIER_ATTEMPT_U64 = 40
 _DEFAULT_ANTI_MONOPOLY_CONSECUTIVE_LIMIT_U64 = 50
 _DEFAULT_ANTI_MONOPOLY_WINDOW_U64 = 50
 _DEFAULT_ANTI_MONOPOLY_DIVERSITY_K_U64 = 3
 _DEFAULT_ANTI_MONOPOLY_COOLDOWN_U64 = 50
 _SHA256_ZERO = "sha256:" + ("0" * 64)
+_SH1_CAPABILITY_ID = "RSI_GE_SH1_OPTIMIZER"
+_SH1_CAMPAIGN_ID = "rsi_ge_symbiotic_optimizer_sh1_v0_1"
+_FORCED_HEAVY_ENV_KEY = "OMEGA_SH1_FORCED_HEAVY_B"
+_FORCED_DEBT_KEY_ENV_KEY = "OMEGA_SH1_FORCED_DEBT_KEY"
+_FORCED_WIRING_LOCUS_ENV_KEY = "OMEGA_SH1_WIRING_LOCUS_RELPATH"
+_FAILED_PATCH_BAN_ENV_KEY = "OMEGA_SH1_FAILED_PATCH_BAN_JSON"
+_FAILED_SHAPE_BAN_ENV_KEY = "OMEGA_SH1_FAILED_SHAPE_BAN_JSON"
+_LAST_FAILURE_HINT_ENV_KEY = "OMEGA_SH1_LAST_FAILURE_HINT_JSON"
+_MAX_FAILED_PATCH_BAN_PER_KEY = 8
+_MAX_FAILED_PATCH_BAN_KEYS = 128
+_MAX_FAILED_SHAPE_BAN_PER_KEY = 8
+_MAX_FAILED_SHAPE_BAN_KEYS = 128
+_FAILED_PATCH_BAN_TTL_TICKS_U64 = 80
+_FAILED_SHAPE_BAN_TTL_TICKS_U64 = 80
+_FORCED_WIRING_LOCUS_FALLBACK_RELPATHS = (
+    "orchestrator/omega_v18_0/decider_v1.py",
+    "orchestrator/omega_v18_0/goal_synthesizer_v1.py",
+    "orchestrator/common/run_invoker_v1.py",
+    "tools/omega/omega_overnight_runner_v1.py",
+)
 
 
 @contextmanager
@@ -201,6 +222,11 @@ def _temp_env(overrides: dict[str, str]) -> Iterator[None]:
 def _deterministic_timing_enabled() -> bool:
     raw = str(os.environ.get("OMEGA_V19_DETERMINISTIC_TIMING", "1")).strip().lower()
     return raw not in {"0", "false", "off", "no"}
+
+
+def _premarathon_v63_enabled() -> bool:
+    raw = str(os.environ.get("OMEGA_PREMARATHON_V63", "0")).strip().lower()
+    return raw in {"1", "true", "yes", "on"}
 
 def _phase3_mutation_signal_enabled() -> bool:
     # Phase 3 DoD evidence: allow emitting a stable, greppable log line from the
@@ -1444,10 +1470,13 @@ def _load_long_run_utility_policy(
 
 
 def _declared_class_for_capability_id(*, utility_policy: dict[str, Any] | None, capability_id: str) -> str:
+    capability = str(capability_id).strip()
+    if _premarathon_v63_enabled() and capability == _SH1_CAPABILITY_ID:
+        return "FRONTIER_HEAVY"
     if isinstance(utility_policy, dict):
         mapping = utility_policy.get("declared_class_by_capability")
         if isinstance(mapping, dict):
-            mapped = str(mapping.get(str(capability_id), "")).strip().upper()
+            mapped = str(mapping.get(capability, "")).strip().upper()
             if mapped in _DECLARED_CLASSES:
                 return mapped
     return "UNCLASSIFIED"
@@ -1481,6 +1510,26 @@ def _capability_id_to_campaign(
     return None
 
 
+def _capability_row_for_forced_frontier(
+    *,
+    registry: dict[str, Any],
+    capability_id: str,
+) -> dict[str, Any] | None:
+    caps = registry.get("capabilities")
+    if not isinstance(caps, list):
+        fail("SCHEMA_FAIL")
+    for row in sorted([entry for entry in caps if isinstance(entry, dict)], key=lambda entry: str(entry.get("campaign_id", ""))):
+        if str(row.get("capability_id", "")).strip() != str(capability_id):
+            continue
+        if not bool(row.get("enabled", False)):
+            continue
+        campaign_id = str(row.get("campaign_id", "")).strip()
+        if not campaign_id:
+            continue
+        return row
+    return None
+
+
 def _recompute_decision_plan_identity(plan: dict[str, Any]) -> tuple[dict[str, Any], str]:
     inputs_hash = canon_hash_obj(
         {
@@ -1507,6 +1556,30 @@ def _recompute_decision_plan_identity(plan: dict[str, Any]) -> tuple[dict[str, A
     plan_id = canon_hash_obj(no_id)
     materialized["plan_id"] = plan_id
     materialized["recompute_proof"] = {"inputs_hash": inputs_hash, "plan_hash": plan_id}
+    validate_schema(materialized, "omega_decision_plan_v1")
+    return materialized, canon_hash_obj(materialized)
+
+
+def _sha256_or_zero(value: Any) -> str:
+    candidate = str(value or "").strip()
+    if _is_sha256(candidate):
+        return candidate
+    return _SHA256_ZERO
+
+
+def _bind_decision_plan_to_inputs_descriptor(
+    *,
+    decision_plan: dict[str, Any],
+    inputs_descriptor_hash: str,
+) -> tuple[dict[str, Any], str]:
+    descriptor_hash = ensure_sha256(inputs_descriptor_hash, reason="SCHEMA_FAIL")
+    materialized = dict(decision_plan)
+    materialized["recompute_proof"] = {"inputs_hash": descriptor_hash, "plan_hash": _SHA256_ZERO}
+    no_id = dict(materialized)
+    no_id.pop("plan_id", None)
+    plan_id = canon_hash_obj(no_id)
+    materialized["plan_id"] = plan_id
+    materialized["recompute_proof"] = {"inputs_hash": descriptor_hash, "plan_hash": plan_id}
     validate_schema(materialized, "omega_decision_plan_v1")
     return materialized, canon_hash_obj(materialized)
 
@@ -1773,10 +1846,20 @@ def _next_health_window(
         fail("SCHEMA_FAIL")
     next_rows = [dict(row) for row in rows if isinstance(row, dict)]
     route_disabled_u64 = int(max(0, int(shadow_summary_payload.get("route_disabled_modules_u64", 0))))
+    subverifier_status = str(tick_outcome.get("subverifier_status", "")).strip().upper()
+    action_kind = str(tick_outcome.get("action_kind", "")).strip().upper()
+    promotion_reason_code = str(tick_outcome.get("promotion_reason_code", "")).strip().upper()
+    invalid_b = subverifier_status == "INVALID"
+    benign_invalid_b = (
+        invalid_b
+        and action_kind == "SAFE_HALT"
+        and promotion_reason_code == "SUBVERIFIER_INVALID"
+    )
     next_rows.append(
         {
             "tick_u64": int(tick_u64),
-            "invalid_b": str(tick_outcome.get("subverifier_status", "")).strip() == "INVALID",
+            # SAFE_HALT driven subverifier invalids are expected control outcomes.
+            "invalid_b": bool(invalid_b and not benign_invalid_b),
             "budget_exhaust_b": str(tick_outcome.get("noop_reason", "")).strip() == "BUDGET",
             "route_disabled_b": route_disabled_u64 > 0,
         }
@@ -1810,11 +1893,18 @@ def _default_dependency_debt_state(*, tick_u64: int) -> dict[str, Any]:
         "hard_lock_active_b": False,
         "hard_lock_debt_key": None,
         "hard_lock_goal_id": None,
+        "scaffold_inflight_ccap_id": None,
+        "scaffold_inflight_started_tick_u64": None,
+        "max_inflight_ccap_ids_u32": 1,
         "reason_code": "N/A",
         "heavy_ok_count_by_capability": {},
         "heavy_no_utility_count_by_capability": {},
         "maintenance_count_u64": 0,
         "frontier_attempts_u64": 0,
+        "failed_patch_ban_by_debt_key_target": {},
+        "failed_shape_ban_by_debt_key_target": {},
+        "last_failure_nontriviality_cert_by_debt_key": {},
+        "last_failure_failed_threshold_by_debt_key": {},
     }
     validate_schema_v19(payload, "dependency_debt_state_v1")
     return payload
@@ -1835,12 +1925,27 @@ def _load_prev_dependency_debt_state(*, prev_state_dir: Path | None) -> dict[str
     payload.setdefault("first_debt_tick_by_key", {})
     payload.setdefault("last_frontier_attempt_debt_key", None)
     payload.setdefault("hard_lock_debt_key", None)
+    payload.setdefault("scaffold_inflight_ccap_id", None)
+    payload.setdefault("scaffold_inflight_started_tick_u64", None)
+    payload.setdefault("max_inflight_ccap_ids_u32", 1)
+    payload.setdefault("failed_patch_ban_by_debt_key_target", {})
+    payload.setdefault("failed_shape_ban_by_debt_key_target", {})
+    payload.setdefault("last_failure_nontriviality_cert_by_debt_key", {})
+    payload.setdefault("last_failure_failed_threshold_by_debt_key", {})
     if not isinstance(payload.get("debt_by_key"), dict):
         payload["debt_by_key"] = {}
     if not isinstance(payload.get("ticks_without_frontier_attempt_by_key"), dict):
         payload["ticks_without_frontier_attempt_by_key"] = {}
     if not isinstance(payload.get("first_debt_tick_by_key"), dict):
         payload["first_debt_tick_by_key"] = {}
+    if not isinstance(payload.get("failed_patch_ban_by_debt_key_target"), dict):
+        payload["failed_patch_ban_by_debt_key_target"] = {}
+    if not isinstance(payload.get("failed_shape_ban_by_debt_key_target"), dict):
+        payload["failed_shape_ban_by_debt_key_target"] = {}
+    if not isinstance(payload.get("last_failure_nontriviality_cert_by_debt_key"), dict):
+        payload["last_failure_nontriviality_cert_by_debt_key"] = {}
+    if not isinstance(payload.get("last_failure_failed_threshold_by_debt_key"), dict):
+        payload["last_failure_failed_threshold_by_debt_key"] = {}
     validate_schema_v19(payload, "dependency_debt_state_v1")
     return payload
 
@@ -1898,11 +2003,13 @@ def _pending_frontier_goals(
         if capability_id not in frontier_set:
             continue
         frontier_id = str(row.get("frontier_id", "")).strip()
+        if frontier_id.lower() in {"none", "null", "nil", "n/a"}:
+            frontier_id = ""
         if not goal_id or not capability_id:
             fail("SCHEMA_FAIL")
-        # Frontier goals are debt-eligible and must carry stable identity.
         if not frontier_id:
-            fail("SCHEMA_FAIL")
+            frontier_id = capability_id
+        frontier_id = str(frontier_id).strip().lower()
         debt_key = _derive_debt_key(frontier_id=frontier_id, capability_id=capability_id)
         out.append(
             {
@@ -1925,6 +2032,8 @@ def _pending_frontier_goals(
 
 def _derive_debt_key(*, frontier_id: str | None, capability_id: str) -> str:
     frontier = str(frontier_id or "").strip()
+    if frontier.lower() in {"none", "null", "nil", "n/a"}:
+        frontier = ""
     if frontier:
         return f"frontier:{frontier}"
     capability = str(capability_id).strip()
@@ -1943,6 +2052,422 @@ def _u64_map(raw: Any) -> dict[str, int]:
             continue
         out[key_s] = int(max(0, int(value)))
     return out
+
+
+def _normalize_sha256(value: Any) -> str | None:
+    text = str(value or "").strip()
+    if not text.startswith("sha256:"):
+        return None
+    digest = text.split(":", 1)[1]
+    if len(digest) != 64 or any(ch not in "0123456789abcdef" for ch in digest):
+        return None
+    return f"sha256:{digest}"
+
+
+def _normalize_patch_sha256(value: Any) -> str | None:
+    return _normalize_sha256(value)
+
+
+def _normalize_relpath(value: Any) -> str | None:
+    rel = str(value or "").strip().replace("\\", "/")
+    if not rel:
+        return None
+    path = Path(rel)
+    if path.is_absolute() or ".." in path.parts:
+        return None
+    return rel
+
+
+def _normalize_target_relpaths(raw: Any) -> list[str]:
+    rows: list[str] = []
+    if isinstance(raw, list):
+        for item in raw:
+            rel = _normalize_relpath(item)
+            if rel is None or rel in rows:
+                continue
+            rows.append(rel)
+    rows = sorted(rows)
+    if len(rows) > 2:
+        rows = rows[:2]
+    return rows
+
+
+def _target_relpaths_key(*, target_relpaths: list[str]) -> str:
+    rows = _normalize_target_relpaths(target_relpaths)
+    if not rows:
+        return ""
+    return "||".join(rows)
+
+
+def _target_relpaths_from_key(target_key: str) -> list[str]:
+    rows = [item for item in str(target_key).split("||") if item]
+    return _normalize_target_relpaths(rows)
+
+
+def _failed_patch_ban_key(*, debt_key: str, target_key: str) -> str:
+    return f"{str(debt_key).strip()}|{str(target_key).strip()}"
+
+
+def _normalize_patch_ban_entry(*, raw: Any, now_tick_u64: int) -> dict[str, Any] | None:
+    patch_sha256: str | None = None
+    expires_tick_u64: int | None = None
+    if isinstance(raw, str):
+        patch_sha256 = _normalize_patch_sha256(raw)
+        expires_tick_u64 = int(max(0, int(now_tick_u64 + _FAILED_PATCH_BAN_TTL_TICKS_U64)))
+    elif isinstance(raw, dict):
+        patch_sha256 = _normalize_patch_sha256(raw.get("patch_sha256"))
+        raw_exp = raw.get("expires_tick_u64")
+        if isinstance(raw_exp, int):
+            expires_tick_u64 = int(max(0, int(raw_exp)))
+    if patch_sha256 is None or expires_tick_u64 is None:
+        return None
+    if int(expires_tick_u64) < int(now_tick_u64):
+        return None
+    return {
+        "patch_sha256": patch_sha256,
+        "expires_tick_u64": int(expires_tick_u64),
+    }
+
+
+def _normalize_shape_ban_entry(*, raw: Any, now_tick_u64: int) -> dict[str, Any] | None:
+    shape_id: str | None = None
+    expires_tick_u64: int | None = None
+    if isinstance(raw, str):
+        shape_id = _normalize_sha256(raw)
+        expires_tick_u64 = int(max(0, int(now_tick_u64 + _FAILED_SHAPE_BAN_TTL_TICKS_U64)))
+    elif isinstance(raw, dict):
+        shape_id = _normalize_sha256(raw.get("shape_id"))
+        raw_exp = raw.get("expires_tick_u64")
+        if isinstance(raw_exp, int):
+            expires_tick_u64 = int(max(0, int(raw_exp)))
+    if shape_id is None or expires_tick_u64 is None:
+        return None
+    if int(expires_tick_u64) < int(now_tick_u64):
+        return None
+    return {
+        "shape_id": shape_id,
+        "expires_tick_u64": int(expires_tick_u64),
+    }
+
+
+def _failed_patch_ban_map(raw: Any, *, now_tick_u64: int) -> dict[str, list[dict[str, Any]]]:
+    if not isinstance(raw, dict):
+        return {}
+    out: dict[str, list[dict[str, Any]]] = {}
+    for key, value in sorted(raw.items(), key=lambda kv: str(kv[0])):
+        key_text = str(key).strip()
+        if not key_text or "|" not in key_text:
+            continue
+        if not isinstance(value, list):
+            continue
+        by_patch: dict[str, int] = {}
+        for item in value:
+            entry = _normalize_patch_ban_entry(raw=item, now_tick_u64=int(now_tick_u64))
+            if entry is None:
+                continue
+            patch = str(entry["patch_sha256"])
+            exp = int(entry["expires_tick_u64"])
+            by_patch[patch] = int(max(int(by_patch.get(patch, 0)), exp))
+        if not by_patch:
+            continue
+        rows = [
+            {"patch_sha256": patch, "expires_tick_u64": int(exp)}
+            for patch, exp in sorted(by_patch.items(), key=lambda kv: (int(kv[1]), str(kv[0])))
+        ]
+        out[key_text] = rows[-_MAX_FAILED_PATCH_BAN_PER_KEY :]
+    if len(out) > _MAX_FAILED_PATCH_BAN_KEYS:
+        keys = sorted(out.keys())
+        keep = set(keys[-_MAX_FAILED_PATCH_BAN_KEYS :])
+        out = {k: list(v) for k, v in out.items() if k in keep}
+    return {str(k): list(v) for k, v in sorted(out.items(), key=lambda kv: str(kv[0]))}
+
+
+def _update_failed_patch_ban_map(
+    *,
+    prev_map: dict[str, list[dict[str, Any]]],
+    now_tick_u64: int,
+    debt_key: str | None,
+    target_key: str | None,
+    patch_sha256: str | None,
+    record_failure_b: bool,
+) -> dict[str, list[dict[str, Any]]]:
+    out = _failed_patch_ban_map(prev_map, now_tick_u64=int(now_tick_u64))
+    if not bool(record_failure_b):
+        return out
+    debt = str(debt_key or "").strip()
+    target = str(target_key or "").strip()
+    patch = _normalize_patch_sha256(patch_sha256)
+    if not debt or not target or patch is None:
+        return out
+    key = _failed_patch_ban_key(debt_key=debt, target_key=target)
+    expires_tick_u64 = int(max(0, int(now_tick_u64 + _FAILED_PATCH_BAN_TTL_TICKS_U64)))
+    existing_rows = list(out.get(key, []))
+    by_patch = {
+        str(row.get("patch_sha256", "")): int(max(0, int(row.get("expires_tick_u64", 0))))
+        for row in existing_rows
+        if _normalize_patch_sha256(row.get("patch_sha256")) is not None
+    }
+    by_patch[str(patch)] = int(max(int(by_patch.get(str(patch), 0)), int(expires_tick_u64)))
+    rows = [
+        {"patch_sha256": str(p), "expires_tick_u64": int(exp)}
+        for p, exp in sorted(by_patch.items(), key=lambda kv: (int(kv[1]), str(kv[0])))
+        if int(exp) >= int(now_tick_u64)
+    ]
+    out[key] = rows[-_MAX_FAILED_PATCH_BAN_PER_KEY :]
+    if len(out) > _MAX_FAILED_PATCH_BAN_KEYS:
+        keys = sorted(out.keys())
+        keep = set(keys[-_MAX_FAILED_PATCH_BAN_KEYS :])
+        out = {k: list(v) for k, v in out.items() if k in keep}
+    return {str(k): list(v) for k, v in sorted(out.items(), key=lambda kv: str(kv[0]))}
+
+
+def _failed_patch_ban_rows_for_debt_key(
+    *,
+    ban_map: dict[str, list[dict[str, Any]]],
+    debt_key: str | None,
+) -> list[dict[str, Any]]:
+    debt = str(debt_key or "").strip()
+    if not debt:
+        return []
+    rows: list[dict[str, Any]] = []
+    for key, values in sorted(ban_map.items(), key=lambda kv: str(kv[0])):
+        key_text = str(key)
+        if not key_text.startswith(f"{debt}|"):
+            continue
+        target_key = key_text.split("|", 1)[1]
+        target_relpaths = _target_relpaths_from_key(target_key)
+        primary_relpath = target_relpaths[0] if target_relpaths else ""
+        for entry in values:
+            normalized = _normalize_patch_sha256(entry.get("patch_sha256"))
+            if normalized is None:
+                continue
+            rows.append(
+                {
+                    "target_relpath": primary_relpath,
+                    "target_relpaths": target_relpaths,
+                    "target_relpaths_key": target_key,
+                    "patch_sha256": normalized,
+                }
+            )
+    return rows
+
+
+def _failed_shape_ban_map(raw: Any, *, now_tick_u64: int) -> dict[str, list[dict[str, Any]]]:
+    if not isinstance(raw, dict):
+        return {}
+    out: dict[str, list[dict[str, Any]]] = {}
+    for key, value in sorted(raw.items(), key=lambda kv: str(kv[0])):
+        key_text = str(key).strip()
+        if not key_text or "|" not in key_text:
+            continue
+        if not isinstance(value, list):
+            continue
+        by_shape: dict[str, int] = {}
+        for item in value:
+            entry = _normalize_shape_ban_entry(raw=item, now_tick_u64=int(now_tick_u64))
+            if entry is None:
+                continue
+            shape = str(entry["shape_id"])
+            exp = int(entry["expires_tick_u64"])
+            by_shape[shape] = int(max(int(by_shape.get(shape, 0)), exp))
+        if not by_shape:
+            continue
+        rows = [
+            {"shape_id": shape, "expires_tick_u64": int(exp)}
+            for shape, exp in sorted(by_shape.items(), key=lambda kv: (int(kv[1]), str(kv[0])))
+        ]
+        out[key_text] = rows[-_MAX_FAILED_SHAPE_BAN_PER_KEY :]
+    if len(out) > _MAX_FAILED_SHAPE_BAN_KEYS:
+        keys = sorted(out.keys())
+        keep = set(keys[-_MAX_FAILED_SHAPE_BAN_KEYS :])
+        out = {k: list(v) for k, v in out.items() if k in keep}
+    return {str(k): list(v) for k, v in sorted(out.items(), key=lambda kv: str(kv[0]))}
+
+
+def _update_failed_shape_ban_map(
+    *,
+    prev_map: dict[str, list[dict[str, Any]]],
+    now_tick_u64: int,
+    debt_key: str | None,
+    target_key: str | None,
+    shape_id: str | None,
+    record_failure_b: bool,
+) -> dict[str, list[dict[str, Any]]]:
+    out = _failed_shape_ban_map(prev_map, now_tick_u64=int(now_tick_u64))
+    if not bool(record_failure_b):
+        return out
+    debt = str(debt_key or "").strip()
+    target = str(target_key or "").strip()
+    shape = _normalize_sha256(shape_id)
+    if not debt or not target or shape is None:
+        return out
+    key = _failed_patch_ban_key(debt_key=debt, target_key=target)
+    expires_tick_u64 = int(max(0, int(now_tick_u64 + _FAILED_SHAPE_BAN_TTL_TICKS_U64)))
+    existing_rows = list(out.get(key, []))
+    by_shape = {
+        str(row.get("shape_id", "")): int(max(0, int(row.get("expires_tick_u64", 0))))
+        for row in existing_rows
+        if _normalize_sha256(row.get("shape_id")) is not None
+    }
+    by_shape[str(shape)] = int(max(int(by_shape.get(str(shape), 0)), int(expires_tick_u64)))
+    rows = [
+        {"shape_id": str(s), "expires_tick_u64": int(exp)}
+        for s, exp in sorted(by_shape.items(), key=lambda kv: (int(kv[1]), str(kv[0])))
+        if int(exp) >= int(now_tick_u64)
+    ]
+    out[key] = rows[-_MAX_FAILED_SHAPE_BAN_PER_KEY :]
+    if len(out) > _MAX_FAILED_SHAPE_BAN_KEYS:
+        keys = sorted(out.keys())
+        keep = set(keys[-_MAX_FAILED_SHAPE_BAN_KEYS :])
+        out = {k: list(v) for k, v in out.items() if k in keep}
+    return {str(k): list(v) for k, v in sorted(out.items(), key=lambda kv: str(kv[0]))}
+
+
+def _failed_shape_ban_rows_for_debt_key(
+    *,
+    ban_map: dict[str, list[dict[str, Any]]],
+    debt_key: str | None,
+) -> list[dict[str, Any]]:
+    debt = str(debt_key or "").strip()
+    if not debt:
+        return []
+    rows: list[dict[str, Any]] = []
+    for key, values in sorted(ban_map.items(), key=lambda kv: str(kv[0])):
+        key_text = str(key)
+        if not key_text.startswith(f"{debt}|"):
+            continue
+        target_key = key_text.split("|", 1)[1]
+        target_relpaths = _target_relpaths_from_key(target_key)
+        primary_relpath = target_relpaths[0] if target_relpaths else ""
+        for entry in values:
+            normalized = _normalize_sha256(entry.get("shape_id"))
+            if normalized is None:
+                continue
+            rows.append(
+                {
+                    "target_relpath": primary_relpath,
+                    "target_relpaths": target_relpaths,
+                    "target_relpaths_key": target_key,
+                    "shape_id": normalized,
+                }
+            )
+    return rows
+
+
+def _wiring_locus_candidates_for_debt_key(
+    *,
+    tick_u64: int,
+    debt_key: str,
+    capability_id: str,
+    last_failure_cert: dict[str, Any] | None,
+) -> list[str]:
+    candidates: list[str] = []
+    if isinstance(last_failure_cert, dict):
+        touched = _normalize_target_relpaths(last_failure_cert.get("touched_relpaths_v1"))
+        for rel in touched:
+            if rel not in candidates:
+                candidates.append(rel)
+    for rel in _FORCED_WIRING_LOCUS_FALLBACK_RELPATHS:
+        normalized = _normalize_relpath(rel)
+        if normalized is None or normalized in candidates:
+            continue
+        candidates.append(normalized)
+    if not candidates:
+        return []
+    seed = canon_hash_obj(
+        {
+            "schema_name": "wiring_locus_seed_v1",
+            "tick_u64": int(max(0, int(tick_u64))),
+            "debt_key": str(debt_key),
+            "capability_id": str(capability_id),
+            "candidate_count_u32": int(len(candidates)),
+        }
+    )
+    start = int(seed.split(":", 1)[1], 16) % len(candidates)
+    ordered = [*candidates[start:], *candidates[:start]]
+    return [str(row) for row in ordered]
+
+
+def _compute_wiring_locus_relpath(
+    *,
+    tick_u64: int,
+    debt_key: str,
+    capability_id: str,
+    last_failure_cert: dict[str, Any] | None,
+) -> str | None:
+    for rel in _wiring_locus_candidates_for_debt_key(
+        tick_u64=tick_u64,
+        debt_key=debt_key,
+        capability_id=capability_id,
+        last_failure_cert=last_failure_cert,
+    ):
+        path = (repo_root() / rel).resolve()
+        if not path.exists() or not path.is_file():
+            continue
+        if not str(rel).endswith(".py"):
+            continue
+        return str(rel)
+    return None
+
+
+def _selected_candidate_from_precheck(*, dispatch_ctx: dict[str, Any] | None) -> dict[str, Any] | None:
+    if not isinstance(dispatch_ctx, dict):
+        return None
+    subrun_root_raw = dispatch_ctx.get("subrun_root_abs")
+    if not isinstance(subrun_root_raw, (str, Path)):
+        return None
+    subrun_root_abs = Path(subrun_root_raw).resolve()
+    precheck_dir = subrun_root_abs / "precheck"
+    if not precheck_dir.exists() or not precheck_dir.is_dir():
+        return None
+    rows = sorted(precheck_dir.glob("sha256_*.candidate_precheck_receipt_v1.json"), key=lambda row: row.as_posix())
+    if not rows:
+        return None
+    payload = load_canon_dict(rows[-1])
+    validate_schema_v19(payload, "candidate_precheck_receipt_v1")
+    candidates = payload.get("candidates")
+    if not isinstance(candidates, list):
+        fail("SCHEMA_FAIL")
+    selected_rows = [row for row in candidates if isinstance(row, dict) and bool(row.get("selected_for_ccap_b", False))]
+    if not selected_rows:
+        return None
+    selected_rows.sort(key=lambda row: int(max(0, int(row.get("candidate_idx_u32", 0)))))
+    selected = selected_rows[0]
+    target_relpath = _normalize_relpath(selected.get("target_relpath"))
+    target_relpaths = _normalize_target_relpaths(selected.get("target_relpaths"))
+    if not target_relpaths and target_relpath is not None:
+        target_relpaths = [target_relpath]
+    target_key = (
+        str(selected.get("target_relpaths_key", "")).strip()
+        if isinstance(selected.get("target_relpaths_key"), str)
+        else ""
+    )
+    if not target_key:
+        target_key = _target_relpaths_key(target_relpaths=target_relpaths)
+    if not target_relpaths:
+        target_relpaths = _target_relpaths_from_key(target_key)
+    if not target_relpaths and target_relpath is not None:
+        target_relpaths = [target_relpath]
+    if not target_relpaths:
+        return None
+    target_relpath = target_relpaths[0]
+    target_key = _target_relpaths_key(target_relpaths=target_relpaths)
+    patch_sha256 = _normalize_patch_sha256(selected.get("patch_sha256"))
+    cert = selected.get("nontriviality_cert_v1")
+    cert_obj = dict(cert) if isinstance(cert, dict) else None
+    shape_id = _normalize_sha256((cert_obj or {}).get("shape_id"))
+    failed_threshold_code = str((cert_obj or {}).get("failed_threshold_code", "")).strip() or None
+    if patch_sha256 is None:
+        return None
+    return {
+        "target_relpath": target_relpath,
+        "target_relpaths": target_relpaths,
+        "target_relpaths_key": target_key,
+        "patch_sha256": patch_sha256,
+        "shape_id": shape_id,
+        "nontriviality_cert_v1": cert_obj,
+        "failed_threshold_code": failed_threshold_code,
+    }
 
 
 def _project_key_map_from_goal_map(
@@ -1986,6 +2511,7 @@ def _forced_frontier_debt_key(
     debt_state: dict[str, Any],
     debt_limit_u64: int,
     max_ticks_without_frontier_attempt_u64: int,
+    anticipate_without_attempt_u64: int = 0,
 ) -> str | None:
     debt_by_key = _u64_map(debt_state.get("debt_by_key"))
     ticks_by_key = _u64_map(debt_state.get("ticks_without_frontier_attempt_by_key"))
@@ -2010,10 +2536,11 @@ def _forced_frontier_debt_key(
         )
     candidates: list[tuple[int, str]] = []
     pending_debt_keys = {str(row.get("debt_key", "")).strip() for row in pending_frontier_goals}
+    anticipated_ticks_u64 = int(max(0, int(anticipate_without_attempt_u64)))
     for debt_key in sorted(key for key in pending_debt_keys if key):
         debt_u64 = int(max(0, int(debt_by_key.get(debt_key, 0))))
         ticks_u64 = int(max(0, int(ticks_by_key.get(debt_key, 0))))
-        if debt_u64 >= int(debt_limit_u64) or ticks_u64 >= int(max_ticks_without_frontier_attempt_u64):
+        if debt_u64 >= int(debt_limit_u64) or (ticks_u64 + 1 + anticipated_ticks_u64) >= int(max_ticks_without_frontier_attempt_u64):
             first_tick = int(max(0, int(first_debt_tick_by_key.get(debt_key, 0))))
             candidates.append((first_tick, debt_key))
     if not candidates:
@@ -2033,8 +2560,14 @@ def _build_dependency_routing_receipt(
     dependency_debt_delta_i64: int,
     forced_frontier_attempt_b: bool,
     forced_frontier_debt_key: str | None,
+    routing_selector_id: str,
+    market_frozen_b: bool,
+    market_used_for_selection_b: bool,
     reason_codes: list[str],
 ) -> dict[str, Any]:
+    selector_id = str(routing_selector_id).strip()
+    if selector_id not in _ROUTING_SELECTOR_IDS:
+        selector_id = "NON_MARKET"
     payload = {
         "schema_name": "dependency_routing_receipt_v1",
         "schema_version": "v19_0",
@@ -2052,6 +2585,9 @@ def _build_dependency_routing_receipt(
             if isinstance(forced_frontier_debt_key, str) and forced_frontier_debt_key.strip()
             else None
         ),
+        "routing_selector_id": selector_id,
+        "market_frozen_b": bool(market_frozen_b),
+        "market_used_for_selection_b": bool(market_used_for_selection_b),
         "reason_codes": [str(row) for row in reason_codes],
     }
     no_id = dict(payload)
@@ -2074,6 +2610,44 @@ def _with_hard_lock_override_reason(
     return out
 
 
+def _routing_selector_for_receipt(
+    *,
+    reason_codes: list[str],
+    forced_frontier_attempt_b: bool,
+    market_selection_in_play_b: bool,
+) -> tuple[str, bool, bool]:
+    reason_set = {str(row).strip() for row in reason_codes if str(row).strip()}
+    if bool(forced_frontier_attempt_b):
+        selector_id = "HARD_LOCK_OVERRIDE"
+    elif "SCAFFOLDING_ALLOWED" in reason_set:
+        selector_id = "SCAFFOLD_OVERRIDE"
+    elif bool(market_selection_in_play_b):
+        selector_id = "MARKET"
+    else:
+        selector_id = "NON_MARKET"
+    market_used_for_selection_b = selector_id == "MARKET"
+    market_frozen_b = selector_id in {"SCAFFOLD_OVERRIDE", "HARD_LOCK_OVERRIDE"}
+    return selector_id, market_frozen_b, market_used_for_selection_b
+
+
+def _with_frontier_dispatch_failed_pre_evidence_reason(
+    *,
+    reason_codes: list[str],
+    hard_lock_became_active_b: bool,
+    selected_declared_class: str,
+    frontier_attempt_counted_b: bool,
+) -> list[str]:
+    out = [str(row) for row in reason_codes]
+    if not bool(hard_lock_became_active_b):
+        return out
+    selected_frontier_b = str(selected_declared_class).strip() == "FRONTIER_HEAVY"
+    if selected_frontier_b and bool(frontier_attempt_counted_b):
+        return out
+    if "FRONTIER_DISPATCH_FAILED_PRE_EVIDENCE" not in out:
+        out.append("FRONTIER_DISPATCH_FAILED_PRE_EVIDENCE")
+    return out
+
+
 def _effective_change_from_effect_class(
     *,
     effect_class: str,
@@ -2090,15 +2664,16 @@ def _frontier_attempt_evidence_satisfied(
     *,
     action_kind: str,
     declared_class_for_tick: str,
+    lane_name: str | None = None,
     candidate_bundle_present_b: bool,
     dispatch_receipt: dict[str, Any] | None,
     subverifier_receipt: dict[str, Any] | None,
 ) -> bool:
     if str(action_kind).strip() not in {"RUN_CAMPAIGN", "RUN_GOAL_TASK"}:
         return False
-    if str(declared_class_for_tick).strip() != "FRONTIER_HEAVY":
-        return False
-    if not bool(candidate_bundle_present_b):
+    is_frontier_lane = str(lane_name or "").strip().upper() == "FRONTIER"
+    declared_class = str(declared_class_for_tick).strip()
+    if declared_class not in _HEAVY_DECLARED_CLASSES and not is_frontier_lane:
         return False
     if not isinstance(dispatch_receipt, dict) or not isinstance(subverifier_receipt, dict):
         return False
@@ -2265,6 +2840,12 @@ def _rewrite_plan_for_forced_frontier_goal(
     tie_break_path = decision_plan.get("tie_break_path")
     if not isinstance(tie_break_path, list):
         fail("SCHEMA_FAIL")
+    existing_proof = decision_plan.get("recompute_proof")
+    existing_inputs_hash: str | None = None
+    if isinstance(existing_proof, dict):
+        candidate_inputs_hash = str(existing_proof.get("inputs_hash", "")).strip()
+        if _is_sha256(candidate_inputs_hash):
+            existing_inputs_hash = candidate_inputs_hash
     payload = dict(decision_plan)
     payload["action_kind"] = "RUN_GOAL_TASK"
     payload["goal_id"] = str(forced_goal_id)
@@ -2277,7 +2858,24 @@ def _rewrite_plan_for_forced_frontier_goal(
     if not isinstance(priority_q32, dict):
         payload["priority_q32"] = {"q": 0}
     payload["tie_break_path"] = [*tie_break_path, f"FORCED_FRONTIER_GOAL:{forced_goal_id}", "FORCED_FRONTIER_OVERRIDE"]
-    return _recompute_decision_plan_identity(payload)
+    rewritten_plan, rewritten_hash = _recompute_decision_plan_identity(payload)
+    if existing_inputs_hash is None:
+        return rewritten_plan, rewritten_hash
+    rewritten_plan = dict(rewritten_plan)
+    rewritten_plan["recompute_proof"] = {
+        "inputs_hash": str(existing_inputs_hash),
+        "plan_hash": _SHA256_ZERO,
+    }
+    no_id = dict(rewritten_plan)
+    no_id.pop("plan_id", None)
+    rewritten_plan_id = canon_hash_obj(no_id)
+    rewritten_plan["plan_id"] = rewritten_plan_id
+    rewritten_plan["recompute_proof"] = {
+        "inputs_hash": str(existing_inputs_hash),
+        "plan_hash": str(rewritten_plan_id),
+    }
+    validate_schema(rewritten_plan, "omega_decision_plan_v1")
+    return rewritten_plan, canon_hash_obj(rewritten_plan)
 
 
 def _activation_meta_verdict(dispatch_ctx: dict[str, Any] | None) -> str | None:
@@ -3723,6 +4321,8 @@ def tick_once(
                 frontier_capability_ids_for_debt = _sorted_unique_strings(
                     list(lanes_cfg.get("frontier_capability_ids") or [])
                 )
+            if _premarathon_v63_enabled():
+                frontier_capability_ids_for_debt = [_SH1_CAPABILITY_ID]
             debt_cfg = long_run_profile.get("dependency_debt")
             if isinstance(debt_cfg, dict):
                 dependency_debt_limit_u64 = int(max(1, int(debt_cfg.get("debt_limit_u64", _DEFAULT_DEBT_LIMIT_U64))))
@@ -3737,6 +4337,14 @@ def tick_once(
                         ),
                     )
                 )
+            # Long-run discipline invariant: once frontier exists, no-attempt timeout must
+            # deterministically force hard-lock by tick 40.
+            max_ticks_without_frontier_attempt_u64 = int(
+                min(int(max_ticks_without_frontier_attempt_u64), int(_DEFAULT_MAX_TICKS_WITHOUT_FRONTIER_ATTEMPT_U64))
+            )
+            if _premarathon_v63_enabled():
+                # Premarathon must enter forced-heavy quickly; do not allow long scaffold drift.
+                max_ticks_without_frontier_attempt_u64 = int(min(int(max_ticks_without_frontier_attempt_u64), 5))
             anti_cfg = long_run_profile.get("anti_monopoly")
             if isinstance(anti_cfg, dict):
                 anti_monopoly_consecutive_limit_u64 = int(
@@ -4133,6 +4741,10 @@ def tick_once(
         policy_market_winner_proposal_hash: str | None = None
         policy_market_selection_policy_payload: dict[str, Any] | None = None
         policy_market_j_profile_payload: dict[str, Any] | None = None
+        predictor_hash = _SHA256_ZERO
+        j_profile_hash = _SHA256_ZERO
+        policy_budget_spec_hash = _SHA256_ZERO
+        determinism_contract_hash = _SHA256_ZERO
         selected_declared_class = "UNCLASSIFIED"
         selected_capability_id = ""
         selected_goal_id: str | None = None
@@ -4624,6 +5236,30 @@ def tick_once(
                 runaway_cfg=runaway_cfg,
                 runaway_state=prev_runaway_state,
             )
+            shared_repo_tree_id = compute_repo_base_tree_id_tolerant(repo_root())
+            descriptor_payload = build_inputs_descriptor_once(
+                tick_u64=tick_u64,
+                prev_state_hash=prev_state_hash_for_descriptor,
+                repo_tree_id=shared_repo_tree_id,
+                observation_hash=observation_hash,
+                issue_hash=issue_hash,
+                registry_hash=registry_hash,
+                policy_program_ids=[_sha256_or_zero(pack.get("coordinator_isa_program_id"))],
+                predictor_hash=_sha256_or_zero(predictor_hash),
+                j_profile_hash=_sha256_or_zero(j_profile_hash),
+                opcode_table_hash=_sha256_or_zero(opcode_table_hash or pack.get("coordinator_opcode_table_id")),
+                policy_budget_spec_hash=_sha256_or_zero(policy_budget_spec_hash),
+                determinism_contract_hash=_sha256_or_zero(determinism_contract_hash),
+            )
+            _, descriptor_payload, inputs_descriptor_hash = _write_payload(
+                state_root / "policy" / "inputs",
+                "inputs_descriptor_v1.json",
+                descriptor_payload,
+            )
+            decision_plan, decision_hash = _bind_decision_plan_to_inputs_descriptor(
+                decision_plan=decision_plan,
+                inputs_descriptor_hash=inputs_descriptor_hash,
+            )
             _mark("decide", decide_start_ns)
             _, decision_plan, decision_hash = _write_payload(
                 state_root / "decisions",
@@ -4769,6 +5405,30 @@ def tick_once(
                 registry=registry,
                 selection_receipt=bid_selection,
             )
+            shared_repo_tree_id = compute_repo_base_tree_id_tolerant(repo_root())
+            descriptor_payload = build_inputs_descriptor_once(
+                tick_u64=tick_u64,
+                prev_state_hash=prev_state_hash_for_descriptor,
+                repo_tree_id=shared_repo_tree_id,
+                observation_hash=observation_hash,
+                issue_hash=issue_hash,
+                registry_hash=registry_hash,
+                policy_program_ids=[_sha256_or_zero(pack.get("coordinator_isa_program_id"))],
+                predictor_hash=_sha256_or_zero(predictor_hash),
+                j_profile_hash=_sha256_or_zero(j_profile_hash),
+                opcode_table_hash=_sha256_or_zero(opcode_table_hash or pack.get("coordinator_opcode_table_id")),
+                policy_budget_spec_hash=_sha256_or_zero(policy_budget_spec_hash),
+                determinism_contract_hash=_sha256_or_zero(determinism_contract_hash),
+            )
+            _, descriptor_payload, inputs_descriptor_hash = _write_payload(
+                state_root / "policy" / "inputs",
+                "inputs_descriptor_v1.json",
+                descriptor_payload,
+            )
+            decision_plan, decision_hash = _bind_decision_plan_to_inputs_descriptor(
+                decision_plan=decision_plan,
+                inputs_descriptor_hash=inputs_descriptor_hash,
+            )
             _mark("decide", decide_start_ns)
             _, decision_plan, decision_hash = _write_payload(
                 state_root / "decisions",
@@ -4788,12 +5448,19 @@ def tick_once(
             utility_policy=long_run_utility_policy_payload,
             capability_id=selected_capability_id,
         )
+        market_selection_in_play_b = bool(
+            (bid_selection_receipt_hash is not None)
+            or (policy_market_selection_hash is not None)
+        )
         if long_run_profile is not None:
             forced_frontier_debt_key = _forced_frontier_debt_key(
                 pending_frontier_goals=pending_frontier_goals,
                 debt_state=prev_dependency_debt_state,
                 debt_limit_u64=dependency_debt_limit_u64,
                 max_ticks_without_frontier_attempt_u64=max_ticks_without_frontier_attempt_u64,
+                # Anticipate this tick's no-attempt branch so hard-lock forcing is
+                # applied in the same tick that would otherwise activate the lock.
+                anticipate_without_attempt_u64=1,
             )
             if forced_frontier_debt_key is not None:
                 forced_frontier_attempt_b = True
@@ -4807,27 +5474,37 @@ def tick_once(
                 if forced_goal_row is None:
                     fail("SCHEMA_FAIL")
                 forced_capability_id = str(forced_goal_row.get("capability_id", "")).strip()
-                cap_row = _capability_id_to_campaign(
+                eligible_cap_row = _capability_id_to_campaign(
                     registry=registry,
                     capability_id=forced_capability_id,
                     tick_u64=int(tick_u64),
                     state=prev_state,
                 )
-                if cap_row is not None:
-                    current_goal_id = _selected_goal_id_from_plan(decision_plan)
-                    current_capability = _selected_capability_id_from_plan(decision_plan)
-                    if current_goal_id != str(forced_frontier_goal_id) or current_capability != forced_capability_id:
-                        decision_plan, decision_hash = _rewrite_plan_for_forced_frontier_goal(
-                            decision_plan=decision_plan,
-                            forced_goal_id=str(forced_frontier_goal_id),
-                            forced_capability_id=forced_capability_id,
-                            cap_row=cap_row,
-                        )
-                        _, decision_plan, decision_hash = _write_payload(
-                            state_root / "decisions",
-                            "omega_decision_plan_v1.json",
-                            decision_plan,
-                        )
+                cap_row = (
+                    eligible_cap_row
+                    if eligible_cap_row is not None
+                    else _capability_row_for_forced_frontier(
+                        registry=registry,
+                        capability_id=forced_capability_id,
+                    )
+                )
+                if cap_row is None:
+                    fail("SCHEMA_FAIL")
+                current_goal_id = _selected_goal_id_from_plan(decision_plan)
+                current_capability = _selected_capability_id_from_plan(decision_plan)
+                if current_goal_id != str(forced_frontier_goal_id) or current_capability != forced_capability_id:
+                    decision_plan, decision_hash = _rewrite_plan_for_forced_frontier_goal(
+                        decision_plan=decision_plan,
+                        forced_goal_id=str(forced_frontier_goal_id),
+                        forced_capability_id=forced_capability_id,
+                        cap_row=cap_row,
+                    )
+                    _, decision_plan, decision_hash = _write_payload(
+                        state_root / "decisions",
+                        "omega_decision_plan_v1.json",
+                        decision_plan,
+                    )
+                if eligible_cap_row is not None:
                     dependency_routing_reason_codes = [
                         "DEPENDENCY_DEBT_LIMIT_REACHED_FORCING_FRONTIER_ATTEMPT",
                         "FORCED_TARGETED_FRONTIER_ATTEMPT",
@@ -4836,12 +5513,8 @@ def tick_once(
                     dependency_routing_reason_codes = [
                         "DEPENDENCY_DEBT_LIMIT_REACHED_FORCING_FRONTIER_ATTEMPT",
                         "FORCED_FRONTIER_ATTEMPT_NOT_ELIGIBLE",
+                        "FORCED_TARGETED_FRONTIER_ATTEMPT",
                     ]
-                market_selection_in_play_b = bool(
-                    market_enabled
-                    or (bid_selection_receipt_hash is not None)
-                    or (policy_market_selection_hash is not None)
-                )
                 dependency_routing_reason_codes = _with_hard_lock_override_reason(
                     reason_codes=dependency_routing_reason_codes,
                     forced_frontier_attempt_b=forced_frontier_attempt_b,
@@ -4888,24 +5561,8 @@ def tick_once(
                 dependency_debt_delta_i64 = 0
                 if not dependency_routing_reason_codes:
                     dependency_routing_reason_codes = ["NO_DEPENDENCY_ROUTING"]
-            dependency_routing_receipt = _build_dependency_routing_receipt(
-                tick_u64=tick_u64,
-                selected_capability_id=selected_capability_id,
-                selected_declared_class=selected_declared_class,
-                frontier_goals_pending_b=frontier_goals_pending_b,
-                blocks_goal_id=blocks_goal_id,
-                blocks_debt_key=blocks_debt_key,
-                dependency_debt_delta_i64=int(dependency_debt_delta_i64),
-                forced_frontier_attempt_b=bool(forced_frontier_attempt_b),
-                forced_frontier_debt_key=forced_frontier_debt_key,
-                reason_codes=list(dependency_routing_reason_codes),
-            )
-            _, _dependency_routing_obj, dependency_routing_receipt_hash = _write_payload_atomic(
-                state_root / "long_run" / "debt",
-                "dependency_routing_receipt_v1.json",
-                dependency_routing_receipt,
-                id_field="receipt_id",
-            )
+            # Persist dependency routing receipt after frontier-attempt evidence is known
+            # so hard-lock transition outcomes are recorded in the same tick.
 
         run_seed_override_raw = str(os.environ.get("OMEGA_RUN_SEED_U64", "")).strip()
         if run_seed_override_raw:
@@ -4951,6 +5608,13 @@ def tick_once(
             "manifest_hash": None,
             "receipt_hash": None,
         }
+        selected_candidate_target_relpath: str | None = None
+        selected_candidate_target_relpaths: list[str] = []
+        selected_candidate_target_key: str | None = None
+        selected_candidate_patch_sha256: str | None = None
+        selected_candidate_shape_id: str | None = None
+        selected_candidate_nontriviality_cert_v1: dict[str, Any] | None = None
+        selected_candidate_failed_threshold_code: str | None = None
         epistemic_capsule_evidence = {
             "capsule_hash": None,
             "capsule_id": None,
@@ -4977,6 +5641,82 @@ def tick_once(
             "epistemic_kernel_spec_id": None,
         }
 
+        dispatch_env_overrides: dict[str, str] = {}
+        prev_failed_patch_ban_map = _failed_patch_ban_map(
+            (prev_dependency_debt_state or {}).get("failed_patch_ban_by_debt_key_target"),
+            now_tick_u64=int(tick_u64),
+        )
+        prev_failed_shape_ban_map = _failed_shape_ban_map(
+            (prev_dependency_debt_state or {}).get("failed_shape_ban_by_debt_key_target"),
+            now_tick_u64=int(tick_u64),
+        )
+        prev_last_failure_nontriviality_cert_by_debt_key = dict(
+            (prev_dependency_debt_state or {}).get("last_failure_nontriviality_cert_by_debt_key") or {}
+        )
+        prev_last_failure_failed_threshold_by_debt_key = {
+            str(key): str(value)
+            for key, value in dict((prev_dependency_debt_state or {}).get("last_failure_failed_threshold_by_debt_key") or {}).items()
+            if str(key).strip() and str(value).strip()
+        }
+        selected_action_kind = str(decision_plan.get("action_kind", "")).strip()
+        if (
+            selected_action_kind in {"RUN_CAMPAIGN", "RUN_GOAL_TASK"}
+            and bool(forced_frontier_attempt_b)
+            and str(selected_capability_id).strip() == _SH1_CAPABILITY_ID
+        ):
+            dispatch_env_overrides[_FORCED_HEAVY_ENV_KEY] = "1"
+            forced_debt_key_for_env = str(forced_frontier_debt_key or blocks_debt_key or "").strip()
+            if forced_debt_key_for_env:
+                dispatch_env_overrides[_FORCED_DEBT_KEY_ENV_KEY] = forced_debt_key_for_env
+                wiring_locus_relpath = _compute_wiring_locus_relpath(
+                    tick_u64=int(tick_u64),
+                    debt_key=str(forced_debt_key_for_env),
+                    capability_id=str(selected_capability_id),
+                    last_failure_cert=(
+                        dict(prev_last_failure_nontriviality_cert_by_debt_key.get(str(forced_debt_key_for_env)))
+                        if isinstance(prev_last_failure_nontriviality_cert_by_debt_key.get(str(forced_debt_key_for_env)), dict)
+                        else None
+                    ),
+                )
+                if isinstance(wiring_locus_relpath, str) and wiring_locus_relpath.strip():
+                    dispatch_env_overrides[_FORCED_WIRING_LOCUS_ENV_KEY] = str(wiring_locus_relpath).strip()
+                ban_rows = _failed_patch_ban_rows_for_debt_key(
+                    ban_map=prev_failed_patch_ban_map,
+                    debt_key=forced_debt_key_for_env,
+                )
+                if ban_rows:
+                    dispatch_env_overrides[_FAILED_PATCH_BAN_ENV_KEY] = json.dumps(
+                        ban_rows,
+                        sort_keys=True,
+                        separators=(",", ":"),
+                    )
+                shape_ban_rows = _failed_shape_ban_rows_for_debt_key(
+                    ban_map=prev_failed_shape_ban_map,
+                    debt_key=forced_debt_key_for_env,
+                )
+                if shape_ban_rows:
+                    dispatch_env_overrides[_FAILED_SHAPE_BAN_ENV_KEY] = json.dumps(
+                        shape_ban_rows,
+                        sort_keys=True,
+                        separators=(",", ":"),
+                    )
+                last_failure_cert = prev_last_failure_nontriviality_cert_by_debt_key.get(str(forced_debt_key_for_env))
+                last_failure_threshold = str(
+                    prev_last_failure_failed_threshold_by_debt_key.get(str(forced_debt_key_for_env), "")
+                ).strip()
+                if isinstance(last_failure_cert, dict) or last_failure_threshold:
+                    dispatch_env_overrides[_LAST_FAILURE_HINT_ENV_KEY] = json.dumps(
+                        {
+                            "debt_key": str(forced_debt_key_for_env),
+                            "failed_threshold_code": (last_failure_threshold or None),
+                            "nontriviality_cert_v1": (dict(last_failure_cert) if isinstance(last_failure_cert, dict) else None),
+                        },
+                        sort_keys=True,
+                        separators=(",", ":"),
+                    )
+            elif _premarathon_v63_enabled():
+                fail("PRECHECK_FAIL:UNBOUND_DEBT_KEY")
+
         safe_halt = decision_plan.get("action_kind") == "SAFE_HALT"
 
         if str(decision_plan.get("action_kind")) in {"RUN_CAMPAIGN", "RUN_GOAL_TASK"}:
@@ -4988,6 +5728,7 @@ def tick_once(
                 state_root=state_root,
                 run_seed_u64=run_seed_u64,
                 runaway_cfg=runaway_cfg,
+                dispatch_env_overrides=dispatch_env_overrides,
             )
             _mark("dispatch_campaign", dispatch_start_ns)
             subverifier_start_ns = time.monotonic_ns()
@@ -5057,6 +5798,25 @@ def tick_once(
         else:
             active_manifest_after = active_manifest_before
 
+        if isinstance(dispatch_receipt, dict) and str(dispatch_receipt.get("campaign_id", "")).strip() == _SH1_CAMPAIGN_ID:
+            selected_candidate = _selected_candidate_from_precheck(dispatch_ctx=dispatch_ctx)
+            if selected_candidate is not None:
+                selected_candidate_target_relpath = str(selected_candidate.get("target_relpath", "")).strip() or None
+                selected_candidate_target_relpaths = [
+                    str(row)
+                    for row in _normalize_target_relpaths(selected_candidate.get("target_relpaths"))
+                ]
+                selected_candidate_target_key = str(selected_candidate.get("target_relpaths_key", "")).strip() or None
+                if not selected_candidate_target_key:
+                    selected_candidate_target_key = _target_relpaths_key(target_relpaths=selected_candidate_target_relpaths)
+                selected_candidate_patch_sha256 = _normalize_patch_sha256(selected_candidate.get("patch_sha256"))
+                selected_candidate_shape_id = _normalize_sha256(selected_candidate.get("shape_id"))
+                cert_obj = selected_candidate.get("nontriviality_cert_v1")
+                selected_candidate_nontriviality_cert_v1 = dict(cert_obj) if isinstance(cert_obj, dict) else None
+                threshold_code_raw = selected_candidate.get("failed_threshold_code")
+                threshold_code = str(threshold_code_raw).strip() if threshold_code_raw is not None else ""
+                selected_candidate_failed_threshold_code = threshold_code or None
+
         utility_proof_hash_raw = str((promotion_receipt or {}).get("utility_proof_hash", "")).strip()
         utility_proof_hash = utility_proof_hash_raw if _is_sha256(utility_proof_hash_raw) else None
         utility_proof_receipt = (
@@ -5095,6 +5855,7 @@ def tick_once(
         if _frontier_attempt_evidence_satisfied(
             action_kind=str(decision_plan.get("action_kind", "")).strip(),
             declared_class_for_tick=declared_class_for_tick,
+            lane_name=lane_name,
             candidate_bundle_present_b=bool(candidate_bundle_present_b),
             dispatch_receipt=dispatch_receipt,
             subverifier_receipt=subverifier_receipt,
@@ -5118,6 +5879,20 @@ def tick_once(
                     frontier_attempt_debt_key = str(frontier_row.get("debt_key", "")).strip() or None
             if frontier_attempt_debt_key is None and isinstance(blocks_debt_key, str) and blocks_debt_key.strip():
                 frontier_attempt_debt_key = str(blocks_debt_key).strip()
+            if frontier_attempt_debt_key is None:
+                pending_debt_key_rows = sorted(
+                    {
+                        str(row.get("debt_key", "")).strip()
+                        for row in pending_frontier_goals
+                        if isinstance(row, dict) and str(row.get("debt_key", "")).strip()
+                    }
+                )
+                if pending_debt_key_rows:
+                    frontier_attempt_debt_key = str(pending_debt_key_rows[0])
+            if frontier_attempt_counted_b and frontier_attempt_debt_key is None:
+                if _premarathon_v63_enabled():
+                    fail("PRECHECK_FAIL:UNBOUND_DEBT_KEY")
+                frontier_attempt_debt_key = "__UNBOUND_FRONTIER_ATTEMPT__"
 
         budget_remaining = dict(prev_state.get("budget_remaining") or {})
         cooldowns = dict(prev_state.get("cooldowns") or {})
@@ -5174,6 +5949,11 @@ def tick_once(
             value = str(reason_code_raw).strip()
             if value:
                 subverifier_reason_code = value
+        subverifier_nontriviality_cert_v1 = (
+            dict((subverifier_receipt or {}).get("nontriviality_cert_v1") or {})
+            if isinstance((subverifier_receipt or {}).get("nontriviality_cert_v1"), dict)
+            else None
+        )
 
         if isinstance(decision_plan, dict):
             winner_campaign_id = str((dispatch_receipt or {}).get("campaign_id") or decision_plan.get("campaign_id", "")).strip()
@@ -5423,14 +6203,13 @@ def tick_once(
                 else:
                     if int(dependency_debt_delta_i64) > 0 and str(blocks_debt_key or "") == debt_key:
                         next_debt = int(next_debt + int(dependency_debt_delta_i64))
-                    if next_debt > 0:
-                        next_ticks = int(next_ticks + 1)
-                    else:
-                        next_ticks = 0
+                    next_ticks = int(next_ticks + 1)
                 if next_debt > 0:
                     next_debt_by_key[debt_key] = int(next_debt)
+                if next_ticks > 0:
                     next_ticks_by_key[debt_key] = int(next_ticks)
-                    if prev_debt > 0:
+                if next_debt > 0 or next_ticks > 0:
+                    if prev_debt > 0 or prev_ticks > 0:
                         next_first_by_key[debt_key] = int(max(0, int(prev_first_by_key.get(debt_key, int(tick_u64)))))
                     else:
                         next_first_by_key[debt_key] = int(tick_u64)
@@ -5472,6 +6251,58 @@ def tick_once(
             if frontier_attempt_counted_b:
                 frontier_attempts_u64 += 1
 
+            failure_debt_key = (
+                frontier_attempt_debt_key
+                or (str(forced_frontier_debt_key).strip() if isinstance(forced_frontier_debt_key, str) else None)
+                or (str(blocks_debt_key).strip() if isinstance(blocks_debt_key, str) else None)
+            )
+            record_failed_frontier_attempt_b = bool(
+                str(dispatched_capability_id).strip() == _SH1_CAPABILITY_ID
+                and bool(forced_frontier_attempt_b or frontier_attempt_counted_b)
+                and str(effect_class_for_tick).strip() != "EFFECT_HEAVY_OK"
+            )
+            failed_patch_ban_by_debt_key_target = _update_failed_patch_ban_map(
+                prev_map=prev_failed_patch_ban_map,
+                now_tick_u64=int(tick_u64),
+                debt_key=failure_debt_key,
+                target_key=selected_candidate_target_key,
+                patch_sha256=selected_candidate_patch_sha256,
+                record_failure_b=record_failed_frontier_attempt_b,
+            )
+            failed_shape_ban_by_debt_key_target = _update_failed_shape_ban_map(
+                prev_map=prev_failed_shape_ban_map,
+                now_tick_u64=int(tick_u64),
+                debt_key=failure_debt_key,
+                target_key=selected_candidate_target_key,
+                shape_id=selected_candidate_shape_id,
+                record_failure_b=record_failed_frontier_attempt_b,
+            )
+            last_failure_nontriviality_cert_by_debt_key = {
+                str(key): dict(value)
+                for key, value in sorted(prev_last_failure_nontriviality_cert_by_debt_key.items(), key=lambda kv: str(kv[0]))
+                if str(key).strip() and isinstance(value, dict)
+            }
+            last_failure_failed_threshold_by_debt_key = {
+                str(key): str(value)
+                for key, value in sorted(prev_last_failure_failed_threshold_by_debt_key.items(), key=lambda kv: str(kv[0]))
+                if str(key).strip() and str(value).strip()
+            }
+            if (
+                record_failed_frontier_attempt_b
+                and isinstance(failure_debt_key, str)
+                and str(failure_debt_key).strip()
+                and str(subverifier_reason_code or "").strip() == "VERIFY_ERROR:INSUFFICIENT_NONTRIVIAL_DELTA"
+                and isinstance(subverifier_nontriviality_cert_v1, dict)
+            ):
+                key = str(failure_debt_key).strip()
+                last_failure_nontriviality_cert_by_debt_key[key] = dict(subverifier_nontriviality_cert_v1)
+                failed_threshold_code = str(
+                    (subverifier_nontriviality_cert_v1 or {}).get("failed_threshold_code")
+                    or (selected_candidate_failed_threshold_code or "")
+                ).strip()
+                if failed_threshold_code:
+                    last_failure_failed_threshold_by_debt_key[key] = failed_threshold_code
+
             prev_forced_debt_key = _forced_frontier_debt_key(
                 pending_frontier_goals=pending_frontier_goals,
                 debt_state={
@@ -5486,6 +6317,59 @@ def tick_once(
                 _goal_id_for_debt_key(pending_frontier_goals=pending_frontier_goals, debt_key=prev_forced_debt_key)
                 if isinstance(prev_forced_debt_key, str) and prev_forced_debt_key
                 else None
+            )
+            prev_hard_lock_active_b = bool((prev_dependency_debt_state or {}).get("hard_lock_active_b", False))
+            next_hard_lock_active_b = bool(forced_frontier_attempt_b or (prev_forced_debt_key is not None))
+            hard_lock_debt_key_for_tick = (
+                str(forced_frontier_debt_key).strip()
+                if bool(forced_frontier_attempt_b) and isinstance(forced_frontier_debt_key, str) and str(forced_frontier_debt_key).strip()
+                else (
+                    str(prev_forced_debt_key).strip()
+                    if isinstance(prev_forced_debt_key, str) and str(prev_forced_debt_key).strip()
+                    else None
+                )
+            )
+            hard_lock_goal_id_for_tick = (
+                str(forced_frontier_goal_id).strip()
+                if bool(forced_frontier_attempt_b) and isinstance(forced_frontier_goal_id, str) and str(forced_frontier_goal_id).strip()
+                else (
+                    str(prev_forced_goal).strip()
+                    if isinstance(prev_forced_goal, str) and str(prev_forced_goal).strip()
+                    else None
+                )
+            )
+            hard_lock_became_active_b = bool((not prev_hard_lock_active_b) and next_hard_lock_active_b)
+            dependency_routing_reason_codes = _with_frontier_dispatch_failed_pre_evidence_reason(
+                reason_codes=dependency_routing_reason_codes,
+                hard_lock_became_active_b=hard_lock_became_active_b,
+                selected_declared_class=selected_declared_class,
+                frontier_attempt_counted_b=frontier_attempt_counted_b,
+            )
+            routing_selector_id, market_frozen_b, market_used_for_selection_b = _routing_selector_for_receipt(
+                reason_codes=list(dependency_routing_reason_codes),
+                forced_frontier_attempt_b=bool(forced_frontier_attempt_b),
+                market_selection_in_play_b=bool(market_selection_in_play_b),
+            )
+            dependency_routing_receipt = _build_dependency_routing_receipt(
+                tick_u64=tick_u64,
+                selected_capability_id=selected_capability_id,
+                selected_declared_class=selected_declared_class,
+                frontier_goals_pending_b=frontier_goals_pending_b,
+                blocks_goal_id=blocks_goal_id,
+                blocks_debt_key=blocks_debt_key,
+                dependency_debt_delta_i64=int(dependency_debt_delta_i64),
+                forced_frontier_attempt_b=bool(forced_frontier_attempt_b),
+                forced_frontier_debt_key=forced_frontier_debt_key,
+                routing_selector_id=routing_selector_id,
+                market_frozen_b=bool(market_frozen_b),
+                market_used_for_selection_b=bool(market_used_for_selection_b),
+                reason_codes=list(dependency_routing_reason_codes),
+            )
+            _, _dependency_routing_obj, dependency_routing_receipt_hash = _write_payload_atomic(
+                state_root / "long_run" / "debt",
+                "dependency_routing_receipt_v1.json",
+                dependency_routing_receipt,
+                id_field="receipt_id",
             )
             maintenance_since_last_frontier_attempt_u64 = int(
                 max(0, int((prev_dependency_debt_state or {}).get("maintenance_since_last_frontier_attempt_u64", 0)))
@@ -5520,6 +6404,21 @@ def tick_once(
             elif frontier_attempt_counted_b:
                 debt_reason_code = "FRONTIER_ATTEMPT_COUNTED"
 
+            scaffold_inflight_ccap_id = (
+                str((prev_dependency_debt_state or {}).get("scaffold_inflight_ccap_id", "")).strip()
+                if isinstance((prev_dependency_debt_state or {}).get("scaffold_inflight_ccap_id"), str)
+                else None
+            )
+            if not scaffold_inflight_ccap_id:
+                scaffold_inflight_ccap_id = None
+            scaffold_inflight_started_tick_u64_raw = (prev_dependency_debt_state or {}).get("scaffold_inflight_started_tick_u64")
+            if scaffold_inflight_ccap_id is None:
+                scaffold_inflight_started_tick_u64 = None
+            elif isinstance(scaffold_inflight_started_tick_u64_raw, int):
+                scaffold_inflight_started_tick_u64 = int(max(0, int(scaffold_inflight_started_tick_u64_raw)))
+            else:
+                scaffold_inflight_started_tick_u64 = int(tick_u64)
+
             dependency_debt_state_payload = {
                 "schema_name": "dependency_debt_state_v1",
                 "schema_version": "v19_0",
@@ -5547,13 +6446,20 @@ def tick_once(
                     if isinstance(last_frontier_attempt_goal_id, str) and last_frontier_attempt_goal_id.strip()
                     else None
                 ),
-                "hard_lock_active_b": bool(prev_forced_debt_key is not None),
+                "hard_lock_active_b": bool(next_hard_lock_active_b),
                 "hard_lock_debt_key": (
-                    str(prev_forced_debt_key)
-                    if isinstance(prev_forced_debt_key, str) and prev_forced_debt_key.strip()
+                    str(hard_lock_debt_key_for_tick)
+                    if isinstance(hard_lock_debt_key_for_tick, str) and hard_lock_debt_key_for_tick.strip()
                     else None
                 ),
-                "hard_lock_goal_id": (str(prev_forced_goal) if isinstance(prev_forced_goal, str) and prev_forced_goal else None),
+                "hard_lock_goal_id": (
+                    str(hard_lock_goal_id_for_tick)
+                    if isinstance(hard_lock_goal_id_for_tick, str) and hard_lock_goal_id_for_tick.strip()
+                    else None
+                ),
+                "scaffold_inflight_ccap_id": scaffold_inflight_ccap_id,
+                "scaffold_inflight_started_tick_u64": scaffold_inflight_started_tick_u64,
+                "max_inflight_ccap_ids_u32": 1,
                 "reason_code": str(debt_reason_code),
                 "heavy_ok_count_by_capability": {
                     str(k): int(max(0, int(v))) for k, v in sorted(heavy_ok_count_by_capability.items(), key=lambda kv: str(kv[0]))
@@ -5563,6 +6469,22 @@ def tick_once(
                 },
                 "maintenance_count_u64": int(max(0, int(maintenance_count_u64))),
                 "frontier_attempts_u64": int(max(0, int(frontier_attempts_u64))),
+                "failed_patch_ban_by_debt_key_target": {
+                    str(k): list(v)
+                    for k, v in sorted(failed_patch_ban_by_debt_key_target.items(), key=lambda kv: str(kv[0]))
+                },
+                "failed_shape_ban_by_debt_key_target": {
+                    str(k): list(v)
+                    for k, v in sorted(failed_shape_ban_by_debt_key_target.items(), key=lambda kv: str(kv[0]))
+                },
+                "last_failure_nontriviality_cert_by_debt_key": {
+                    str(k): dict(v)
+                    for k, v in sorted(last_failure_nontriviality_cert_by_debt_key.items(), key=lambda kv: str(kv[0]))
+                },
+                "last_failure_failed_threshold_by_debt_key": {
+                    str(k): str(v)
+                    for k, v in sorted(last_failure_failed_threshold_by_debt_key.items(), key=lambda kv: str(kv[0]))
+                },
             }
             validate_schema_v19(dependency_debt_state_payload, "dependency_debt_state_v1")
             _, _dependency_debt_obj, dependency_debt_snapshot_hash = _write_payload_atomic(

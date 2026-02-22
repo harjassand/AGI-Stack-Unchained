@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import re
 from pathlib import Path
 from typing import Any
@@ -38,6 +39,7 @@ from .continuity.loaders_v1 import load_artifact_ref
 from .continuity.objective_J_v1 import compute_J
 from .federation.check_treaty_v1 import T_AXIS_MORPHISM_TYPE, check_treaty
 from .federation.ok_ican_v1 import DEFAULT_ICAN_PROFILE, ican_id
+from .nontriviality_cert_v1 import build_nontriviality_cert_v1 as build_shared_nontriviality_cert_v1
 from .world.check_world_snapshot_v1 import W_AXIS_MORPHISM_TYPE, check_world_snapshot
 
 
@@ -55,7 +57,13 @@ EXPECTED_AXIS_EXEMPTIONS_ID = "sha256:642fe65d716df82045833cecaf624202d90cf7ffd2
 _SHA256_ZERO = "sha256:" + ("0" * 64)
 _HEAVY_DECLARED_CLASSES = {"FRONTIER_HEAVY", "CANARY_HEAVY"}
 _DECLARED_CLASSES = {"FRONTIER_HEAVY", "CANARY_HEAVY", "BASELINE_CORE", "MAINTENANCE"}
-_COMMENT_LINE_RE = re.compile(r"^(#|//|/\\*|\\*|\\*/)")
+_COMMENT_LINE_RE = re.compile(r"^(#|//|/\*|\*|\*/)")
+_SH1_CAPABILITY_ID = "RSI_GE_SH1_OPTIMIZER"
+
+
+def _premarathon_v63_enabled() -> bool:
+    raw = str(os.environ.get("OMEGA_PREMARATHON_V63", "0")).strip().lower()
+    return raw in {"1", "true", "yes", "on"}
 
 
 def _load_axis_bundle_from_bundle(*, bundle_obj: dict[str, Any], bundle_path: Path) -> dict[str, Any] | None:
@@ -797,10 +805,12 @@ def _capability_id_from_dispatch(dispatch_ctx: dict[str, Any]) -> str:
 
 
 def _declared_class_for_capability(dispatch_ctx: dict[str, Any], utility_policy: dict[str, Any] | None) -> str:
+    capability_id = _capability_id_from_dispatch(dispatch_ctx)
+    if _premarathon_v63_enabled() and capability_id == _SH1_CAPABILITY_ID:
+        return "FRONTIER_HEAVY"
     if isinstance(utility_policy, dict):
         mapping = utility_policy.get("declared_class_by_capability")
         if isinstance(mapping, dict):
-            capability_id = _capability_id_from_dispatch(dispatch_ctx)
             mapped = str(mapping.get(capability_id, "")).strip().upper()
             if mapped in _DECLARED_CLASSES:
                 return mapped
@@ -883,17 +893,24 @@ def _nontrivial_delta_from_patch_bytes(patch_bytes: bytes) -> int:
     return int(count)
 
 
-def _nontrivial_delta_for_bundle(*, bundle_obj: dict[str, Any], bundle_path: Path) -> int:
+def _patch_bytes_for_bundle(*, bundle_obj: dict[str, Any], bundle_path: Path) -> bytes | None:
     if str(bundle_obj.get("schema_version", "")).strip() != "omega_promotion_bundle_ccap_v1":
-        return 0
+        return None
     patch_rel = normalize_subrun_relpath(str(bundle_obj.get("patch_relpath", "")).strip())
     if not patch_rel:
-        return 0
+        return None
     subrun_root = _resolve_ccap_subrun_root_for_bundle(bundle_obj=bundle_obj, bundle_path=bundle_path)
     patch_path = (subrun_root / patch_rel).resolve()
     if not patch_path.exists() or not patch_path.is_file():
+        return None
+    return patch_path.read_bytes()
+
+
+def _nontrivial_delta_for_bundle(*, bundle_obj: dict[str, Any], bundle_path: Path) -> int:
+    patch_bytes = _patch_bytes_for_bundle(bundle_obj=bundle_obj, bundle_path=bundle_path)
+    if patch_bytes is None:
         return 0
-    return _nontrivial_delta_from_patch_bytes(patch_path.read_bytes())
+    return _nontrivial_delta_from_patch_bytes(patch_bytes)
 
 
 def _rewrite_subverifier_receipt(
@@ -902,6 +919,7 @@ def _rewrite_subverifier_receipt(
     receipt: dict[str, Any],
     status: str,
     reason_code: str | None,
+    nontriviality_cert_v1: dict[str, Any] | None = None,
 ) -> tuple[dict[str, Any], str]:
     out_dir = Path(dispatch_ctx["dispatch_dir"]) / "verifier"
     payload = dict(receipt)
@@ -909,6 +927,7 @@ def _rewrite_subverifier_receipt(
     result["status"] = status
     result["reason_code"] = reason_code
     payload["result"] = result
+    payload["nontriviality_cert_v1"] = nontriviality_cert_v1 if isinstance(nontriviality_cert_v1, dict) else None
     _, new_receipt, digest = write_hashed_json(out_dir, "omega_subverifier_receipt_v1.json", payload, id_field="receipt_id")
     validate_v18_schema(new_receipt, "omega_subverifier_receipt_v1")
     return new_receipt, digest
@@ -942,6 +961,15 @@ def _candidate_bundle_present(
 
 
 def _heavy_policy_for_capability(utility_policy: dict[str, Any] | None, capability_id: str) -> dict[str, Any] | None:
+    if _premarathon_v63_enabled() and str(capability_id).strip() == _SH1_CAPABILITY_ID:
+        return {
+            "probe_suite_id": "utility_probe_suite_default_v1",
+            "stress_probe_suite_id": "utility_stress_probe_suite_default_v1",
+            "primary_signal": "NONTRIVIAL_DELTA",
+            "primary_threshold_u64": 1,
+            "stress_signal": "REQUIRE_PATCH_DELTA",
+            "stress_threshold_u64": 1,
+        }
     if not isinstance(utility_policy, dict):
         return None
     rows = utility_policy.get("heavy_policies")
@@ -1223,15 +1251,43 @@ def run_subverifier(*, tick_u64: int, dispatch_ctx: dict[str, Any] | None) -> tu
     if bundle_path is None:
         return receipt, digest
     bundle_obj = load_canon_dict(bundle_path)
+    patch_bytes = _patch_bytes_for_bundle(bundle_obj=bundle_obj, bundle_path=bundle_path)
+    # Always emit a certificate shape, even when patch material is missing,
+    # so INSUFFICIENT_NONTRIVIAL_DELTA has deterministic measured evidence.
+    nontriviality_cert_v1 = build_shared_nontriviality_cert_v1(
+        repo_root=repo_root(),
+        patch_bytes=(patch_bytes if patch_bytes is not None else b""),
+        archetype_id=None,
+    )
+    capability_id = _capability_id_from_dispatch(dispatch_ctx)
+    if capability_id == _SH1_CAPABILITY_ID:
+        cert = dict(nontriviality_cert_v1 or {})
+        if not bool(cert.get("wiring_class_ok_b", False)):
+            return _rewrite_subverifier_receipt(
+                dispatch_ctx=dispatch_ctx,
+                receipt=receipt,
+                status="INVALID",
+                reason_code="VERIFY_ERROR:INSUFFICIENT_NONTRIVIAL_DELTA",
+                nontriviality_cert_v1=cert if cert else None,
+            )
+        return _rewrite_subverifier_receipt(
+            dispatch_ctx=dispatch_ctx,
+            receipt=receipt,
+            status="VALID",
+            reason_code=(receipt.get("result") or {}).get("reason_code"),
+            nontriviality_cert_v1=cert,
+        )
+
     active_binding = v18_promoter._read_active_binding(v18_promoter._meta_core_root())  # type: ignore[attr-defined]
     binary_delta_b = _binary_artifact_delta_present(bundle_obj=bundle_obj, active_binding=active_binding)
     nontrivial_delta_u64 = _nontrivial_delta_for_bundle(bundle_obj=bundle_obj, bundle_path=bundle_path)
-    if not (binary_delta_b or nontrivial_delta_u64 > 0):
+    if not (binary_delta_b or nontrivial_delta_u64 >= 1):
         return _rewrite_subverifier_receipt(
             dispatch_ctx=dispatch_ctx,
             receipt=receipt,
             status="INVALID",
             reason_code="VERIFY_ERROR:INSUFFICIENT_NONTRIVIAL_DELTA",
+            nontriviality_cert_v1=nontriviality_cert_v1,
         )
     return receipt, digest
 

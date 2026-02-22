@@ -14,6 +14,7 @@ if str(REPO_ROOT / "CDEL-v2") not in sys.path:
     sys.path.insert(0, str(REPO_ROOT / "CDEL-v2"))
 
 from cdel.v18_0.omega_common_v1 import OmegaV18Error, canon_hash_obj
+from cdel.v19_0 import omega_promoter_v1 as promoter_v19
 from orchestrator.omega_v18_0.io_v1 import freeze_pack_config
 from orchestrator.omega_v19_0.eval_cadence_v1 import build_eval_report, should_emit_eval
 from orchestrator.omega_v19_0.mission_goal_ingest_v1 import ingest_mission_goals
@@ -23,8 +24,10 @@ from orchestrator.omega_v19_0.microkernel_v1 import (
     _forced_frontier_debt_key,
     _frontier_attempt_evidence_satisfied,
     _goal_id_for_debt_key,
+    _next_health_window,
     _pending_frontier_goals,
     _resolve_lane,
+    _with_frontier_dispatch_failed_pre_evidence_reason,
     _with_hard_lock_override_reason,
 )
 import scripts.run_long_disciplined_loop_v1 as long_harness
@@ -33,6 +36,18 @@ import scripts.run_long_disciplined_loop_v1 as long_harness
 def _write_json(path: Path, payload: dict) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(payload, sort_keys=True, separators=(",", ":")) + "\n", encoding="utf-8")
+
+
+def test_nontrivial_delta_counts_code_lines_not_all_lines_as_comments() -> None:
+    patch_bytes = (
+        b"--- a/x.py\n"
+        b"+++ b/x.py\n"
+        b"@@ -1 +1,5 @@\n"
+        b"+# comment\n"
+        b"+def f() -> int:\n"
+        b"+    return 1\n"
+    )
+    assert promoter_v19._nontrivial_delta_from_patch_bytes(patch_bytes) == 2
 
 
 def test_mission_ingest_deterministic_same_input(tmp_path: Path) -> None:
@@ -151,6 +166,25 @@ def test_lane_resolver_tick_and_health_rules(monkeypatch: pytest.MonkeyPatch) ->
     assert "FORCED_LANE_OVERRIDE" in forced_reasons
 
 
+def test_health_window_ignores_benign_safe_halt_invalid() -> None:
+    prev = {"schema_name": "long_run_health_window_v1", "schema_version": "v19_0", "window_ticks_u64": 100, "rows": []}
+    tick_outcome = {
+        "subverifier_status": "INVALID",
+        "action_kind": "SAFE_HALT",
+        "promotion_reason_code": "SUBVERIFIER_INVALID",
+        "noop_reason": "",
+    }
+    next_window = _next_health_window(
+        prev_window=prev,
+        tick_u64=1,
+        tick_outcome=tick_outcome,
+        shadow_summary_payload={"route_disabled_modules_u64": 0},
+    )
+    rows = next_window.get("rows")
+    assert isinstance(rows, list) and rows
+    assert rows[-1]["invalid_b"] is False
+
+
 def test_queue_filter_removes_disallowed_pending() -> None:
     rows = [
         {"goal_id": "g1", "capability_id": "RSI_SAS_CODE", "status": "PENDING"},
@@ -191,7 +225,7 @@ def test_debt_key_derivation_prefers_frontier_id() -> None:
     assert pending[1]["debt_key"] == "frontier:ge_optimizer_lane"
 
 
-def test_frontier_goal_missing_frontier_id_fails_closed() -> None:
+def test_frontier_goal_missing_frontier_id_falls_back_to_capability_identity() -> None:
     queue = {
         "schema_version": "omega_goal_queue_v1",
         "goals": [
@@ -202,11 +236,18 @@ def test_frontier_goal_missing_frontier_id_fails_closed() -> None:
             }
         ],
     }
-    with pytest.raises(OmegaV18Error):
-        _pending_frontier_goals(
-            goal_queue=queue,
-            frontier_capability_ids=["RSI_GE_SH1_OPTIMIZER"],
-        )
+    pending = _pending_frontier_goals(
+        goal_queue=queue,
+        frontier_capability_ids=["RSI_GE_SH1_OPTIMIZER"],
+    )
+    assert pending == [
+        {
+            "goal_id": "goal_a_0001",
+            "capability_id": "RSI_GE_SH1_OPTIMIZER",
+            "frontier_id": "rsi_ge_sh1_optimizer",
+            "debt_key": "frontier:rsi_ge_sh1_optimizer",
+        }
+    ]
 
 
 def test_forced_frontier_selection_uses_debt_key_not_goal_id() -> None:
@@ -239,6 +280,62 @@ def test_forced_frontier_selection_uses_debt_key_not_goal_id() -> None:
     assert chosen_goal_id == "goal_auto_90_lane_frontier_rsi_ge_sh1_optimizer_000200_00"
 
 
+def test_forced_frontier_selection_triggers_on_timeout_without_debt() -> None:
+    pending = [
+        {
+            "goal_id": "goal_frontier_native_000001",
+            "capability_id": "RSI_OMEGA_NATIVE_MODULE",
+            "frontier_id": "rsi_omega_native_module",
+            "debt_key": "frontier:rsi_omega_native_module",
+        }
+    ]
+    forced_key = _forced_frontier_debt_key(
+        pending_frontier_goals=pending,
+        debt_state={
+            "debt_by_key": {},
+            "ticks_without_frontier_attempt_by_key": {"frontier:rsi_omega_native_module": 39},
+            "first_debt_tick_by_key": {"frontier:rsi_omega_native_module": 1},
+        },
+        debt_limit_u64=3,
+        max_ticks_without_frontier_attempt_u64=40,
+    )
+    assert forced_key == "frontier:rsi_omega_native_module"
+
+
+def test_forced_frontier_selection_can_anticipate_same_tick_timeout() -> None:
+    pending = [
+        {
+            "goal_id": "goal_frontier_native_000001",
+            "capability_id": "RSI_OMEGA_NATIVE_MODULE",
+            "frontier_id": "rsi_omega_native_module",
+            "debt_key": "frontier:rsi_omega_native_module",
+        }
+    ]
+    forced_key_default = _forced_frontier_debt_key(
+        pending_frontier_goals=pending,
+        debt_state={
+            "debt_by_key": {},
+            "ticks_without_frontier_attempt_by_key": {"frontier:rsi_omega_native_module": 38},
+            "first_debt_tick_by_key": {"frontier:rsi_omega_native_module": 1},
+        },
+        debt_limit_u64=3,
+        max_ticks_without_frontier_attempt_u64=40,
+    )
+    assert forced_key_default is None
+    forced_key_anticipated = _forced_frontier_debt_key(
+        pending_frontier_goals=pending,
+        debt_state={
+            "debt_by_key": {},
+            "ticks_without_frontier_attempt_by_key": {"frontier:rsi_omega_native_module": 38},
+            "first_debt_tick_by_key": {"frontier:rsi_omega_native_module": 1},
+        },
+        debt_limit_u64=3,
+        max_ticks_without_frontier_attempt_u64=40,
+        anticipate_without_attempt_u64=1,
+    )
+    assert forced_key_anticipated == "frontier:rsi_omega_native_module"
+
+
 def test_market_override_reason_is_explicit_for_hard_lock() -> None:
     reason_codes = _with_hard_lock_override_reason(
         reason_codes=[
@@ -259,15 +356,37 @@ def test_market_override_reason_is_explicit_for_hard_lock() -> None:
         dependency_debt_delta_i64=0,
         forced_frontier_attempt_b=True,
         forced_frontier_debt_key="frontier:ge_optimizer_lane",
+        routing_selector_id="HARD_LOCK_OVERRIDE",
+        market_frozen_b=True,
+        market_used_for_selection_b=False,
         reason_codes=reason_codes,
     )
     assert "HARD_LOCK_OVERRIDE_MARKET_SELECTION" in receipt["reason_codes"]
+
+
+def test_frontier_dispatch_failed_pre_evidence_reason_on_hard_lock_transition() -> None:
+    reason_codes = _with_frontier_dispatch_failed_pre_evidence_reason(
+        reason_codes=["DEPENDENCY_DEBT_LIMIT_REACHED_FORCING_FRONTIER_ATTEMPT"],
+        hard_lock_became_active_b=True,
+        selected_declared_class="FRONTIER_HEAVY",
+        frontier_attempt_counted_b=False,
+    )
+    assert "FRONTIER_DISPATCH_FAILED_PRE_EVIDENCE" in reason_codes
+
+    reason_codes_ok = _with_frontier_dispatch_failed_pre_evidence_reason(
+        reason_codes=["DEPENDENCY_DEBT_LIMIT_REACHED_FORCING_FRONTIER_ATTEMPT"],
+        hard_lock_became_active_b=True,
+        selected_declared_class="FRONTIER_HEAVY",
+        frontier_attempt_counted_b=True,
+    )
+    assert "FRONTIER_DISPATCH_FAILED_PRE_EVIDENCE" not in reason_codes_ok
 
 
 def _dispatch_receipt(*, tick_u64: int = 1, campaign_id: str = "rsi_ge_symbiotic_optimizer_sh1_v0_1") -> dict:
     return {
         "schema_version": "omega_dispatch_receipt_v1",
         "receipt_id": "sha256:" + ("1" * 64),
+        "dispatch_attempted_b": True,
         "tick_u64": int(tick_u64),
         "campaign_id": campaign_id,
         "capability_id": "RSI_GE_SH1_OPTIMIZER",
@@ -323,7 +442,7 @@ def test_frontier_attempt_counting_accepts_invalid_subverifier_with_dispatch_bou
     assert counted is True
 
 
-def test_frontier_attempt_counting_requires_candidate_bundle() -> None:
+def test_frontier_attempt_counting_does_not_require_candidate_bundle() -> None:
     counted = _frontier_attempt_evidence_satisfied(
         action_kind="RUN_GOAL_TASK",
         declared_class_for_tick="FRONTIER_HEAVY",
@@ -331,7 +450,96 @@ def test_frontier_attempt_counting_requires_candidate_bundle() -> None:
         dispatch_receipt=_dispatch_receipt(),
         subverifier_receipt=_subverifier_receipt(status="VALID"),
     )
-    assert counted is False
+    assert counted is True
+
+
+def test_frontier_attempt_counting_requires_dispatch_and_subverifier_receipts() -> None:
+    counted_no_dispatch = _frontier_attempt_evidence_satisfied(
+        action_kind="RUN_CAMPAIGN",
+        declared_class_for_tick="FRONTIER_HEAVY",
+        candidate_bundle_present_b=True,
+        dispatch_receipt=None,
+        subverifier_receipt=_subverifier_receipt(status="VALID"),
+    )
+    assert counted_no_dispatch is False
+    counted_no_sub = _frontier_attempt_evidence_satisfied(
+        action_kind="RUN_CAMPAIGN",
+        declared_class_for_tick="FRONTIER_HEAVY",
+        candidate_bundle_present_b=True,
+        dispatch_receipt=_dispatch_receipt(),
+        subverifier_receipt=None,
+    )
+    assert counted_no_sub is False
+
+
+def test_harness_frontier_attempt_quality_classifier_and_windows() -> None:
+    live_rows: list[dict] = []
+    row_1 = {
+        "frontier_attempt_counted_b": True,
+        "effect_class": "EFFECT_HEAVY_NO_UTILITY",
+        "subverifier_status": "VALID",
+        "action_kind": "RUN_GOAL_TASK",
+        "state_verifier_reason_code": None,
+        "status": "OK",
+        "hard_lock_active_b": False,
+        "declared_class": "FRONTIER_HEAVY",
+    }
+    long_harness._attach_frontier_attempt_quality_telemetry(rows=live_rows, row=row_1)
+    assert row_1["frontier_attempt_quality_class"] == "FRONTIER_ATTEMPT_VALID_BUT_NO_UTILITY"
+    assert row_1["frontier_attempt_quality_counts_total"]["frontier_attempt_valid_but_no_utility_total_u64"] == 1
+    live_rows.append(row_1)
+
+    row_2 = {
+        "frontier_attempt_counted_b": True,
+        "effect_class": "EFFECT_HEAVY_OK",
+        "subverifier_status": "VALID",
+        "action_kind": "RUN_GOAL_TASK",
+        "state_verifier_reason_code": None,
+        "status": "OK",
+        "hard_lock_active_b": True,
+        "declared_class": "FRONTIER_HEAVY",
+    }
+    long_harness._attach_frontier_attempt_quality_telemetry(rows=live_rows, row=row_2)
+    assert row_2["frontier_attempt_quality_class"] == "FRONTIER_ATTEMPT_HEAVY_OK"
+    assert row_2["frontier_attempt_quality_counts_last_50"]["frontier_attempt_heavy_ok_total_u64"] == 1
+    assert row_2["frontier_attempt_quality_counts_last_200"]["frontier_counted_total_u64"] == 2
+
+
+def test_harness_frontier_attempt_quality_classifier_marks_schema_fail_invalid() -> None:
+    live_rows: list[dict] = []
+    row = {
+        "frontier_attempt_counted_b": True,
+        "effect_class": "EFFECT_REJECTED",
+        "subverifier_status": "VALID",
+        "action_kind": "RUN_GOAL_TASK",
+        "state_verifier_reason_code": None,
+        "promotion_reason_code": "SCHEMA_FAIL",
+        "status": "OK",
+        "hard_lock_active_b": True,
+        "declared_class": "FRONTIER_HEAVY",
+    }
+    long_harness._attach_frontier_attempt_quality_telemetry(rows=live_rows, row=row)
+    assert row["frontier_attempt_quality_class"] == "FRONTIER_ATTEMPT_INVALID"
+    assert row["frontier_attempt_quality_counts_total"]["frontier_attempt_invalid_total_u64"] == 1
+
+
+def test_harness_hard_lock_transition_logs_pre_evidence_failure() -> None:
+    live_rows = [
+        {
+            "hard_lock_active_b": False,
+            "frontier_attempt_counted_b": False,
+            "declared_class": "BASELINE_CORE",
+        }
+    ]
+    row = {
+        "hard_lock_active_b": True,
+        "frontier_attempt_counted_b": False,
+        "declared_class": "FRONTIER_HEAVY",
+    }
+    long_harness._attach_hard_lock_transition_telemetry(rows=live_rows, row=row)
+    assert row["hard_lock_became_active_b"] is True
+    assert row["frontier_dispatch_failed_pre_evidence_b"] is True
+    assert row["frontier_dispatch_pre_evidence_reason_code"] == "FRONTIER_DISPATCH_FAILED_PRE_EVIDENCE"
 
 
 def test_harness_precheck_reason_priority_and_pass() -> None:
@@ -380,6 +588,80 @@ def test_harness_precheck_reason_priority_and_pass() -> None:
     reason, missing = long_harness._frontier_precheck_reason(summary)
     assert reason is None
     assert missing == []
+
+
+def test_harness_mandatory_frontier_guard_deadlines_and_policy_kills() -> None:
+    reason_20, _detail_20 = long_harness._mandatory_frontier_guard_reason(
+        rows=[
+            {
+                "frontier_goals_pending_b": False,
+                "hard_lock_active_b": False,
+                "frontier_attempt_counted_b": False,
+                "promotion_status": "NONE",
+            }
+        ],
+        tick_u64=20,
+    )
+    assert reason_20 == "PRECHECK_FAIL:NO_FRONTIER_GOALS_PRESENT"
+
+    reason_30, _detail_30 = long_harness._mandatory_frontier_guard_reason(
+        rows=[
+            {
+                "frontier_goals_pending_b": False,
+                "hard_lock_active_b": False,
+                "frontier_attempt_counted_b": False,
+                "promotion_status": "PROMOTED",
+            }
+        ],
+        tick_u64=30,
+    )
+    assert reason_30 == "PRECHECK_FAIL:PROMOTION_WITHOUT_FRONTIER_GOALS"
+
+    reason_40, _detail_40 = long_harness._mandatory_frontier_guard_reason(
+        rows=[
+            {
+                "frontier_goals_pending_b": True,
+                "hard_lock_active_b": False,
+                "frontier_attempt_counted_b": False,
+                "promotion_status": "NONE",
+            }
+        ],
+        tick_u64=40,
+    )
+    assert reason_40 == "PRECHECK_FAIL:NO_HARD_LOCK"
+
+    reason_60, _detail_60 = long_harness._mandatory_frontier_guard_reason(
+        rows=[
+            {
+                "frontier_goals_pending_b": True,
+                "hard_lock_active_b": True,
+                "frontier_attempt_counted_b": False,
+                "promotion_status": "NONE",
+            }
+        ],
+        tick_u64=60,
+    )
+    assert reason_60 == "PRECHECK_FAIL:NO_COUNTED_FRONTIER_ATTEMPT"
+
+
+def test_harness_mandatory_guard_frontier_gaming_kill_switch() -> None:
+    rows = [
+        {
+            "frontier_goals_pending_b": True,
+            "hard_lock_active_b": True,
+            "frontier_attempt_counted_b": True,
+            "frontier_attempt_quality_class": "FRONTIER_ATTEMPT_INVALID",
+            "promotion_status": "NONE",
+        }
+        for _ in range(5)
+    ]
+    reason, detail = long_harness._mandatory_frontier_guard_reason(
+        rows=rows,
+        tick_u64=200,
+    )
+    assert reason == "PRECHECK_FAIL:FRONTIER_GAMING_NO_HEAVY_OK"
+    assert detail["frontier_counted_total_u64"] >= 5
+    assert detail["frontier_attempt_heavy_ok_total_u64"] == 0
 
 
 def test_eval_cadence_and_report_shape() -> None:

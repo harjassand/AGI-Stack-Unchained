@@ -18,7 +18,7 @@ from ..v1_7r.canon import canon_bytes, write_canon_json
 from .ccap_runtime_v1 import (
     apply_patch_bytes,
     ccap_payload_id,
-    compute_repo_base_tree_id,
+    compute_repo_base_tree_id_tolerant,
     compute_workspace_tree_id,
     materialize_repo_snapshot,
     normalize_subrun_relpath,
@@ -60,6 +60,15 @@ _SUBVERIFIER_REASON_CODES = {
     "VERIFY_ERROR",
     "UNKNOWN",
 }
+_MUTATOR_NO_BUNDLE_REASON_CODES = {
+    "NO_BUNDLE_MICRO_BENCH_GATE_FAIL",
+    "NO_BUNDLE_TRIVIALITY_GATE_FAIL",
+    "NO_BUNDLE_REPLAY_INVALID",
+    "NO_BUNDLE_STRUCTURAL_FAIL",
+    "NO_BUNDLE_BENCH_FAIL",
+    "NO_BUNDLE_PATCH_GENERATION_FAIL",
+    "NO_BUNDLE_POLICY_GATE_FAIL",
+}
 _WRITE_BITS = stat.S_IWUSR | stat.S_IWGRP | stat.S_IWOTH
 _SUBVERIFIER_STATE_ARG_BY_MODULE = {
     "cdel.v12_0.verify_rsi_sas_code_v1": "--sas_code_state_dir",
@@ -81,6 +90,44 @@ def _state_arg_for_verifier(verifier_module: str) -> str:
 
 def _is_hex64(value: str) -> bool:
     return len(value) == 64 and all(ch in _HEX64 for ch in value)
+
+
+def _load_json_obj(path: Path) -> dict[str, Any] | None:
+    if not path.exists() or not path.is_file():
+        return None
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except Exception:  # noqa: BLE001
+        return None
+    if not isinstance(payload, dict):
+        return None
+    return payload
+
+
+def _infer_no_promotion_bundle_reason(dispatch_ctx: dict[str, Any]) -> str:
+    campaign_id = str((dispatch_ctx.get("campaign_entry") or {}).get("campaign_id", "")).strip()
+    if campaign_id != "rsi_coordinator_mutator_v1":
+        return "NO_PROMOTION_BUNDLE"
+    dispatch_dir = Path(dispatch_ctx["dispatch_dir"])
+    if (dispatch_dir / "coordinator_mutator_replay_failure_v1.json").exists():
+        return "NO_BUNDLE_REPLAY_INVALID"
+    verify_failure = _load_json_obj(dispatch_dir / "coordinator_mutator_verify_failure_v1.json")
+    verify_reason = str((verify_failure or {}).get("reason", "")).strip().upper()
+    if verify_reason in {"TRIVIAL_PATCH", "CONSTANTS_ONLY_PATCH"}:
+        return "NO_BUNDLE_TRIVIALITY_GATE_FAIL"
+    if verify_reason == "MICRO_BENCH_GATE_FAIL":
+        return "NO_BUNDLE_MICRO_BENCH_GATE_FAIL"
+    if (dispatch_dir / "coordinator_mutator_structural_failure_v1.json").exists():
+        return "NO_BUNDLE_STRUCTURAL_FAIL"
+    if (dispatch_dir / "coordinator_mutator_bench_failure_v1.json").exists():
+        return "NO_BUNDLE_BENCH_FAIL"
+    if (dispatch_dir / "coordinator_mutator_llm_failure_v1.json").exists() or (
+        dispatch_dir / "coordinator_mutator_patch_apply_failure_v1.json"
+    ).exists():
+        return "NO_BUNDLE_PATCH_GENERATION_FAIL"
+    if verify_reason:
+        return "NO_BUNDLE_POLICY_GATE_FAIL"
+    return "NO_PROMOTION_BUNDLE"
 
 
 def _sha256_hex(data: bytes) -> str:
@@ -321,7 +368,7 @@ def _verify_ccap_apply_matches_receipt(
             expected_base_tree_id = meta_base_tree_id
 
         root = _resolve_repo_root_for_dispatch(dispatch_ctx)
-        if compute_repo_base_tree_id(root) != expected_base_tree_id:
+        if compute_repo_base_tree_id_tolerant(root) != expected_base_tree_id:
             return False
 
         with tempfile.TemporaryDirectory(dir=out_dir, prefix="ccap_promote_") as tmpdir:
@@ -1333,9 +1380,12 @@ def run_promotion(
     if bundle_hash is not None:
         promotion_bundle_hash = bundle_hash
     if bundle_path is None:
+        inferred_reason = _infer_no_promotion_bundle_reason(dispatch_ctx)
+        if inferred_reason not in _MUTATOR_NO_BUNDLE_REASON_CODES and inferred_reason != "NO_PROMOTION_BUNDLE":
+            inferred_reason = "NO_PROMOTION_BUNDLE"
         return _write_promotion_receipt(
             status="SKIPPED",
-            reason="NO_PROMOTION_BUNDLE",
+            reason=inferred_reason,
             active_after_hash=None,
         )
 

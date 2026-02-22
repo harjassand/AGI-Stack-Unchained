@@ -1,0 +1,269 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v19_0/dependency_debt_state_v1",
+  "title": "Dependency debt state v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_name",
+    "schema_version",
+    "state_id",
+    "tick_u64",
+    "debt_by_key",
+    "ticks_without_frontier_attempt_by_key",
+    "first_debt_tick_by_key",
+    "debt_by_goal_id",
+    "ticks_without_frontier_attempt_by_goal_id",
+    "first_debt_tick_by_goal_id",
+    "maintenance_since_last_frontier_attempt_u64",
+    "last_frontier_attempt_tick_u64",
+    "last_frontier_attempt_debt_key",
+    "last_frontier_attempt_goal_id",
+    "hard_lock_active_b",
+    "hard_lock_debt_key",
+    "hard_lock_goal_id",
+    "scaffold_inflight_ccap_id",
+    "scaffold_inflight_started_tick_u64",
+    "max_inflight_ccap_ids_u32",
+    "reason_code",
+    "heavy_ok_count_by_capability",
+    "heavy_no_utility_count_by_capability",
+    "maintenance_count_u64",
+    "frontier_attempts_u64",
+    "failed_patch_ban_by_debt_key_target",
+    "failed_shape_ban_by_debt_key_target",
+    "last_failure_nontriviality_cert_by_debt_key",
+    "last_failure_failed_threshold_by_debt_key"
+  ],
+  "properties": {
+    "schema_name": {"const": "dependency_debt_state_v1"},
+    "schema_version": {"const": "v19_0"},
+    "state_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "tick_u64": {"type": "integer", "minimum": 0},
+    "debt_by_key": {
+      "type": "object",
+      "additionalProperties": {"type": "integer", "minimum": 0}
+    },
+    "ticks_without_frontier_attempt_by_key": {
+      "type": "object",
+      "additionalProperties": {"type": "integer", "minimum": 0}
+    },
+    "first_debt_tick_by_key": {
+      "type": "object",
+      "additionalProperties": {"type": "integer", "minimum": 0}
+    },
+    "debt_by_goal_id": {
+      "type": "object",
+      "additionalProperties": {"type": "integer", "minimum": 0}
+    },
+    "ticks_without_frontier_attempt_by_goal_id": {
+      "type": "object",
+      "additionalProperties": {"type": "integer", "minimum": 0}
+    },
+    "first_debt_tick_by_goal_id": {
+      "type": "object",
+      "additionalProperties": {"type": "integer", "minimum": 0}
+    },
+    "maintenance_since_last_frontier_attempt_u64": {"type": "integer", "minimum": 0},
+    "last_frontier_attempt_tick_u64": {"type": "integer", "minimum": 0},
+    "last_frontier_attempt_debt_key": {
+      "anyOf": [
+        {"type": "string", "minLength": 1},
+        {"type": "null"}
+      ]
+    },
+    "last_frontier_attempt_goal_id": {
+      "anyOf": [
+        {"type": "string", "minLength": 1},
+        {"type": "null"}
+      ]
+    },
+    "hard_lock_active_b": {"type": "boolean"},
+    "hard_lock_debt_key": {
+      "anyOf": [
+        {"type": "string", "minLength": 1},
+        {"type": "null"}
+      ]
+    },
+    "hard_lock_goal_id": {
+      "anyOf": [
+        {"type": "string", "minLength": 1},
+        {"type": "null"}
+      ]
+    },
+    "scaffold_inflight_ccap_id": {
+      "anyOf": [
+        {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+        {"type": "null"}
+      ]
+    },
+    "scaffold_inflight_started_tick_u64": {
+      "anyOf": [
+        {"type": "integer", "minimum": 0},
+        {"type": "null"}
+      ]
+    },
+    "max_inflight_ccap_ids_u32": {"type": "integer", "const": 1},
+    "reason_code": {"type": "string", "minLength": 1},
+    "heavy_ok_count_by_capability": {
+      "type": "object",
+      "additionalProperties": {"type": "integer", "minimum": 0}
+    },
+    "heavy_no_utility_count_by_capability": {
+      "type": "object",
+      "additionalProperties": {"type": "integer", "minimum": 0}
+    },
+    "maintenance_count_u64": {"type": "integer", "minimum": 0},
+    "frontier_attempts_u64": {"type": "integer", "minimum": 0}
+    ,
+    "failed_patch_ban_by_debt_key_target": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "array",
+        "items": {
+          "anyOf": [
+            {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["patch_sha256", "expires_tick_u64"],
+              "properties": {
+                "patch_sha256": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+                "expires_tick_u64": {"type": "integer", "minimum": 0}
+              }
+            }
+          ]
+        }
+      }
+    },
+    "failed_shape_ban_by_debt_key_target": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "array",
+        "items": {
+          "anyOf": [
+            {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["shape_id", "expires_tick_u64"],
+              "properties": {
+                "shape_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+                "expires_tick_u64": {"type": "integer", "minimum": 0}
+              }
+            }
+          ]
+        }
+      }
+    },
+    "last_failure_nontriviality_cert_by_debt_key": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "schema_name",
+          "schema_version",
+          "policy_id",
+          "threshold_profile_id",
+          "thresholds_v1",
+          "patch_parse_ok_b",
+          "ast_parse_ok_b",
+          "touched_paths_u32",
+          "ast_nodes_changed_u32",
+          "control_flow_changed_b",
+          "call_edges_changed_b",
+          "data_flow_changed_b",
+          "public_api_changed_b",
+          "lines_added_u32",
+          "lines_deleted_u32",
+          "wiring_class_ok_b",
+          "archetype_id",
+          "archetype_pass_b",
+          "shape_id",
+          "failed_threshold_code"
+        ],
+        "properties": {
+          "schema_name": {"const": "nontriviality_cert_v1"},
+          "schema_version": {"const": "v1"},
+          "policy_id": {"type": "string", "minLength": 1},
+          "threshold_profile_id": {"type": "string", "minLength": 1},
+          "thresholds_v1": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["wiring_ast_nodes_min_u32"],
+            "properties": {
+              "wiring_ast_nodes_min_u32": {"type": "integer", "minimum": 0}
+            }
+          },
+          "patch_parse_ok_b": {"type": "boolean"},
+          "ast_parse_ok_b": {"type": "boolean"},
+          "touched_paths_u32": {"type": "integer", "minimum": 0},
+          "touched_relpaths_v1": {
+            "type": "array",
+            "items": {"type": "string"}
+          },
+          "ast_nodes_changed_u32": {"type": "integer", "minimum": 0},
+          "control_flow_changed_b": {"type": "boolean"},
+          "call_edges_changed_b": {"type": "boolean"},
+          "data_flow_changed_b": {"type": "boolean"},
+          "public_api_changed_b": {"type": "boolean"},
+          "lines_added_u32": {"type": "integer", "minimum": 0},
+          "lines_deleted_u32": {"type": "integer", "minimum": 0},
+          "wiring_class_ok_b": {"type": "boolean"},
+          "archetype_id": {
+            "anyOf": [
+              {"type": "string", "minLength": 1},
+              {"type": "null"}
+            ]
+          },
+          "archetype_pass_b": {
+            "anyOf": [
+              {"type": "boolean"},
+              {"type": "null"}
+            ]
+          },
+          "shape_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+          "failed_threshold_code": {
+            "anyOf": [
+              {"type": "null"},
+              {"type": "string", "pattern": "^[A-Z0-9_]+$"}
+            ]
+          }
+        }
+      }
+    },
+    "last_failure_failed_threshold_by_debt_key": {
+      "type": "object",
+      "additionalProperties": {"type": "string", "pattern": "^[A-Z0-9_]+$"}
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "scaffold_inflight_ccap_id": {"type": "null"}
+        },
+        "required": ["scaffold_inflight_ccap_id"]
+      },
+      "then": {
+        "properties": {
+          "scaffold_inflight_started_tick_u64": {"type": "null"}
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "scaffold_inflight_ccap_id": {"type": "string"}
+        },
+        "required": ["scaffold_inflight_ccap_id"]
+      },
+      "then": {
+        "properties": {
+          "scaffold_inflight_started_tick_u64": {"type": "integer", "minimum": 0}
+        }
+      }
+    }
+  ]
+}

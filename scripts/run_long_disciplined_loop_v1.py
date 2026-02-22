@@ -41,12 +41,29 @@ DEFAULT_RETAIN_LAST = 200
 DEFAULT_ANCHOR_EVERY = 100
 DEFAULT_CANARY_EVERY = 10
 DEFAULT_HIST_WINDOW = 50
+MANDATORY_FRONTIER_GOALS_DEADLINE_TICK_U64 = 20
+MANDATORY_HARD_LOCK_DEADLINE_TICK_U64 = 40
+MANDATORY_COUNTED_FRONTIER_DEADLINE_TICK_U64 = 60
+MANDATORY_FORCED_HEAVY_SH1_DEADLINE_TICK_U64 = 60
+MANDATORY_FORCED_HEAVY_SH1_MIN_TICKS_U64 = 1
+EARLY_GOODHART_MIN_TICK_U64 = 30
+EARLY_GOODHART_MAX_TICK_U64 = 40
+GOODHART_PROMOTION_FARM_LIMIT_U64 = 50
+GOODHART_FRONTIER_GAMING_DEADLINE_TICK_U64 = 200
+GOODHART_FRONTIER_GAMING_MIN_COUNTED_U64 = 5
+QUALITY_WINDOW_SHORT_U64 = 50
+QUALITY_WINDOW_LONG_U64 = 200
+FRONTIER_ATTEMPT_QUALITY_VALID_BUT_NO_UTILITY = "FRONTIER_ATTEMPT_VALID_BUT_NO_UTILITY"
+FRONTIER_ATTEMPT_QUALITY_INVALID = "FRONTIER_ATTEMPT_INVALID"
+FRONTIER_ATTEMPT_QUALITY_HEAVY_OK = "FRONTIER_ATTEMPT_HEAVY_OK"
+FRONTIER_DISPATCH_PRE_EVIDENCE_REASON_CODE = "FRONTIER_DISPATCH_FAILED_PRE_EVIDENCE"
 
 ENV_ALLOWLIST = (
     "PYTHONPATH",
     "OMEGA_NET_LIVE_OK",
     "OMEGA_META_CORE_ACTIVATION_MODE",
     "OMEGA_ALLOW_SIMULATE_ACTIVATION",
+    "OMEGA_CCAP_ALLOW_DIRTY_TREE",
     "OMEGA_BLACKBOX",
     "OMEGA_DISABLE_FORCED_RUNAWAY",
     "OMEGA_RUN_SEED_U64",
@@ -59,6 +76,9 @@ ENV_ALLOWLIST = (
     "OMEGA_LONG_VALIDATE_MIN_HARDLOCKS",
     "OMEGA_LONG_VALIDATE_MIN_FORCED",
     "OMEGA_LONG_VALIDATE_MIN_COUNTED",
+    "OMEGA_LONG_VALIDATE_FORCED_HEAVY_SH1_DEADLINE_TICK_U64",
+    "OMEGA_LONG_VALIDATE_FORCED_HEAVY_SH1_MIN_TICKS_U64",
+    "OMEGA_PREMARATHON_V63",
     "ORCH_LLM_BACKEND",
 )
 
@@ -93,6 +113,10 @@ def _env_bool(name: str, *, default: bool = False) -> bool:
     return raw in {"1", "true", "yes", "on"}
 
 
+def _premarathon_v63_enabled() -> bool:
+    return _env_bool("OMEGA_PREMARATHON_V63", default=False)
+
+
 def _env_u64(name: str, *, default: int, minimum: int = 0) -> int:
     raw = str(os.environ.get(name, str(int(default)))).strip()
     value = int(raw)
@@ -101,6 +125,183 @@ def _env_u64(name: str, *, default: int, minimum: int = 0) -> int:
 
 def _count_true(rows: list[dict[str, Any]], key: str) -> int:
     return int(sum(1 for row in rows if row.get(key) is True))
+
+
+def _count_promoted(rows: list[dict[str, Any]]) -> int:
+    return int(
+        sum(
+            1
+            for row in rows
+            if str(row.get("promotion_status", "")).strip().upper() == "PROMOTED"
+        )
+    )
+
+
+def _count_quality_class(rows: list[dict[str, Any]], quality_class: str) -> int:
+    return int(
+        sum(
+            1
+            for row in rows
+            if str(row.get("frontier_attempt_quality_class", "")).strip() == str(quality_class)
+        )
+    )
+
+
+def _frontier_attempt_quality_class_for_row(row: dict[str, Any]) -> str | None:
+    if row.get("frontier_attempt_counted_b") is not True:
+        return None
+    effect_class = str(row.get("effect_class", "")).strip().upper()
+    subverifier_status = str(row.get("subverifier_status", "")).strip().upper()
+    action_kind = str(row.get("action_kind", "")).strip().upper()
+    state_verifier_reason_code = str(row.get("state_verifier_reason_code", "")).strip().upper()
+    promotion_reason_code = str(row.get("promotion_reason_code", "")).strip().upper()
+    subverifier_reason_code = str(row.get("subverifier_reason_code", "")).strip().upper()
+    status = str(row.get("status", "")).strip().upper()
+    if effect_class == "EFFECT_HEAVY_OK":
+        return FRONTIER_ATTEMPT_QUALITY_HEAVY_OK
+    if effect_class == "EFFECT_HEAVY_NO_UTILITY":
+        return FRONTIER_ATTEMPT_QUALITY_VALID_BUT_NO_UTILITY
+    if (
+        subverifier_status == "INVALID"
+        or action_kind == "SAFE_HALT"
+        or state_verifier_reason_code == "SCHEMA_FAIL"
+        or promotion_reason_code == "SCHEMA_FAIL"
+        or subverifier_reason_code == "SCHEMA_FAIL"
+        or status != "OK"
+    ):
+        return FRONTIER_ATTEMPT_QUALITY_INVALID
+    return FRONTIER_ATTEMPT_QUALITY_INVALID
+
+
+def _frontier_attempt_quality_counts(*, rows: list[dict[str, Any]], window_u64: int | None = None) -> dict[str, int]:
+    if window_u64 is None:
+        scope = list(rows)
+    else:
+        scope = list(rows[-int(max(1, int(window_u64))) :])
+    return {
+        "rows_u64": int(len(scope)),
+        "frontier_counted_total_u64": int(_count_true(scope, "frontier_attempt_counted_b")),
+        "frontier_attempt_heavy_ok_total_u64": int(_count_quality_class(scope, FRONTIER_ATTEMPT_QUALITY_HEAVY_OK)),
+        "frontier_attempt_valid_but_no_utility_total_u64": int(
+            _count_quality_class(scope, FRONTIER_ATTEMPT_QUALITY_VALID_BUT_NO_UTILITY)
+        ),
+        "frontier_attempt_invalid_total_u64": int(_count_quality_class(scope, FRONTIER_ATTEMPT_QUALITY_INVALID)),
+    }
+
+
+def _attach_frontier_attempt_quality_telemetry(*, rows: list[dict[str, Any]], row: dict[str, Any]) -> None:
+    quality_class = _frontier_attempt_quality_class_for_row(row)
+    row["frontier_attempt_quality_class"] = quality_class
+    combined = [*rows, row]
+    row["frontier_attempt_quality_counts_total"] = _frontier_attempt_quality_counts(rows=combined, window_u64=None)
+    row["frontier_attempt_quality_counts_last_50"] = _frontier_attempt_quality_counts(
+        rows=combined,
+        window_u64=QUALITY_WINDOW_SHORT_U64,
+    )
+    row["frontier_attempt_quality_counts_last_200"] = _frontier_attempt_quality_counts(
+        rows=combined,
+        window_u64=QUALITY_WINDOW_LONG_U64,
+    )
+
+
+def _attach_hard_lock_transition_telemetry(*, rows: list[dict[str, Any]], row: dict[str, Any]) -> None:
+    prev_hard_lock_active_b = bool(rows[-1].get("hard_lock_active_b")) if rows else False
+    hard_lock_active_b = bool(row.get("hard_lock_active_b"))
+    hard_lock_became_active_b = bool((not prev_hard_lock_active_b) and hard_lock_active_b)
+    frontier_counted_b = bool(row.get("frontier_attempt_counted_b"))
+    declared_class = str(row.get("declared_class", "")).strip().upper()
+    selected_frontier_b = declared_class == "FRONTIER_HEAVY"
+    transition_failed_b = bool(hard_lock_became_active_b and ((not selected_frontier_b) or (not frontier_counted_b)))
+    pre_evidence_failed_b = bool(row.get("frontier_dispatch_failed_pre_evidence_b")) or transition_failed_b
+    row["hard_lock_became_active_b"] = hard_lock_became_active_b
+    row["hard_lock_selected_frontier_b"] = selected_frontier_b
+    row["frontier_dispatch_failed_pre_evidence_b"] = pre_evidence_failed_b
+    row["frontier_dispatch_pre_evidence_reason_code"] = (
+        FRONTIER_DISPATCH_PRE_EVIDENCE_REASON_CODE if pre_evidence_failed_b else None
+    )
+
+
+def _mandatory_frontier_guard_summary(*, rows: list[dict[str, Any]]) -> dict[str, int]:
+    quality_counts_total = _frontier_attempt_quality_counts(rows=rows, window_u64=None)
+    return {
+        "rows_u64": int(len(rows)),
+        "frontier_total_u64": int(_count_true(rows, "frontier_goals_pending_b")),
+        "hard_locks_total_u64": int(_count_true(rows, "hard_lock_active_b")),
+        "frontier_counted_total_u64": int(quality_counts_total["frontier_counted_total_u64"]),
+        "frontier_attempt_heavy_ok_total_u64": int(quality_counts_total["frontier_attempt_heavy_ok_total_u64"]),
+        "frontier_attempt_valid_but_no_utility_total_u64": int(
+            quality_counts_total["frontier_attempt_valid_but_no_utility_total_u64"]
+        ),
+        "frontier_attempt_invalid_total_u64": int(quality_counts_total["frontier_attempt_invalid_total_u64"]),
+        "forced_heavy_sh1_total_u64": int(_count_true(rows, "forced_heavy_sh1_b")),
+        "promoted_u64": int(_count_promoted(rows)),
+    }
+
+
+def _mandatory_frontier_guard_reason(
+    *,
+    rows: list[dict[str, Any]],
+    tick_u64: int,
+) -> tuple[str | None, dict[str, Any]]:
+    tick_value = int(max(0, int(tick_u64)))
+    summary = _mandatory_frontier_guard_summary(rows=rows)
+    detail: dict[str, Any] = {
+        "tick_u64": int(tick_value),
+        "deadlines_u64": {
+            "frontier_goals_deadline_u64": int(MANDATORY_FRONTIER_GOALS_DEADLINE_TICK_U64),
+            "hard_lock_deadline_u64": int(MANDATORY_HARD_LOCK_DEADLINE_TICK_U64),
+            "frontier_counted_deadline_u64": int(MANDATORY_COUNTED_FRONTIER_DEADLINE_TICK_U64),
+            "forced_heavy_sh1_deadline_u64": int(MANDATORY_FORCED_HEAVY_SH1_DEADLINE_TICK_U64),
+        },
+        **summary,
+    }
+    if (
+        int(EARLY_GOODHART_MIN_TICK_U64) <= tick_value <= int(EARLY_GOODHART_MAX_TICK_U64)
+        and int(summary["frontier_total_u64"]) == 0
+        and int(summary["promoted_u64"]) > 0
+    ):
+        return "PRECHECK_FAIL:PROMOTION_WITHOUT_FRONTIER_GOALS", detail
+    if (
+        int(summary["promoted_u64"]) >= int(GOODHART_PROMOTION_FARM_LIMIT_U64)
+        and int(summary["hard_locks_total_u64"]) == 0
+    ):
+        return "PRECHECK_FAIL:GOODHART_BYPASS_PROMOTION_FARM", detail
+    if (
+        tick_value >= int(GOODHART_FRONTIER_GAMING_DEADLINE_TICK_U64)
+        and int(summary["frontier_counted_total_u64"]) >= int(GOODHART_FRONTIER_GAMING_MIN_COUNTED_U64)
+        and int(summary["frontier_attempt_heavy_ok_total_u64"]) == 0
+    ):
+        detail["frontier_gaming_limits_u64"] = {
+            "min_counted_u64": int(GOODHART_FRONTIER_GAMING_MIN_COUNTED_U64),
+            "deadline_tick_u64": int(GOODHART_FRONTIER_GAMING_DEADLINE_TICK_U64),
+        }
+        return "PRECHECK_FAIL:FRONTIER_GAMING_NO_HEAVY_OK", detail
+    if (
+        tick_value >= int(MANDATORY_FRONTIER_GOALS_DEADLINE_TICK_U64)
+        and int(summary["frontier_total_u64"]) == 0
+    ):
+        return "PRECHECK_FAIL:NO_FRONTIER_GOALS_PRESENT", detail
+    if (
+        tick_value >= int(MANDATORY_HARD_LOCK_DEADLINE_TICK_U64)
+        and int(summary["hard_locks_total_u64"]) == 0
+    ):
+        return "PRECHECK_FAIL:NO_HARD_LOCK", detail
+    if (
+        _premarathon_v63_enabled()
+        and _env_bool("OMEGA_PREMARATHON_REQUIRE_FORCED_HEAVY_SH1", default=False)
+        and (
+        tick_value >= int(MANDATORY_FORCED_HEAVY_SH1_DEADLINE_TICK_U64)
+        and int(summary["forced_heavy_sh1_total_u64"]) < int(MANDATORY_FORCED_HEAVY_SH1_MIN_TICKS_U64)
+        )
+    ):
+        detail["forced_heavy_sh1_min_ticks_u64"] = int(MANDATORY_FORCED_HEAVY_SH1_MIN_TICKS_U64)
+        return "PRECHECK_FAIL:NO_FORCED_HEAVY_SH1", detail
+    if (
+        tick_value >= int(MANDATORY_COUNTED_FRONTIER_DEADLINE_TICK_U64)
+        and int(summary["frontier_counted_total_u64"]) == 0
+    ):
+        return "PRECHECK_FAIL:NO_COUNTED_FRONTIER_ATTEMPT", detail
+    return None, detail
 
 
 def _frontier_precheck_summary(
@@ -183,6 +384,9 @@ def _build_subprocess_env(
             env[key] = value
     env.setdefault("PYTHONPATH", ".:CDEL-v2:Extension-1/agi-orchestrator")
     env.setdefault("OMEGA_NET_LIVE_OK", "0")
+    env.setdefault("OMEGA_META_CORE_ACTIVATION_MODE", "simulate")
+    env.setdefault("OMEGA_ALLOW_SIMULATE_ACTIVATION", "1")
+    env.setdefault("OMEGA_CCAP_ALLOW_DIRTY_TREE", "1")
     if force_lane:
         env["OMEGA_LONG_RUN_FORCE_LANE"] = force_lane
     else:
@@ -718,6 +922,18 @@ def run_tick(
     tick_outcome_payload, _tick_outcome_hash = _latest_payload(state_dir / "perf", "omega_tick_outcome_v1.json")
     debt_payload, _debt_hash = _latest_payload(state_dir / "long_run" / "debt", "dependency_debt_state_v1.json")
     routing_payload, _routing_hash = _latest_payload(state_dir / "long_run" / "debt", "dependency_routing_receipt_v1.json")
+    routing_reason_codes: list[str] = []
+    selected_capability_id = None
+    if isinstance(routing_payload, dict):
+        raw_reason_codes = routing_payload.get("reason_codes")
+        if isinstance(raw_reason_codes, list):
+            routing_reason_codes = [str(item).strip() for item in raw_reason_codes if str(item).strip()]
+        selected_capability_id = routing_payload.get("selected_capability_id")
+    frontier_dispatch_failed_from_routing_b = FRONTIER_DISPATCH_PRE_EVIDENCE_REASON_CODE in set(routing_reason_codes)
+    forced_heavy_sh1_b = bool(
+        (routing_payload or {}).get("forced_frontier_attempt_b")
+        and str(selected_capability_id or "").strip() == "RSI_GE_SH1_OPTIMIZER"
+    )
     lane_name = None
     lane_frontier_gate_pass_b = None
     lane_invalid_count_u64 = None
@@ -749,9 +965,22 @@ def run_tick(
         "mission_goal_ingest_receipt_hash": (snapshot_payload or {}).get("mission_goal_ingest_receipt_hash"),
         "eval_report_hash": (snapshot_payload or {}).get("eval_report_hash"),
         "subverifier_status": (tick_outcome_payload or {}).get("subverifier_status"),
+        "promotion_status": (tick_outcome_payload or {}).get("promotion_status"),
         "promotion_reason_code": (tick_outcome_payload or {}).get("promotion_reason_code"),
+        "candidate_bundle_present_b": (tick_outcome_payload or {}).get("candidate_bundle_present_b"),
+        "selected_capability_id": selected_capability_id,
+        "declared_class": (tick_outcome_payload or {}).get("declared_class"),
+        "effect_class": (tick_outcome_payload or {}).get("effect_class"),
+        "action_kind": (tick_outcome_payload or {}).get("action_kind"),
         "hard_lock_active_b": (debt_payload or {}).get("hard_lock_active_b"),
+        "frontier_goals_pending_b": (routing_payload or {}).get("frontier_goals_pending_b"),
         "forced_frontier_attempt_b": (routing_payload or {}).get("forced_frontier_attempt_b"),
+        "forced_heavy_sh1_b": forced_heavy_sh1_b,
+        "dependency_routing_reason_codes": routing_reason_codes,
+        "frontier_dispatch_failed_pre_evidence_b": bool(frontier_dispatch_failed_from_routing_b),
+        "frontier_dispatch_pre_evidence_reason_code": (
+            FRONTIER_DISPATCH_PRE_EVIDENCE_REASON_CODE if frontier_dispatch_failed_from_routing_b else None
+        ),
         "frontier_attempt_counted_b": (tick_outcome_payload or {}).get("frontier_attempt_counted_b"),
         "disk_bytes_u64": int(_dir_size_bytes(out_dir)) if out_dir.exists() else 0,
         "started_unix_s": int(started),
@@ -910,7 +1139,10 @@ def run_loop(
                 prev_state_dir = state_dir
                 last_valid_state_dir = state_dir
             else:
-                hard_stop_reason_code = "STATE_VERIFIER_INVALID"
+                if state_verifier_reason_code == "PRECHECK_FAIL:UNBOUND_DEBT_KEY":
+                    hard_stop_reason_code = "PRECHECK_FAIL:UNBOUND_DEBT_KEY"
+                else:
+                    hard_stop_reason_code = "STATE_VERIFIER_INVALID"
                 hard_stop_detail = {
                     "state_verifier_reason_code": state_verifier_reason_code,
                 }
@@ -931,6 +1163,9 @@ def run_loop(
             row["harness_control_reason_code"] = "SUBVERIFIER_INVALID_CONTINUE"
         else:
             row["harness_control_reason_code"] = "CONTINUE"
+
+        _attach_frontier_attempt_quality_telemetry(rows=live_rows, row=row)
+        _attach_hard_lock_transition_telemetry(rows=live_rows, row=row)
 
         frontier_gate_pass_raw = row.get("lane_frontier_gate_pass_b")
         frontier_gate_pass = frontier_gate_pass_raw if isinstance(frontier_gate_pass_raw, bool) else None
@@ -958,6 +1193,15 @@ def run_loop(
             hard_stop_detail = {
                 "exit_code": int(row.get("exit_code", 0)),
             }
+
+        if hard_stop_reason_code is None:
+            mandatory_reason, mandatory_detail = _mandatory_frontier_guard_reason(
+                rows=[*live_rows, row],
+                tick_u64=tick_value,
+            )
+            if mandatory_reason is not None:
+                hard_stop_reason_code = mandatory_reason
+                hard_stop_detail = mandatory_detail
 
         if hard_stop_reason_code is None and validate_frontier_b:
             ticks_seen_this_invocation = int(ticks_run + 1)

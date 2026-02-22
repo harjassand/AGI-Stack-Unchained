@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import shutil
 import subprocess
 import sys
@@ -233,6 +234,34 @@ def _read_pruned_ticks(run_root: Path) -> set[int]:
     return {int(row.get("tick_u64", -1)) for row in rows if isinstance(row, dict)}
 
 
+def _env_truthy(name: str, *, default: bool = False) -> bool:
+    raw = str(os.environ.get(name, "1" if default else "0")).strip().lower()
+    return raw in {"1", "true", "yes", "on"}
+
+
+def _repo_dirty_summary(repo_root: Path) -> dict[str, Any]:
+    def _run(args: list[str]) -> list[str]:
+        run = subprocess.run(
+            ["git", "-C", str(repo_root), *args],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        if run.returncode != 0:
+            return []
+        return [row.strip() for row in (run.stdout or "").splitlines() if row.strip()]
+
+    unstaged = _run(["diff", "--name-only"])
+    untracked = _run(["ls-files", "--others", "--exclude-standard"])
+    return {
+        "dirty_b": bool(unstaged or untracked),
+        "unstaged_count_u64": int(len(unstaged)),
+        "untracked_count_u64": int(len(untracked)),
+        "unstaged_preview": [str(row) for row in unstaged[:10]],
+        "untracked_preview": [str(row) for row in untracked[:10]],
+    }
+
+
 def main() -> None:
     ap = argparse.ArgumentParser(prog="preflight_long_run_v1")
     ap.add_argument("--campaign_pack", default=DEFAULT_PACK)
@@ -277,6 +306,73 @@ def main() -> None:
     canary_row: dict[str, Any] | None = None
 
     try:
+        activation_mode = str(os.environ.get("OMEGA_META_CORE_ACTIVATION_MODE", "simulate")).strip().lower() or "simulate"
+        activation_ok = activation_mode == "simulate"
+        _record_check(
+            checks,
+            check_id="activation_mode_guard",
+            pass_b=activation_ok,
+            reason_code="OK" if activation_ok else "LIVE_ACTIVATION_UNSAFE_FOR_LONG_RUN_VERIFIER",
+            detail={
+                "observed_mode": activation_mode,
+                "required_mode": "simulate",
+            },
+        )
+
+        dirty_summary = _repo_dirty_summary(REPO_ROOT)
+        dirty_mode_enabled = _env_truthy("OMEGA_CCAP_ALLOW_DIRTY_TREE", default=True)
+        dirty_guard_ok = (not bool(dirty_summary["dirty_b"])) or dirty_mode_enabled
+        _record_check(
+            checks,
+            check_id="dirty_tree_guard",
+            pass_b=dirty_guard_ok,
+            reason_code="OK" if dirty_guard_ok else "DIRTY_TREE_WITH_STRICT_CCAP",
+            detail={
+                **dirty_summary,
+                "planned_dirty_mode_enabled_b": bool(dirty_mode_enabled),
+            },
+        )
+
+        frontier_cap_rows = profile.get("lanes", {}).get("frontier_capability_ids", [])
+        cap_rows = registry.get("capabilities") if isinstance(registry.get("capabilities"), list) else []
+        by_cap: dict[str, dict[str, Any]] = {}
+        for row in cap_rows:
+            if not isinstance(row, dict):
+                continue
+            capability_id = str(row.get("capability_id", "")).strip()
+            if capability_id:
+                by_cap[capability_id] = row
+        missing_frontier_caps = [str(cap) for cap in frontier_cap_rows if str(cap) and str(cap) not in by_cap]
+        enabled_frontier_caps = [cap for cap in _frontier_enabled_caps(profile, registry)]
+        missing_pack_paths: list[str] = []
+        frontier_with_promotion_path_u64 = 0
+        for capability_id in enabled_frontier_caps:
+            row = by_cap.get(capability_id) or {}
+            pack_rel = str(row.get("campaign_pack_rel", "")).strip()
+            if not pack_rel or not (REPO_ROOT / pack_rel).exists():
+                missing_pack_paths.append(capability_id)
+            promo_rel = str(row.get("promotion_bundle_rel", "")).strip()
+            if promo_rel:
+                frontier_with_promotion_path_u64 += 1
+        frontier_registry_ok = (
+            (not missing_frontier_caps)
+            and bool(enabled_frontier_caps)
+            and (not missing_pack_paths)
+            and int(frontier_with_promotion_path_u64) > 0
+        )
+        _record_check(
+            checks,
+            check_id="frontier_registry_wiring",
+            pass_b=frontier_registry_ok,
+            reason_code="OK" if frontier_registry_ok else "FRONTIER_REGISTRY_INVALID",
+            detail={
+                "missing_frontier_capability_ids": missing_frontier_caps,
+                "enabled_frontier_capability_ids": enabled_frontier_caps,
+                "missing_campaign_pack_capability_ids": missing_pack_paths,
+                "frontier_with_promotion_path_u64": int(frontier_with_promotion_path_u64),
+            },
+        )
+
         _write_json(mission_path, MISSION_PAYLOAD_A)
 
         baseline_proc = _run_harness(
@@ -403,13 +499,14 @@ def main() -> None:
                 campaign_pack_rel=campaign_pack_rel,
                 run_root_rel=run_root_rel,
                 start_tick_u64=None,
-                max_ticks=1,
+                max_ticks=3,
                 max_disk_bytes=int(args.max_disk_bytes),
                 force_lane="FRONTIER",
                 force_eval=False,
             )
             rows_after_frontier = _read_tick_rows(run_root)
-            frontier_row = rows_after_frontier[-1] if rows_after_frontier else None
+            frontier_rows = [row for row in rows_after_frontier if str(row.get("lane_name", "")) == "FRONTIER"]
+            frontier_row = frontier_rows[-1] if frontier_rows else None
             frontier_ok = (
                 frontier_proc.returncode == 0
                 and frontier_row is not None
@@ -423,6 +520,7 @@ def main() -> None:
                 detail={
                     "returncode": int(frontier_proc.returncode),
                     "lane_name": str((frontier_row or {}).get("lane_name", "")),
+                    "frontier_rows_u64": int(len(frontier_rows)),
                     "enabled_frontier_capability_ids": frontier_caps,
                     "health_counts": frontier_health_counts,
                 },
@@ -441,23 +539,34 @@ def main() -> None:
             )
 
         all_rows = _read_tick_rows(run_root)
-        replay_invalid_ticks: list[int] = []
-        for row in all_rows:
-            tick_u64 = int(row.get("tick_u64", -1))
-            if str(row.get("status", "")) != "OK":
-                replay_invalid_ticks.append(tick_u64)
-                continue
-            state_dir = Path(str(row.get("state_dir", "")))
-            ok, _verify_out = _verify_state(state_dir)
-            if not ok:
-                replay_invalid_ticks.append(tick_u64)
+        replay_invalid_ticks_from_harness = [
+            int(row.get("tick_u64", -1))
+            for row in all_rows
+            if bool(row.get("state_verifier_valid_b")) is not True
+        ]
+        replay_invalid_ticks_head: list[int] = []
+        replay_head_reason = ""
+        if all_rows:
+            head_row = all_rows[-1]
+            head_tick_u64 = int(head_row.get("tick_u64", -1))
+            head_state_dir = Path(str(head_row.get("state_dir", "")))
+            head_ok, head_verify_out = _verify_state(head_state_dir)
+            if not head_ok:
+                replay_invalid_ticks_head.append(head_tick_u64)
+                replay_head_reason = head_verify_out
+        replay_invalid_ticks = sorted({*replay_invalid_ticks_from_harness, *replay_invalid_ticks_head})
         replay_ok = len(replay_invalid_ticks) == 0
         _record_check(
             checks,
             check_id="replay_window_valid",
             pass_b=replay_ok,
             reason_code="OK" if replay_ok else "REPLAY_INVALID",
-            detail={"invalid_ticks": replay_invalid_ticks},
+            detail={
+                "invalid_ticks": replay_invalid_ticks,
+                "invalid_ticks_from_harness": replay_invalid_ticks_from_harness,
+                "invalid_ticks_head_recheck": replay_invalid_ticks_head,
+                "head_recheck_reason": replay_head_reason,
+            },
         )
 
         canary_files = sorted((run_root / "canary").glob("sha256_*.long_run_canary_summary_v1.json"))
@@ -542,6 +651,71 @@ def main() -> None:
             pass_b=explicit_reasons_ok,
             reason_code="OK" if explicit_reasons_ok else "OPAQUE_REASON_CODE_FOUND",
             detail={"hits": opaque_hits},
+        )
+
+        frontier_rows = [row for row in all_rows if str(row.get("lane_name", "")) == "FRONTIER"]
+        frontier_counted_ticks = [int(row.get("tick_u64", -1)) for row in frontier_rows if bool(row.get("frontier_attempt_counted_b", False))]
+        frontier_signal_ok = (not frontier_rows) or bool(frontier_counted_ticks)
+        _record_check(
+            checks,
+            check_id="frontier_attempt_signal",
+            pass_b=frontier_signal_ok,
+            reason_code="OK" if frontier_signal_ok else "NO_COUNTED_FRONTIER_ATTEMPT",
+            detail={
+                "frontier_ticks_u64": int(len(frontier_rows)),
+                "counted_frontier_ticks": frontier_counted_ticks,
+            },
+        )
+
+        invalid_ticks = [int(row.get("tick_u64", -1)) for row in all_rows if str(row.get("subverifier_status", "")).strip().upper() == "INVALID"]
+        blocking_invalid_ticks = [
+            int(row.get("tick_u64", -1))
+            for row in all_rows
+            if str(row.get("subverifier_status", "")).strip().upper() == "INVALID"
+            and not (
+                str(row.get("action_kind", "")).strip() == "SAFE_HALT"
+                and not bool(row.get("candidate_bundle_present_b", False))
+            )
+        ]
+        subverifier_ok = len(blocking_invalid_ticks) == 0
+        _record_check(
+            checks,
+            check_id="subverifier_invalid_guard",
+            pass_b=subverifier_ok,
+            reason_code="OK" if subverifier_ok else "SUBVERIFIER_INVALID_PRESENT",
+            detail={
+                "invalid_ticks": invalid_ticks,
+                "blocking_invalid_ticks": blocking_invalid_ticks,
+            },
+        )
+
+        frontier_no_bundle_ticks = [
+            int(row.get("tick_u64", -1))
+            for row in frontier_rows
+            if str(row.get("promotion_reason_code", "")).strip() == "NO_PROMOTION_BUNDLE"
+        ]
+        frontier_candidate_bundle_ticks = [
+            int(row.get("tick_u64", -1))
+            for row in frontier_rows
+            if bool(row.get("candidate_bundle_present_b", False))
+        ]
+        frontier_promoted_ticks = [
+            int(row.get("tick_u64", -1))
+            for row in frontier_rows
+            if str(row.get("promotion_status", "")).strip() == "PROMOTED"
+        ]
+        frontier_promotion_pipeline_ok = (not frontier_rows) or bool(frontier_candidate_bundle_ticks or frontier_promoted_ticks)
+        _record_check(
+            checks,
+            check_id="frontier_promotion_pipeline_signal",
+            pass_b=frontier_promotion_pipeline_ok,
+            reason_code="OK" if frontier_promotion_pipeline_ok else "NO_PROMOTION_PIPELINE_SIGNAL",
+            detail={
+                "frontier_ticks_u64": int(len(frontier_rows)),
+                "frontier_no_promotion_bundle_ticks": frontier_no_bundle_ticks,
+                "frontier_candidate_bundle_ticks": frontier_candidate_bundle_ticks,
+                "frontier_promoted_ticks": frontier_promoted_ticks,
+            },
         )
     finally:
         if mission_backup_bytes is not None:

@@ -13,6 +13,7 @@ from .ccap_runtime_v1 import (
     ccap_blob_path,
     ccap_payload_id,
     compute_repo_base_tree_id,
+    compute_repo_base_tree_id_tolerant,
     discover_ccap_relpath,
     normalize_subrun_relpath,
     read_patch_blob,
@@ -23,6 +24,17 @@ from .omega_common_v1 import OmegaV18Error, canon_hash_obj, load_canon_dict, val
 
 
 _ZERO_SHA = "sha256:" + ("0" * 64)
+
+
+def _allow_dirty_tree() -> bool:
+    raw = str(os.environ.get("OMEGA_CCAP_ALLOW_DIRTY_TREE", "0")).strip().lower()
+    return raw in {"1", "true", "yes", "on"}
+
+
+def _compute_base_tree_for_verify(repo_root: Path) -> str:
+    if _allow_dirty_tree():
+        return compute_repo_base_tree_id_tolerant(repo_root)
+    return compute_repo_base_tree_id(repo_root)
 
 
 def _normalize_patch_relpath(path_value: str) -> str:
@@ -460,7 +472,32 @@ def _verify_once(
         _write_ccap_receipt(receipt_out_dir, payload)
         return payload, "CANON_VERSION_MISMATCH"
 
-    base_tree_id = compute_repo_base_tree_id(repo_root)
+    try:
+        base_tree_id = _compute_base_tree_for_verify(repo_root)
+    except Exception as exc:  # noqa: BLE001
+        cert, _ = _write_refutation_cert(
+            subrun_root=subrun_root,
+            ccap_id=ccap_id,
+            code="BASE_TREE_UNAVAILABLE",
+            detail=str(exc) or "failed to compute repository base tree",
+            evidence_hashes=None,
+        )
+        payload = _receipt_payload(
+            ccap_id=ccap_id,
+            base_tree_id=str((meta if isinstance(meta, dict) else {}).get("base_tree_id", _ZERO_SHA)),
+            applied_tree_id=_ZERO_SHA,
+            realized_out_id="",
+            ek_id=str((meta if isinstance(meta, dict) else {}).get("ek_id", _ZERO_SHA)),
+            op_pool_id=str((meta if isinstance(meta, dict) else {}).get("op_pool_id", _ZERO_SHA)),
+            auth_hash_value=ccap_auth_hash or _ZERO_SHA,
+            determinism_check="REFUTED",
+            eval_status="REFUTED",
+            decision="REJECT",
+            cost_vector={"cpu_ms": 0, "wall_ms": 0, "mem_mb": 0, "disk_mb": 0, "fds": 0, "procs": 0, "threads": 0},
+            logs_hash=canon_hash_obj(cert),
+        )
+        _write_ccap_receipt(receipt_out_dir, payload)
+        return payload, "BASE_TREE_UNAVAILABLE"
     if str(meta.get("base_tree_id", "")) != base_tree_id:
         cert, _ = _write_refutation_cert(
             subrun_root=subrun_root,

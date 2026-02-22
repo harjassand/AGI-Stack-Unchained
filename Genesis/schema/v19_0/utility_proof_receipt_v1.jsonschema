@@ -1,0 +1,122 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v19_0/utility_proof_receipt_v1",
+  "title": "Utility proof receipt v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_name",
+    "schema_version",
+    "receipt_id",
+    "tick_u64",
+    "capability_id",
+    "candidate_bundle_hash",
+    "baseline_ref_hash",
+    "probe_suite_id",
+    "stress_probe_suite_id",
+    "runtime_stats_source_id",
+    "runtime_stats_hash",
+    "candidate_bundle_present_b",
+    "probe_executed_b",
+    "correctness_ok_b",
+    "utility_ok_b",
+    "signal_a_ok_b",
+    "signal_b_ok_b",
+    "utility_metrics",
+    "utility_thresholds",
+    "reason_code",
+    "declared_class",
+    "effect_class",
+    "primary_probe",
+    "stress_probe"
+  ],
+  "properties": {
+    "schema_name": {"const": "utility_proof_receipt_v1"},
+    "schema_version": {"const": "v19_0"},
+    "receipt_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "tick_u64": {"type": "integer", "minimum": 0},
+    "capability_id": {"type": "string", "minLength": 1},
+    "candidate_bundle_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "baseline_ref_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "probe_suite_id": {"type": "string", "minLength": 1},
+    "stress_probe_suite_id": {"type": "string", "minLength": 1},
+    "runtime_stats_source_id": {"type": "string", "minLength": 1},
+    "runtime_stats_hash": {
+      "anyOf": [
+        {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+        {"type": "null"}
+      ]
+    },
+    "candidate_bundle_present_b": {"type": "boolean"},
+    "probe_executed_b": {"type": "boolean"},
+    "correctness_ok_b": {"type": "boolean"},
+    "utility_ok_b": {"type": "boolean"},
+    "signal_a_ok_b": {"type": "boolean"},
+    "signal_b_ok_b": {"type": "boolean"},
+    "utility_metrics": {
+      "type": "object",
+      "additionalProperties": {
+        "anyOf": [
+          {"type": "integer"},
+          {"type": "boolean"},
+          {"type": "string"},
+          {"type": "null"}
+        ]
+      }
+    },
+    "utility_thresholds": {
+      "type": "object",
+      "additionalProperties": {
+        "anyOf": [
+          {"type": "integer"},
+          {"type": "boolean"},
+          {"type": "string"},
+          {"type": "null"}
+        ]
+      }
+    },
+    "reason_code": {
+      "type": "string",
+      "enum": [
+        "UTILITY_OK",
+        "NO_UTILITY_GAIN",
+        "POLICY_MISSING",
+        "RUNTIME_STATS_SOURCE_MISMATCH",
+        "PROBE_MISSING",
+        "NONDETERMINISTIC"
+      ]
+    },
+    "declared_class": {
+      "type": "string",
+      "enum": ["FRONTIER_HEAVY", "CANARY_HEAVY", "BASELINE_CORE", "MAINTENANCE", "UNCLASSIFIED"]
+    },
+    "effect_class": {
+      "type": "string",
+      "enum": [
+        "EFFECT_HEAVY_OK",
+        "EFFECT_HEAVY_NO_UTILITY",
+        "EFFECT_BASELINE_CORE_OK",
+        "EFFECT_MAINTENANCE_OK",
+        "EFFECT_REJECTED"
+      ]
+    },
+    "primary_probe": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["input_hash", "output_hash"],
+      "properties": {
+        "input_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+        "output_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"}
+      }
+    },
+    "stress_probe": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["input_hash", "output_hash"],
+      "properties": {
+        "input_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+        "output_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"}
+      }
+    }
+  }
+}

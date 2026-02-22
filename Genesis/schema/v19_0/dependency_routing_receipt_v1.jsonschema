@@ -1,0 +1,115 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v19_0/dependency_routing_receipt_v1",
+  "title": "Dependency routing receipt v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_name",
+    "schema_version",
+    "receipt_id",
+    "tick_u64",
+    "selected_capability_id",
+    "selected_declared_class",
+    "frontier_goals_pending_b",
+    "blocks_goal_id",
+    "blocks_debt_key",
+    "dependency_debt_delta_i64",
+    "forced_frontier_attempt_b",
+    "forced_frontier_debt_key",
+    "routing_selector_id",
+    "market_frozen_b",
+    "market_used_for_selection_b",
+    "reason_codes"
+  ],
+  "properties": {
+    "schema_name": {"const": "dependency_routing_receipt_v1"},
+    "schema_version": {"const": "v19_0"},
+    "receipt_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "tick_u64": {"type": "integer", "minimum": 0},
+    "selected_capability_id": {"type": "string"},
+    "selected_declared_class": {
+      "type": "string",
+      "enum": ["FRONTIER_HEAVY", "CANARY_HEAVY", "BASELINE_CORE", "MAINTENANCE", "UNCLASSIFIED"]
+    },
+    "frontier_goals_pending_b": {"type": "boolean"},
+    "blocks_goal_id": {
+      "anyOf": [
+        {"type": "string", "minLength": 1},
+        {"type": "null"}
+      ]
+    },
+    "blocks_debt_key": {
+      "anyOf": [
+        {"type": "string", "minLength": 1},
+        {"type": "null"}
+      ]
+    },
+    "dependency_debt_delta_i64": {"type": "integer"},
+    "forced_frontier_attempt_b": {"type": "boolean"},
+    "forced_frontier_debt_key": {
+      "anyOf": [
+        {"type": "string", "minLength": 1},
+        {"type": "null"}
+      ]
+    },
+    "routing_selector_id": {
+      "type": "string",
+      "enum": ["MARKET", "NON_MARKET", "SCAFFOLD_OVERRIDE", "HARD_LOCK_OVERRIDE"]
+    },
+    "market_frozen_b": {"type": "boolean"},
+    "market_used_for_selection_b": {"type": "boolean"},
+    "reason_codes": {
+      "type": "array",
+      "items": {"type": "string", "minLength": 1}
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "frontier_goals_pending_b": {"const": true},
+          "selected_declared_class": {"const": "MAINTENANCE"}
+        },
+        "required": ["frontier_goals_pending_b", "selected_declared_class"]
+      },
+      "then": {
+        "properties": {
+          "blocks_goal_id": {"type": "string", "minLength": 1},
+          "blocks_debt_key": {"type": "string", "minLength": 1}
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "routing_selector_id": {"const": "MARKET"}
+        },
+        "required": ["routing_selector_id"]
+      },
+      "then": {
+        "properties": {
+          "market_used_for_selection_b": {"const": true}
+        }
+      },
+      "else": {
+        "properties": {
+          "market_used_for_selection_b": {"const": false}
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "market_frozen_b": {"const": true}
+        },
+        "required": ["market_frozen_b"]
+      },
+      "then": {
+        "properties": {
+          "market_used_for_selection_b": {"const": false}
+        }
+      }
+    }
+  ]
+}

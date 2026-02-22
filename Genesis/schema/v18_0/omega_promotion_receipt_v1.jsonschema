@@ -88,6 +88,13 @@
               "type": "string",
               "enum": [
                 "NO_PROMOTION_BUNDLE",
+                "NO_BUNDLE_MICRO_BENCH_GATE_FAIL",
+                "NO_BUNDLE_TRIVIALITY_GATE_FAIL",
+                "NO_BUNDLE_REPLAY_INVALID",
+                "NO_BUNDLE_STRUCTURAL_FAIL",
+                "NO_BUNDLE_BENCH_FAIL",
+                "NO_BUNDLE_PATCH_GENERATION_FAIL",
+                "NO_BUNDLE_POLICY_GATE_FAIL",
                 "SUBVERIFIER_INVALID",
                 "META_CORE_REJECT",
                 "FORBIDDEN_PATH",

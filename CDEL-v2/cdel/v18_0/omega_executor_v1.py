@@ -187,6 +187,7 @@ def dispatch_campaign(
     state_root: Path,
     run_seed_u64: int,
     runaway_cfg: dict[str, Any] | None = None,
+    dispatch_env_overrides: dict[str, str] | None = None,
 ) -> tuple[dict[str, Any] | None, str | None, dict[str, Any] | None]:
     action_kind = str(decision_plan.get("action_kind"))
     if action_kind not in {"RUN_CAMPAIGN", "RUN_GOAL_TASK"}:
@@ -264,7 +265,13 @@ def dispatch_campaign(
         if declared_env != expected_env:
             fail("NONDETERMINISTIC")
         invocation_env_overrides = expected_env
-    invocation_env_overrides = _guard_skip_verifier_env(dict(invocation_env_overrides or {}))
+    merged_invocation_env = dict(invocation_env_overrides or {})
+    for key, value in dict(dispatch_env_overrides or {}).items():
+        key_text = str(key).strip()
+        if not key_text:
+            continue
+        merged_invocation_env[key_text] = str(value)
+    invocation_env_overrides = _guard_skip_verifier_env(merged_invocation_env)
 
     run_result = run_module(
         py_module=py_module,
@@ -302,6 +309,7 @@ def dispatch_campaign(
     payload = {
         "schema_version": "omega_dispatch_receipt_v1",
         "receipt_id": "sha256:" + "0" * 64,
+        "dispatch_attempted_b": True,
         "tick_u64": int(tick_u64),
         "campaign_id": campaign_id,
         "capability_id": str(cap.get("capability_id")),
@@ -309,7 +317,7 @@ def dispatch_campaign(
             "py_module": py_module,
             "argv": argv,
             "env_fingerprint_hash": run_result["env_fingerprint_hash"],
-            **({"env_overrides": invocation_env_overrides or {}} if runaway_enabled(runaway_cfg) else {}),
+            "env_overrides": invocation_env_overrides or {},
         },
         "subrun": {
             "subrun_root_rel": subrun_root_rel_from_state,

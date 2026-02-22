@@ -36,6 +36,7 @@ from cdel.v19_0.nontriviality_cert_v1 import (
     FORCED_HEAVY_ARCHETYPE_IDS,
     build_nontriviality_cert_v1,
 )
+from cdel.v18_0.hard_task_suite_v1 import evaluate_hard_task_patch_delta_v1
 
 from tools.genesis_engine.sh1_pd_v1 import build_pd_from_patch_bytes, touched_paths_hash_for_paths, touched_paths_hash_prefix_hex
 from tools.genesis_engine.sh1_xs_v1 import build_xs_snapshot, load_ge_config
@@ -83,11 +84,13 @@ _PRECHECK_DECISION_CODES = {
     "DROPPED_FORCED_HEAVY_NONPY_TARGET",
     "DROPPED_REPEATED_FAILED_PATCH",
     "DROPPED_REPEATED_FAILED_SHAPE",
+    "DROPPED_FORCED_HEAVY_NO_WIRING_EVIDENCE",
+    "DROPPED_FORCED_HEAVY_PREDICTED_NO_HARD_GAIN",
     "DROPPED_INSUFFICIENT_WIRING_DELTA",
     "DROPPED_SITE_NOT_FOUND",
     "DROPPED_WIRING_LOCUS_UNAVAILABLE",
 }
-_FORCED_HEAVY_TEMPLATE_IDS = ("CODE_REWRITE_AST",)
+FORCED_HEAVY_TEMPLATE_POOL_V1 = ("CODE_REWRITE_AST",)
 _FAILED_SHAPE_BAN_ENV_KEY = "OMEGA_SH1_FAILED_SHAPE_BAN_JSON"
 _FORCED_WIRING_LOCUS_ENV_KEY = "OMEGA_SH1_WIRING_LOCUS_RELPATH"
 _CODE_REWRITE_AST_SITE_LOCATOR_RULE = "python:first_function_return_site(def->return)"
@@ -524,6 +527,11 @@ def _append_python_helper(lines: list[str], *, helper_name: str, marker: str) ->
             "",
             f"# ge_code_rewrite_ast:{marker}",
             f"def {helper_name}(value):",
+            "    if isinstance(value, str):",
+            "        normalized = str(value).strip(\"_\")",
+            "        while \"__\" in normalized:",
+            "            normalized = normalized.replace(\"__\", \"_\")",
+            "        return normalized or \"x\"",
             "    return value",
         ]
     )
@@ -1587,9 +1595,61 @@ def _parse_failed_shape_ban_env() -> dict[str, set[str]]:
 
 
 def _forced_heavy_archetype_for_candidate(*, tick_u64: int, debt_key: str, candidate_idx_u32: int) -> str:
-    seed = f"{int(tick_u64)}|{str(debt_key)}|{int(candidate_idx_u32)}".encode("utf-8")
-    start = int(hashlib.sha256(seed).hexdigest(), 16) % len(FORCED_HEAVY_ARCHETYPE_IDS)
-    return str(FORCED_HEAVY_ARCHETYPE_IDS[(start + int(candidate_idx_u32)) % len(FORCED_HEAVY_ARCHETYPE_IDS)])
+    del tick_u64, debt_key
+    order = (
+        FORCED_HEAVY_ARCHETYPE_CALL_EDGE,
+        FORCED_HEAVY_ARCHETYPE_HELPER_REPLACE,
+        FORCED_HEAVY_ARCHETYPE_CONTROL_FLOW,
+    )
+    return str(order[int(candidate_idx_u32) % len(order)])
+
+
+def _forced_heavy_expected_wiring_delta_v1(*, archetype_id: str | None) -> dict[str, bool]:
+    mode = str(archetype_id or "").strip()
+    if mode == FORCED_HEAVY_ARCHETYPE_CALL_EDGE:
+        return {"require_call_edges": True, "require_control_flow": False, "require_data_flow": False}
+    if mode == FORCED_HEAVY_ARCHETYPE_CONTROL_FLOW:
+        return {"require_call_edges": False, "require_control_flow": True, "require_data_flow": False}
+    if mode == FORCED_HEAVY_ARCHETYPE_HELPER_REPLACE:
+        return {"require_call_edges": False, "require_control_flow": False, "require_data_flow": True}
+    return {"require_call_edges": False, "require_control_flow": False, "require_data_flow": False}
+
+
+def _forced_heavy_observed_wiring_delta_v1(*, cert: dict[str, Any] | None) -> dict[str, Any]:
+    if not isinstance(cert, dict):
+        return {
+            "wiring_class_ok_b": None,
+            "call_edges_changed_b": None,
+            "control_flow_changed_b": None,
+            "data_flow_changed_b": None,
+            "failed_threshold_code": None,
+        }
+    failed = cert.get("failed_threshold_code")
+    return {
+        "wiring_class_ok_b": bool(cert.get("wiring_class_ok_b", False)),
+        "call_edges_changed_b": bool(cert.get("call_edges_changed_b", False)),
+        "control_flow_changed_b": bool(cert.get("control_flow_changed_b", False)),
+        "data_flow_changed_b": bool(cert.get("data_flow_changed_b", False)),
+        "failed_threshold_code": (str(failed) if isinstance(failed, str) and failed.strip() else None),
+    }
+
+
+def _forced_heavy_structural_delta_present(*, cert: dict[str, Any] | None) -> bool:
+    if not isinstance(cert, dict):
+        return False
+    return bool(
+        bool(cert.get("call_edges_changed_b", False))
+        or bool(cert.get("control_flow_changed_b", False))
+        or bool(cert.get("data_flow_changed_b", False))
+    )
+
+
+def _forced_heavy_wiring_evidence_ok(*, cert: dict[str, Any] | None) -> bool:
+    if not isinstance(cert, dict):
+        return False
+    if not bool(cert.get("wiring_class_ok_b", False)):
+        return False
+    return _forced_heavy_structural_delta_present(cert=cert)
 
 
 def _deterministic_target_order(
@@ -1672,6 +1732,7 @@ def _write_candidate_precheck_receipt(
     candidates: list[dict[str, Any]],
     forced_heavy_b: bool,
     wiring_locus_relpath: str | None,
+    expected_wiring_delta_v1: dict[str, bool] | None,
     final_candidate_rows_v1: list[dict[str, Any]],
 ) -> tuple[Path, dict[str, Any], str]:
     status_code = str(precheck_status_code).strip()
@@ -1685,6 +1746,16 @@ def _write_candidate_precheck_receipt(
     if status_code == "DISPATCH_ERROR" and error_code == "NONE":
         raise _invalid("SCHEMA_FAIL")
     rows = [dict(row) for row in candidates if isinstance(row, dict)]
+    expected_wiring_obj_raw = (
+        dict(expected_wiring_delta_v1)
+        if isinstance(expected_wiring_delta_v1, dict)
+        else _forced_heavy_expected_wiring_delta_v1(archetype_id=None)
+    )
+    expected_wiring_obj = {
+        "require_call_edges": bool(expected_wiring_obj_raw.get("require_call_edges", False)),
+        "require_control_flow": bool(expected_wiring_obj_raw.get("require_control_flow", False)),
+        "require_data_flow": bool(expected_wiring_obj_raw.get("require_data_flow", False)),
+    }
     payload = {
         "schema_name": "candidate_precheck_receipt_v1",
         "schema_version": "v19_0",
@@ -1702,6 +1773,7 @@ def _write_candidate_precheck_receipt(
                 if isinstance(wiring_locus_relpath, str) and str(wiring_locus_relpath).strip()
                 else None
             ),
+            "expected_wiring_delta_v1": expected_wiring_obj,
             "final_candidate_rows_v1": [
                 {
                     "candidate_idx_u32": int(max(0, int(row.get("candidate_idx_u32", 0)))),
@@ -1716,6 +1788,67 @@ def _write_candidate_precheck_receipt(
                         max_items_u32=2,
                     ),
                     "precheck_decision_code": str(row.get("precheck_decision_code", "")).strip(),
+                    "expected_wiring_delta_v1": _forced_heavy_expected_wiring_delta_v1(
+                        archetype_id=(
+                            str(row.get("archetype_id", "")).strip()
+                            if isinstance(row.get("archetype_id"), str) and str(row.get("archetype_id", "")).strip()
+                            else None
+                        )
+                    ),
+                    "observed_wiring_delta_v1": (
+                        {
+                            "wiring_class_ok_b": (
+                                bool(row.get("observed_wiring_delta_v1", {}).get("wiring_class_ok_b"))
+                                if isinstance(row.get("observed_wiring_delta_v1"), dict)
+                                and row.get("observed_wiring_delta_v1", {}).get("wiring_class_ok_b") is not None
+                                else None
+                            ),
+                            "call_edges_changed_b": (
+                                bool(row.get("observed_wiring_delta_v1", {}).get("call_edges_changed_b"))
+                                if isinstance(row.get("observed_wiring_delta_v1"), dict)
+                                and row.get("observed_wiring_delta_v1", {}).get("call_edges_changed_b") is not None
+                                else None
+                            ),
+                            "control_flow_changed_b": (
+                                bool(row.get("observed_wiring_delta_v1", {}).get("control_flow_changed_b"))
+                                if isinstance(row.get("observed_wiring_delta_v1"), dict)
+                                and row.get("observed_wiring_delta_v1", {}).get("control_flow_changed_b") is not None
+                                else None
+                            ),
+                            "data_flow_changed_b": (
+                                bool(row.get("observed_wiring_delta_v1", {}).get("data_flow_changed_b"))
+                                if isinstance(row.get("observed_wiring_delta_v1"), dict)
+                                and row.get("observed_wiring_delta_v1", {}).get("data_flow_changed_b") is not None
+                                else None
+                            ),
+                            "failed_threshold_code": (
+                                str(row.get("observed_wiring_delta_v1", {}).get("failed_threshold_code"))
+                                if isinstance(row.get("observed_wiring_delta_v1"), dict)
+                                and isinstance(row.get("observed_wiring_delta_v1", {}).get("failed_threshold_code"), str)
+                                and str(row.get("observed_wiring_delta_v1", {}).get("failed_threshold_code")).strip()
+                                else None
+                            ),
+                        }
+                        if isinstance(row.get("observed_wiring_delta_v1"), dict)
+                        else _forced_heavy_observed_wiring_delta_v1(
+                            cert=(dict(row.get("nontriviality_cert_v1")) if isinstance(row.get("nontriviality_cert_v1"), dict) else None)
+                        )
+                    ),
+                    "predicted_hard_task_delta_q32": (
+                        int(row.get("predicted_hard_task_delta_q32"))
+                        if isinstance(row.get("predicted_hard_task_delta_q32"), int)
+                        else None
+                    ),
+                    "predicted_hard_task_baseline_score_q32": (
+                        int(row.get("predicted_hard_task_baseline_score_q32"))
+                        if isinstance(row.get("predicted_hard_task_baseline_score_q32"), int)
+                        else None
+                    ),
+                    "predicted_hard_task_patched_score_q32": (
+                        int(row.get("predicted_hard_task_patched_score_q32"))
+                        if isinstance(row.get("predicted_hard_task_patched_score_q32"), int)
+                        else None
+                    ),
                 }
                 for row in final_candidate_rows_v1
                 if isinstance(row, dict)
@@ -1933,13 +2066,24 @@ def main() -> None:
     emitted_ccaps: list[dict[str, Any]] = []
     forced_heavy_b = False
     forced_wiring_locus_relpath: str | None = None
+    forced_heavy_debug_by_candidate_idx: dict[int, dict[str, Any]] = {}
 
     def _flush_candidate_precheck() -> None:
         nonlocal precheck_written_b
         if precheck_written_b:
             return
+        final_candidate_rows_v1: list[dict[str, Any]] = []
+        for row in precheck_rows:
+            if not isinstance(row, dict):
+                continue
+            row_copy = dict(row)
+            candidate_idx_u32 = int(max(0, int(row_copy.get("candidate_idx_u32", 0))))
+            debug_row = forced_heavy_debug_by_candidate_idx.get(candidate_idx_u32)
+            if isinstance(debug_row, dict):
+                row_copy.update(dict(debug_row))
+            final_candidate_rows_v1.append(row_copy)
         final_candidate_rows_v1 = sorted(
-            [dict(row) for row in precheck_rows if isinstance(row, dict)],
+            final_candidate_rows_v1,
             key=lambda row: int(max(0, int(row.get("candidate_idx_u32", 0)))),
         )
         _write_candidate_precheck_receipt(
@@ -1951,6 +2095,7 @@ def main() -> None:
             candidates=precheck_rows,
             forced_heavy_b=bool(forced_heavy_b),
             wiring_locus_relpath=(str(forced_wiring_locus_relpath) if forced_wiring_locus_relpath else None),
+            expected_wiring_delta_v1=_forced_heavy_expected_wiring_delta_v1(archetype_id=None),
             final_candidate_rows_v1=final_candidate_rows_v1,
         )
         _write_site_not_found_repro(
@@ -2027,7 +2172,7 @@ def main() -> None:
             except Exception:
                 forced_wiring_locus_relpath = None
         if forced_heavy_b:
-            forced_templates = [template_id for template_id in _FORCED_HEAVY_TEMPLATE_IDS if template_id in _SUPPORTED_TEMPLATE_IDS]
+            forced_templates = [template_id for template_id in FORCED_HEAVY_TEMPLATE_POOL_V1 if template_id in _SUPPORTED_TEMPLATE_IDS]
             if not forced_templates:
                 raise _invalid("SCHEMA_FAIL")
             allowed_templates = sorted(set(forced_templates))
@@ -2139,18 +2284,26 @@ def main() -> None:
                     candidate_idx_u32=int(candidate_idx),
                     archetype_id=archetype_id,
                 )
-                if not target_candidates:
+                if (
+                    not wiring_locus_available_b
+                    and (
+                        not target_candidates
+                        or not isinstance(target_candidates[0], str)
+                        or not str(target_candidates[0]).strip()
+                    )
+                ):
                     continue
-                row_target_relpaths = (
-                    [str(target_candidates[0]), str(forced_wiring_locus_relpath)]
-                    if wiring_locus_available_b and isinstance(forced_wiring_locus_relpath, str) and forced_wiring_locus_relpath
-                    else [str(target_candidates[0])]
-                )
+                if wiring_locus_available_b and isinstance(forced_wiring_locus_relpath, str) and forced_wiring_locus_relpath:
+                    primary_target_relpath = str(forced_wiring_locus_relpath)
+                    row_target_relpaths = [str(forced_wiring_locus_relpath)]
+                else:
+                    primary_target_relpath = str(target_candidates[0])
+                    row_target_relpaths = [str(target_candidates[0])]
                 planned_candidates.append(
                     {
                         "bucket": "grow",
                         "template_id": "CODE_REWRITE_AST",
-                        "target_relpath": str(target_candidates[0]),
+                        "target_relpath": primary_target_relpath,
                         "target_relpaths": _canonical_target_relpaths(target_relpaths=row_target_relpaths, max_items_u32=2),
                         "target_candidates": [str(row) for row in target_candidates],
                         "archetype_id": str(archetype_id),
@@ -2369,6 +2522,14 @@ def main() -> None:
                 else [target]
             )
             if forced_heavy_b:
+                forced_heavy_debug_by_candidate_idx[int(idx)] = {
+                    "expected_wiring_delta_v1": _forced_heavy_expected_wiring_delta_v1(archetype_id=archetype_id),
+                    "observed_wiring_delta_v1": None,
+                    "predicted_hard_task_delta_q32": None,
+                    "predicted_hard_task_baseline_score_q32": None,
+                    "predicted_hard_task_patched_score_q32": None,
+                }
+            if forced_heavy_b:
                 print(
                     json.dumps(
                         {
@@ -2404,7 +2565,7 @@ def main() -> None:
                     )
                 )
                 continue
-            if forced_heavy_b and template_id not in _FORCED_HEAVY_TEMPLATE_IDS:
+            if forced_heavy_b and template_id not in FORCED_HEAVY_TEMPLATE_POOL_V1:
                 precheck_rows.append(
                     _candidate_precheck_row(
                         candidate_idx_u32=idx,
@@ -2576,7 +2737,11 @@ def main() -> None:
                 archetype_id=archetype_id,
             )
             if forced_heavy_b:
-                if not bool((nontriviality_cert_v1 or {}).get("wiring_class_ok_b", False)):
+                forced_heavy_debug = forced_heavy_debug_by_candidate_idx.setdefault(int(idx), {})
+                forced_heavy_debug["observed_wiring_delta_v1"] = _forced_heavy_observed_wiring_delta_v1(
+                    cert=nontriviality_cert_v1
+                )
+                if not _forced_heavy_wiring_evidence_ok(cert=nontriviality_cert_v1):
                     precheck_rows.append(
                         _candidate_precheck_row(
                             candidate_idx_u32=idx,
@@ -2585,7 +2750,7 @@ def main() -> None:
                             target_relpath=target,
                             target_relpaths=selected_target_relpaths,
                             selected_for_ccap_b=False,
-                            precheck_decision_code="DROPPED_INSUFFICIENT_WIRING_DELTA",
+                            precheck_decision_code="DROPPED_FORCED_HEAVY_NO_WIRING_EVIDENCE",
                             patch_sha256=patch_sha256,
                             ccap_id=None,
                             archetype_id=archetype_id,
@@ -2612,8 +2777,52 @@ def main() -> None:
                     )
                     global_slot += 1
                     continue
+                try:
+                    predicted_hard_task = evaluate_hard_task_patch_delta_v1(
+                        repo_root=repo_root,
+                        patch_bytes=patch_bytes,
+                    )
+                except Exception:  # noqa: BLE001
+                    predicted_hard_task = {
+                        "predicted_delta_total_q32": 0,
+                        "baseline_total_score_q32": 0,
+                        "patched_total_score_q32": 0,
+                    }
+                forced_heavy_debug["predicted_hard_task_delta_q32"] = int(
+                    predicted_hard_task.get("predicted_delta_total_q32", 0)
+                )
+                forced_heavy_debug["predicted_hard_task_baseline_score_q32"] = int(
+                    predicted_hard_task.get("baseline_total_score_q32", 0)
+                )
+                forced_heavy_debug["predicted_hard_task_patched_score_q32"] = int(
+                    predicted_hard_task.get("patched_total_score_q32", 0)
+                )
+                if int(predicted_hard_task.get("predicted_delta_total_q32", 0)) <= 0:
+                    precheck_rows.append(
+                        _candidate_precheck_row(
+                            candidate_idx_u32=idx,
+                            bucket=bucket,
+                            template_id=template_id,
+                            target_relpath=target,
+                            target_relpaths=selected_target_relpaths,
+                            selected_for_ccap_b=False,
+                            precheck_decision_code="DROPPED_FORCED_HEAVY_PREDICTED_NO_HARD_GAIN",
+                            patch_sha256=patch_sha256,
+                            ccap_id=None,
+                            archetype_id=archetype_id,
+                            nontriviality_cert_v1=nontriviality_cert_v1,
+                        )
+                    )
+                    global_slot += 1
+                    continue
             target_key = _target_relpaths_key(target_relpaths=selected_target_relpaths)
-            if patch_sha256 in failed_patch_ban_by_target.get(target_key, set()):
+            skip_repeated_ban_for_forced_heavy_b = bool(
+                forced_heavy_b and template_id in FORCED_HEAVY_TEMPLATE_POOL_V1
+            )
+            if (
+                not skip_repeated_ban_for_forced_heavy_b
+                and patch_sha256 in failed_patch_ban_by_target.get(target_key, set())
+            ):
                 precheck_rows.append(
                     _candidate_precheck_row(
                         candidate_idx_u32=idx,
@@ -2632,7 +2841,11 @@ def main() -> None:
                 global_slot += 1
                 continue
             shape_id = _normalize_sha256((nontriviality_cert_v1 or {}).get("shape_id"))
-            if shape_id is not None and shape_id in failed_shape_ban_by_target.get(target_key, set()):
+            if (
+                not skip_repeated_ban_for_forced_heavy_b
+                and shape_id is not None
+                and shape_id in failed_shape_ban_by_target.get(target_key, set())
+            ):
                 precheck_rows.append(
                     _candidate_precheck_row(
                         candidate_idx_u32=idx,

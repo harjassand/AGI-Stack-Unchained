@@ -9,6 +9,7 @@ from cdel.v19_0.nontriviality_cert_v1 import (
     FORCED_HEAVY_ARCHETYPE_HELPER_REPLACE,
     build_nontriviality_cert_v1,
 )
+from cdel.v18_0.hard_task_suite_v1 import evaluate_hard_task_patch_delta_v1
 
 from tools.genesis_engine import ge_symbiotic_optimizer_v0_3 as ge_v0_3
 
@@ -270,3 +271,98 @@ def test_code_rewrite_ast_target_patchable_requires_return_site(tmp_path: Path) 
     )
     assert ge_v0_3._code_rewrite_ast_target_patchable(repo_root=tmp_path, target_relpath=rel_adapter) is False  # noqa: SLF001
     assert ge_v0_3._code_rewrite_ast_target_patchable(repo_root=tmp_path, target_relpath=rel_impl) is True  # noqa: SLF001
+
+
+def test_forced_heavy_template_pool_wiring_contract_v1(tmp_path: Path) -> None:
+    rel = "orchestrator/omega_v18_0/decider_v1.py"
+    target = tmp_path / rel
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_text(
+        "\n".join(
+            [
+                "def decide(x: int) -> int:",
+                "    return x + 1",
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    for template_id in ge_v0_3.FORCED_HEAVY_TEMPLATE_POOL_V1:
+        for archetype_id in (
+            FORCED_HEAVY_ARCHETYPE_CALL_EDGE,
+            FORCED_HEAVY_ARCHETYPE_CONTROL_FLOW,
+            FORCED_HEAVY_ARCHETYPE_HELPER_REPLACE,
+        ):
+            patch = ge_v0_3._build_patch_bytes_for_template(  # noqa: SLF001
+                template_id=template_id,
+                target_relpath=rel,
+                target_relpaths=[rel],
+                marker=f"marker_{template_id}_{archetype_id}",
+                repo_root=tmp_path,
+                archetype_id=archetype_id,
+            )
+            cert = build_nontriviality_cert_v1(
+                repo_root=tmp_path,
+                patch_bytes=patch,
+                archetype_id=archetype_id,
+            )
+            assert cert["wiring_class_ok_b"] is True
+            assert any(
+                bool(cert.get(flag, False))
+                for flag in ("call_edges_changed_b", "control_flow_changed_b", "data_flow_changed_b")
+            )
+
+
+def test_forced_heavy_smoke_eval_predicts_hard_task_gain_v1(tmp_path: Path) -> None:
+    rel = "orchestrator/omega_v18_0/goal_synthesizer_v1.py"
+    target = tmp_path / rel
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_text(
+        "\n".join(
+            [
+                "import re",
+                "",
+                "_GOAL_ID_TOKEN_RE = re.compile(r\"[^a-z0-9_]+\")",
+                "",
+                "def _slug(value: str) -> str:",
+                "    out = _GOAL_ID_TOKEN_RE.sub(\"_\", str(value).strip().lower()).strip(\"_\")",
+                "    return out or \"x\"",
+                "",
+                "def _goal_id_for(priority_prefix: str, reason_slug: str, capability_id: str, tick_u64: int, suffix_u64: int = 0) -> str:",
+                "    cap_slug = _slug(capability_id)",
+                "    if priority_prefix == \"CORE\":",
+                "        base = f\"goal_self_optimize_core_00_{_slug(reason_slug)}_{int(tick_u64):06d}\"",
+                "    elif priority_prefix == \"00\":",
+                "        base = f\"goal_auto_00_issue_{_slug(reason_slug)}_{cap_slug}_{int(tick_u64):06d}\"",
+                "    elif priority_prefix == \"10\":",
+                "        base = f\"goal_auto_10_runaway_blocked_{cap_slug}_{int(tick_u64):06d}\"",
+                "    elif priority_prefix == \"20\":",
+                "        base = f\"goal_explore_20_family_{_slug(reason_slug)}_{cap_slug}_{int(tick_u64):06d}\"",
+                "    else:",
+                "        base = f\"goal_auto_90_queue_floor_{cap_slug}_{int(tick_u64):06d}\"",
+                "    if suffix_u64 <= 0:",
+                "        return base",
+                "    return f\"{base}_{int(suffix_u64):02d}\"",
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    patch_call_edge = ge_v0_3._build_code_rewrite_ast_patch(  # noqa: SLF001
+        target_relpath=rel,
+        marker="marker_call",
+        repo_root=tmp_path,
+        archetype_id=FORCED_HEAVY_ARCHETYPE_CALL_EDGE,
+    )
+    call_edge_delta = evaluate_hard_task_patch_delta_v1(repo_root=tmp_path, patch_bytes=patch_call_edge)
+    assert int(call_edge_delta["predicted_delta_total_q32"]) > 0
+
+    patch_control_flow = ge_v0_3._build_code_rewrite_ast_patch(  # noqa: SLF001
+        target_relpath=rel,
+        marker="marker_cf",
+        repo_root=tmp_path,
+        archetype_id=FORCED_HEAVY_ARCHETYPE_CONTROL_FLOW,
+    )
+    control_flow_delta = evaluate_hard_task_patch_delta_v1(repo_root=tmp_path, patch_bytes=patch_control_flow)
+    assert int(control_flow_delta["predicted_delta_total_q32"]) <= 0

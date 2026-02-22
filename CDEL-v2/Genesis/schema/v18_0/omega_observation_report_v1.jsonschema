@@ -67,6 +67,56 @@
         }
       }
     },
+    "hard_task_suite_v1": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema_name",
+        "schema_version",
+        "suite_hash",
+        "target_relpath",
+        "status",
+        "error_code",
+        "task_count_u32",
+        "tasks",
+        "total_score_q32"
+      ],
+      "properties": {
+        "schema_name": {"const": "hard_task_suite_v1"},
+        "schema_version": {"const": "v1"},
+        "suite_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+        "target_relpath": {"type": "string", "minLength": 1},
+        "status": {"type": "string", "enum": ["OK", "ERROR"]},
+        "error_code": {
+          "anyOf": [
+            {"type": "null"},
+            {"type": "string", "minLength": 1}
+          ]
+        },
+        "task_count_u32": {"type": "integer", "minimum": 0},
+        "tasks": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["task_id", "score_q32", "passed_u64", "total_u64", "error_code"],
+            "properties": {
+              "task_id": {"type": "string", "minLength": 1},
+              "score_q32": {"type": "integer", "minimum": 0},
+              "passed_u64": {"type": "integer", "minimum": 0},
+              "total_u64": {"type": "integer", "minimum": 0},
+              "error_code": {
+                "anyOf": [
+                  {"type": "null"},
+                  {"type": "string", "minLength": 1}
+                ]
+              }
+            }
+          }
+        },
+        "total_score_q32": {"type": "integer", "minimum": 0}
+      }
+    },
     "sources": {
       "type": "array",
       "items": {

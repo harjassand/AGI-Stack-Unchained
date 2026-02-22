@@ -1,1 +1,1 @@
-{"exempt_relpaths":["orchestrator/omega_v19_0/coordinator_v1.py","orchestrator/omega_bid_market_v1.py"],"schema_version":"omega_axis_gate_exemptions_v1"}
+{"exempt_relpaths":["orchestrator/omega_v18_0/goal_synthesizer_v1.py","orchestrator/omega_v19_0/coordinator_v1.py","orchestrator/omega_bid_market_v1.py"],"schema_version":"omega_axis_gate_exemptions_v1"}

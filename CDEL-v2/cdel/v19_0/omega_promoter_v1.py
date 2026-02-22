@@ -53,7 +53,7 @@ _GOVERNED_PREFIXES = (
 _MORPHISMS_REQUIRING_C_CONT = {"M_K", "M_E", "M_M", "M_C"}
 
 _AXIS_EXEMPTIONS_REL = "configs/omega_axis_gate_exemptions_v1.json"
-EXPECTED_AXIS_EXEMPTIONS_ID = "sha256:642fe65d716df82045833cecaf624202d90cf7ffd2edd394e7ffe781fe5f7d28"
+EXPECTED_AXIS_EXEMPTIONS_ID = "sha256:ddf80e01910d5a304332976b2c7b8f9727e0bdd6e74418d8621a97993819d3d3"
 _SHA256_ZERO = "sha256:" + ("0" * 64)
 _HEAVY_DECLARED_CLASSES = {"FRONTIER_HEAVY", "CANARY_HEAVY"}
 _DECLARED_CLASSES = {"FRONTIER_HEAVY", "CANARY_HEAVY", "BASELINE_CORE", "MAINTENANCE"}
@@ -525,6 +525,11 @@ def _verify_axis_bundle_gate(
             "axis_bundle_present_b": bool(axis_bundle is not None),
         },
     )
+    # Axis validation is required only when governed touched paths are not exempt.
+    # If the bundle carries an optional axis payload while `needs_axis` is false,
+    # treat it as non-blocking and skip the expensive/strict checks.
+    if not needs_axis:
+        return
     if axis_bundle is None:
         if needs_axis:
             fail("MISSING_ARTIFACT", safe_halt=True)

@@ -19,6 +19,11 @@ from .omega_common_v1 import (
     require_relpath,
     validate_schema,
 )
+from .hard_task_suite_v1 import (
+    HARD_TASK_METRIC_IDS,
+    evaluate_hard_task_suite_v1,
+    hard_task_metric_q32_by_id_from_suite,
+)
 from .omega_observer_index_v1 import load_index, maybe_update_entry, store_index
 
 _HEX64_RE = re.compile(r"^[0-9a-f]{64}$")
@@ -44,12 +49,7 @@ _NON_CARRY_SERIES_KEYS = {
     "cap_enabled_u64",
     "cap_activated_u64",
 }
-_HARD_TASK_METRIC_IDS: tuple[str, ...] = (
-    "hard_task_code_correctness_q32",
-    "hard_task_performance_q32",
-    "hard_task_reasoning_q32",
-    "hard_task_suite_score_q32",
-)
+_HARD_TASK_METRIC_IDS: tuple[str, ...] = tuple(HARD_TASK_METRIC_IDS)
 _LEGACY_SKILL_SOURCES: tuple[tuple[str, str, str, str], ...] = (
     (
         "omega_skill_transfer_report_v1",
@@ -1061,15 +1061,12 @@ def observe(
     maximize_science_q32 = _maximize_science_q32(science_q)
     maximize_speed_q32 = _maximize_speed_q32(previous_tick_total_ns_u64)
     code_success_rate_rat = dict(code_metrics["code_success_rate_rat"])
-    hard_task_code_correctness_q32 = rat_q32(
-        max(0, int(code_success_rate_rat.get("num_u64", 0))),
-        max(1, int(code_success_rate_rat.get("den_u64", 1))),
-    )
-    hard_task_performance_q32 = int(maximize_speed_q32)
-    hard_task_reasoning_q32 = int(maximize_science_q32)
-    hard_task_suite_score_q32 = int(
-        (int(hard_task_code_correctness_q32) + int(hard_task_performance_q32) + int(hard_task_reasoning_q32)) // 3
-    )
+    hard_task_suite_v1 = evaluate_hard_task_suite_v1(repo_root=root)
+    hard_task_metric_q32_by_id = hard_task_metric_q32_by_id_from_suite(suite_eval=hard_task_suite_v1)
+    hard_task_code_correctness_q32 = int(hard_task_metric_q32_by_id.get(_HARD_TASK_METRIC_IDS[0], 0))
+    hard_task_performance_q32 = int(hard_task_metric_q32_by_id.get(_HARD_TASK_METRIC_IDS[1], 0))
+    hard_task_reasoning_q32 = int(hard_task_metric_q32_by_id.get(_HARD_TASK_METRIC_IDS[2], 0))
+    hard_task_suite_score_q32 = int(hard_task_metric_q32_by_id.get(_HARD_TASK_METRIC_IDS[3], 0))
     hard_task_now_q32_by_metric = {
         _HARD_TASK_METRIC_IDS[0]: int(hard_task_code_correctness_q32),
         _HARD_TASK_METRIC_IDS[1]: int(hard_task_performance_q32),
@@ -1209,6 +1206,31 @@ def observe(
             "thermo_efficiency_q32": [dict(legacy_skill_metrics["thermo_efficiency_q32"])],
             "persistence_health_q32": [dict(legacy_skill_metrics["persistence_health_q32"])],
             "persistence_flags_u64": [int(legacy_skill_metrics["persistence_flags_u64"])],
+        },
+        "hard_task_suite_v1": {
+            "schema_name": str(hard_task_suite_v1.get("schema_name", "")),
+            "schema_version": str(hard_task_suite_v1.get("schema_version", "")),
+            "suite_hash": str(hard_task_suite_v1.get("suite_hash", "")),
+            "target_relpath": str(hard_task_suite_v1.get("target_relpath", "")),
+            "status": str(hard_task_suite_v1.get("status", "")),
+            "error_code": (
+                str(hard_task_suite_v1.get("error_code"))
+                if hard_task_suite_v1.get("error_code") is not None
+                else None
+            ),
+            "task_count_u32": int(max(0, int(hard_task_suite_v1.get("task_count_u32", 0)))),
+            "tasks": [
+                {
+                    "task_id": str(row.get("task_id", "")),
+                    "score_q32": int(max(0, int(row.get("score_q32", 0)))),
+                    "passed_u64": int(max(0, int(row.get("passed_u64", 0)))),
+                    "total_u64": int(max(0, int(row.get("total_u64", 0)))),
+                    "error_code": (str(row.get("error_code")) if row.get("error_code") is not None else None),
+                }
+                for row in (hard_task_suite_v1.get("tasks") if isinstance(hard_task_suite_v1.get("tasks"), list) else [])
+                if isinstance(row, dict)
+            ],
+            "total_score_q32": int(max(0, int(hard_task_suite_v1.get("total_score_q32", 0)))),
         },
         "sources": sources,
         "inputs_hashes": {

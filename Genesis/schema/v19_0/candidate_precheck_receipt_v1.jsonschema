@@ -82,6 +82,8 @@
               "DROPPED_FORCED_HEAVY_NONPY_TARGET",
               "DROPPED_REPEATED_FAILED_PATCH",
               "DROPPED_REPEATED_FAILED_SHAPE",
+              "DROPPED_FORCED_HEAVY_NO_WIRING_EVIDENCE",
+              "DROPPED_FORCED_HEAVY_PREDICTED_NO_HARD_GAIN",
               "DROPPED_INSUFFICIENT_WIRING_DELTA",
               "DROPPED_SITE_NOT_FOUND",
               "DROPPED_WIRING_LOCUS_UNAVAILABLE"
@@ -224,6 +226,7 @@
       "required": [
         "forced_heavy_b",
         "wiring_locus_relpath",
+        "expected_wiring_delta_v1",
         "final_candidate_rows_v1"
       ],
       "properties": {
@@ -233,6 +236,16 @@
             {"type": "string", "minLength": 1},
             {"type": "null"}
           ]
+        },
+        "expected_wiring_delta_v1": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["require_call_edges", "require_control_flow", "require_data_flow"],
+          "properties": {
+            "require_call_edges": {"type": "boolean"},
+            "require_control_flow": {"type": "boolean"},
+            "require_data_flow": {"type": "boolean"}
+          }
         },
         "final_candidate_rows_v1": {
           "type": "array",
@@ -244,7 +257,12 @@
               "template_id",
               "target_relpath",
               "target_relpaths",
-              "precheck_decision_code"
+              "precheck_decision_code",
+              "expected_wiring_delta_v1",
+              "observed_wiring_delta_v1",
+              "predicted_hard_task_delta_q32",
+              "predicted_hard_task_baseline_score_q32",
+              "predicted_hard_task_patched_score_q32"
             ],
             "properties": {
               "candidate_idx_u32": {"type": "integer", "minimum": 0},
@@ -272,16 +290,49 @@
                   "DROPPED_FORCED_HEAVY_NONPY_TARGET",
                   "DROPPED_REPEATED_FAILED_PATCH",
                   "DROPPED_REPEATED_FAILED_SHAPE",
+                  "DROPPED_FORCED_HEAVY_NO_WIRING_EVIDENCE",
+                  "DROPPED_FORCED_HEAVY_PREDICTED_NO_HARD_GAIN",
                   "DROPPED_INSUFFICIENT_WIRING_DELTA",
                   "DROPPED_SITE_NOT_FOUND",
                   "DROPPED_WIRING_LOCUS_UNAVAILABLE"
                 ]
+              },
+              "expected_wiring_delta_v1": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["require_call_edges", "require_control_flow", "require_data_flow"],
+                "properties": {
+                  "require_call_edges": {"type": "boolean"},
+                  "require_control_flow": {"type": "boolean"},
+                  "require_data_flow": {"type": "boolean"}
+                }
+              },
+              "observed_wiring_delta_v1": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "wiring_class_ok_b",
+                  "call_edges_changed_b",
+                  "control_flow_changed_b",
+                  "data_flow_changed_b",
+                  "failed_threshold_code"
+                ],
+                "properties": {
+                  "wiring_class_ok_b": {"anyOf": [{"type": "boolean"}, {"type": "null"}]},
+                  "call_edges_changed_b": {"anyOf": [{"type": "boolean"}, {"type": "null"}]},
+                  "control_flow_changed_b": {"anyOf": [{"type": "boolean"}, {"type": "null"}]},
+                  "data_flow_changed_b": {"anyOf": [{"type": "boolean"}, {"type": "null"}]},
+                  "failed_threshold_code": {"anyOf": [{"type": "string", "pattern": "^[A-Z0-9_]+$"}, {"type": "null"}]}
+                }
+              },
+              "predicted_hard_task_delta_q32": {"anyOf": [{"type": "integer"}, {"type": "null"}]},
+              "predicted_hard_task_baseline_score_q32": {"anyOf": [{"type": "integer", "minimum": 0}, {"type": "null"}]},
+              "predicted_hard_task_patched_score_q32": {"anyOf": [{"type": "integer", "minimum": 0}, {"type": "null"}]}
               }
             }
           }
         }
       }
-    }
   },
   "allOf": [
     {

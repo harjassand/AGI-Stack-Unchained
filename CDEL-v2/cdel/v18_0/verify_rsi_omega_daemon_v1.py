@@ -39,6 +39,11 @@ from .omega_policy_ir_v1 import load_policy
 from .omega_promotion_bundle_v1 import extract_touched_paths, load_bundle
 from .omega_registry_v2 import load_registry
 from .omega_test_plan_v1 import campaign_requires_test_plan_receipt, load_test_plan_receipt
+from .hard_task_suite_v1 import (
+    HARD_TASK_METRIC_IDS as HARD_TASK_SUITE_METRIC_IDS,
+    evaluate_hard_task_suite_v1,
+    hard_task_metric_q32_by_id_from_suite,
+)
 from .omega_runaway_v1 import (
     advance_runaway_state,
     load_latest_runaway_state,
@@ -168,12 +173,7 @@ _OBS_NON_CARRY_SERIES_KEYS = {
     "cap_enabled_u64",
     "cap_activated_u64",
 }
-_HARD_TASK_METRIC_IDS: tuple[str, ...] = (
-    "hard_task_code_correctness_q32",
-    "hard_task_performance_q32",
-    "hard_task_reasoning_q32",
-    "hard_task_suite_score_q32",
-)
+_HARD_TASK_METRIC_IDS: tuple[str, ...] = tuple(HARD_TASK_SUITE_METRIC_IDS)
 _GE_CAMPAIGN_ID = "rsi_ge_symbiotic_optimizer_sh1_v0_1"
 _CAPABILITY_FRONTIER_WINDOW_U64 = 512
 _HEX64 = set("0123456789abcdef")
@@ -1405,15 +1405,12 @@ def _recompute_observation_from_sources(
     capability_expansion_q32 = int(int(capability_frontier["cap_frontier_u64"]) << 32)
     maximize_science_q32 = _maximize_science_q32(int(by_schema["sas_science_promotion_bundle_v1"]))
     maximize_speed_q32 = _maximize_speed_q32(int(previous_tick_total_ns_u64))
-    hard_task_code_correctness_q32 = rat_q32(
-        max(0, int(code_success_rate_rat.get("num_u64", 0))),
-        max(1, int(code_success_rate_rat.get("den_u64", 1))),
-    )
-    hard_task_performance_q32 = int(maximize_speed_q32)
-    hard_task_reasoning_q32 = int(maximize_science_q32)
-    hard_task_suite_score_q32 = int(
-        (int(hard_task_code_correctness_q32) + int(hard_task_performance_q32) + int(hard_task_reasoning_q32)) // 3
-    )
+    hard_task_suite_v1 = evaluate_hard_task_suite_v1(repo_root=root)
+    hard_task_metric_q32_by_id = hard_task_metric_q32_by_id_from_suite(suite_eval=hard_task_suite_v1)
+    hard_task_code_correctness_q32 = int(hard_task_metric_q32_by_id.get(_HARD_TASK_METRIC_IDS[0], 0))
+    hard_task_performance_q32 = int(hard_task_metric_q32_by_id.get(_HARD_TASK_METRIC_IDS[1], 0))
+    hard_task_reasoning_q32 = int(hard_task_metric_q32_by_id.get(_HARD_TASK_METRIC_IDS[2], 0))
+    hard_task_suite_score_q32 = int(hard_task_metric_q32_by_id.get(_HARD_TASK_METRIC_IDS[3], 0))
     hard_task_now_q32_by_metric = {
         _HARD_TASK_METRIC_IDS[0]: int(hard_task_code_correctness_q32),
         _HARD_TASK_METRIC_IDS[1]: int(hard_task_performance_q32),
@@ -1547,6 +1544,32 @@ def _recompute_observation_from_sources(
             "objectives_hash": objectives_hash,
         },
     }
+    if observation_payload.get("hard_task_suite_v1") is not None:
+        payload["hard_task_suite_v1"] = {
+            "schema_name": str(hard_task_suite_v1.get("schema_name", "")),
+            "schema_version": str(hard_task_suite_v1.get("schema_version", "")),
+            "suite_hash": str(hard_task_suite_v1.get("suite_hash", "")),
+            "target_relpath": str(hard_task_suite_v1.get("target_relpath", "")),
+            "status": str(hard_task_suite_v1.get("status", "")),
+            "error_code": (
+                str(hard_task_suite_v1.get("error_code"))
+                if hard_task_suite_v1.get("error_code") is not None
+                else None
+            ),
+            "task_count_u32": int(max(0, int(hard_task_suite_v1.get("task_count_u32", 0)))),
+            "tasks": [
+                {
+                    "task_id": str(row.get("task_id", "")),
+                    "score_q32": int(max(0, int(row.get("score_q32", 0)))),
+                    "passed_u64": int(max(0, int(row.get("passed_u64", 0)))),
+                    "total_u64": int(max(0, int(row.get("total_u64", 0)))),
+                    "error_code": (str(row.get("error_code")) if row.get("error_code") is not None else None),
+                }
+                for row in (hard_task_suite_v1.get("tasks") if isinstance(hard_task_suite_v1.get("tasks"), list) else [])
+                if isinstance(row, dict)
+            ],
+            "total_score_q32": int(max(0, int(hard_task_suite_v1.get("total_score_q32", 0)))),
+        }
     observed_metrics = observation_payload.get("metrics")
     observed_metric_series = observation_payload.get("metric_series")
     if not isinstance(observed_metrics, dict) or not isinstance(observed_metric_series, dict):

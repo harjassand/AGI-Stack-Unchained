@@ -1980,6 +1980,41 @@ def _verify_candidate_precheck_for_dispatch(*, state_root: Path, dispatch_payloa
             else:
                 normalized_candidates.append(row)
         payload_for_validation["candidates"] = normalized_candidates
+    forced_heavy_context = payload_for_validation.get("forced_heavy_context_v1")
+    if isinstance(forced_heavy_context, dict):
+        context_norm = dict(forced_heavy_context)
+        context_norm.setdefault(
+            "expected_wiring_delta_v1",
+            {"require_call_edges": False, "require_control_flow": False, "require_data_flow": False},
+        )
+        final_rows = context_norm.get("final_candidate_rows_v1")
+        normalized_final_rows: list[Any] = []
+        if isinstance(final_rows, list):
+            for row in final_rows:
+                if isinstance(row, dict):
+                    row_norm = dict(row)
+                    row_norm.setdefault(
+                        "expected_wiring_delta_v1",
+                        {"require_call_edges": False, "require_control_flow": False, "require_data_flow": False},
+                    )
+                    row_norm.setdefault(
+                        "observed_wiring_delta_v1",
+                        {
+                            "wiring_class_ok_b": None,
+                            "call_edges_changed_b": None,
+                            "control_flow_changed_b": None,
+                            "data_flow_changed_b": None,
+                            "failed_threshold_code": None,
+                        },
+                    )
+                    row_norm.setdefault("predicted_hard_task_delta_q32", None)
+                    row_norm.setdefault("predicted_hard_task_baseline_score_q32", None)
+                    row_norm.setdefault("predicted_hard_task_patched_score_q32", None)
+                    normalized_final_rows.append(row_norm)
+                else:
+                    normalized_final_rows.append(row)
+            context_norm["final_candidate_rows_v1"] = normalized_final_rows
+        payload_for_validation["forced_heavy_context_v1"] = context_norm
     validate_schema_v19(payload_for_validation, "candidate_precheck_receipt_v1")
 
     if not bool(payload.get("dispatch_happened_b", False)):
@@ -2014,6 +2049,8 @@ def _verify_candidate_precheck_for_dispatch(*, state_root: Path, dispatch_payloa
         cert_required_decisions = {
             "SELECTED_FOR_CCAP",
             "DROPPED_INSUFFICIENT_WIRING_DELTA",
+            "DROPPED_FORCED_HEAVY_NO_WIRING_EVIDENCE",
+            "DROPPED_FORCED_HEAVY_PREDICTED_NO_HARD_GAIN",
             "DROPPED_REPEATED_FAILED_PATCH",
             "DROPPED_REPEATED_FAILED_SHAPE",
         }
@@ -2028,6 +2065,17 @@ def _verify_candidate_precheck_for_dispatch(*, state_root: Path, dispatch_payloa
             archetype_pass = cert.get("archetype_pass_b")
             if wiring_ok_b and (archetype_pass is not False):
                 fail_v18("NONDETERMINISTIC")
+        if decision == "DROPPED_FORCED_HEAVY_NO_WIRING_EVIDENCE" and isinstance(cert, dict):
+            wiring_ok_b = bool(cert.get("wiring_class_ok_b", False))
+            structural_present_b = bool(
+                bool(cert.get("call_edges_changed_b", False))
+                or bool(cert.get("control_flow_changed_b", False))
+                or bool(cert.get("data_flow_changed_b", False))
+            )
+            if wiring_ok_b and structural_present_b:
+                fail_v18("NONDETERMINISTIC")
+        if decision == "DROPPED_FORCED_HEAVY_PREDICTED_NO_HARD_GAIN" and not forced_heavy_claimed_b:
+            fail_v18("NONDETERMINISTIC")
         if forced_heavy_claimed_b and bool(row.get("selected_for_ccap_b", False)):
             target_relpaths = row.get("target_relpaths")
             if isinstance(target_relpaths, list):

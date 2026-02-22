@@ -127,3 +127,7 @@ def test_observer_uses_index_fastpath(tmp_path, monkeypatch) -> None:
     assert "hard_task_reasoning_q32" in report["metrics"]
     assert "hard_task_suite_score_q32" in report["metrics"]
     assert int(report["metrics"]["hard_task_gain_count_u64"]) == 0
+    hard_task_suite = report.get("hard_task_suite_v1")
+    assert isinstance(hard_task_suite, dict)
+    assert str(hard_task_suite.get("suite_hash", "")).startswith("sha256:")
+    assert int(hard_task_suite.get("total_score_q32", 0)) == int(report["metrics"]["hard_task_suite_score_q32"]["q"])

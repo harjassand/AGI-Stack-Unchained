@@ -90,6 +90,7 @@ ENV_ALLOWLIST = (
     "OMEGA_LONG_VALIDATE_FORCED_HEAVY_SH1_MIN_TICKS_U64",
     "OMEGA_PREMARATHON_V63",
     "OMEGA_MILESTONE_FORCE_SH1_FRONTIER_B",
+    "OMEGA_MILESTONE_FORCE_SH1_FRONTIER_UNTIL_TICK_U64",
     "OMEGA_RETENTION_PRUNE_CCAP_EK_RUNS_B",
     "OMEGA_SH1_FORCED_HEAVY_B",
     "OMEGA_SH1_FORCED_DEBT_KEY",
@@ -660,6 +661,16 @@ def _ccap_refutation_fields(*, ccap_payload: dict[str, Any] | None, state_dir: P
         if (not summary) and cert_detail:
             summary = cert_detail
     return (code or None), (summary or None)
+
+
+def _extract_ccap_u64(value: dict[str, Any] | None, key: str) -> int:
+    if not isinstance(value, dict):
+        return 0
+    candidate = value.get(key, 0)
+    try:
+        return int(candidate)
+    except Exception:
+        return 0
 
 
 def _latest_state_verifier_failure_detail_hash(state_dir: Path) -> str | None:
@@ -1360,6 +1371,8 @@ def run_tick(
         ccap_payload=ccap_payload,
         state_dir=state_dir,
     )
+    ccap_cost_vector = (ccap_payload or {}).get("cost_vector")
+    ccap_effective_budget = (ccap_payload or {}).get("effective_budget")
     axis_gate_fields = _axis_gate_index_fields(
         state_dir=state_dir,
         promotion_reason_code=(str(promotion_reason_value) if promotion_reason_value is not None else None),
@@ -1493,6 +1506,79 @@ def run_tick(
         "ccap_determinism_check": (ccap_payload or {}).get("determinism_check"),
         "ccap_refutation_code": ccap_refutation_code,
         "ccap_refutation_summary": ccap_refutation_summary,
+        "ccap_first_refutation_code": ccap_refutation_code,
+        "ccap_cost_vector_cpu_ms": _extract_ccap_u64(
+            ccap_cost_vector if isinstance(ccap_cost_vector, dict) else None,
+            "cpu_ms",
+        ),
+        "ccap_cost_vector_wall_ms": _extract_ccap_u64(
+            ccap_cost_vector if isinstance(ccap_cost_vector, dict) else None,
+            "wall_ms",
+        ),
+        "ccap_cost_vector_mem_mb": _extract_ccap_u64(
+            ccap_cost_vector if isinstance(ccap_cost_vector, dict) else None,
+            "mem_mb",
+        ),
+        "ccap_cost_vector_disk_mb": _extract_ccap_u64(
+            ccap_cost_vector if isinstance(ccap_cost_vector, dict) else None,
+            "disk_mb",
+        ),
+        "ccap_cost_vector_fds_u64": _extract_ccap_u64(
+            ccap_cost_vector if isinstance(ccap_cost_vector, dict) else None,
+            "fds",
+        ),
+        "ccap_cost_vector_procs_u64": _extract_ccap_u64(
+            ccap_cost_vector if isinstance(ccap_cost_vector, dict) else None,
+            "procs",
+        ),
+        "ccap_cost_vector_threads_u64": _extract_ccap_u64(
+            ccap_cost_vector if isinstance(ccap_cost_vector, dict) else None,
+            "threads",
+        ),
+        "ccap_effective_budget_cpu_ms_max": _extract_ccap_u64(
+            ccap_effective_budget.get("limits") if isinstance(ccap_effective_budget, dict) else None,
+            "cpu_ms_max",
+        ),
+        "ccap_effective_budget_wall_ms_max": _extract_ccap_u64(
+            ccap_effective_budget.get("limits") if isinstance(ccap_effective_budget, dict) else None,
+            "wall_ms_max",
+        ),
+        "ccap_effective_budget_mem_mb_max": _extract_ccap_u64(
+            ccap_effective_budget.get("limits") if isinstance(ccap_effective_budget, dict) else None,
+            "mem_mb_max",
+        ),
+        "ccap_effective_budget_disk_mb_max": _extract_ccap_u64(
+            ccap_effective_budget.get("limits") if isinstance(ccap_effective_budget, dict) else None,
+            "disk_mb_max",
+        ),
+        "ccap_effective_budget_fds_max": _extract_ccap_u64(
+            ccap_effective_budget.get("limits") if isinstance(ccap_effective_budget, dict) else None,
+            "fds_max",
+        ),
+        "ccap_effective_budget_procs_max": _extract_ccap_u64(
+            ccap_effective_budget.get("limits") if isinstance(ccap_effective_budget, dict) else None,
+            "procs_max",
+        ),
+        "ccap_effective_budget_threads_max": _extract_ccap_u64(
+            ccap_effective_budget.get("limits") if isinstance(ccap_effective_budget, dict) else None,
+            "threads_max",
+        ),
+        "ccap_effective_budget_tuple_disk_mb_max": _extract_ccap_u64(
+            ccap_effective_budget.get("tuple") if isinstance(ccap_effective_budget, dict) else None,
+            "disk_mb_max",
+        ),
+        "ccap_effective_budget_tuple_time_ms_max": _extract_ccap_u64(
+            ccap_effective_budget.get("tuple") if isinstance(ccap_effective_budget, dict) else None,
+            "time_ms_max",
+        ),
+        "ccap_effective_budget_tuple_stage_cost_budget": _extract_ccap_u64(
+            ccap_effective_budget.get("tuple") if isinstance(ccap_effective_budget, dict) else None,
+            "stage_cost_budget",
+        ),
+        "ccap_effective_budget_tuple_artifact_bytes_max": _extract_ccap_u64(
+            ccap_effective_budget.get("tuple") if isinstance(ccap_effective_budget, dict) else None,
+            "artifact_bytes_max",
+        ),
         "hard_task_score_q32": int(hard_task_score_q32),
         "hard_task_prev_score_q32": int(hard_task_prev_score_q32),
         "hard_task_baseline_init_b": bool(hard_task_baseline_init_b),
@@ -1703,6 +1789,14 @@ def run_loop(
         _attach_axis_gate_telemetry(rows=live_rows, row=row)
         _attach_heavy_success_telemetry(rows=live_rows, row=row)
 
+        if hard_stop_reason_code is None and row.get("heavy_promoted_b") is True:
+            hard_stop_reason_code = "HEAVY_PROMOTED"
+            hard_stop_detail = {
+                "tick_u64": tick_value,
+                "ccap_decision": row.get("ccap_decision"),
+                "ccap_refutation_code": row.get("ccap_refutation_code"),
+            }
+
         frontier_gate_pass_raw = row.get("lane_frontier_gate_pass_b")
         frontier_gate_pass = frontier_gate_pass_raw if isinstance(frontier_gate_pass_raw, bool) else None
         budget_count = int(max(0, int(row.get("lane_budget_exhaust_count_u64") or 0)))
@@ -1758,6 +1852,20 @@ def run_loop(
                         **summary,
                         "missing_conditions": [str(item) for item in missing],
                     }
+
+        if bool(row.get("heavy_promoted_b")):
+            hard_stop_reason_code = "HEAVY_PROMOTED"
+            hard_stop_detail = {
+                "tick_u64": tick_value,
+                "ccap_decision": row.get("ccap_decision"),
+                "ccap_refutation_code": row.get("ccap_refutation_code"),
+            }
+        elif hard_stop_reason_code is None and str(row.get("ccap_decision") or "").strip().upper() == "ACCEPT":
+            hard_stop_reason_code = "CCAP_ACCEPT"
+            hard_stop_detail = {
+                "tick_u64": tick_value,
+                "ccap_refutation_code": row.get("ccap_refutation_code"),
+            }
 
         row["hard_stop_reason_code"] = hard_stop_reason_code
         if hard_stop_reason_code is not None:

@@ -179,6 +179,7 @@ _FORCED_HEAVY_ENV_KEY = "OMEGA_SH1_FORCED_HEAVY_B"
 _FORCED_DEBT_KEY_ENV_KEY = "OMEGA_SH1_FORCED_DEBT_KEY"
 _FORCED_WIRING_LOCUS_ENV_KEY = "OMEGA_SH1_WIRING_LOCUS_RELPATH"
 _MILESTONE_FORCE_SH1_FRONTIER_ENV_KEY = "OMEGA_MILESTONE_FORCE_SH1_FRONTIER_B"
+_MILESTONE_FORCE_SH1_FRONTIER_UNTIL_TICK_U64_ENV_KEY = "OMEGA_MILESTONE_FORCE_SH1_FRONTIER_UNTIL_TICK_U64"
 _RETENTION_PRUNE_CCAP_EK_RUNS_ENV_KEY = "OMEGA_RETENTION_PRUNE_CCAP_EK_RUNS_B"
 _LANE_RECEIPT_FINAL_NAME = "lane_receipt_final.long_run_lane_v1.json"
 _FAILED_PATCH_BAN_ENV_KEY = "OMEGA_SH1_FAILED_PATCH_BAN_JSON"
@@ -240,6 +241,12 @@ def _deterministic_timing_enabled() -> bool:
 def _env_bool(name: str, *, default: bool = False) -> bool:
     raw = str(os.environ.get(name, "1" if default else "0")).strip().lower()
     return raw in {"1", "true", "yes", "on"}
+
+
+def _env_u64(name: str, *, default: int, minimum: int = 0) -> int:
+    raw = str(os.environ.get(name, str(int(default)))).strip()
+    value = int(raw)
+    return int(max(int(minimum), value))
 
 
 def _premarathon_v63_enabled() -> bool:
@@ -4429,6 +4436,11 @@ def tick_once(
         anti_monopoly_cooldown_u64 = int(_DEFAULT_ANTI_MONOPOLY_COOLDOWN_U64)
         milestone_force_sh1_frontier_b = _env_bool(_MILESTONE_FORCE_SH1_FRONTIER_ENV_KEY, default=False)
         prune_ccap_ek_runs_b = _env_bool(_RETENTION_PRUNE_CCAP_EK_RUNS_ENV_KEY, default=False)
+        milestone_force_sh1_frontier_until_tick_u64 = _env_u64(
+            _MILESTONE_FORCE_SH1_FRONTIER_UNTIL_TICK_U64_ENV_KEY,
+            default=40,
+            minimum=0,
+        )
         frontier_capability_ids_for_debt: list[str] = []
         if long_run_profile is not None:
             long_run_eval_kernel_payload, long_run_eval_suite_payload = _load_long_run_eval_assets(
@@ -4513,6 +4525,11 @@ def tick_once(
             retention_cfg = long_run_profile.get("retention")
             if isinstance(retention_cfg, dict):
                 prune_ccap_ek_runs_b = bool(retention_cfg.get("prune_ccap_ek_runs_b", prune_ccap_ek_runs_b))
+
+        milestone_force_sh1_frontier_b = bool(
+            milestone_force_sh1_frontier_b
+            and int(tick_u64) <= int(milestone_force_sh1_frontier_until_tick_u64)
+        )
 
         bid_market_cfg, bid_market_cfg_hash = load_optional_bid_market_config(config_dir)
         market_enabled = bid_market_enabled(bid_market_cfg)

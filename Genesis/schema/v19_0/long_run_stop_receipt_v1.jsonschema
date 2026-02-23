@@ -24,6 +24,8 @@
       "type": "string",
       "enum": [
         "STATE_VERIFIER_INVALID",
+        "HEAVY_PROMOTED",
+        "CCAP_ACCEPT",
         "HEALTH_GATE_BUDGET_EXHAUST",
         "HEALTH_GATE_ROUTE_DISABLED",
         "HEALTH_GATE_BUDGET_AND_ROUTE",

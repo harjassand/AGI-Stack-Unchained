@@ -13,7 +13,7 @@ from pathlib import Path
 from typing import Any
 
 from ..v1_7r.canon import write_canon_json
-from .ccap_runtime_v1 import materialize_repo_snapshot
+from .ccap_runtime_v1 import compute_repo_base_tree_id_tolerant, materialize_repo_snapshot
 from .omega_common_v1 import OmegaV18Error, canon_hash_obj, fail, load_canon_dict, repo_root, validate_schema
 from .patch_diff_v1 import build_unified_patch_bytes
 
@@ -614,6 +614,44 @@ def _inject_capability_backlog_patch(
     return next_ccap_id, next_ccap_relpath, next_patch_relpath, True, None
 
 
+def _rebind_ccap_base_tree(
+    *,
+    root: Path,
+    out_dir: Path,
+    ccap_id: str,
+    ccap_relpath: str,
+) -> tuple[str, str, bool]:
+    ccap_path = out_dir / ccap_relpath
+    if not ccap_path.exists() or not ccap_path.is_file():
+        fail("MISSING_STATE_INPUT")
+
+    ccap_payload = load_canon_dict(ccap_path)
+    validate_schema(ccap_payload, "ccap_v1")
+    meta = ccap_payload.get("meta")
+    payload = ccap_payload.get("payload")
+    if not isinstance(meta, dict) or not isinstance(payload, dict):
+        fail("SCHEMA_FAIL")
+
+    canonical_ccap_id = canon_hash_obj(payload)
+    canonical_ccap_relpath = f"ccap/sha256_{canonical_ccap_id.split(':', 1)[1]}.ccap_v1.json"
+    expected_base_tree_id = compute_repo_base_tree_id_tolerant(root)
+    changed_b = False
+    if str(meta.get("base_tree_id", "")).strip() != expected_base_tree_id:
+        meta["base_tree_id"] = expected_base_tree_id
+        ccap_payload["meta"] = meta
+        validate_schema(ccap_payload, "ccap_v1")
+        changed_b = True
+
+    canonical_ccap_path = out_dir / canonical_ccap_relpath
+    if changed_b or canonical_ccap_relpath != ccap_relpath:
+        canonical_ccap_path.parent.mkdir(parents=True, exist_ok=True)
+        write_canon_json(canonical_ccap_path, ccap_payload)
+        return canonical_ccap_id, canonical_ccap_relpath, True
+
+    # Keep upstream id/relpath when already canonical and correctly rebound.
+    return ccap_id, ccap_relpath, False
+
+
 def run(*, campaign_pack: Path, out_dir: Path) -> None:
     pack = _load_pack(campaign_pack)
     root = repo_root()
@@ -757,6 +795,12 @@ def run(*, campaign_pack: Path, out_dir: Path) -> None:
                 if bool(diagnostic_payload.get("diagnostic_only_active_b", False)):
                     print("OK")
                     return
+        ccap_id, ccap_relpath, _ = _rebind_ccap_base_tree(
+            root=root,
+            out_dir=out_dir.resolve(),
+            ccap_id=ccap_id,
+            ccap_relpath=ccap_relpath,
+        )
 
         bundle = {
             "schema_version": "omega_promotion_bundle_ccap_v1",

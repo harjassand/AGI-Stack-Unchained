@@ -25,6 +25,7 @@ for candidate in (REPO_ROOT, REPO_ROOT / "CDEL-v2"):
 
 from cdel.v1_7r.canon import canon_bytes, write_canon_json
 from cdel.v18_0.authority.authority_hash_v1 import auth_hash, load_authority_pins
+from cdel.v18_0.ccap_budget_v1 import resolve_effective_ccap_budget_profile
 from cdel.v18_0.ccap_runtime_v1 import ccap_payload_id, compute_repo_base_tree_id_tolerant
 from cdel.v18_0.omega_common_v1 import canon_hash_obj, rat_q32, validate_schema, write_hashed_json
 from cdel.v18_0.patch_diff_v1 import build_unified_patch_bytes
@@ -1971,6 +1972,21 @@ def _emit_ccap(
     wall_ms_max = 600000
     if str(os.environ.get("OMEGA_SURVIVAL_DRILL", "")).strip().lower() in {"1", "true", "yes", "on"}:
         wall_ms_max = 1200000
+    budget_profile = resolve_effective_ccap_budget_profile(
+        declared_budgets={
+            "cpu_ms_max": 600000,
+            "wall_ms_max": int(wall_ms_max),
+            "mem_mb_max": 4096,
+            "disk_mb_max": 8192,
+            "fds_max": 256,
+            "procs_max": 64,
+            "threads_max": 256,
+            "net": "forbidden",
+        },
+        # Real EK runs snapshot the full repo into `ccap/ek_runs`, so 2GB remains
+        # the operational floor even when env overrides are malformed or too low.
+        minimum_int_limits={"disk_mb_max": 2048},
+    )
 
     ccap_obj = {
         "meta": {
@@ -2000,16 +2016,7 @@ def _emit_ccap(
                 }
             ),
         },
-        "budgets": {
-            "cpu_ms_max": 600000,
-            "wall_ms_max": wall_ms_max,
-            "mem_mb_max": 4096,
-            "disk_mb_max": 2048,
-            "fds_max": 256,
-            "procs_max": 64,
-            "threads_max": 256,
-            "net": "forbidden",
-        },
+        "budgets": dict(budget_profile["limits"]),
     }
     validate_schema(ccap_obj, "ccap_v1")
 

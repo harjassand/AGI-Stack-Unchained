@@ -563,6 +563,25 @@ def test_harness_axis_gate_aggregate_counts() -> None:
     }
 
 
+def test_harness_heavy_success_telemetry_tracks_utility_and_promotion() -> None:
+    live_rows = [
+        {
+            "heavy_utility_ok_b": True,
+            "heavy_promoted_b": False,
+        }
+    ]
+    row = {
+        "heavy_utility_ok_b": True,
+        "heavy_promoted_b": True,
+    }
+    long_harness._attach_heavy_success_telemetry(rows=live_rows, row=row)
+    assert row["heavy_success_counts_total"]["rows_u64"] == 2
+    assert row["heavy_success_counts_total"]["heavy_utility_ok_u64"] == 2
+    assert row["heavy_success_counts_total"]["heavy_promoted_u64"] == 1
+    assert row["heavy_success_counts_last_50"]["heavy_promoted_u64"] == 1
+    assert row["heavy_success_counts_last_200"]["heavy_utility_ok_u64"] == 2
+
+
 def test_harness_hard_lock_transition_logs_pre_evidence_failure() -> None:
     live_rows = [
         {
@@ -702,6 +721,70 @@ def test_harness_mandatory_guard_frontier_gaming_kill_switch() -> None:
     assert reason == "PRECHECK_FAIL:FRONTIER_GAMING_NO_HEAVY_OK"
     assert detail["frontier_counted_total_u64"] >= 5
     assert detail["frontier_attempt_heavy_ok_total_u64"] == 0
+
+
+def test_harness_lane_receipt_loader_uses_canonical_final_file(tmp_path: Path) -> None:
+    state_dir = tmp_path / "state"
+    lane_dir = state_dir / "long_run" / "lane"
+    final_payload = {
+        "schema_name": "lane_decision_receipt_v1",
+        "schema_version": "v19_0",
+        "receipt_id": "sha256:" + ("a" * 64),
+        "tick_u64": 9,
+        "lane_name": "FRONTIER",
+        "forced_lane_override_b": False,
+        "frontier_gate_pass_b": True,
+        "reason_codes": ["CADENCE_FRONTIER"],
+        "health_window": {
+            "window_ticks_u64": 100,
+            "invalid_count_u64": 0,
+            "budget_exhaust_count_u64": 0,
+            "route_disabled_count_u64": 0,
+        },
+        "allowed_capability_ids": ["RSI_GE_SH1_OPTIMIZER"],
+    }
+    hashed_payload = dict(final_payload)
+    hashed_payload["lane_name"] = "BASELINE"
+    _write_json(lane_dir / f"sha256_{'1' * 64}.lane_decision_receipt_v1.json", hashed_payload)
+    _write_json(lane_dir / "lane_receipt_final.long_run_lane_v1.json", final_payload)
+
+    payload, digest = long_harness._lane_receipt_final_payload(state_dir)
+    assert isinstance(payload, dict)
+    assert payload["lane_name"] == "FRONTIER"
+    assert digest == canon_hash_obj(payload)
+
+
+def test_harness_startup_cleanup_prunes_orphan_ek_runs(tmp_path: Path) -> None:
+    run_root = tmp_path / "run"
+    ek_runs_dir = (
+        run_root
+        / "tick_000024"
+        / "daemon"
+        / "rsi_omega_daemon_v19_0"
+        / "state"
+        / "subruns"
+        / "abc_rsi_ge_symbiotic_optimizer_sh1_v0_1"
+        / "ccap"
+        / "ek_runs"
+        / "deadbeefdeadbeef"
+    )
+    ek_runs_dir.mkdir(parents=True, exist_ok=True)
+    (ek_runs_dir / "artifact.bin").write_bytes(b"x" * 64)
+    lock_path = run_root / "tick_000024" / "daemon" / "rsi_omega_daemon_v19_0" / "LOCK"
+    lock_path.parent.mkdir(parents=True, exist_ok=True)
+    lock_path.write_text("", encoding="utf-8")
+
+    long_harness._cleanup_orphan_ek_runs_startup(run_root=run_root, tick_rows=[])
+
+    assert not (ek_runs_dir.parent).exists()
+    note_path = run_root / "tick_000024" / "CLEANUP_ORPHAN_EK_RUNS_V1.json"
+    assert note_path.exists() and note_path.is_file()
+    note_payload = json.loads(note_path.read_text(encoding="utf-8"))
+    assert note_payload["schema_name"] == "CLEANUP_ORPHAN_EK_RUNS_V1"
+    assert note_payload["tick_u64"] == 24
+    assert note_payload["lock_present_b"] is True
+    cleanup_log = run_root / "index" / "long_run_orphan_ek_runs_cleanup_v1.jsonl"
+    assert cleanup_log.exists() and cleanup_log.is_file()
 
 
 def test_eval_cadence_and_report_shape() -> None:

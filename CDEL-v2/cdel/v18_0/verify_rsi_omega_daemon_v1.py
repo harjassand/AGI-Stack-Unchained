@@ -1411,13 +1411,17 @@ def _recompute_observation_from_sources(
     hard_task_performance_q32 = int(hard_task_metric_q32_by_id.get(_HARD_TASK_METRIC_IDS[1], 0))
     hard_task_reasoning_q32 = int(hard_task_metric_q32_by_id.get(_HARD_TASK_METRIC_IDS[2], 0))
     hard_task_suite_score_q32 = int(hard_task_metric_q32_by_id.get(_HARD_TASK_METRIC_IDS[3], 0))
+    hard_task_score_q32 = int(hard_task_suite_score_q32)
     hard_task_now_q32_by_metric = {
         _HARD_TASK_METRIC_IDS[0]: int(hard_task_code_correctness_q32),
         _HARD_TASK_METRIC_IDS[1]: int(hard_task_performance_q32),
         _HARD_TASK_METRIC_IDS[2]: int(hard_task_reasoning_q32),
         _HARD_TASK_METRIC_IDS[3]: int(hard_task_suite_score_q32),
     }
+    hard_task_delta_q32 = 0
     hard_task_gain_count_u64 = 0
+    hard_task_prev_score_q32 = 0
+    hard_task_baseline_init_u64 = 1
     prev_metrics_for_hard_tasks: dict[str, Any] = {}
     has_prev_hard_task_baseline = False
     if isinstance(prev_observation, dict):
@@ -1435,9 +1439,21 @@ def _recompute_observation_from_sources(
                         prev_metrics_for_hard_tasks[metric_id] = rows[-1]
                 has_prev_hard_task_baseline = bool(prev_metrics_for_hard_tasks)
     if has_prev_hard_task_baseline:
+        previous_hard_task_score_q32 = int(_metric_q32(prev_metrics_for_hard_tasks, "hard_task_score_q32"))
+        if previous_hard_task_score_q32 == 0:
+            previous_hard_task_score_q32 = int(_metric_q32(prev_metrics_for_hard_tasks, _HARD_TASK_METRIC_IDS[3]))
+        hard_task_prev_score_q32 = int(previous_hard_task_score_q32)
+        hard_task_delta_q32 = int(hard_task_score_q32) - int(previous_hard_task_score_q32)
         for metric_id, now_q32 in sorted(hard_task_now_q32_by_metric.items()):
             if int(now_q32) > int(_metric_q32(prev_metrics_for_hard_tasks, metric_id)):
                 hard_task_gain_count_u64 += 1
+        hard_task_baseline_init_u64 = 0
+    elif int(observation_payload.get("tick_u64", 0)) > 1:
+        # Mirror observer fallback when t-1 observation is unavailable.
+        hard_task_prev_score_q32 = int(hard_task_score_q32)
+        hard_task_delta_q32 = 0
+        hard_task_gain_count_u64 = 0
+        hard_task_baseline_init_u64 = 0
 
     payload: dict[str, Any] = {
         "schema_version": "omega_observation_report_v1",
@@ -1456,6 +1472,10 @@ def _recompute_observation_from_sources(
             "hard_task_performance_q32": {"q": int(hard_task_performance_q32)},
             "hard_task_reasoning_q32": {"q": int(hard_task_reasoning_q32)},
             "hard_task_suite_score_q32": {"q": int(hard_task_suite_score_q32)},
+            "hard_task_score_q32": {"q": int(hard_task_score_q32)},
+            "hard_task_prev_score_q32": {"q": int(hard_task_prev_score_q32)},
+            "hard_task_delta_q32": {"q": int(hard_task_delta_q32)},
+            "hard_task_baseline_init_u64": int(hard_task_baseline_init_u64),
             "hard_task_gain_count_u64": int(hard_task_gain_count_u64),
             "promotion_reject_rate_rat": promotion_reject_rate_rat,
             "subverifier_invalid_rate_rat": subverifier_invalid_rate_rat,
@@ -1503,6 +1523,10 @@ def _recompute_observation_from_sources(
             "hard_task_performance_q32": [{"q": int(hard_task_performance_q32)}],
             "hard_task_reasoning_q32": [{"q": int(hard_task_reasoning_q32)}],
             "hard_task_suite_score_q32": [{"q": int(hard_task_suite_score_q32)}],
+            "hard_task_score_q32": [{"q": int(hard_task_score_q32)}],
+            "hard_task_prev_score_q32": [{"q": int(hard_task_prev_score_q32)}],
+            "hard_task_delta_q32": [{"q": int(hard_task_delta_q32)}],
+            "hard_task_baseline_init_u64": [int(hard_task_baseline_init_u64)],
             "hard_task_gain_count_u64": [int(hard_task_gain_count_u64)],
             "promotion_reject_rate_rat": [promotion_reject_rate_rat],
             "subverifier_invalid_rate_rat": [subverifier_invalid_rate_rat],

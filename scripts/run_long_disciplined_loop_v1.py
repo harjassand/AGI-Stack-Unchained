@@ -33,6 +33,9 @@ ENV_RECEIPT_NAME = "run_env_receipt_v1.json"
 LAUNCH_MANIFEST_NAME = "long_run_launch_manifest_v1.json"
 LAUNCH_BINDING_MARKER_NAME = "long_run_launch_manifest_binding_v1.json"
 STOP_RECEIPT_NAME = "LONG_RUN_STOP_RECEIPT_v1.json"
+LANE_RECEIPT_FINAL_NAME = "lane_receipt_final.long_run_lane_v1.json"
+ORPHAN_EK_RUNS_NOTE_NAME = "CLEANUP_ORPHAN_EK_RUNS_V1.json"
+ORPHAN_EK_RUNS_LOG_NAME = "long_run_orphan_ek_runs_cleanup_v1.jsonl"
 
 DEFAULT_PACK = "campaigns/rsi_omega_daemon_v19_0_long_run_v1/rsi_omega_daemon_pack_v1.json"
 DEFAULT_RUN_ROOT = "runs/long_disciplined_v1"
@@ -64,6 +67,13 @@ ENV_ALLOWLIST = (
     "OMEGA_META_CORE_ACTIVATION_MODE",
     "OMEGA_ALLOW_SIMULATE_ACTIVATION",
     "OMEGA_CCAP_ALLOW_DIRTY_TREE",
+    "OMEGA_CCAP_CPU_MS_MAX",
+    "OMEGA_CCAP_WALL_MS_MAX",
+    "OMEGA_CCAP_MEM_MB_MAX",
+    "OMEGA_CCAP_DISK_MB_MAX",
+    "OMEGA_CCAP_FDS_MAX",
+    "OMEGA_CCAP_PROCS_MAX",
+    "OMEGA_CCAP_THREADS_MAX",
     "OMEGA_BLACKBOX",
     "OMEGA_DISABLE_FORCED_RUNAWAY",
     "OMEGA_RUN_SEED_U64",
@@ -79,6 +89,11 @@ ENV_ALLOWLIST = (
     "OMEGA_LONG_VALIDATE_FORCED_HEAVY_SH1_DEADLINE_TICK_U64",
     "OMEGA_LONG_VALIDATE_FORCED_HEAVY_SH1_MIN_TICKS_U64",
     "OMEGA_PREMARATHON_V63",
+    "OMEGA_MILESTONE_FORCE_SH1_FRONTIER_B",
+    "OMEGA_RETENTION_PRUNE_CCAP_EK_RUNS_B",
+    "OMEGA_SH1_FORCED_HEAVY_B",
+    "OMEGA_SH1_FORCED_DEBT_KEY",
+    "OMEGA_SH1_WIRING_LOCUS_RELPATH",
     "ORCH_LLM_BACKEND",
 )
 
@@ -121,6 +136,11 @@ def _env_u64(name: str, *, default: int, minimum: int = 0) -> int:
     raw = str(os.environ.get(name, str(int(default)))).strip()
     value = int(raw)
     return int(max(int(minimum), value))
+
+
+def _is_sha256(value: Any) -> bool:
+    text = str(value).strip()
+    return text.startswith("sha256:") and len(text) == 71 and all(ch in "0123456789abcdef" for ch in text.split(":", 1)[1])
 
 
 def _count_true(rows: list[dict[str, Any]], key: str) -> int:
@@ -242,6 +262,27 @@ def _attach_axis_gate_telemetry(*, rows: list[dict[str, Any]], row: dict[str, An
     rejected_u64, reason_counts = _axis_gate_rejection_counts(rows=combined, window_u64=None)
     row["axis_gate_rejected_u64"] = int(rejected_u64)
     row["axis_gate_reason_code_counts"] = reason_counts
+
+
+def _heavy_success_counts(*, rows: list[dict[str, Any]], window_u64: int | None = None) -> dict[str, int]:
+    if window_u64 is None:
+        scope = list(rows)
+    else:
+        scope = list(rows[-int(max(1, int(window_u64))) :])
+    utility_ok_u64 = int(sum(1 for row in scope if row.get("heavy_utility_ok_b") is True))
+    promoted_u64 = int(sum(1 for row in scope if row.get("heavy_promoted_b") is True))
+    return {
+        "rows_u64": int(len(scope)),
+        "heavy_utility_ok_u64": int(utility_ok_u64),
+        "heavy_promoted_u64": int(promoted_u64),
+    }
+
+
+def _attach_heavy_success_telemetry(*, rows: list[dict[str, Any]], row: dict[str, Any]) -> None:
+    combined = [*rows, row]
+    row["heavy_success_counts_total"] = _heavy_success_counts(rows=combined, window_u64=None)
+    row["heavy_success_counts_last_50"] = _heavy_success_counts(rows=combined, window_u64=QUALITY_WINDOW_SHORT_U64)
+    row["heavy_success_counts_last_200"] = _heavy_success_counts(rows=combined, window_u64=QUALITY_WINDOW_LONG_U64)
 
 
 def _mandatory_frontier_guard_summary(*, rows: list[dict[str, Any]]) -> dict[str, int]:
@@ -390,6 +431,31 @@ def _latest_payload(dir_path: Path, suffix: str) -> tuple[dict[str, Any] | None,
     return payload, digest
 
 
+def _lane_receipt_final_payload(state_dir: Path) -> tuple[dict[str, Any] | None, str | None]:
+    path = state_dir / "long_run" / "lane" / LANE_RECEIPT_FINAL_NAME
+    if not path.exists() or not path.is_file():
+        return None, None
+    payload = load_canon_dict(path)
+    if not isinstance(payload, dict):
+        return None, None
+    if str(payload.get("schema_name", "")).strip() != "lane_decision_receipt_v1":
+        return None, None
+    return payload, canon_hash_obj(payload)
+
+
+def _metric_q32(metrics: dict[str, Any] | None, metric_id: str, *, fallback_metric_id: str | None = None) -> int:
+    if not isinstance(metrics, dict):
+        return 0
+    value = metrics.get(metric_id)
+    if value is None and isinstance(fallback_metric_id, str):
+        value = metrics.get(fallback_metric_id)
+    if isinstance(value, dict) and set(value.keys()) == {"q"}:
+        return int(value.get("q", 0))
+    if isinstance(value, int):
+        return int(value)
+    return 0
+
+
 def _canonical_axis_gate_relpath(path_value: Any) -> str:
     raw = str(path_value).strip().replace("\\", "/")
     parts: list[str] = []
@@ -472,6 +538,143 @@ def _axis_gate_index_fields(*, state_dir: Path, promotion_reason_code: str | Non
     return out
 
 
+def _latest_sh1_precheck_payload(state_dir: Path) -> dict[str, Any] | None:
+    subruns_dir = state_dir / "subruns"
+    if not subruns_dir.exists() or not subruns_dir.is_dir():
+        return None
+    rows = sorted(
+        subruns_dir.glob("*_rsi_ge_symbiotic_optimizer_sh1_v0_1/precheck/sha256_*.candidate_precheck_receipt_v1.json"),
+        key=lambda row: row.as_posix(),
+    )
+    if not rows:
+        return None
+    payload = load_canon_dict(rows[-1])
+    return payload if isinstance(payload, dict) else None
+
+
+def _latest_sh1_dispatch_payload(state_dir: Path) -> dict[str, Any] | None:
+    dispatch_dir = state_dir / "dispatch"
+    if not dispatch_dir.exists() or not dispatch_dir.is_dir():
+        return None
+    rows = sorted(dispatch_dir.glob("*/sha256_*.omega_dispatch_receipt_v1.json"), key=lambda row: row.as_posix())
+    if not rows:
+        return None
+    for path in reversed(rows):
+        payload = load_canon_dict(path)
+        if not isinstance(payload, dict):
+            continue
+        if str(payload.get("campaign_id", "")).strip() != "rsi_ge_symbiotic_optimizer_sh1_v0_1":
+            continue
+        return payload
+    return None
+
+
+def _latest_sh1_utility_payload(state_dir: Path) -> dict[str, Any] | None:
+    dispatch_dir = state_dir / "dispatch"
+    if not dispatch_dir.exists() or not dispatch_dir.is_dir():
+        return None
+    utility_candidates: list[Path] = []
+    for row in sorted(dispatch_dir.glob("*"), key=lambda item: item.as_posix()):
+        if not row.exists() or not row.is_dir():
+            continue
+        dispatch_payload, _dispatch_hash = _latest_payload(row, "omega_dispatch_receipt_v1.json")
+        if not isinstance(dispatch_payload, dict):
+            continue
+        if str(dispatch_payload.get("campaign_id", "")).strip() != "rsi_ge_symbiotic_optimizer_sh1_v0_1":
+            continue
+        utility_candidates.extend(
+            sorted(
+                row.glob("promotion/sha256_*.utility_proof_receipt_v1.json"),
+                key=lambda item: item.as_posix(),
+            )
+        )
+    if not utility_candidates:
+        return None
+    payload = load_canon_dict(utility_candidates[-1])
+    return payload if isinstance(payload, dict) else None
+
+
+def _latest_ccap_receipt_payload(state_dir: Path) -> tuple[dict[str, Any] | None, str | None]:
+    if not state_dir.exists() or not state_dir.is_dir():
+        return None, None
+    rows = sorted(
+        [
+            *state_dir.glob("dispatch/*/verifier/sha256_*.ccap_receipt_v1.json"),
+            *state_dir.glob("dispatch/*/verifier/ccap_receipt_v1.json"),
+        ],
+        key=lambda row: row.as_posix(),
+    )
+    if not rows:
+        return None, None
+    path = rows[-1]
+    payload = load_canon_dict(path)
+    if not isinstance(payload, dict):
+        return None, None
+    digest = None
+    if path.name.startswith("sha256_") and ".ccap_receipt_v1.json" in path.name:
+        digest = "sha256:" + path.name.split(".", 1)[0].split("_", 1)[1]
+    else:
+        digest = canon_hash_obj(payload)
+    return payload, digest
+
+
+def _ccap_refutation_cert_for_ccap_id(*, state_dir: Path, ccap_id: str) -> tuple[str | None, str | None]:
+    if not _is_sha256(ccap_id):
+        return None, None
+    rows = sorted(
+        [
+            *state_dir.glob("subruns/*/ccap/refutations/sha256_*.ccap_refutation_cert_v1.json"),
+            *state_dir.glob("subruns/*/ccap/refutations/ccap_refutation_cert_v1.json"),
+        ],
+        key=lambda row: row.as_posix(),
+    )
+    for path in reversed(rows):
+        payload = load_canon_dict(path)
+        if not isinstance(payload, dict):
+            continue
+        if str(payload.get("ccap_id", "")).strip() != ccap_id:
+            continue
+        code = str(payload.get("refutation_code", "")).strip() or None
+        detail = str(payload.get("detail", "")).strip() or None
+        return code, detail
+    return None, None
+
+
+def _ccap_refutation_fields(*, ccap_payload: dict[str, Any] | None, state_dir: Path) -> tuple[str | None, str | None]:
+    if not isinstance(ccap_payload, dict):
+        return None, None
+    ref_code = ccap_payload.get("refutation_code")
+    ref_summary = ccap_payload.get("refutation_summary")
+    if not ref_code and isinstance(ccap_payload.get("refutation"), dict):
+        ref_code = ccap_payload["refutation"].get("code")
+        ref_summary = ccap_payload["refutation"].get("summary")
+    code = str(ref_code).strip() if ref_code is not None else ""
+    summary = str(ref_summary).strip() if ref_summary is not None else ""
+    if not code:
+        cert_code, cert_detail = _ccap_refutation_cert_for_ccap_id(
+            state_dir=state_dir,
+            ccap_id=str(ccap_payload.get("ccap_id", "")).strip(),
+        )
+        if cert_code:
+            code = cert_code
+        if (not summary) and cert_detail:
+            summary = cert_detail
+    return (code or None), (summary or None)
+
+
+def _latest_state_verifier_failure_detail_hash(state_dir: Path) -> str | None:
+    verifier_dir = state_dir.parent / "state_verifier"
+    if not verifier_dir.exists() or not verifier_dir.is_dir():
+        return None
+    rows = sorted(verifier_dir.glob("sha256_*.state_verifier_failure_detail_v1.json"), key=lambda row: row.as_posix())
+    if not rows:
+        return None
+    path = rows[-1]
+    if not path.name.startswith("sha256_"):
+        return None
+    return "sha256:" + path.name.split(".", 1)[0].split("_", 1)[1]
+
+
 def _build_subprocess_env(
     *,
     force_lane: str | None,
@@ -492,6 +695,7 @@ def _build_subprocess_env(
     env.setdefault("OMEGA_META_CORE_ACTIVATION_MODE", "simulate")
     env.setdefault("OMEGA_ALLOW_SIMULATE_ACTIVATION", "1")
     env.setdefault("OMEGA_CCAP_ALLOW_DIRTY_TREE", "1")
+    env.setdefault("OMEGA_RETENTION_PRUNE_CCAP_EK_RUNS_B", "1")
     if force_lane:
         env["OMEGA_LONG_RUN_FORCE_LANE"] = force_lane
     else:
@@ -681,7 +885,7 @@ def _bind_launch_manifest_to_tick_ledger(
     return binding_hash, str(event_row.get("event_id", ""))
 
 
-def _state_verifier_outcome(state_dir: Path) -> tuple[bool, str | None]:
+def _state_verifier_outcome(state_dir: Path) -> tuple[bool, str | None, str | None]:
     cmd = [
         sys.executable,
         "-m",
@@ -703,8 +907,9 @@ def _state_verifier_outcome(state_dir: Path) -> tuple[bool, str | None]:
         env=env,
         check=False,
     )
+    failure_detail_hash = _latest_state_verifier_failure_detail_hash(state_dir)
     if proc.returncode == 0 and "VALID" in (proc.stdout or ""):
-        return True, None
+        return True, None, None
     reason = None
     for line in ((proc.stdout or "") + "\n" + (proc.stderr or "")).splitlines():
         line = line.strip()
@@ -713,7 +918,9 @@ def _state_verifier_outcome(state_dir: Path) -> tuple[bool, str | None]:
             break
     if reason is None:
         reason = "STATE_VERIFIER_FAILED"
-    return False, reason
+    if not str(reason).strip().upper().startswith("NONDETERMINISTIC"):
+        failure_detail_hash = None
+    return False, reason, failure_detail_hash
 
 
 def _write_stop_receipt(
@@ -980,6 +1187,72 @@ def _prune_if_needed(
         )
 
 
+def _tick_u64_from_dir_name(name: str) -> int | None:
+    text = str(name).strip()
+    if not text.startswith("tick_"):
+        return None
+    token = text.split("_", 1)[1]
+    try:
+        return int(token)
+    except Exception:
+        return None
+
+
+def _cleanup_orphan_ek_runs_startup(*, run_root: Path, tick_rows: list[dict[str, Any]]) -> None:
+    indexed_ticks = {int(row.get("tick_u64", -1)) for row in tick_rows if isinstance(row, dict)}
+    cleanup_events: list[dict[str, Any]] = []
+    for tick_dir in sorted(run_root.glob("tick_*"), key=lambda row: row.as_posix()):
+        if not tick_dir.exists() or not tick_dir.is_dir():
+            continue
+        tick_u64 = _tick_u64_from_dir_name(tick_dir.name)
+        if tick_u64 is None:
+            continue
+        has_index_row_b = int(tick_u64) in indexed_ticks
+        lock_paths = sorted(tick_dir.glob("**/LOCK"), key=lambda row: row.as_posix())
+        lock_present_b = bool(lock_paths)
+        if has_index_row_b and not lock_present_b:
+            continue
+        ek_run_dirs = sorted(
+            [row for row in tick_dir.glob("**/ccap/ek_runs") if row.exists() and row.is_dir()],
+            key=lambda row: row.as_posix(),
+        )
+        if not ek_run_dirs:
+            continue
+        deleted_relpaths: list[str] = []
+        deleted_bytes_u64 = 0
+        for ek_runs_dir in ek_run_dirs:
+            deleted_bytes_u64 += int(_dir_size_bytes(ek_runs_dir))
+            deleted_relpaths.append(ek_runs_dir.relative_to(tick_dir).as_posix())
+            shutil.rmtree(ek_runs_dir)
+        reason_codes: list[str] = []
+        if lock_present_b:
+            reason_codes.append("LOCK_PRESENT")
+        if not has_index_row_b:
+            reason_codes.append("MISSING_INDEX_ROW")
+        note_payload = {
+            "schema_name": "CLEANUP_ORPHAN_EK_RUNS_V1",
+            "schema_version": "v1",
+            "tick_u64": int(tick_u64),
+            "has_index_row_b": bool(has_index_row_b),
+            "lock_present_b": bool(lock_present_b),
+            "reason_codes": reason_codes,
+            "deleted_ek_runs_relpaths": deleted_relpaths,
+            "deleted_bytes_u64": int(deleted_bytes_u64),
+        }
+        _write_json(tick_dir / ORPHAN_EK_RUNS_NOTE_NAME, note_payload)
+        cleanup_events.append(
+            {
+                **note_payload,
+                "tick_dir": str(tick_dir),
+            }
+        )
+    if not cleanup_events:
+        return
+    index_dir = run_root / "index"
+    for row in cleanup_events:
+        _append_jsonl(index_dir / ORPHAN_EK_RUNS_LOG_NAME, row)
+
+
 def run_tick(
     *,
     campaign_pack: Path,
@@ -1025,6 +1298,8 @@ def run_tick(
     state_dir = out_dir / "daemon" / "rsi_omega_daemon_v19_0" / "state"
     snapshot_payload, snapshot_hash = _latest_payload(state_dir / "snapshot", "omega_tick_snapshot_v1.json")
     tick_outcome_payload, _tick_outcome_hash = _latest_payload(state_dir / "perf", "omega_tick_outcome_v1.json")
+    observation_payload, _observation_hash = _latest_payload(state_dir / "observations", "omega_observation_report_v1.json")
+    eval_report_payload, _eval_report_hash = _latest_payload(state_dir / "long_run" / "eval", "eval_report_v1.json")
     debt_payload, _debt_hash = _latest_payload(state_dir / "long_run" / "debt", "dependency_debt_state_v1.json")
     routing_payload, _routing_hash = _latest_payload(state_dir / "long_run" / "debt", "dependency_routing_receipt_v1.json")
     routing_reason_codes: list[str] = []
@@ -1035,8 +1310,30 @@ def run_tick(
             routing_reason_codes = [str(item).strip() for item in raw_reason_codes if str(item).strip()]
         selected_capability_id = routing_payload.get("selected_capability_id")
     frontier_dispatch_failed_from_routing_b = FRONTIER_DISPATCH_PRE_EVIDENCE_REASON_CODE in set(routing_reason_codes)
+    precheck_payload = _latest_sh1_precheck_payload(state_dir)
+    sh1_dispatch_payload = _latest_sh1_dispatch_payload(state_dir)
+    utility_payload = _latest_sh1_utility_payload(state_dir)
+    precheck_forced_heavy_b = bool((precheck_payload or {}).get("forced_heavy_b"))
+    sh1_dispatch_overrides = (
+        (sh1_dispatch_payload or {}).get("invocation", {}).get("env_overrides")
+        if isinstance((sh1_dispatch_payload or {}).get("invocation"), dict)
+        else {}
+    )
+    sh1_dispatch_forced_heavy_b = (
+        isinstance(sh1_dispatch_overrides, dict)
+        and str(sh1_dispatch_overrides.get("OMEGA_SH1_FORCED_HEAVY_B", "")).strip() == "1"
+    )
+    sh1_dispatch_wiring_locus_relpath = (
+        str(sh1_dispatch_overrides.get("OMEGA_SH1_WIRING_LOCUS_RELPATH", "")).strip()
+        if isinstance(sh1_dispatch_overrides, dict)
+        else ""
+    )
     forced_heavy_sh1_b = bool(
-        (routing_payload or {}).get("forced_frontier_attempt_b")
+        (
+            bool((routing_payload or {}).get("forced_frontier_attempt_b"))
+            or bool(precheck_forced_heavy_b)
+            or bool(sh1_dispatch_forced_heavy_b)
+        )
         and str(selected_capability_id or "").strip() == "RSI_GE_SH1_OPTIMIZER"
     )
     lane_name = None
@@ -1044,7 +1341,7 @@ def run_tick(
     lane_invalid_count_u64 = None
     lane_budget_exhaust_count_u64 = None
     lane_route_disabled_count_u64 = None
-    lane_payload, _lane_hash = _latest_payload(state_dir / "long_run" / "lane", "lane_decision_receipt_v1.json")
+    lane_payload, _lane_hash = _lane_receipt_final_payload(state_dir)
     if isinstance(lane_payload, dict):
         lane_name = lane_payload.get("lane_name")
         lane_frontier_gate_pass_b = lane_payload.get("frontier_gate_pass_b")
@@ -1058,9 +1355,94 @@ def run_tick(
     if not status_ok_b:
         error_class = "TICK_STATE_MISSING" if not state_dir.exists() or not state_dir.is_dir() else "TICK_PROCESS_ERROR"
     promotion_reason_value = (tick_outcome_payload or {}).get("promotion_reason_code")
+    ccap_payload, ccap_receipt_hash = _latest_ccap_receipt_payload(state_dir)
+    ccap_refutation_code, ccap_refutation_summary = _ccap_refutation_fields(
+        ccap_payload=ccap_payload,
+        state_dir=state_dir,
+    )
     axis_gate_fields = _axis_gate_index_fields(
         state_dir=state_dir,
         promotion_reason_code=(str(promotion_reason_value) if promotion_reason_value is not None else None),
+    )
+    observation_metrics = observation_payload.get("metrics") if isinstance(observation_payload, dict) else {}
+    hard_task_score_q32 = int(
+        _metric_q32(
+            observation_metrics if isinstance(observation_metrics, dict) else None,
+            "hard_task_score_q32",
+            fallback_metric_id="hard_task_suite_score_q32",
+        )
+    )
+    hard_task_delta_q32 = int(
+        _metric_q32(
+            observation_metrics if isinstance(observation_metrics, dict) else None,
+            "hard_task_delta_q32",
+        )
+    )
+    hard_task_prev_score_q32 = int(
+        _metric_q32(
+            observation_metrics if isinstance(observation_metrics, dict) else None,
+            "hard_task_prev_score_q32",
+        )
+    )
+    hard_task_baseline_init_b = bool(
+        int(
+            _metric_q32(
+                observation_metrics if isinstance(observation_metrics, dict) else None,
+                "hard_task_baseline_init_u64",
+            )
+        )
+        > 0
+    )
+    utility_metrics = (utility_payload or {}).get("utility_metrics")
+    utility_hard_task_delta_q32 = 0
+    utility_j_delta_q32_i64 = 0
+    utility_hard_task_baseline_init_b = False
+    utility_hard_task_prev_score_q32 = 0
+    if isinstance(utility_metrics, dict):
+        try:
+            utility_hard_task_delta_q32 = int(utility_metrics.get("hard_task_delta_q32", 0))
+        except Exception:
+            utility_hard_task_delta_q32 = 0
+        try:
+            utility_j_delta_q32_i64 = int(utility_metrics.get("j_delta_q32_i64", 0))
+        except Exception:
+            utility_j_delta_q32_i64 = 0
+        utility_hard_task_baseline_init_b = bool(utility_metrics.get("hard_task_baseline_init_b", False))
+        try:
+            utility_hard_task_prev_score_q32 = int(utility_metrics.get("hard_task_prev_score_q32", 0))
+        except Exception:
+            utility_hard_task_prev_score_q32 = 0
+    hard_task_baseline_init_b = bool(hard_task_baseline_init_b or utility_hard_task_baseline_init_b)
+    if int(hard_task_prev_score_q32) == 0 and int(utility_hard_task_prev_score_q32) != 0:
+        hard_task_prev_score_q32 = int(utility_hard_task_prev_score_q32)
+    if hard_task_baseline_init_b:
+        hard_task_delta_q32 = 0
+    else:
+        hard_task_delta_q32 = int(max(hard_task_delta_q32, utility_hard_task_delta_q32))
+    j_delta_q32_i64 = 0
+    if isinstance(eval_report_payload, dict):
+        try:
+            j_delta_q32_i64 = int(eval_report_payload.get("delta_j_q32", 0))
+        except Exception:
+            j_delta_q32_i64 = 0
+    if int(j_delta_q32_i64) == 0:
+        j_delta_q32_i64 = int(utility_j_delta_q32_i64)
+    declared_class_value = str((tick_outcome_payload or {}).get("declared_class", "")).strip().upper()
+    promotion_status_value = str((tick_outcome_payload or {}).get("promotion_status", "")).strip().upper()
+    ccap_decision_value = str((ccap_payload or {}).get("decision", "")).strip().upper()
+    utility_ok_b = bool((utility_payload or {}).get("utility_ok_b", False))
+    utility_hard_task_any_gain_b = bool(
+        ((utility_payload or {}).get("utility_metrics") or {}).get("hard_task_any_gain_b", False)
+    )
+    heavy_utility_ok_b = bool(
+        declared_class_value in {"FRONTIER_HEAVY", "CANARY_HEAVY"}
+        and utility_ok_b
+        and utility_hard_task_any_gain_b
+    )
+    heavy_promoted_b = bool(
+        heavy_utility_ok_b
+        and promotion_status_value == "PROMOTED"
+        and ccap_decision_value in {"PROMOTE", "ACCEPT"}
     )
     row = {
         "schema_name": "long_run_tick_index_row_v1",
@@ -1090,6 +1472,8 @@ def run_tick(
         "frontier_goals_pending_b": (routing_payload or {}).get("frontier_goals_pending_b"),
         "forced_frontier_attempt_b": (routing_payload or {}).get("forced_frontier_attempt_b"),
         "forced_heavy_sh1_b": forced_heavy_sh1_b,
+        "sh1_dispatch_forced_heavy_b": bool(sh1_dispatch_forced_heavy_b),
+        "sh1_dispatch_wiring_locus_relpath": (sh1_dispatch_wiring_locus_relpath or None),
         "dependency_routing_reason_codes": routing_reason_codes,
         "frontier_dispatch_failed_pre_evidence_b": bool(frontier_dispatch_failed_from_routing_b),
         "frontier_dispatch_pre_evidence_reason_code": (
@@ -1103,6 +1487,19 @@ def run_tick(
         "axis_gate_bundle_present_b": bool(axis_gate_fields["axis_gate_bundle_present_b"]),
         "axis_gate_bundle_sha256": axis_gate_fields["axis_gate_bundle_sha256"],
         "axis_gate_checked_relpaths_v1": list(axis_gate_fields["axis_gate_checked_relpaths_v1"]),
+        "ccap_receipt_hash": ccap_receipt_hash,
+        "ccap_decision": (ccap_payload or {}).get("decision"),
+        "ccap_eval_status": (ccap_payload or {}).get("eval_status"),
+        "ccap_determinism_check": (ccap_payload or {}).get("determinism_check"),
+        "ccap_refutation_code": ccap_refutation_code,
+        "ccap_refutation_summary": ccap_refutation_summary,
+        "hard_task_score_q32": int(hard_task_score_q32),
+        "hard_task_prev_score_q32": int(hard_task_prev_score_q32),
+        "hard_task_baseline_init_b": bool(hard_task_baseline_init_b),
+        "hard_task_delta_q32": int(hard_task_delta_q32),
+        "j_delta_q32_i64": int(j_delta_q32_i64),
+        "heavy_utility_ok_b": bool(heavy_utility_ok_b),
+        "heavy_promoted_b": bool(heavy_promoted_b),
         "error_class": error_class,
         "disk_bytes_u64": int(_dir_size_bytes(out_dir)) if out_dir.exists() else 0,
         "started_unix_s": int(started),
@@ -1157,6 +1554,7 @@ def run_loop(
     pins_hash_initial = _authority_pins_hash()
     health_gate_thresholds = _load_health_gate_thresholds(campaign_pack)
     validate_frontier_b = _env_bool("OMEGA_LONG_VALIDATE_FRONTIER", default=False)
+    allow_invalid_state_continue_b = _env_bool("OMEGA_LONG_RUN_DEBUG_ALLOW_INVALID_STATE", default=False)
     validate_window_ticks_u64 = _env_u64("OMEGA_LONG_VALIDATE_WINDOW_TICKS", default=150, minimum=1)
     validate_min_hardlocks_u64 = _env_u64("OMEGA_LONG_VALIDATE_MIN_HARDLOCKS", default=1, minimum=0)
     validate_min_forced_u64 = _env_u64("OMEGA_LONG_VALIDATE_MIN_FORCED", default=1, minimum=0)
@@ -1164,6 +1562,7 @@ def run_loop(
     manifest_relpath = str(launch_manifest_payload.get("manifest_relpath", _repo_relpath(launch_manifest_path)))
 
     tick_rows, pruned_ticks = _read_indexes(index_dir)
+    _cleanup_orphan_ek_runs_startup(run_root=run_root, tick_rows=tick_rows)
     live_rows = _live_rows(tick_rows, pruned_ticks)
     head = _read_head(index_dir / HEAD_NAME)
     launch_binding_marker_path = index_dir / LAUNCH_BINDING_MARKER_NAME
@@ -1215,6 +1614,8 @@ def run_loop(
             launch_bound_b = True
 
     ticks_run = 0
+    stop_receipt_written_b = False
+    last_row: dict[str, Any] | None = None
     while max_ticks <= 0 or ticks_run < max_ticks:
         row = run_tick(
             campaign_pack=campaign_pack,
@@ -1254,21 +1655,25 @@ def run_loop(
             row["launch_manifest_hash"] = launch_manifest_hash
 
         if str(row.get("status", "")) == "OK" and state_dir.exists() and state_dir.is_dir():
-            valid_b, state_verifier_reason_code = _state_verifier_outcome(state_dir)
+            valid_b, state_verifier_reason_code, state_verifier_failure_detail_hash = _state_verifier_outcome(state_dir)
             row["state_verifier_valid_b"] = bool(valid_b)
             row["state_verifier_reason_code"] = state_verifier_reason_code
+            row["state_verifier_failure_detail_hash"] = state_verifier_failure_detail_hash
             row["error_class"] = None
             if valid_b:
                 prev_state_dir = state_dir
                 last_valid_state_dir = state_dir
             else:
-                if state_verifier_reason_code == "PRECHECK_FAIL:UNBOUND_DEBT_KEY":
-                    hard_stop_reason_code = "PRECHECK_FAIL:UNBOUND_DEBT_KEY"
+                if allow_invalid_state_continue_b:
+                    prev_state_dir = state_dir
                 else:
-                    hard_stop_reason_code = "STATE_VERIFIER_INVALID"
-                hard_stop_detail = {
-                    "state_verifier_reason_code": state_verifier_reason_code,
-                }
+                    if state_verifier_reason_code == "PRECHECK_FAIL:UNBOUND_DEBT_KEY":
+                        hard_stop_reason_code = "PRECHECK_FAIL:UNBOUND_DEBT_KEY"
+                    else:
+                        hard_stop_reason_code = "STATE_VERIFIER_INVALID"
+                    hard_stop_detail = {
+                        "state_verifier_reason_code": state_verifier_reason_code,
+                    }
         else:
             row["state_verifier_valid_b"] = False
             error_class = None
@@ -1282,6 +1687,7 @@ def run_loop(
                     hard_stop_reason_code = "TICK_PROCESS_ERROR"
             state_verifier_reason_code = str(error_class)
             row["state_verifier_reason_code"] = state_verifier_reason_code
+            row["state_verifier_failure_detail_hash"] = None
             row["error_class"] = error_class
 
         row["frontier_attempt_counted_b"] = bool(row.get("frontier_attempt_counted_b", False))
@@ -1295,6 +1701,7 @@ def run_loop(
         _attach_frontier_attempt_quality_telemetry(rows=live_rows, row=row)
         _attach_hard_lock_transition_telemetry(rows=live_rows, row=row)
         _attach_axis_gate_telemetry(rows=live_rows, row=row)
+        _attach_heavy_success_telemetry(rows=live_rows, row=row)
 
         frontier_gate_pass_raw = row.get("lane_frontier_gate_pass_b")
         frontier_gate_pass = frontier_gate_pass_raw if isinstance(frontier_gate_pass_raw, bool) else None
@@ -1368,6 +1775,7 @@ def run_loop(
             row["stop_receipt_hash"] = stop_hash
             row["stop_receipt_relpath"] = _repo_relpath(stop_path)
             row["stop_receipt_ledger_bound_b"] = False
+            stop_receipt_written_b = True
             if str(row.get("status", "")) == "OK" and state_dir.exists() and state_dir.is_dir():
                 try:
                     _state_stop_path, _state_stop_obj, state_stop_hash = _write_hashed_payload(
@@ -1389,6 +1797,7 @@ def run_loop(
                     row["stop_receipt_ledger_bound_b"] = False
 
         _append_jsonl(index_dir / TICK_INDEX_NAME, row)
+        last_row = row
         tick_rows.append(row)
         if row.get("state_verifier_valid_b") is True:
             _write_head(index_dir / HEAD_NAME, row)
@@ -1411,6 +1820,57 @@ def run_loop(
             break
         tick_u64 += 1
         ticks_run += 1
+
+    if (not stop_receipt_written_b) and isinstance(last_row, dict) and max_ticks > 0 and ticks_run >= max_ticks:
+        final_tick_u64 = int(max(0, int(last_row.get("tick_u64", 0))))
+        final_state_dir = Path(str(last_row.get("state_dir", "")).strip())
+        state_verifier_reason_code = (
+            str(last_row.get("state_verifier_reason_code", "")).strip() or None
+            if isinstance(last_row.get("state_verifier_reason_code"), str)
+            else None
+        )
+        last_valid_state_rel = _repo_relpath(last_valid_state_dir) if isinstance(last_valid_state_dir, Path) else ""
+        stop_path, stop_obj, stop_hash = _write_stop_receipt(
+            run_root=run_root,
+            halt_reason_code="CLEAN_EXIT:MAX_TICKS_REACHED",
+            halt_tick_u64=final_tick_u64,
+            last_valid_state_dir_relpath=last_valid_state_rel,
+            manifest_hash=launch_manifest_hash,
+            manifest_relpath=manifest_relpath,
+            state_verifier_reason_code=state_verifier_reason_code,
+            detail={
+                "max_ticks_u64": int(max_ticks),
+                "ticks_run_u64": int(ticks_run),
+                "final_tick_u64": int(final_tick_u64),
+            },
+        )
+        if final_state_dir.exists() and final_state_dir.is_dir():
+            try:
+                _state_stop_path, _state_stop_obj, state_stop_hash = _write_hashed_payload(
+                    dir_path=final_state_dir / "long_run" / "stop",
+                    suffix="long_run_stop_receipt_v1.json",
+                    payload=stop_obj,
+                    id_field="stop_receipt_id",
+                )
+                if state_stop_hash != stop_hash:
+                    raise RuntimeError("NONDETERMINISTIC")
+                _ = _append_ledger_event(
+                    state_dir=final_state_dir,
+                    tick_u64=final_tick_u64,
+                    event_type="LONG_RUN_STOP_RECEIPT",
+                    artifact_hash=stop_hash,
+                )
+            except Exception:
+                pass
+        _append_jsonl(
+            index_dir / "long_run_stop_receipt_index_v1.jsonl",
+            {
+                "tick_u64": int(final_tick_u64),
+                "stop_receipt_hash": str(stop_hash),
+                "stop_receipt_relpath": _repo_relpath(stop_path),
+                "halt_reason_code": "CLEAN_EXIT:MAX_TICKS_REACHED",
+            },
+        )
 
 
 def main() -> None:

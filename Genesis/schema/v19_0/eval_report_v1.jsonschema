@@ -54,13 +54,17 @@
         "cap_frontier_u64",
         "cap_frontier_delta_s64",
         "promotion_success_rate_q32",
-        "invalid_rate_q32"
+        "invalid_rate_q32",
+        "hard_task_score_q32",
+        "hard_task_delta_q32"
       ],
       "properties": {
         "cap_frontier_u64": {"type": "integer", "minimum": 0},
         "cap_frontier_delta_s64": {"type": "integer"},
         "promotion_success_rate_q32": {"type": "integer", "minimum": 0},
-        "invalid_rate_q32": {"type": "integer", "minimum": 0}
+        "invalid_rate_q32": {"type": "integer", "minimum": 0},
+        "hard_task_score_q32": {"type": "integer", "minimum": 0},
+        "hard_task_delta_q32": {"type": "integer"}
       }
     }
   }

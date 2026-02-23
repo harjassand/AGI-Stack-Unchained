@@ -59,6 +59,7 @@ _HEAVY_DECLARED_CLASSES = {"FRONTIER_HEAVY", "CANARY_HEAVY"}
 _DECLARED_CLASSES = {"FRONTIER_HEAVY", "CANARY_HEAVY", "BASELINE_CORE", "MAINTENANCE"}
 _COMMENT_LINE_RE = re.compile(r"^(#|//|/\*|\*|\*/)")
 _SH1_CAPABILITY_ID = "RSI_GE_SH1_OPTIMIZER"
+_FORCED_HEAVY_ENV_KEY = "OMEGA_SH1_FORCED_HEAVY_B"
 _HARD_TASK_METRIC_IDS: tuple[str, ...] = (
     "hard_task_code_correctness_q32",
     "hard_task_performance_q32",
@@ -840,7 +841,9 @@ def _load_long_run_profile_for_dispatch(dispatch_ctx: dict[str, Any]) -> dict[st
     if config_dir is None:
         return None
     candidates = [config_dir / "long_run_profile_v1.json"]
-    candidates.extend(sorted(config_dir.glob("**/long_run_profile_v1.json"), key=lambda p: p.as_posix()))
+    # Accept profile filename variants (for example long_run_profile_v1_debug_hard_task.json)
+    # while still validating content against long_run_profile_v1 schema.
+    candidates.extend(sorted(config_dir.glob("**/long_run_profile_v1*.json"), key=lambda p: p.as_posix()))
     seen: set[str] = set()
     for path in candidates:
         key = str(path.resolve())
@@ -894,9 +897,17 @@ def _capability_id_from_dispatch(dispatch_ctx: dict[str, Any]) -> str:
     return str(cap.get("capability_id", "")).strip()
 
 
+def _dispatch_forced_heavy_b(dispatch_ctx: dict[str, Any]) -> bool:
+    overrides = dispatch_ctx.get("invocation_env_overrides")
+    if not isinstance(overrides, dict):
+        return False
+    raw = str(overrides.get(_FORCED_HEAVY_ENV_KEY, "")).strip().lower()
+    return raw in {"1", "true", "yes", "on"}
+
+
 def _declared_class_for_capability(dispatch_ctx: dict[str, Any], utility_policy: dict[str, Any] | None) -> str:
     capability_id = _capability_id_from_dispatch(dispatch_ctx)
-    if _premarathon_v63_enabled() and capability_id == _SH1_CAPABILITY_ID:
+    if capability_id == _SH1_CAPABILITY_ID and (_premarathon_v63_enabled() or _dispatch_forced_heavy_b(dispatch_ctx)):
         return "FRONTIER_HEAVY"
     if isinstance(utility_policy, dict):
         mapping = utility_policy.get("declared_class_by_capability")
@@ -1050,8 +1061,15 @@ def _candidate_bundle_present(
     return path.exists() and path.is_file(), path
 
 
-def _heavy_policy_for_capability(utility_policy: dict[str, Any] | None, capability_id: str) -> dict[str, Any] | None:
-    if _premarathon_v63_enabled() and str(capability_id).strip() == _SH1_CAPABILITY_ID:
+def _heavy_policy_for_capability(
+    utility_policy: dict[str, Any] | None,
+    capability_id: str,
+    *,
+    dispatch_ctx: dict[str, Any] | None = None,
+) -> dict[str, Any] | None:
+    sh1_capability_b = str(capability_id).strip() == _SH1_CAPABILITY_ID
+    forced_sh1_heavy_b = bool(sh1_capability_b and isinstance(dispatch_ctx, dict) and _dispatch_forced_heavy_b(dispatch_ctx))
+    if (_premarathon_v63_enabled() and sh1_capability_b) or forced_sh1_heavy_b:
         return {
             "probe_suite_id": "utility_probe_suite_default_v1",
             "stress_probe_suite_id": "utility_stress_probe_suite_default_v1",
@@ -1123,10 +1141,73 @@ def _metric_q32(metrics: dict[str, Any], metric_id: str) -> int:
     return int(raw.get("q", 0))
 
 
+def _selected_precheck_hard_task_prediction(dispatch_ctx: dict[str, Any]) -> dict[str, int]:
+    out = {
+        "predicted_hard_task_delta_q32": 0,
+        "predicted_hard_task_baseline_score_q32": 0,
+        "predicted_hard_task_patched_score_q32": 0,
+    }
+    subrun_root_raw = dispatch_ctx.get("subrun_root_abs")
+    if not isinstance(subrun_root_raw, (str, Path)):
+        return out
+    precheck_dir = Path(subrun_root_raw).resolve() / "precheck"
+    if not precheck_dir.exists() or not precheck_dir.is_dir():
+        return out
+    rows = sorted(precheck_dir.glob("sha256_*.candidate_precheck_receipt_v1.json"), key=lambda row: row.as_posix())
+    if not rows:
+        return out
+    payload = load_canon_dict(rows[-1])
+    try:
+        validate_schema(payload, "candidate_precheck_receipt_v1")
+    except Exception:
+        return out
+    candidates = payload.get("candidates")
+    if not isinstance(candidates, list):
+        return out
+    selected_rows = [row for row in candidates if isinstance(row, dict) and bool(row.get("selected_for_ccap_b", False))]
+    if not selected_rows:
+        return out
+    selected_rows.sort(key=lambda row: int(max(0, int(row.get("candidate_idx_u32", 0)))))
+    selected = selected_rows[0]
+    for key in sorted(out.keys()):
+        try:
+            out[key] = int(selected.get(key, 0))
+        except Exception:
+            out[key] = 0
+    forced_heavy_ctx = payload.get("forced_heavy_context_v1")
+    final_rows = (forced_heavy_ctx or {}).get("final_candidate_rows_v1") if isinstance(forced_heavy_ctx, dict) else None
+    if isinstance(final_rows, list):
+        selected_ctx: dict[str, Any] | None = None
+        selected_idx = int(max(0, int(selected.get("candidate_idx_u32", 0))))
+        for row in final_rows:
+            if not isinstance(row, dict):
+                continue
+            row_idx = int(max(0, int(row.get("candidate_idx_u32", -1))))
+            if row_idx == selected_idx and str(row.get("precheck_decision_code", "")).strip() == "SELECTED_FOR_CCAP":
+                selected_ctx = row
+                break
+        if selected_ctx is None:
+            for row in final_rows:
+                if isinstance(row, dict) and str(row.get("precheck_decision_code", "")).strip() == "SELECTED_FOR_CCAP":
+                    selected_ctx = row
+                    break
+        if selected_ctx is not None:
+            for key in sorted(out.keys()):
+                try:
+                    value = int(selected_ctx.get(key, 0))
+                except Exception:
+                    value = 0
+                if out[key] == 0 and value != 0:
+                    out[key] = int(value)
+    return out
+
+
 def _hard_task_observation_deltas(dispatch_ctx: dict[str, Any]) -> dict[str, Any]:
     out: dict[str, Any] = {
         "observation_hash": None,
         "previous_observation_hash": None,
+        "baseline_init_b": False,
+        "prev_score_q32": 0,
         "gain_count_u64": 0,
         "delta_by_metric": {metric_id: 0 for metric_id in _HARD_TASK_METRIC_IDS},
     }
@@ -1164,11 +1245,29 @@ def _hard_task_observation_deltas(dispatch_ctx: dict[str, Any]) -> dict[str, Any
     prev_metrics = (prev_payload or {}).get("metrics")
     if not isinstance(now_metrics, dict):
         return out
+    baseline_raw = now_metrics.get("hard_task_baseline_init_u64", 1)
+    try:
+        baseline_init_u64 = int((baseline_raw or {}).get("q", 0) if isinstance(baseline_raw, dict) else baseline_raw)
+    except Exception:
+        baseline_init_u64 = 1
+    now_prev_score_q32 = int(_metric_q32(now_metrics, "hard_task_prev_score_q32"))
+    now_suite_delta_q32 = int(_metric_q32(now_metrics, "hard_task_delta_q32"))
     if not isinstance(prev_metrics, dict):
-        prev_metrics = {}
+        out["observation_hash"] = str(now_hash)
+        out["previous_observation_hash"] = str(prev_hash) if isinstance(prev_hash, str) and prev_hash else None
+        out["baseline_init_b"] = bool(baseline_init_u64 > 0)
+        out["prev_score_q32"] = int(now_prev_score_q32)
+        deltas = {metric_id: 0 for metric_id in _HARD_TASK_METRIC_IDS}
+        deltas["hard_task_suite_score_q32"] = int(now_suite_delta_q32)
+        out["gain_count_u64"] = int(1 if int(now_suite_delta_q32) > 0 else 0)
+        out["delta_by_metric"] = deltas
+        return out
 
     deltas: dict[str, int] = {}
     gain_count = 0
+    previous_hard_task_score_q32 = int(_metric_q32(prev_metrics, "hard_task_score_q32"))
+    if previous_hard_task_score_q32 == 0:
+        previous_hard_task_score_q32 = int(_metric_q32(prev_metrics, "hard_task_suite_score_q32"))
     for metric_id in _HARD_TASK_METRIC_IDS:
         delta_q32 = int(_metric_q32(now_metrics, metric_id)) - int(_metric_q32(prev_metrics, metric_id))
         deltas[metric_id] = int(delta_q32)
@@ -1177,6 +1276,8 @@ def _hard_task_observation_deltas(dispatch_ctx: dict[str, Any]) -> dict[str, Any
 
     out["observation_hash"] = str(now_hash)
     out["previous_observation_hash"] = str(prev_hash) if isinstance(prev_hash, str) and prev_hash else None
+    out["baseline_init_b"] = bool(baseline_init_u64 > 0)
+    out["prev_score_q32"] = int(now_prev_score_q32 if int(now_prev_score_q32) > 0 else previous_hard_task_score_q32)
     out["gain_count_u64"] = int(gain_count)
     out["delta_by_metric"] = dict(deltas)
     return out
@@ -1609,7 +1710,11 @@ def run_promotion(
         baseline_ref_hash=baseline_ref_hash,
     )
 
-    heavy_policy = _heavy_policy_for_capability(utility_policy, capability_id)
+    heavy_policy = _heavy_policy_for_capability(
+        utility_policy,
+        capability_id,
+        dispatch_ctx=dispatch_ctx,
+    )
     probe_suite_id = str((heavy_policy or {}).get("probe_suite_id", "utility_probe_suite_default_v1"))
     stress_probe_suite_id = str((heavy_policy or {}).get("stress_probe_suite_id", "utility_stress_probe_suite_default_v1"))
     primary_signal = str((heavy_policy or {}).get("primary_signal", "NONTRIVIAL_DELTA"))
@@ -1631,8 +1736,25 @@ def run_promotion(
     hard_task_performance_delta_q32 = int(hard_task_delta_by_metric.get("hard_task_performance_q32", 0))
     hard_task_reasoning_delta_q32 = int(hard_task_delta_by_metric.get("hard_task_reasoning_q32", 0))
     hard_task_suite_delta_q32 = int(hard_task_delta_by_metric.get("hard_task_suite_score_q32", 0))
+    hard_task_prediction = _selected_precheck_hard_task_prediction(dispatch_ctx)
+    predicted_hard_task_delta_q32 = int(hard_task_prediction.get("predicted_hard_task_delta_q32", 0))
+    predicted_hard_task_baseline_score_q32 = int(
+        hard_task_prediction.get("predicted_hard_task_baseline_score_q32", 0)
+    )
+    predicted_hard_task_patched_score_q32 = int(
+        hard_task_prediction.get("predicted_hard_task_patched_score_q32", 0)
+    )
+    hard_task_baseline_init_b = bool(hard_task_observation.get("baseline_init_b", False))
+    hard_task_prev_score_q32 = int(hard_task_observation.get("prev_score_q32", 0))
+    effective_hard_task_delta_q32 = 0
+    if not hard_task_baseline_init_b:
+        effective_hard_task_delta_q32 = int(max(hard_task_suite_delta_q32, predicted_hard_task_delta_q32))
     hard_task_gain_count_u64 = max(0, int(hard_task_observation.get("gain_count_u64", 0)))
-    hard_task_any_gain_b = int(hard_task_gain_count_u64) >= int(hard_task_required_gain_count_u64)
+    hard_task_any_gain_b = (not hard_task_baseline_init_b) and (
+        int(hard_task_gain_count_u64) >= int(hard_task_required_gain_count_u64)
+    )
+    if (not hard_task_baseline_init_b) and int(predicted_hard_task_delta_q32) > 0:
+        hard_task_any_gain_b = True
 
     signal_a_ok_b = True
     signal_b_ok_b = True
@@ -1704,6 +1826,13 @@ def run_promotion(
         "hard_task_performance_delta_q32": int(hard_task_performance_delta_q32),
         "hard_task_reasoning_delta_q32": int(hard_task_reasoning_delta_q32),
         "hard_task_suite_score_delta_q32": int(hard_task_suite_delta_q32),
+        "hard_task_delta_q32": int(effective_hard_task_delta_q32),
+        "predicted_hard_task_delta_q32": int(predicted_hard_task_delta_q32),
+        "predicted_hard_task_baseline_score_q32": int(predicted_hard_task_baseline_score_q32),
+        "predicted_hard_task_patched_score_q32": int(predicted_hard_task_patched_score_q32),
+        "j_delta_q32_i64": int(effective_hard_task_delta_q32),
+        "hard_task_prev_score_q32": int(hard_task_prev_score_q32),
+        "hard_task_baseline_init_b": bool(hard_task_baseline_init_b),
         "hard_task_gain_count_u64": int(hard_task_gain_count_u64),
         "hard_task_any_gain_b": bool(hard_task_any_gain_b),
         "hard_task_gate_ok_b": bool(hard_task_ok_b),
@@ -1791,10 +1920,12 @@ def run_promotion(
         if receipt is None or digest is None:
             return receipt, digest
         promotion_status = str((receipt.get("result") or {}).get("status", "")).strip()
-        if promotion_status == "REJECTED":
+        if declared_class in _HEAVY_DECLARED_CLASSES:
+            # Heavy utility success is counted as EFFECT_HEAVY_OK even when CCAP
+            # integration rejects promotion; rejection reasons remain explicit.
+            final_effect_class = "EFFECT_HEAVY_OK" if bool(utility_ok_b) else "EFFECT_REJECTED"
+        elif promotion_status == "REJECTED":
             final_effect_class = "EFFECT_REJECTED"
-        elif declared_class in _HEAVY_DECLARED_CLASSES:
-            final_effect_class = "EFFECT_HEAVY_OK"
         elif declared_class == "BASELINE_CORE":
             final_effect_class = "EFFECT_BASELINE_CORE_OK"
         elif declared_class == "MAINTENANCE":

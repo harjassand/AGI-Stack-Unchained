@@ -7,6 +7,7 @@ import hashlib
 import json
 import os
 import re
+import shutil
 import sys
 import time
 from pathlib import Path
@@ -177,6 +178,9 @@ _SH1_CAMPAIGN_ID = "rsi_ge_symbiotic_optimizer_sh1_v0_1"
 _FORCED_HEAVY_ENV_KEY = "OMEGA_SH1_FORCED_HEAVY_B"
 _FORCED_DEBT_KEY_ENV_KEY = "OMEGA_SH1_FORCED_DEBT_KEY"
 _FORCED_WIRING_LOCUS_ENV_KEY = "OMEGA_SH1_WIRING_LOCUS_RELPATH"
+_MILESTONE_FORCE_SH1_FRONTIER_ENV_KEY = "OMEGA_MILESTONE_FORCE_SH1_FRONTIER_B"
+_RETENTION_PRUNE_CCAP_EK_RUNS_ENV_KEY = "OMEGA_RETENTION_PRUNE_CCAP_EK_RUNS_B"
+_LANE_RECEIPT_FINAL_NAME = "lane_receipt_final.long_run_lane_v1.json"
 _FAILED_PATCH_BAN_ENV_KEY = "OMEGA_SH1_FAILED_PATCH_BAN_JSON"
 _FAILED_SHAPE_BAN_ENV_KEY = "OMEGA_SH1_FAILED_SHAPE_BAN_JSON"
 _LAST_FAILURE_HINT_ENV_KEY = "OMEGA_SH1_LAST_FAILURE_HINT_JSON"
@@ -231,6 +235,11 @@ def _temp_env(overrides: dict[str, str]) -> Iterator[None]:
 def _deterministic_timing_enabled() -> bool:
     raw = str(os.environ.get("OMEGA_V19_DETERMINISTIC_TIMING", "1")).strip().lower()
     return raw not in {"0", "false", "off", "no"}
+
+
+def _env_bool(name: str, *, default: bool = False) -> bool:
+    raw = str(os.environ.get(name, "1" if default else "0")).strip().lower()
+    return raw in {"1", "true", "yes", "on"}
 
 
 def _premarathon_v63_enabled() -> bool:
@@ -1842,6 +1851,26 @@ def _build_lane_decision_receipt(
     return payload
 
 
+def _persist_lane_decision_receipt_final(*, state_root: Path, lane_decision_receipt: dict[str, Any]) -> str:
+    lane_dir = state_root / "long_run" / "lane"
+    _, persisted_obj, lane_decision_receipt_hash = _write_payload_atomic(
+        lane_dir,
+        "lane_decision_receipt_v1.json",
+        lane_decision_receipt,
+        id_field="receipt_id",
+    )
+    final_path = lane_dir / _LANE_RECEIPT_FINAL_NAME
+    content = canon_bytes(persisted_obj) + b"\n"
+    if final_path.exists():
+        existing = final_path.read_bytes()
+        if existing.rstrip(b"\n") != content.rstrip(b"\n"):
+            fail("NONDETERMINISTIC")
+    else:
+        final_path.parent.mkdir(parents=True, exist_ok=True)
+        final_path.write_bytes(content)
+    return lane_decision_receipt_hash
+
+
 def _next_health_window(
     *,
     prev_window: dict[str, Any],
@@ -2777,6 +2806,56 @@ def _probe_executed_from_artifacts(
     return True
 
 
+def _dir_size_bytes(path: Path) -> int:
+    total = 0
+    for root, _dirs, files in os.walk(path):
+        for name in files:
+            file_path = Path(root) / name
+            try:
+                total += int(file_path.stat().st_size)
+            except FileNotFoundError:
+                continue
+    return int(total)
+
+
+def _prune_ccap_ephemeral_artifacts(
+    *,
+    dispatch_ctx: dict[str, Any] | None,
+    enabled_b: bool,
+    tick_u64: int,
+) -> None:
+    if not enabled_b or not isinstance(dispatch_ctx, dict):
+        return
+    candidate_dirs: set[Path] = set()
+    subrun_root_raw = dispatch_ctx.get("subrun_root_abs")
+    if isinstance(subrun_root_raw, (str, Path)):
+        candidate_dirs.add((Path(subrun_root_raw).resolve() / "ccap" / "ek_runs").resolve())
+    state_root_raw = dispatch_ctx.get("state_root")
+    if isinstance(state_root_raw, (str, Path)):
+        state_root = Path(state_root_raw).resolve()
+        for path in sorted((state_root / "subruns").glob("*/ccap/ek_runs"), key=lambda row: row.as_posix()):
+            candidate_dirs.add(path.resolve())
+    for ek_runs_dir in sorted(candidate_dirs, key=lambda row: row.as_posix()):
+        if not ek_runs_dir.exists() or not ek_runs_dir.is_dir():
+            continue
+        before_bytes = _dir_size_bytes(ek_runs_dir)
+        shutil.rmtree(ek_runs_dir)
+        print(
+            json.dumps(
+                {
+                    "event": "CCAP_EK_RUNS_PRUNED_V1",
+                    "tick_u64": int(tick_u64),
+                    "pruned_abs": str(ek_runs_dir),
+                    "before_bytes_u64": int(before_bytes),
+                    "after_bytes_u64": 0,
+                },
+                separators=(",", ":"),
+                sort_keys=True,
+            ),
+            file=sys.stderr,
+        )
+
+
 def _declared_class_from_promotion_receipt(promotion_receipt: dict[str, Any] | None) -> str:
     raw = str((promotion_receipt or {}).get("declared_class", "")).strip().upper()
     if raw in _DECLARED_CLASSES:
@@ -2826,6 +2905,50 @@ def _campaign_pack_hash_for_entry(cap_row: dict[str, Any]) -> str:
         fail("MISSING_STATE_INPUT")
     payload = load_canon_dict(path)
     return canon_hash_obj(payload)
+
+
+def _rewrite_plan_for_milestone_sh1_frontier(
+    *,
+    decision_plan: dict[str, Any],
+    cap_row: dict[str, Any],
+) -> tuple[dict[str, Any], str]:
+    tie_break_path = decision_plan.get("tie_break_path")
+    if not isinstance(tie_break_path, list):
+        fail("SCHEMA_FAIL")
+    existing_proof = decision_plan.get("recompute_proof")
+    existing_inputs_hash: str | None = None
+    if isinstance(existing_proof, dict):
+        candidate_inputs_hash = str(existing_proof.get("inputs_hash", "")).strip()
+        if _is_sha256(candidate_inputs_hash):
+            existing_inputs_hash = candidate_inputs_hash
+    payload = dict(decision_plan)
+    payload["action_kind"] = "RUN_CAMPAIGN"
+    payload["campaign_id"] = str(cap_row.get("campaign_id", "")).strip()
+    payload["capability_id"] = _SH1_CAPABILITY_ID
+    payload["campaign_pack_hash"] = _campaign_pack_hash_for_entry(cap_row)
+    payload["expected_verifier_module"] = str(cap_row.get("verifier_module", "")).strip()
+    priority_q32 = payload.get("priority_q32")
+    if not isinstance(priority_q32, dict):
+        payload["priority_q32"] = {"q": 0}
+    payload["tie_break_path"] = [*tie_break_path, "MILESTONE_FORCE_SH1_FRONTIER"]
+    rewritten_plan, rewritten_hash = _recompute_decision_plan_identity(payload)
+    if existing_inputs_hash is None:
+        return rewritten_plan, rewritten_hash
+    rewritten_plan = dict(rewritten_plan)
+    rewritten_plan["recompute_proof"] = {
+        "inputs_hash": str(existing_inputs_hash),
+        "plan_hash": _SHA256_ZERO,
+    }
+    no_id = dict(rewritten_plan)
+    no_id.pop("plan_id", None)
+    rewritten_plan_id = canon_hash_obj(no_id)
+    rewritten_plan["plan_id"] = rewritten_plan_id
+    rewritten_plan["recompute_proof"] = {
+        "inputs_hash": str(existing_inputs_hash),
+        "plan_hash": str(rewritten_plan_id),
+    }
+    validate_schema(rewritten_plan, "omega_decision_plan_v1")
+    return rewritten_plan, canon_hash_obj(rewritten_plan)
 
 
 def _rewrite_plan_for_forced_frontier_goal(
@@ -4304,6 +4427,8 @@ def tick_once(
         anti_monopoly_window_u64 = int(_DEFAULT_ANTI_MONOPOLY_WINDOW_U64)
         anti_monopoly_diversity_k_u64 = int(_DEFAULT_ANTI_MONOPOLY_DIVERSITY_K_U64)
         anti_monopoly_cooldown_u64 = int(_DEFAULT_ANTI_MONOPOLY_COOLDOWN_U64)
+        milestone_force_sh1_frontier_b = _env_bool(_MILESTONE_FORCE_SH1_FRONTIER_ENV_KEY, default=False)
+        prune_ccap_ek_runs_b = _env_bool(_RETENTION_PRUNE_CCAP_EK_RUNS_ENV_KEY, default=False)
         frontier_capability_ids_for_debt: list[str] = []
         if long_run_profile is not None:
             long_run_eval_kernel_payload, long_run_eval_suite_payload = _load_long_run_eval_assets(
@@ -4382,6 +4507,12 @@ def tick_once(
                 anti_monopoly_cooldown_u64 = int(
                     max(1, int(anti_cfg.get("cooldown_for_ticks_u64", _DEFAULT_ANTI_MONOPOLY_COOLDOWN_U64)))
                 )
+            milestone_force_sh1_frontier_b = bool(
+                long_run_profile.get("milestone_force_sh1_frontier_b", milestone_force_sh1_frontier_b)
+            )
+            retention_cfg = long_run_profile.get("retention")
+            if isinstance(retention_cfg, dict):
+                prune_ccap_ek_runs_b = bool(retention_cfg.get("prune_ccap_ek_runs_b", prune_ccap_ek_runs_b))
 
         bid_market_cfg, bid_market_cfg_hash = load_optional_bid_market_config(config_dir)
         market_enabled = bid_market_enabled(bid_market_cfg)
@@ -4553,6 +4684,7 @@ def tick_once(
         lane_allowed_capability_ids: list[str] = []
         lane_allowed_effective: list[str] = []
         pending_frontier_goals: list[dict[str, str]] = []
+        lane_decision_receipt: dict[str, Any] | None = None
         lane_decision_receipt_hash: str | None = None
         mission_goal_receipt_hash: str | None = None
         eval_report_hash: str | None = None
@@ -4579,12 +4711,6 @@ def tick_once(
                 health_window_ticks_u64=int(prev_health_window.get("window_ticks_u64", 100)),
                 health_counts=lane_health_counts,
                 allowed_capability_ids=lane_allowed_capability_ids,
-            )
-            _, _lane_decision_receipt, lane_decision_receipt_hash = _write_payload_atomic(
-                state_root / "long_run" / "lane",
-                "lane_decision_receipt_v1.json",
-                lane_decision_receipt,
-                id_field="receipt_id",
             )
 
             registry_caps = registry.get("capabilities")
@@ -4658,10 +4784,14 @@ def tick_once(
                 fail("SCHEMA_FAIL")
             eval_mode = str(eval_cfg.get("mode", "CLASSIFY_ONLY")).strip().upper()
             eval_every_ticks_u64 = int(max(1, int(eval_cfg.get("eval_every_ticks_u64", 50))))
+            hard_task_eval_every_u64 = int(
+                max(1, int(eval_cfg.get("hard_task_eval_every_u64", eval_every_ticks_u64)))
+            )
+            eval_emit_every_ticks_u64 = int(min(eval_every_ticks_u64, hard_task_eval_every_u64))
             force_eval_b = str(os.environ.get("OMEGA_LONG_RUN_FORCE_EVAL", "0")).strip() == "1"
             if should_emit_eval(
                 tick_u64=tick_u64,
-                eval_every_ticks_u64=eval_every_ticks_u64,
+                eval_every_ticks_u64=eval_emit_every_ticks_u64,
                 force_eval_b=force_eval_b,
             ):
                 if long_run_eval_kernel_payload is None or long_run_eval_suite_payload is None:
@@ -4758,6 +4888,7 @@ def tick_once(
         forced_frontier_attempt_b = False
         forced_frontier_debt_key: str | None = None
         forced_frontier_goal_id: str | None = None
+        milestone_force_sh1_trigger_b = False
         blocks_debt_key: str | None = None
         blocks_goal_id: str | None = None
         dependency_debt_delta_i64 = 0
@@ -5528,12 +5659,76 @@ def tick_once(
                     market_selection_in_play_b=market_selection_in_play_b,
                 )
 
+            prev_hard_lock_active_b_for_milestone = bool((prev_dependency_debt_state or {}).get("hard_lock_active_b", False))
+            milestone_force_sh1_trigger_b = bool(
+                milestone_force_sh1_frontier_b and (forced_frontier_attempt_b or prev_hard_lock_active_b_for_milestone)
+            )
+            if milestone_force_sh1_trigger_b:
+                sh1_cap_row = _capability_id_to_campaign(
+                    registry=registry,
+                    capability_id=_SH1_CAPABILITY_ID,
+                    tick_u64=int(tick_u64),
+                    state=prev_state,
+                )
+                if sh1_cap_row is None:
+                    sh1_cap_row = _capability_row_for_forced_frontier(
+                        registry=registry,
+                        capability_id=_SH1_CAPABILITY_ID,
+                    )
+                if sh1_cap_row is None:
+                    fail("SCHEMA_FAIL")
+                current_capability = _selected_capability_id_from_plan(decision_plan)
+                current_action_kind = str(decision_plan.get("action_kind", "")).strip()
+                if current_capability != _SH1_CAPABILITY_ID or current_action_kind not in {"RUN_CAMPAIGN", "RUN_GOAL_TASK"}:
+                    decision_plan, decision_hash = _rewrite_plan_for_milestone_sh1_frontier(
+                        decision_plan=decision_plan,
+                        cap_row=sh1_cap_row,
+                    )
+                    _, decision_plan, decision_hash = _write_payload(
+                        state_root / "decisions",
+                        "omega_decision_plan_v1.json",
+                        decision_plan,
+                    )
+                forced_frontier_attempt_b = True
+                if "FORCED_TARGETED_FRONTIER_ATTEMPT" not in dependency_routing_reason_codes:
+                    dependency_routing_reason_codes.append("FORCED_TARGETED_FRONTIER_ATTEMPT")
+                if "MILESTONE_FORCE_SH1_FRONTIER" not in dependency_routing_reason_codes:
+                    dependency_routing_reason_codes.append("MILESTONE_FORCE_SH1_FRONTIER")
+                dependency_routing_reason_codes = _with_hard_lock_override_reason(
+                    reason_codes=dependency_routing_reason_codes,
+                    forced_frontier_attempt_b=forced_frontier_attempt_b,
+                    market_selection_in_play_b=market_selection_in_play_b,
+                )
+                lane_name = "FRONTIER"
+                lane_reason_codes = [str(row).strip() for row in lane_reason_codes if str(row).strip()]
+                if "MILESTONE_FORCE_SH1_FRONTIER" not in lane_reason_codes:
+                    lane_reason_codes.append("MILESTONE_FORCE_SH1_FRONTIER")
+                lane_allowed_capability_ids = _sorted_unique_strings([*lane_allowed_capability_ids, _SH1_CAPABILITY_ID])
+                lane_decision_receipt = _build_lane_decision_receipt(
+                    tick_u64=tick_u64,
+                    lane_name=lane_name,
+                    forced_lane_override_b=str(os.environ.get("OMEGA_LONG_RUN_FORCE_LANE", "")).strip().upper() in _LANE_NAMES,
+                    frontier_gate_pass_b=frontier_gate_pass_b,
+                    reason_codes=lane_reason_codes,
+                    health_window_ticks_u64=int(prev_health_window.get("window_ticks_u64", 100)),
+                    health_counts=lane_health_counts,
+                    allowed_capability_ids=lane_allowed_capability_ids,
+                )
+
+            if lane_decision_receipt is not None:
+                lane_decision_receipt_hash = _persist_lane_decision_receipt_final(
+                    state_root=state_root,
+                    lane_decision_receipt=lane_decision_receipt,
+                )
+
             selected_capability_id = _selected_capability_id_from_plan(decision_plan)
             selected_goal_id = _selected_goal_id_from_plan(decision_plan)
             selected_declared_class = _declared_class_for_capability_id(
                 utility_policy=long_run_utility_policy_payload,
                 capability_id=selected_capability_id,
             )
+            if milestone_force_sh1_trigger_b and str(selected_capability_id).strip() == _SH1_CAPABILITY_ID:
+                selected_declared_class = "FRONTIER_HEAVY"
             if frontier_goals_pending_b and selected_declared_class == "MAINTENANCE":
                 candidate_blocks_goal = None
                 if isinstance(selected_goal_id, str) and selected_goal_id in pending_frontier_goal_by_id:
@@ -5666,15 +5861,21 @@ def tick_once(
             if str(key).strip() and str(value).strip()
         }
         selected_action_kind = str(decision_plan.get("action_kind", "")).strip()
+        milestone_force_sh1_dispatch_b = bool(
+            milestone_force_sh1_trigger_b
+            and selected_action_kind in {"RUN_CAMPAIGN", "RUN_GOAL_TASK"}
+            and str(selected_capability_id).strip() == _SH1_CAPABILITY_ID
+        )
         if (
             selected_action_kind in {"RUN_CAMPAIGN", "RUN_GOAL_TASK"}
-            and bool(forced_frontier_attempt_b)
+            and bool(forced_frontier_attempt_b or milestone_force_sh1_dispatch_b)
             and str(selected_capability_id).strip() == _SH1_CAPABILITY_ID
         ):
             dispatch_env_overrides[_FORCED_HEAVY_ENV_KEY] = "1"
             forced_debt_key_for_env = str(forced_frontier_debt_key or blocks_debt_key or "").strip()
-            if forced_debt_key_for_env:
-                dispatch_env_overrides[_FORCED_DEBT_KEY_ENV_KEY] = forced_debt_key_for_env
+            if milestone_force_sh1_dispatch_b:
+                dispatch_env_overrides[_FORCED_WIRING_LOCUS_ENV_KEY] = str(_FORCED_WIRING_LOCUS_PRIMARY_RELPATH)
+            elif forced_debt_key_for_env:
                 wiring_locus_relpath = _compute_wiring_locus_relpath(
                     tick_u64=int(tick_u64),
                     debt_key=str(forced_debt_key_for_env),
@@ -5687,6 +5888,8 @@ def tick_once(
                 )
                 if isinstance(wiring_locus_relpath, str) and wiring_locus_relpath.strip():
                     dispatch_env_overrides[_FORCED_WIRING_LOCUS_ENV_KEY] = str(wiring_locus_relpath).strip()
+            if forced_debt_key_for_env:
+                dispatch_env_overrides[_FORCED_DEBT_KEY_ENV_KEY] = forced_debt_key_for_env
                 ban_rows = _failed_patch_ban_rows_for_debt_key(
                     ban_map=prev_failed_patch_ban_map,
                     debt_key=forced_debt_key_for_env,
@@ -5721,7 +5924,7 @@ def tick_once(
                         sort_keys=True,
                         separators=(",", ":"),
                     )
-            elif _premarathon_v63_enabled():
+            elif _premarathon_v63_enabled() and not milestone_force_sh1_dispatch_b:
                 fail("PRECHECK_FAIL:UNBOUND_DEBT_KEY")
         if selected_action_kind in {"RUN_CAMPAIGN", "RUN_GOAL_TASK"} and str(selected_capability_id).strip() == _SH1_CAPABILITY_ID:
             normalized_overrides = {
@@ -5761,29 +5964,9 @@ def tick_once(
                 dispatch_env_overrides=dispatch_env_overrides,
             )
             _mark("dispatch_campaign", dispatch_start_ns)
-            subverifier_start_ns = time.monotonic_ns()
-            if dispatch_ctx is None:
-                subverifier_receipt, subverifier_hash = run_subverifier_fn(
-                    tick_u64=tick_u64,
-                    dispatch_ctx=dispatch_ctx,
-                )
-                _mark("run_subverifier", subverifier_start_ns)
-                promotion_start_ns = time.monotonic_ns()
-                promotion_receipt, promotion_hash = run_promotion_fn(
-                    tick_u64=tick_u64,
-                    dispatch_ctx=dispatch_ctx,
-                    subverifier_receipt=subverifier_receipt,
-                    allowlists=allowlists,
-                )
-                _mark("run_promotion", promotion_start_ns)
-            else:
-                if not isinstance(dispatch_ctx, dict):
-                    fail("SCHEMA_FAIL")
-                subrun_root_raw = dispatch_ctx.get("subrun_root_abs")
-                if not isinstance(subrun_root_raw, (str, Path)):
-                    fail("SCHEMA_FAIL")
-                subrun_root_abs = Path(subrun_root_raw).resolve()
-                with _chdir(subrun_root_abs):
+            try:
+                subverifier_start_ns = time.monotonic_ns()
+                if dispatch_ctx is None:
                     subverifier_receipt, subverifier_hash = run_subverifier_fn(
                         tick_u64=tick_u64,
                         dispatch_ctx=dispatch_ctx,
@@ -5797,34 +5980,61 @@ def tick_once(
                         allowlists=allowlists,
                     )
                     _mark("run_promotion", promotion_start_ns)
-            promotion_status_raw = str((promotion_receipt or {}).get("result", {}).get("status", "")).strip()
-            if promotion_status_raw == "PROMOTED":
-                activation_start_ns = time.monotonic_ns()
-                (
-                    activation_receipt,
-                    activation_hash,
-                    rollback_receipt,
-                    rollback_hash,
-                    active_manifest_after,
-                ) = run_activation_fn(
-                    tick_u64=tick_u64,
-                    dispatch_ctx=dispatch_ctx,
-                    promotion_receipt=promotion_receipt,
-                    healthcheck_suitepack=healthcheck_suite,
-                    healthcheck_suite_hash=healthcheck_suite_hash,
-                    active_manifest_hash_before=active_manifest_before,
-                )
-                _mark("run_activation", activation_start_ns)
-            else:
-                active_manifest_after = active_manifest_before
-            axis_gate_failure = _load_axis_gate_failure(dispatch_ctx)
-            if _axis_gate_applies_safe_halt(axis_gate_failure):
-                safe_halt = True
+                else:
+                    if not isinstance(dispatch_ctx, dict):
+                        fail("SCHEMA_FAIL")
+                    subrun_root_raw = dispatch_ctx.get("subrun_root_abs")
+                    if not isinstance(subrun_root_raw, (str, Path)):
+                        fail("SCHEMA_FAIL")
+                    subrun_root_abs = Path(subrun_root_raw).resolve()
+                    with _chdir(subrun_root_abs):
+                        subverifier_receipt, subverifier_hash = run_subverifier_fn(
+                            tick_u64=tick_u64,
+                            dispatch_ctx=dispatch_ctx,
+                        )
+                        _mark("run_subverifier", subverifier_start_ns)
+                        promotion_start_ns = time.monotonic_ns()
+                        promotion_receipt, promotion_hash = run_promotion_fn(
+                            tick_u64=tick_u64,
+                            dispatch_ctx=dispatch_ctx,
+                            subverifier_receipt=subverifier_receipt,
+                            allowlists=allowlists,
+                        )
+                        _mark("run_promotion", promotion_start_ns)
+                promotion_status_raw = str((promotion_receipt or {}).get("result", {}).get("status", "")).strip()
+                if promotion_status_raw == "PROMOTED":
+                    activation_start_ns = time.monotonic_ns()
+                    (
+                        activation_receipt,
+                        activation_hash,
+                        rollback_receipt,
+                        rollback_hash,
+                        active_manifest_after,
+                    ) = run_activation_fn(
+                        tick_u64=tick_u64,
+                        dispatch_ctx=dispatch_ctx,
+                        promotion_receipt=promotion_receipt,
+                        healthcheck_suitepack=healthcheck_suite,
+                        healthcheck_suite_hash=healthcheck_suite_hash,
+                        active_manifest_hash_before=active_manifest_before,
+                    )
+                    _mark("run_activation", activation_start_ns)
+                else:
+                    active_manifest_after = active_manifest_before
+                axis_gate_failure = _load_axis_gate_failure(dispatch_ctx)
+                if _axis_gate_applies_safe_halt(axis_gate_failure):
+                    safe_halt = True
 
-            if subverifier_receipt is not None and ((subverifier_receipt.get("result") or {}).get("status") != "VALID"):
-                safe_halt = True
-            if promotion_receipt is not None and ((promotion_receipt.get("result") or {}).get("reason_code") == "FORBIDDEN_PATH"):
-                safe_halt = True
+                if subverifier_receipt is not None and ((subverifier_receipt.get("result") or {}).get("status") != "VALID"):
+                    safe_halt = True
+                if promotion_receipt is not None and ((promotion_receipt.get("result") or {}).get("reason_code") == "FORBIDDEN_PATH"):
+                    safe_halt = True
+            finally:
+                _prune_ccap_ephemeral_artifacts(
+                    dispatch_ctx=dispatch_ctx,
+                    enabled_b=bool(prune_ccap_ek_runs_b),
+                    tick_u64=int(tick_u64),
+                )
         else:
             active_manifest_after = active_manifest_before
 
@@ -5920,9 +6130,12 @@ def tick_once(
                 if pending_debt_key_rows:
                     frontier_attempt_debt_key = str(pending_debt_key_rows[0])
             if frontier_attempt_counted_b and frontier_attempt_debt_key is None:
-                if _premarathon_v63_enabled():
+                if milestone_force_sh1_trigger_b and str(dispatched_capability_id).strip() == _SH1_CAPABILITY_ID:
+                    frontier_attempt_debt_key = "frontier:milestone_sh1"
+                elif _premarathon_v63_enabled():
                     fail("PRECHECK_FAIL:UNBOUND_DEBT_KEY")
-                frontier_attempt_debt_key = "__UNBOUND_FRONTIER_ATTEMPT__"
+                else:
+                    frontier_attempt_debt_key = "__UNBOUND_FRONTIER_ATTEMPT__"
 
         budget_remaining = dict(prev_state.get("budget_remaining") or {})
         cooldowns = dict(prev_state.get("cooldowns") or {})

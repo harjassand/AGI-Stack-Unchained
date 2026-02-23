@@ -1067,19 +1067,36 @@ def observe(
     hard_task_performance_q32 = int(hard_task_metric_q32_by_id.get(_HARD_TASK_METRIC_IDS[1], 0))
     hard_task_reasoning_q32 = int(hard_task_metric_q32_by_id.get(_HARD_TASK_METRIC_IDS[2], 0))
     hard_task_suite_score_q32 = int(hard_task_metric_q32_by_id.get(_HARD_TASK_METRIC_IDS[3], 0))
+    hard_task_score_q32 = int(hard_task_suite_score_q32)
     hard_task_now_q32_by_metric = {
         _HARD_TASK_METRIC_IDS[0]: int(hard_task_code_correctness_q32),
         _HARD_TASK_METRIC_IDS[1]: int(hard_task_performance_q32),
         _HARD_TASK_METRIC_IDS[2]: int(hard_task_reasoning_q32),
         _HARD_TASK_METRIC_IDS[3]: int(hard_task_suite_score_q32),
     }
+    hard_task_delta_q32 = 0
     hard_task_gain_count_u64 = 0
+    hard_task_prev_score_q32 = 0
+    hard_task_baseline_init_u64 = 1
     if isinstance(previous_observation_report, dict):
         prev_metrics = previous_observation_report.get("metrics")
         if isinstance(prev_metrics, dict):
+            previous_hard_task_score_q32 = int(_metric_q32(prev_metrics, "hard_task_score_q32"))
+            if previous_hard_task_score_q32 == 0:
+                previous_hard_task_score_q32 = int(_metric_q32(prev_metrics, _HARD_TASK_METRIC_IDS[3]))
+            hard_task_prev_score_q32 = int(previous_hard_task_score_q32)
+            hard_task_delta_q32 = int(hard_task_score_q32) - int(previous_hard_task_score_q32)
             for metric_id, now_q32 in sorted(hard_task_now_q32_by_metric.items()):
                 if int(now_q32) > int(_metric_q32(prev_metrics, metric_id)):
                     hard_task_gain_count_u64 += 1
+            hard_task_baseline_init_u64 = 0
+    elif int(tick_u64) > 1:
+        # Previous observation can be unavailable in some replay/fastpath ticks.
+        # Keep baseline initialization one-shot and deterministic after tick 1.
+        hard_task_prev_score_q32 = int(hard_task_score_q32)
+        hard_task_delta_q32 = 0
+        hard_task_gain_count_u64 = 0
+        hard_task_baseline_init_u64 = 0
 
     sources: list[dict[str, str]] = [src_meta, src_hotloop, src_build, src_science]
     sources.extend(polymath_sources)
@@ -1128,6 +1145,10 @@ def observe(
             "hard_task_performance_q32": {"q": int(hard_task_performance_q32)},
             "hard_task_reasoning_q32": {"q": int(hard_task_reasoning_q32)},
             "hard_task_suite_score_q32": {"q": int(hard_task_suite_score_q32)},
+            "hard_task_score_q32": {"q": int(hard_task_score_q32)},
+            "hard_task_prev_score_q32": {"q": int(hard_task_prev_score_q32)},
+            "hard_task_delta_q32": {"q": int(hard_task_delta_q32)},
+            "hard_task_baseline_init_u64": int(hard_task_baseline_init_u64),
             "hard_task_gain_count_u64": int(hard_task_gain_count_u64),
             "promotion_reject_rate_rat": promotion_reject_rate_rat,
             "subverifier_invalid_rate_rat": subverifier_invalid_rate_rat,
@@ -1174,6 +1195,10 @@ def observe(
             "hard_task_performance_q32": [{"q": int(hard_task_performance_q32)}],
             "hard_task_reasoning_q32": [{"q": int(hard_task_reasoning_q32)}],
             "hard_task_suite_score_q32": [{"q": int(hard_task_suite_score_q32)}],
+            "hard_task_score_q32": [{"q": int(hard_task_score_q32)}],
+            "hard_task_prev_score_q32": [{"q": int(hard_task_prev_score_q32)}],
+            "hard_task_delta_q32": [{"q": int(hard_task_delta_q32)}],
+            "hard_task_baseline_init_u64": [int(hard_task_baseline_init_u64)],
             "hard_task_gain_count_u64": [int(hard_task_gain_count_u64)],
             "promotion_reject_rate_rat": [promotion_reject_rate_rat],
             "subverifier_invalid_rate_rat": [subverifier_invalid_rate_rat],

@@ -9,6 +9,7 @@ from typing import Any
 
 from ..v1_7r.canon import write_canon_json
 from .authority.authority_hash_v1 import auth_hash, load_authority_pins
+from .ccap_budget_v1 import resolve_effective_ccap_budget_profile
 from .ccap_runtime_v1 import (
     ccap_blob_path,
     ccap_payload_id,
@@ -253,6 +254,7 @@ def _receipt_payload(
     score_base_summary: dict[str, Any] | None = None,
     score_cand_summary: dict[str, Any] | None = None,
     score_delta_summary: dict[str, Any] | None = None,
+    effective_budget: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     def _canon_number(value: Any) -> int:
         # Canonical JSON used by receipts rejects floats; store any numeric KPI as an int.
@@ -312,6 +314,13 @@ def _receipt_payload(
             "non_noop_ticks_per_min_f64": _canon_number(score_delta_summary.get("non_noop_ticks_per_min_f64", 0)),
             "promotions_u64": int(score_delta_summary.get("promotions_u64", 0)),
             "activation_success_u64": int(score_delta_summary.get("activation_success_u64", 0)),
+        }
+    if isinstance(effective_budget, dict):
+        payload["effective_budget"] = {
+            "limits": dict(effective_budget.get("limits") or {}),
+            "tuple": dict(effective_budget.get("tuple") or {}),
+            "env_overrides": dict(effective_budget.get("env_overrides") or {}),
+            "profile_id": str(effective_budget.get("profile_id", "")),
         }
     validate_schema(payload, "ccap_receipt_v1")
     return payload
@@ -702,12 +711,17 @@ def _verify_once(
                 _write_ccap_receipt(receipt_out_dir, payload)
                 return payload, "PAYLOAD_KIND_UNSUPPORTED"
 
+    budget_profile = resolve_effective_ccap_budget_profile(
+        declared_budgets=(ccap.get("budgets") if isinstance(ccap.get("budgets"), dict) else {}),
+    )
+
     ek_result = run_ek(
         repo_root=repo_root,
         subrun_root=subrun_root,
         ccap_id=ccap_id,
         ccap=ccap,
         out_dir=subrun_root / "ccap" / "ek_runs" / ccap_id.split(":", 1)[1][:16],
+        effective_budget_limits=dict(budget_profile["limits"]),
     )
 
     determinism_check = str(ek_result.get("determinism_check", "REFUTED"))
@@ -765,6 +779,7 @@ def _verify_once(
         score_base_summary=score_base_summary,
         score_cand_summary=score_cand_summary,
         score_delta_summary=score_delta_summary,
+        effective_budget=budget_profile,
     )
     _write_ccap_receipt(receipt_out_dir, receipt_payload)
 

@@ -13,6 +13,11 @@ from typing import Any
 
 from ...v1_7r.canon import write_canon_json
 from ..authority.authority_hash_v1 import load_authority_pins
+from ..ccap_budget_v1 import (
+    effective_ccap_budget_tuple,
+    normalize_ccap_budget_limits,
+    resolve_effective_ccap_budget_profile,
+)
 from ..ccap_runtime_v1 import (
     apply_patch_bytes,
     compute_workspace_tree_id,
@@ -178,6 +183,7 @@ def _realize_once(
     subrun_root: Path,
     ccap_id: str,
     ccap: dict[str, Any],
+    effective_budgets: dict[str, Any],
     out_dir: Path,
 ) -> dict[str, Any]:
     workspace = out_dir / "workspace"
@@ -207,17 +213,16 @@ def _realize_once(
     applied_tree_id = compute_workspace_tree_id(workspace)
     meta = ccap.get("meta")
     build = ccap.get("build")
-    budgets = ccap.get("budgets")
-    if not isinstance(meta, dict) or not isinstance(build, dict) or not isinstance(budgets, dict):
+    if not isinstance(meta, dict) or not isinstance(build, dict):
         return {
             "ok": False,
-            "refutation": {"code": "EVAL_STAGE_FAIL", "detail": "ccap meta/build/budgets missing"},
+            "refutation": {"code": "EVAL_STAGE_FAIL", "detail": "ccap meta/build missing"},
         }
     harness = run_repo_harness(
         repo_root=repo_root,
         applied_tree_checkout_dir=workspace,
         build_recipe_id=str(build.get("build_recipe_id", "")).strip(),
-        budgets=budgets,
+        budgets=effective_budgets,
         env_contract_id=str(meta.get("env_contract_id", "")).strip(),
         dsbx_profile_id=str(meta.get("dsbx_profile_id", "")).strip(),
         toolchain_root_id=str(meta.get("toolchain_root_id", "")).strip(),
@@ -472,12 +477,31 @@ def run_ek(
     ccap_id: str,
     ccap: dict[str, Any],
     out_dir: Path,
+    effective_budget_limits: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     out_dir.mkdir(parents=True, exist_ok=True)
     stage_logs: list[str] = []
 
     cpu_start = int(time.process_time() * 1000)
     wall_start = int(time.time() * 1000)
+    declared_budgets = ccap.get("budgets")
+    if isinstance(effective_budget_limits, dict):
+        effective_budgets = normalize_ccap_budget_limits(effective_budget_limits)
+        budget_profile_id = canon_hash_obj(
+            {
+                "schema_version": "ccap_effective_budget_profile_v1",
+                "limits": effective_budgets,
+                "tuple": effective_ccap_budget_tuple(limits=effective_budgets),
+                "source": "provided",
+            }
+        )
+    else:
+        budget_profile = resolve_effective_ccap_budget_profile(
+            declared_budgets=declared_budgets if isinstance(declared_budgets, dict) else {},
+        )
+        effective_budgets = dict(budget_profile["limits"])
+        budget_profile_id = str(budget_profile["profile_id"])
+    effective_budget_tuple = effective_ccap_budget_tuple(limits=effective_budgets)
 
     meta = ccap.get("meta")
     if not isinstance(meta, dict):
@@ -552,6 +576,7 @@ def run_ek(
         subrun_root=subrun_root,
         ccap_id=ccap_id,
         ccap=ccap,
+        effective_budgets=effective_budgets,
         out_dir=out_dir / "realize_a",
     )
 
@@ -581,10 +606,7 @@ def run_ek(
         mem_mb = _self_mem_mb()
         disk_mb = workspace_disk_mb(out_dir)
         cost = _cost_vector(cpu_ms=cpu_ms, wall_ms=wall_ms, mem_mb=mem_mb, disk_mb=disk_mb)
-        budgets = ccap.get("budgets")
-        if not isinstance(budgets, dict):
-            budgets = {}
-        if _budget_exceeded(budgets=budgets, cost=cost):
+        if _budget_exceeded(budgets=effective_budgets, cost=cost):
             return {
                 "determinism_check": "PASS",
                 "eval_status": "FAIL",
@@ -597,6 +619,9 @@ def run_ek(
                 "realized_out_id": realized_out_a,
                 "cost_vector": cost,
                 "logs_hash": hash_bytes("\n".join(stage_logs).encode("utf-8")),
+                "effective_budget_limits": dict(effective_budgets),
+                "effective_budget_tuple": dict(effective_budget_tuple),
+                "effective_budget_profile_id": str(budget_profile_id),
             }
         return {
             "determinism_check": "PASS",
@@ -607,6 +632,9 @@ def run_ek(
             "realized_out_id": realized_out_a,
             "cost_vector": cost,
             "logs_hash": hash_bytes("\n".join(stage_logs).encode("utf-8")),
+            "effective_budget_limits": dict(effective_budgets),
+            "effective_budget_tuple": dict(effective_budget_tuple),
+            "effective_budget_profile_id": str(budget_profile_id),
         }
 
     enforce_deterministic_compilation = (
@@ -619,6 +647,7 @@ def run_ek(
         subrun_root=subrun_root,
         ccap_id=ccap_id,
         ccap=ccap,
+        effective_budgets=effective_budgets,
         out_dir=out_dir / "realize_b",
     )
     if not bool(realize_b.get("ok", False)):
@@ -732,10 +761,7 @@ def run_ek(
     disk_mb = workspace_disk_mb(out_dir)
     cost = _cost_vector(cpu_ms=cpu_ms, wall_ms=wall_ms, mem_mb=mem_mb, disk_mb=disk_mb)
 
-    budgets = ccap.get("budgets")
-    if not isinstance(budgets, dict):
-        budgets = {}
-    if _budget_exceeded(budgets=budgets, cost=cost):
+    if _budget_exceeded(budgets=effective_budgets, cost=cost):
         return {
             "determinism_check": "PASS",
             "eval_status": "FAIL",
@@ -752,6 +778,9 @@ def run_ek(
             "score_base_summary": score_base_summary,
             "score_cand_summary": score_cand_summary,
             "score_delta_summary": score_delta_summary,
+            "effective_budget_limits": dict(effective_budgets),
+            "effective_budget_tuple": dict(effective_budget_tuple),
+            "effective_budget_profile_id": str(budget_profile_id),
         }
 
     return {
@@ -767,6 +796,9 @@ def run_ek(
         "score_base_summary": score_base_summary,
         "score_cand_summary": score_cand_summary,
         "score_delta_summary": score_delta_summary,
+        "effective_budget_limits": dict(effective_budgets),
+        "effective_budget_tuple": dict(effective_budget_tuple),
+        "effective_budget_profile_id": str(budget_profile_id),
     }
 
 

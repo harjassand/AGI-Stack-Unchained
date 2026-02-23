@@ -75,6 +75,7 @@
       "properties": {
         "mode": {"type": "string", "enum": ["CLASSIFY_ONLY", "HARD_REJECT"]},
         "eval_every_ticks_u64": {"type": "integer", "minimum": 1},
+        "hard_task_eval_every_u64": {"type": "integer", "minimum": 1},
         "ek_rel": {"type": "string", "minLength": 1},
         "suite_rel": {"type": "string", "minLength": 1}
       }
@@ -108,6 +109,15 @@
         "window_ticks_u64": {"type": "integer", "minimum": 1},
         "low_diversity_campaign_limit_u64": {"type": "integer", "minimum": 1},
         "cooldown_for_ticks_u64": {"type": "integer", "minimum": 1}
+      }
+    },
+    "milestone_force_sh1_frontier_b": {"type": "boolean"},
+    "retention": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["prune_ccap_ek_runs_b"],
+      "properties": {
+        "prune_ccap_ek_runs_b": {"type": "boolean"}
       }
     },
     "mission": {

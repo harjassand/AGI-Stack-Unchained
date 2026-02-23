@@ -75,6 +75,7 @@ def build_eval_report(
 
     promotion_success_rate_q32 = _rat_to_q32((run_scorecard or {}).get("promotion_success_rate_rat"))
     invalid_rate_q32 = _rat_to_q32((tick_stats or {}).get("invalid_rate_rat"))
+    hard_task_score_q32 = int(_metric_q32(observation_report, "hard_task_suite_score_q32"))
     hard_task_delta_q32 = 0
     if isinstance(previous_observation_report, dict):
         for metric_id in _HARD_TASK_METRIC_IDS:
@@ -118,6 +119,8 @@ def build_eval_report(
             "cap_frontier_delta_s64": int(cap_frontier_delta),
             "promotion_success_rate_q32": int(promotion_success_rate_q32),
             "invalid_rate_q32": int(invalid_rate_q32),
+            "hard_task_score_q32": int(hard_task_score_q32),
+            "hard_task_delta_q32": int(hard_task_delta_q32),
         },
     }
     no_id = dict(payload)

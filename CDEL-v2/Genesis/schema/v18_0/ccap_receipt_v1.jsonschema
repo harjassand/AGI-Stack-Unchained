@@ -121,6 +121,63 @@
         "promotions_u64": {"type": "integer"},
         "activation_success_u64": {"type": "integer"}
       }
+    },
+    "effective_budget": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "limits",
+        "tuple",
+        "env_overrides",
+        "profile_id"
+      ],
+      "properties": {
+        "limits": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "cpu_ms_max",
+            "wall_ms_max",
+            "mem_mb_max",
+            "disk_mb_max",
+            "fds_max",
+            "procs_max",
+            "threads_max",
+            "net"
+          ],
+          "properties": {
+            "cpu_ms_max": {"type": "integer", "minimum": 0},
+            "wall_ms_max": {"type": "integer", "minimum": 0},
+            "mem_mb_max": {"type": "integer", "minimum": 0},
+            "disk_mb_max": {"type": "integer", "minimum": 0},
+            "fds_max": {"type": "integer", "minimum": 0},
+            "procs_max": {"type": "integer", "minimum": 0},
+            "threads_max": {"type": "integer", "minimum": 0},
+            "net": {"type": "string"}
+          }
+        },
+        "tuple": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "disk_mb_max",
+            "time_ms_max",
+            "stage_cost_budget",
+            "artifact_bytes_max"
+          ],
+          "properties": {
+            "disk_mb_max": {"type": "integer", "minimum": 0},
+            "time_ms_max": {"type": "integer", "minimum": 0},
+            "stage_cost_budget": {"type": "integer", "minimum": 0},
+            "artifact_bytes_max": {"type": "integer", "minimum": 0}
+          }
+        },
+        "env_overrides": {
+          "type": "object",
+          "additionalProperties": {"type": "string"}
+        },
+        "profile_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"}
+      }
     }
   }
 }

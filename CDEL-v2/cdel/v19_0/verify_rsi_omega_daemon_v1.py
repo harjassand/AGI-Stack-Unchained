@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import traceback
 from pathlib import Path
 from typing import Any
 
@@ -15,6 +16,7 @@ from ..v18_0.omega_common_v1 import (
     load_canon_dict,
     repo_root as repo_root_v18,
     validate_schema as validate_schema_v18,
+    write_hashed_json,
 )
 from ..v18_0.verify_rsi_omega_daemon_v1 import OmegaV18Error
 from ..v18_0.verify_rsi_omega_daemon_v1 import verify as verify_v18
@@ -69,6 +71,19 @@ def _load_canon_json(path: Path) -> dict[str, Any]:
     return payload
 
 
+def _relpath_or_abs(path_value: Any) -> str | None:
+    if not isinstance(path_value, (str, Path)):
+        return None
+    try:
+        path = Path(path_value).resolve()
+    except Exception:
+        return None
+    try:
+        return path.relative_to(repo_root_v18()).as_posix()
+    except Exception:
+        return path.as_posix()
+
+
 def _is_sha256(value: Any) -> bool:
     return isinstance(value, str) and value.startswith("sha256:") and len(value.split(":", 1)[1]) == 64
 
@@ -78,6 +93,82 @@ def _require_sha256(value: Any, *, reason: str = "SCHEMA_FAIL") -> str:
     if not _is_sha256(raw):
         fail_v18(reason)
     return raw
+
+
+def _nondeterministic_failure_detail(
+    *,
+    exc: BaseException,
+) -> tuple[str | None, str | None, str | None, str | None]:
+    frames = list(traceback.walk_tb(exc.__traceback__)) if exc.__traceback__ is not None else []
+    failure_site: str | None = None
+    path_rel: str | None = None
+    expected_hash: str | None = None
+    observed_hash: str | None = None
+    for frame, lineno in reversed(frames):
+        filename = Path(frame.f_code.co_filename)
+        if filename.name != "verify_rsi_omega_daemon_v1.py":
+            continue
+        if failure_site is None:
+            failure_site = f"{filename.name}:{int(lineno)}:{frame.f_code.co_name}"
+        locals_map = frame.f_locals
+        if path_rel is None:
+            for key in (
+                "path",
+                "bundle_path",
+                "promotion_path",
+                "axis_path",
+                "state_root",
+                "state_dir",
+                "replay_state_abs",
+                "ccap_path",
+            ):
+                candidate = _relpath_or_abs(locals_map.get(key))
+                if candidate is not None:
+                    path_rel = candidate
+                    break
+        if expected_hash is None or observed_hash is None:
+            for key in sorted(locals_map.keys()):
+                value = locals_map.get(key)
+                if not _is_sha256(value):
+                    continue
+                lowered = str(key).strip().lower()
+                if expected_hash is None and "expected" in lowered:
+                    expected_hash = str(value)
+                    continue
+                if observed_hash is None and any(token in lowered for token in ("observed", "actual", "adjusted", "replay")):
+                    observed_hash = str(value)
+    return failure_site, path_rel, expected_hash, observed_hash
+
+
+def _write_state_verifier_failure_detail(
+    *,
+    state_dir: Path,
+    reason_code: str,
+    exc: BaseException,
+) -> str | None:
+    try:
+        state_root = _resolve_state_dir(state_dir)
+    except Exception:
+        return None
+    out_dir = state_root.parent / "state_verifier"
+    failure_site, path_rel, expected_hash, observed_hash = _nondeterministic_failure_detail(exc=exc)
+    payload: dict[str, Any] = {
+        "schema_name": "state_verifier_failure_detail_v1",
+        "schema_version": "v19_0",
+        "failure_detail_id": "sha256:" + ("0" * 64),
+        "reason_code": str(reason_code).strip() or "NONDETERMINISTIC",
+        "failure_site": failure_site or "verify_rsi_omega_daemon_v1.py:unknown",
+        "path_rel": path_rel,
+        "expected_hash": expected_hash,
+        "observed_hash": observed_hash,
+    }
+    _path, _payload, digest = write_hashed_json(
+        out_dir,
+        "state_verifier_failure_detail_v1.json",
+        payload,
+        id_field="failure_detail_id",
+    )
+    return digest
 
 
 def _canonical_axis_gate_relpath(path_value: Any) -> str:
@@ -2516,6 +2607,15 @@ def main() -> None:
         msg = str(exc)
         if not msg.startswith("INVALID:"):
             msg = f"INVALID:{msg}"
+        reason_code = msg.split("INVALID:", 1)[1].strip() if msg.startswith("INVALID:") else msg.strip()
+        if str(reason_code).upper().startswith("NONDETERMINISTIC"):
+            detail_hash = _write_state_verifier_failure_detail(
+                state_dir=Path(args.state_dir),
+                reason_code="NONDETERMINISTIC",
+                exc=exc,
+            )
+            if isinstance(detail_hash, str) and detail_hash.startswith("sha256:"):
+                print(f"FAILURE_DETAIL_HASH:{detail_hash}")
         print(msg)
         raise SystemExit(1)
 

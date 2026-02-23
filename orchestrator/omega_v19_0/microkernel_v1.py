@@ -168,6 +168,8 @@ _EFFECT_CLASSES = {
 }
 _DEFAULT_DEBT_LIMIT_U64 = 3
 _DEFAULT_MAX_TICKS_WITHOUT_FRONTIER_ATTEMPT_U64 = 40
+_UTILITY_RECOVERY_WINDOW_SHORT_U64 = 50
+_UTILITY_RECOVERY_WINDOW_LONG_U64 = 200
 _DEFAULT_ANTI_MONOPOLY_CONSECUTIVE_LIMIT_U64 = 50
 _DEFAULT_ANTI_MONOPOLY_WINDOW_U64 = 50
 _DEFAULT_ANTI_MONOPOLY_DIVERSITY_K_U64 = 3
@@ -176,6 +178,11 @@ _DEFAULT_ORCH_MLX_MODEL_ID = "mlx-community/Qwen2.5-Coder-14B-Instruct-4bit"
 _SHA256_ZERO = "sha256:" + ("0" * 64)
 _SH1_CAPABILITY_ID = "RSI_GE_SH1_OPTIMIZER"
 _SH1_CAMPAIGN_ID = "rsi_ge_symbiotic_optimizer_sh1_v0_1"
+_BUILTIN_PROBE_SUITE_IDS = (
+    "utility_probe_suite_default_v1",
+    "utility_stress_probe_suite_default_v1",
+)
+_REPLAY_STATE_ROOT_REL = "replay_state"
 _FORCED_HEAVY_ENV_KEY = "OMEGA_SH1_FORCED_HEAVY_B"
 _FORCED_DEBT_KEY_ENV_KEY = "OMEGA_SH1_FORCED_DEBT_KEY"
 _FORCED_WIRING_LOCUS_ENV_KEY = "OMEGA_SH1_WIRING_LOCUS_RELPATH"
@@ -1501,6 +1508,7 @@ def _load_long_run_utility_policy(
         fail("PIN_HASH_MISMATCH")
     if observed_id != declared_id:
         fail("PIN_HASH_MISMATCH")
+    _validate_probe_suite_resolution_contract(utility_policy=payload)
     return payload, observed_id
 
 
@@ -1515,6 +1523,238 @@ def _declared_class_for_capability_id(*, utility_policy: dict[str, Any] | None, 
             if mapped in _DECLARED_CLASSES:
                 return mapped
     return "UNCLASSIFIED"
+
+
+def _probe_registry_v1_from_utility_policy(utility_policy: dict[str, Any] | None) -> dict[str, dict[str, Any]]:
+    if not isinstance(utility_policy, dict):
+        return {}
+    raw_registry = utility_policy.get("probe_registry_v1")
+    if raw_registry is None:
+        return {}
+    if not isinstance(raw_registry, dict):
+        fail("SCHEMA_FAIL")
+    normalized: dict[str, dict[str, Any]] = {}
+    for probe_id_raw, row in sorted(raw_registry.items(), key=lambda kv: str(kv[0])):
+        probe_id = str(probe_id_raw).strip()
+        if not probe_id:
+            fail("SCHEMA_FAIL")
+        if not isinstance(row, dict):
+            fail("SCHEMA_FAIL")
+        assets_raw = row.get("required_asset_relpaths_v1", [])
+        if not isinstance(assets_raw, list):
+            fail("SCHEMA_FAIL")
+        assets = [_require_safe_relpath(item) for item in assets_raw]
+        normalized[probe_id] = {
+            "probe_id": probe_id,
+            "required_asset_relpaths_v1": assets,
+        }
+    return normalized
+
+
+def _available_probe_suite_ids(*, utility_policy: dict[str, Any] | None) -> set[str]:
+    available = {str(row).strip() for row in _BUILTIN_PROBE_SUITE_IDS if str(row).strip()}
+    available.update(_probe_registry_v1_from_utility_policy(utility_policy).keys())
+    return {str(row).strip() for row in available if str(row).strip()}
+
+
+def _required_probe_suite_ids_from_utility_policy(*, utility_policy: dict[str, Any] | None) -> set[str]:
+    if not isinstance(utility_policy, dict):
+        return set()
+    heavy_policies = utility_policy.get("heavy_policies")
+    if not isinstance(heavy_policies, dict):
+        fail("SCHEMA_FAIL")
+    required: set[str] = set()
+    for _capability_id, heavy_policy in sorted(heavy_policies.items(), key=lambda kv: str(kv[0])):
+        if not isinstance(heavy_policy, dict):
+            fail("SCHEMA_FAIL")
+        required_probe_ids = heavy_policy.get("required_probe_ids_v1")
+        if isinstance(required_probe_ids, list):
+            for probe_id_raw in required_probe_ids:
+                probe_id = str(probe_id_raw).strip()
+                if probe_id:
+                    required.add(probe_id)
+        required_probe_id = str(heavy_policy.get("required_probe_id", "")).strip()
+        if required_probe_id:
+            required.add(required_probe_id)
+        probe_suite_id = str(heavy_policy.get("probe_suite_id", "")).strip()
+        stress_probe_suite_id = str(heavy_policy.get("stress_probe_suite_id", "")).strip()
+        if probe_suite_id:
+            required.add(probe_suite_id)
+        if stress_probe_suite_id:
+            required.add(stress_probe_suite_id)
+    return required
+
+
+def _validate_probe_suite_resolution_contract(*, utility_policy: dict[str, Any] | None) -> None:
+    required_suite_ids = sorted(_required_probe_suite_ids_from_utility_policy(utility_policy=utility_policy))
+    if not required_suite_ids:
+        return
+    available_suite_ids = sorted(_available_probe_suite_ids(utility_policy=utility_policy))
+    missing_suite_ids = sorted(set(required_suite_ids) - set(available_suite_ids))
+    if missing_suite_ids:
+        print(
+            json.dumps(
+                {
+                    "event": "HEAVY_POLICY_PROBE_REGISTRY_MISSING_V1",
+                    "reason_code": "HEAVY_POLICY_PROBE_REGISTRY_MISSING",
+                    "required_suite_ids": required_suite_ids,
+                    "available_suite_ids": available_suite_ids,
+                    "missing_suite_ids": missing_suite_ids,
+                },
+                sort_keys=True,
+                separators=(",", ":"),
+            ),
+            file=sys.stderr,
+        )
+        fail("HEAVY_POLICY_PROBE_REGISTRY_MISSING")
+
+
+def _required_probe_ids_for_capability(
+    *,
+    utility_policy: dict[str, Any] | None,
+    capability_id: str,
+) -> tuple[list[str], bool]:
+    if str(capability_id).strip() == _SH1_CAPABILITY_ID:
+        return [str(row) for row in _BUILTIN_PROBE_SUITE_IDS], True
+    if not isinstance(utility_policy, dict):
+        return [], False
+    heavy_policies = utility_policy.get("heavy_policies")
+    if not isinstance(heavy_policies, dict):
+        return [], False
+    heavy_policy = heavy_policies.get(str(capability_id))
+    if not isinstance(heavy_policy, dict):
+        return [], False
+    eligible_raw = heavy_policy.get("frontier_heavy_eligible_b")
+    frontier_heavy_eligible_b = bool(eligible_raw) if isinstance(eligible_raw, bool) else True
+    required_probe_ids = heavy_policy.get("required_probe_ids_v1")
+    if isinstance(required_probe_ids, list):
+        normalized = _sorted_unique_strings(required_probe_ids)
+        return normalized, frontier_heavy_eligible_b
+    required_probe_id = str(heavy_policy.get("required_probe_id", "")).strip()
+    if required_probe_id:
+        return [required_probe_id], frontier_heavy_eligible_b
+    fallback = _sorted_unique_strings(
+        [
+            str(heavy_policy.get("probe_suite_id", "")).strip(),
+            str(heavy_policy.get("stress_probe_suite_id", "")).strip(),
+        ]
+    )
+    return fallback, frontier_heavy_eligible_b
+
+
+def _probe_coverage_gate_for_capability(
+    *,
+    utility_policy: dict[str, Any] | None,
+    capability_id: str,
+    declared_class: str,
+) -> tuple[bool, str | None, dict[str, Any]]:
+    declared = str(declared_class).strip().upper()
+    heavy_block_reason = "HEAVY_BLOCKED_PROBE_MISSING"
+    if declared not in _HEAVY_DECLARED_CLASSES:
+        return True, None, {"required_probe_ids_v1": [], "missing_probe_ids_v1": [], "missing_probe_assets_v1": []}
+    if str(capability_id).strip() == _SH1_CAPABILITY_ID:
+        return True, None, {"required_probe_ids_v1": [], "missing_probe_ids_v1": [], "missing_probe_assets_v1": []}
+    required_probe_ids, heavy_eligible_b = _required_probe_ids_for_capability(
+        utility_policy=utility_policy,
+        capability_id=str(capability_id),
+    )
+    registry = _probe_registry_v1_from_utility_policy(utility_policy)
+    if not heavy_eligible_b:
+        return (
+            False,
+            heavy_block_reason,
+            {
+                "required_probe_ids_v1": list(required_probe_ids),
+                "missing_probe_ids_v1": list(required_probe_ids),
+                "missing_probe_assets_v1": [],
+            },
+        )
+    if not required_probe_ids:
+        return False, heavy_block_reason, {"required_probe_ids_v1": [], "missing_probe_ids_v1": [], "missing_probe_assets_v1": []}
+    missing_probe_ids = [probe_id for probe_id in required_probe_ids if probe_id not in registry]
+    if missing_probe_ids:
+        return (
+            False,
+            heavy_block_reason,
+            {
+                "required_probe_ids_v1": list(required_probe_ids),
+                "missing_probe_ids_v1": list(missing_probe_ids),
+                "missing_probe_assets_v1": [],
+            },
+        )
+    root = repo_root().resolve()
+    missing_assets: list[dict[str, str]] = []
+    for probe_id in required_probe_ids:
+        row = registry.get(str(probe_id)) or {}
+        assets = row.get("required_asset_relpaths_v1", [])
+        if not isinstance(assets, list):
+            fail("SCHEMA_FAIL")
+        for rel in assets:
+            asset_rel = _require_safe_relpath(rel)
+            candidate = (root / asset_rel).resolve()
+            try:
+                candidate.relative_to(root)
+            except ValueError:
+                fail("SCHEMA_FAIL")
+            if not candidate.exists():
+                missing_assets.append(
+                    {
+                        "probe_id": str(probe_id),
+                        "asset_relpath": str(asset_rel),
+                    }
+                )
+    if missing_assets:
+        return (
+            False,
+            "DROPPED_PROBE_ASSET_MISSING",
+            {
+                "required_probe_ids_v1": list(required_probe_ids),
+                "missing_probe_ids_v1": [],
+                "missing_probe_assets_v1": missing_assets,
+            },
+        )
+    return True, None, {"required_probe_ids_v1": list(required_probe_ids), "missing_probe_ids_v1": [], "missing_probe_assets_v1": []}
+
+
+def _probe_covered_fallback_capability(
+    *,
+    utility_policy: dict[str, Any] | None,
+    lane_allowed_capability_ids: list[str],
+    current_capability_id: str,
+    registry: dict[str, Any],
+    tick_u64: int,
+    state: dict[str, Any],
+) -> tuple[str | None, dict[str, Any] | None]:
+    candidate_ids = _sorted_unique_strings([_SH1_CAPABILITY_ID, *list(lane_allowed_capability_ids)])
+    for capability_id in candidate_ids:
+        candidate_capability_id = str(capability_id).strip()
+        if not candidate_capability_id or candidate_capability_id == str(current_capability_id).strip():
+            continue
+        declared_class = _declared_class_for_capability_id(
+            utility_policy=utility_policy,
+            capability_id=candidate_capability_id,
+        )
+        gate_pass_b, _drop_code, _drop_detail = _probe_coverage_gate_for_capability(
+            utility_policy=utility_policy,
+            capability_id=candidate_capability_id,
+            declared_class=declared_class,
+        )
+        if not gate_pass_b:
+            continue
+        cap_row = _capability_id_to_campaign(
+            registry=registry,
+            capability_id=candidate_capability_id,
+            tick_u64=int(tick_u64),
+            state=state,
+        )
+        if cap_row is None:
+            cap_row = _capability_row_for_forced_frontier(
+                registry=registry,
+                capability_id=candidate_capability_id,
+            )
+        if cap_row is not None:
+            return candidate_capability_id, cap_row
+    return None, None
 
 
 def _capability_id_to_campaign(
@@ -1777,6 +2017,60 @@ def _health_counts(window_payload: dict[str, Any]) -> dict[str, int]:
         "budget_exhaust_count_u64": int(budget_count),
         "route_disabled_count_u64": int(route_count),
     }
+
+
+def _recent_heavy_utility_ok_counts(*, prev_state_dir: Path | None) -> dict[str, int]:
+    out = {
+        "last_50_heavy_utility_ok_u64": 0,
+        "last_200_heavy_utility_ok_u64": 0,
+    }
+    if prev_state_dir is None:
+        return out
+    perf_dir = Path(prev_state_dir) / "perf"
+    if not perf_dir.exists() or not perf_dir.is_dir():
+        return out
+    rows: list[tuple[int, str, bool]] = []
+    for path in sorted(perf_dir.glob("sha256_*.omega_tick_outcome_v1.json"), key=lambda p: p.as_posix()):
+        payload = load_canon_dict(path)
+        if str(payload.get("schema_version", "")).strip() != "omega_tick_outcome_v1":
+            continue
+        tick_u64 = int(payload.get("tick_u64", -1))
+        if tick_u64 < 0:
+            continue
+        declared_class = str(payload.get("declared_class", "")).strip().upper()
+        effect_class = str(payload.get("effect_class", "")).strip().upper()
+        heavy_utility_ok_b = bool(
+            declared_class in _HEAVY_DECLARED_CLASSES
+            and effect_class == "EFFECT_HEAVY_OK"
+        )
+        rows.append((tick_u64, path.as_posix(), heavy_utility_ok_b))
+    if not rows:
+        return out
+    rows.sort(key=lambda row: (int(row[0]), str(row[1])))
+    last_50 = rows[-int(_UTILITY_RECOVERY_WINDOW_SHORT_U64) :]
+    last_200 = rows[-int(_UTILITY_RECOVERY_WINDOW_LONG_U64) :]
+    out["last_50_heavy_utility_ok_u64"] = int(sum(1 for row in last_50 if bool(row[2])))
+    out["last_200_heavy_utility_ok_u64"] = int(sum(1 for row in last_200 if bool(row[2])))
+    return out
+
+
+def _preferred_utility_recovery_capability(*, prev_dependency_debt_state: dict[str, Any] | None) -> str:
+    rows_raw = (prev_dependency_debt_state or {}).get("heavy_ok_count_by_capability")
+    if not isinstance(rows_raw, dict):
+        return _SH1_CAPABILITY_ID
+    rows: list[tuple[int, str]] = []
+    for capability_id, value in rows_raw.items():
+        key = str(capability_id).strip()
+        if not key:
+            continue
+        count = int(max(0, int(value)))
+        if count <= 0:
+            continue
+        rows.append((count, key))
+    if not rows:
+        return _SH1_CAPABILITY_ID
+    rows.sort(key=lambda row: (-int(row[0]), str(row[1])))
+    return str(rows[0][1])
 
 
 def _resolve_lane(
@@ -2848,17 +3142,25 @@ def _prune_ccap_ephemeral_artifacts(
     if not enabled_b or not isinstance(dispatch_ctx, dict):
         return
     candidate_dirs: set[Path] = set()
+    replay_root_abs: Path | None = None
     subrun_root_raw = dispatch_ctx.get("subrun_root_abs")
     if isinstance(subrun_root_raw, (str, Path)):
         candidate_dirs.add((Path(subrun_root_raw).resolve() / "ccap" / "ek_runs").resolve())
     state_root_raw = dispatch_ctx.get("state_root")
     if isinstance(state_root_raw, (str, Path)):
         state_root = Path(state_root_raw).resolve()
+        replay_root_abs = (state_root / _REPLAY_STATE_ROOT_REL).resolve()
         for path in sorted((state_root / "subruns").glob("*/ccap/ek_runs"), key=lambda row: row.as_posix()):
             candidate_dirs.add(path.resolve())
     for ek_runs_dir in sorted(candidate_dirs, key=lambda row: row.as_posix()):
         if not ek_runs_dir.exists() or not ek_runs_dir.is_dir():
             continue
+        if replay_root_abs is not None:
+            try:
+                ek_runs_dir.relative_to(replay_root_abs)
+                continue
+            except ValueError:
+                pass
         before_bytes = _dir_size_bytes(ek_runs_dir)
         shutil.rmtree(ek_runs_dir)
         print(
@@ -2928,10 +3230,12 @@ def _campaign_pack_hash_for_entry(cap_row: dict[str, Any]) -> str:
     return canon_hash_obj(payload)
 
 
-def _rewrite_plan_for_milestone_sh1_frontier(
+def _rewrite_plan_for_frontier_capability_bias(
     *,
     decision_plan: dict[str, Any],
     cap_row: dict[str, Any],
+    capability_id: str,
+    tie_break_reason: str,
 ) -> tuple[dict[str, Any], str]:
     tie_break_path = decision_plan.get("tie_break_path")
     if not isinstance(tie_break_path, list):
@@ -2945,13 +3249,14 @@ def _rewrite_plan_for_milestone_sh1_frontier(
     payload = dict(decision_plan)
     payload["action_kind"] = "RUN_CAMPAIGN"
     payload["campaign_id"] = str(cap_row.get("campaign_id", "")).strip()
-    payload["capability_id"] = _SH1_CAPABILITY_ID
+    payload["capability_id"] = str(capability_id).strip()
     payload["campaign_pack_hash"] = _campaign_pack_hash_for_entry(cap_row)
     payload["expected_verifier_module"] = str(cap_row.get("verifier_module", "")).strip()
     priority_q32 = payload.get("priority_q32")
     if not isinstance(priority_q32, dict):
         payload["priority_q32"] = {"q": 0}
-    payload["tie_break_path"] = [*tie_break_path, "MILESTONE_FORCE_SH1_FRONTIER"]
+    reason_norm = str(tie_break_reason).strip() or "FRONTIER_CAPABILITY_BIAS"
+    payload["tie_break_path"] = [*tie_break_path, reason_norm]
     rewritten_plan, rewritten_hash = _recompute_decision_plan_identity(payload)
     if existing_inputs_hash is None:
         return rewritten_plan, rewritten_hash
@@ -2970,6 +3275,19 @@ def _rewrite_plan_for_milestone_sh1_frontier(
     }
     validate_schema(rewritten_plan, "omega_decision_plan_v1")
     return rewritten_plan, canon_hash_obj(rewritten_plan)
+
+
+def _rewrite_plan_for_milestone_sh1_frontier(
+    *,
+    decision_plan: dict[str, Any],
+    cap_row: dict[str, Any],
+) -> tuple[dict[str, Any], str]:
+    return _rewrite_plan_for_frontier_capability_bias(
+        decision_plan=decision_plan,
+        cap_row=cap_row,
+        capability_id=_SH1_CAPABILITY_ID,
+        tie_break_reason="MILESTONE_FORCE_SH1_FRONTIER",
+    )
 
 
 def _rewrite_plan_for_forced_frontier_goal(
@@ -4721,6 +5039,7 @@ def tick_once(
         lane_decision_receipt_hash: str | None = None
         mission_goal_receipt_hash: str | None = None
         eval_report_hash: str | None = None
+        eval_mode_for_tick = "CLASSIFY_ONLY"
         prev_health_window = _load_prev_health_window(prev_state_dir=prev_state_dir, window_ticks_u64=100)
         if long_run_profile is not None:
             health_cfg = long_run_profile.get("frontier_health_gate")
@@ -4817,7 +5136,7 @@ def tick_once(
             eval_cfg = long_run_profile.get("evaluation")
             if not isinstance(eval_cfg, dict):
                 fail("SCHEMA_FAIL")
-            eval_mode = str(eval_cfg.get("mode", "CLASSIFY_ONLY")).strip().upper()
+            eval_mode_for_tick = str(eval_cfg.get("mode", "CLASSIFY_ONLY")).strip().upper()
             eval_every_ticks_u64 = int(max(1, int(eval_cfg.get("eval_every_ticks_u64", 50))))
             hard_task_eval_every_u64 = int(
                 max(1, int(eval_cfg.get("hard_task_eval_every_u64", eval_every_ticks_u64)))
@@ -4842,7 +5161,7 @@ def tick_once(
                 }
                 eval_report_payload = build_eval_report(
                     tick_u64=tick_u64,
-                    mode=eval_mode,
+                    mode=eval_mode_for_tick,
                     ek_payload=long_run_eval_kernel_payload,
                     suite_payload=long_run_eval_suite_payload,
                     observation_report=observation_report,
@@ -4928,6 +5247,12 @@ def tick_once(
         blocks_goal_id: str | None = None
         dependency_debt_delta_i64 = 0
         dependency_routing_reason_codes: list[str] = ["NO_DEPENDENCY_ROUTING"]
+        probe_gate_drop_reason_code: str | None = None
+        probe_gate_drop_detail: dict[str, Any] = {
+            "required_probe_ids_v1": [],
+            "missing_probe_ids_v1": [],
+            "missing_probe_assets_v1": [],
+        }
         opcode_table: dict[str, Any] | None = None
         opcode_table_hash: str | None = None
         if str(pack.get("schema_version", "")).strip() == "rsi_omega_daemon_pack_v2":
@@ -5752,6 +6077,67 @@ def tick_once(
                     resolved_orch_model_id=resolved_orch_model_id,
                 )
 
+            utility_recovery_counts = _recent_heavy_utility_ok_counts(prev_state_dir=prev_state_dir)
+            utility_recovery_drought_b = bool(
+                int(utility_recovery_counts.get("last_50_heavy_utility_ok_u64", 0)) == 0
+                and int(utility_recovery_counts.get("last_200_heavy_utility_ok_u64", 0)) == 0
+            )
+            if (
+                lane_name == "FRONTIER"
+                and utility_recovery_drought_b
+                and not forced_frontier_attempt_b
+                and not milestone_force_sh1_trigger_b
+            ):
+                recovery_capability_id = _preferred_utility_recovery_capability(
+                    prev_dependency_debt_state=prev_dependency_debt_state
+                )
+                recovery_cap_row = _capability_id_to_campaign(
+                    registry=registry,
+                    capability_id=recovery_capability_id,
+                    tick_u64=int(tick_u64),
+                    state=prev_state,
+                )
+                if recovery_cap_row is None:
+                    recovery_cap_row = _capability_row_for_forced_frontier(
+                        registry=registry,
+                        capability_id=recovery_capability_id,
+                    )
+                if recovery_cap_row is not None:
+                    current_capability = _selected_capability_id_from_plan(decision_plan)
+                    current_action_kind = str(decision_plan.get("action_kind", "")).strip()
+                    if current_capability != recovery_capability_id or current_action_kind not in {"RUN_CAMPAIGN", "RUN_GOAL_TASK"}:
+                        decision_plan, decision_hash = _rewrite_plan_for_frontier_capability_bias(
+                            decision_plan=decision_plan,
+                            cap_row=recovery_cap_row,
+                            capability_id=recovery_capability_id,
+                            tie_break_reason=f"UTILITY_DROUGHT_RECOVERY:{recovery_capability_id}",
+                        )
+                        _, decision_plan, decision_hash = _write_payload(
+                            state_root / "decisions",
+                            "omega_decision_plan_v1.json",
+                            decision_plan,
+                        )
+                    if "UTILITY_DROUGHT_RECOVERY_BIAS" not in dependency_routing_reason_codes:
+                        dependency_routing_reason_codes.append("UTILITY_DROUGHT_RECOVERY_BIAS")
+                    if recovery_capability_id == _SH1_CAPABILITY_ID and "UTILITY_DROUGHT_RECOVERY_SH1" not in dependency_routing_reason_codes:
+                        dependency_routing_reason_codes.append("UTILITY_DROUGHT_RECOVERY_SH1")
+                    lane_reason_codes = [str(row).strip() for row in lane_reason_codes if str(row).strip()]
+                    if "UTILITY_DROUGHT_RECOVERY_BIAS" not in lane_reason_codes:
+                        lane_reason_codes.append("UTILITY_DROUGHT_RECOVERY_BIAS")
+                    lane_allowed_capability_ids = _sorted_unique_strings([*lane_allowed_capability_ids, recovery_capability_id])
+                    lane_decision_receipt = _build_lane_decision_receipt(
+                        tick_u64=tick_u64,
+                        lane_name=lane_name,
+                        forced_lane_override_b=str(os.environ.get("OMEGA_LONG_RUN_FORCE_LANE", "")).strip().upper() in _LANE_NAMES,
+                        frontier_gate_pass_b=frontier_gate_pass_b,
+                        reason_codes=lane_reason_codes,
+                        health_window_ticks_u64=int(prev_health_window.get("window_ticks_u64", 100)),
+                        health_counts=lane_health_counts,
+                        allowed_capability_ids=lane_allowed_capability_ids,
+                        resolved_orch_llm_backend=resolved_orch_llm_backend,
+                        resolved_orch_model_id=resolved_orch_model_id,
+                    )
+
             if lane_decision_receipt is not None:
                 lane_decision_receipt_hash = _persist_lane_decision_receipt_final(
                     state_root=state_root,
@@ -5766,6 +6152,55 @@ def tick_once(
             )
             if milestone_force_sh1_trigger_b and str(selected_capability_id).strip() == _SH1_CAPABILITY_ID:
                 selected_declared_class = "FRONTIER_HEAVY"
+            selected_action_kind_after_lane = str(decision_plan.get("action_kind", "")).strip()
+            if selected_action_kind_after_lane in {"RUN_CAMPAIGN", "RUN_GOAL_TASK"}:
+                probe_gate_pass_b, probe_gate_reason_code, probe_gate_detail = _probe_coverage_gate_for_capability(
+                    utility_policy=long_run_utility_policy_payload,
+                    capability_id=selected_capability_id,
+                    declared_class=selected_declared_class,
+                )
+                if not probe_gate_pass_b:
+                    fallback_capability_id: str | None = None
+                    fallback_cap_row: dict[str, Any] | None = None
+                    # Keep forced-targeting semantics intact; only auto-rewrite when not in forced frontier mode.
+                    if not forced_frontier_attempt_b and not milestone_force_sh1_trigger_b:
+                        fallback_capability_id, fallback_cap_row = _probe_covered_fallback_capability(
+                            utility_policy=long_run_utility_policy_payload,
+                            lane_allowed_capability_ids=lane_allowed_capability_ids,
+                            current_capability_id=selected_capability_id,
+                            registry=registry,
+                            tick_u64=int(tick_u64),
+                            state=prev_state,
+                        )
+                    if fallback_capability_id is not None and fallback_cap_row is not None:
+                        decision_plan, decision_hash = _rewrite_plan_for_frontier_capability_bias(
+                            decision_plan=decision_plan,
+                            cap_row=fallback_cap_row,
+                            capability_id=str(fallback_capability_id),
+                            tie_break_reason=f"PROBE_COVERAGE_FALLBACK:{selected_capability_id}->{fallback_capability_id}",
+                        )
+                        _, decision_plan, decision_hash = _write_payload(
+                            state_root / "decisions",
+                            "omega_decision_plan_v1.json",
+                            decision_plan,
+                        )
+                        selected_capability_id = _selected_capability_id_from_plan(decision_plan)
+                        selected_goal_id = _selected_goal_id_from_plan(decision_plan)
+                        selected_declared_class = _declared_class_for_capability_id(
+                            utility_policy=long_run_utility_policy_payload,
+                            capability_id=selected_capability_id,
+                        )
+                        if milestone_force_sh1_trigger_b and str(selected_capability_id).strip() == _SH1_CAPABILITY_ID:
+                            selected_declared_class = "FRONTIER_HEAVY"
+                        if "PROBE_COVERAGE_FALLBACK" not in dependency_routing_reason_codes:
+                            dependency_routing_reason_codes.append("PROBE_COVERAGE_FALLBACK")
+                    else:
+                        probe_gate_drop_reason_code = str(probe_gate_reason_code or "DROPPED_PROBE_MISSING")
+                        probe_gate_drop_detail = (
+                            dict(probe_gate_detail)
+                            if isinstance(probe_gate_detail, dict)
+                            else {"required_probe_ids_v1": [], "missing_probe_ids_v1": [], "missing_probe_assets_v1": []}
+                        )
             if frontier_goals_pending_b and selected_declared_class == "MAINTENANCE":
                 candidate_blocks_goal = None
                 if isinstance(selected_goal_id, str) and selected_goal_id in pending_frontier_goal_by_id:
@@ -5800,6 +6235,24 @@ def tick_once(
                 dependency_debt_delta_i64 = 0
                 if not dependency_routing_reason_codes:
                     dependency_routing_reason_codes = ["NO_DEPENDENCY_ROUTING"]
+            if probe_gate_drop_reason_code is not None:
+                if str(probe_gate_drop_reason_code) not in dependency_routing_reason_codes:
+                    dependency_routing_reason_codes.append(str(probe_gate_drop_reason_code))
+                print(
+                    json.dumps(
+                        {
+                            "event": "PROBE_COVERAGE_DROP_V1",
+                            "tick_u64": int(tick_u64),
+                            "capability_id": str(selected_capability_id),
+                            "declared_class": str(selected_declared_class),
+                            "reason_code": str(probe_gate_drop_reason_code),
+                            "detail": dict(probe_gate_drop_detail),
+                        },
+                        sort_keys=True,
+                        separators=(",", ":"),
+                    ),
+                    file=sys.stderr,
+                )
             # Persist dependency routing receipt after frontier-attempt evidence is known
             # so hard-lock transition outcomes are recorded in the same tick.
 
@@ -5989,7 +6442,10 @@ def tick_once(
 
         safe_halt = decision_plan.get("action_kind") == "SAFE_HALT"
 
-        if str(decision_plan.get("action_kind")) in {"RUN_CAMPAIGN", "RUN_GOAL_TASK"}:
+        if (
+            str(decision_plan.get("action_kind")) in {"RUN_CAMPAIGN", "RUN_GOAL_TASK"}
+            and probe_gate_drop_reason_code is None
+        ):
             dispatch_start_ns = time.monotonic_ns()
             dispatch_receipt, dispatch_hash, dispatch_ctx = dispatch_campaign(
                 tick_u64=tick_u64,
@@ -6114,7 +6570,9 @@ def tick_once(
         subverifier_status_tmp = str((subverifier_receipt or {}).get("result", {}).get("status", "")).strip().upper()
         utility_ok_tmp = bool((utility_proof_receipt or {}).get("utility_ok_b", False))
         fallback_effect_class = "EFFECT_REJECTED"
-        if declared_class_for_tick in _HEAVY_DECLARED_CLASSES:
+        if probe_gate_drop_reason_code is not None:
+            fallback_effect_class = "EFFECT_REJECTED"
+        elif declared_class_for_tick in _HEAVY_DECLARED_CLASSES:
             if promotion_reason_tmp == "NO_UTILITY_GAIN_SHADOW" or not utility_ok_tmp:
                 fallback_effect_class = "EFFECT_HEAVY_NO_UTILITY"
             elif promotion_status_tmp == "PROMOTED":
@@ -7177,6 +7635,62 @@ def tick_once(
                     id_field="receipt_id",
                 )
 
+        # Deterministic measurement guarantee: if a heavy attempt is counted, emit an
+        # eval report for this tick even when cadence would otherwise skip.
+        if (
+            long_run_profile is not None
+            and eval_report_hash is None
+            and bool(frontier_attempt_counted_b)
+            and str(declared_class_for_tick).strip() in _HEAVY_DECLARED_CLASSES
+        ):
+            if long_run_eval_kernel_payload is None or long_run_eval_suite_payload is None:
+                fail("MISSING_STATE_INPUT")
+            late_heavy_ok_count_by_capability = dict((prev_dependency_debt_state or {}).get("heavy_ok_count_by_capability") or {})
+            late_heavy_no_utility_count_by_capability = dict(
+                (prev_dependency_debt_state or {}).get("heavy_no_utility_count_by_capability") or {}
+            )
+            late_maintenance_count_u64 = int((prev_dependency_debt_state or {}).get("maintenance_count_u64", 0))
+            late_frontier_attempts_u64 = int((prev_dependency_debt_state or {}).get("frontier_attempts_u64", 0))
+            if selected_capability_id:
+                if effect_class_for_tick == "EFFECT_HEAVY_OK":
+                    late_heavy_ok_count_by_capability[selected_capability_id] = int(
+                        max(0, int(late_heavy_ok_count_by_capability.get(selected_capability_id, 0))) + 1
+                    )
+                elif effect_class_for_tick == "EFFECT_HEAVY_NO_UTILITY":
+                    late_heavy_no_utility_count_by_capability[selected_capability_id] = int(
+                        max(0, int(late_heavy_no_utility_count_by_capability.get(selected_capability_id, 0))) + 1
+                    )
+            if effect_class_for_tick == "EFFECT_MAINTENANCE_OK":
+                late_maintenance_count_u64 += 1
+            late_frontier_attempts_u64 += 1
+            late_eval_report_payload = build_eval_report(
+                tick_u64=tick_u64,
+                mode=eval_mode_for_tick,
+                ek_payload=long_run_eval_kernel_payload,
+                suite_payload=long_run_eval_suite_payload,
+                observation_report=observation_report,
+                previous_observation_report=prev_observation_report,
+                run_scorecard=prev_run_scorecard,
+                tick_stats=prev_tick_stats,
+                accumulation_counters={
+                    "heavy_ok_count_by_capability": dict(late_heavy_ok_count_by_capability),
+                    "heavy_no_utility_count_by_capability": dict(late_heavy_no_utility_count_by_capability),
+                    "maintenance_count": int(max(0, int(late_maintenance_count_u64))),
+                    "dependency_debt_snapshot_hash": (
+                        dependency_debt_snapshot_hash
+                        if isinstance(dependency_debt_snapshot_hash, str) and _is_sha256(dependency_debt_snapshot_hash)
+                        else canon_hash_obj(prev_dependency_debt_state)
+                    ),
+                    "frontier_attempts_u64": int(max(0, int(late_frontier_attempts_u64))),
+                },
+            )
+            _, _late_eval_report_obj, eval_report_hash = _write_payload_atomic(
+                state_root / "long_run" / "eval",
+                "eval_report_v1.json",
+                late_eval_report_payload,
+                id_field="report_id",
+            )
+
         ledger_path = state_root / "ledger" / "omega_ledger_v1.jsonl"
         prev_event_id: str | None = None
         if ledger_path.exists():
@@ -7485,6 +7999,8 @@ def tick_once(
         axis_gate_reason_code = _axis_gate_promotion_reason_code(axis_gate_failure)
         if axis_gate_reason_code is not None:
             promotion_reason_code = axis_gate_reason_code
+        elif isinstance(probe_gate_drop_reason_code, str) and probe_gate_drop_reason_code:
+            promotion_reason_code = probe_gate_drop_reason_code
 
         perf_payload = build_tick_perf(
             tick_u64=tick_u64,

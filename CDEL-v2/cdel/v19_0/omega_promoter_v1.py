@@ -1439,6 +1439,7 @@ def _write_promotion_receipt_v19(
     utility_proof_hash: str | None,
     declared_class: str,
     effect_class: str,
+    replay_binding_v1: dict[str, Any] | None = None,
 ) -> tuple[dict[str, Any], str]:
     out_dir = Path(dispatch_ctx["dispatch_dir"]) / "promotion"
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -1462,6 +1463,8 @@ def _write_promotion_receipt_v19(
         },
         "active_manifest_hash_after": active_manifest_hash_after if _is_sha256(active_manifest_hash_after) else None,
     }
+    if isinstance(replay_binding_v1, dict):
+        payload["replay_binding_v1"] = dict(replay_binding_v1)
     require_no_absolute_paths(payload)
     _, receipt, digest = write_hashed_json(out_dir, "omega_promotion_receipt_v1.json", payload, id_field="receipt_id")
     validate_v18_schema(receipt, "omega_promotion_receipt_v1")
@@ -1475,12 +1478,15 @@ def _augment_promotion_receipt_with_effect(
     utility_proof_hash: str | None,
     declared_class: str,
     effect_class: str,
+    replay_binding_v1: dict[str, Any] | None = None,
 ) -> tuple[dict[str, Any], str]:
     out_dir = Path(dispatch_ctx["dispatch_dir"]) / "promotion"
     payload = dict(promotion_receipt)
     payload["utility_proof_hash"] = utility_proof_hash if isinstance(utility_proof_hash, str) and _is_sha256(utility_proof_hash) else None
     payload["declared_class"] = declared_class if declared_class in _DECLARED_CLASSES else "UNCLASSIFIED"
     payload["effect_class"] = effect_class
+    if isinstance(replay_binding_v1, dict):
+        payload["replay_binding_v1"] = dict(replay_binding_v1)
     result = dict(payload.get("result") or {})
     route = str(result.get("route", "")).strip().upper()
     if route not in {"ACTIVE", "SHADOW", "NONE"}:
@@ -1564,6 +1570,10 @@ def run_promotion(
     utility_policy = _load_utility_policy_for_dispatch(dispatch_ctx)
     declared_class = _declared_class_for_capability(dispatch_ctx, utility_policy)
     capability_id = _capability_id_from_dispatch(dispatch_ctx)
+    replay_binding_v1 = v18_promoter._replay_binding_v1_for_receipt(  # type: ignore[attr-defined]
+        dispatch_ctx=dispatch_ctx,
+        subverifier_receipt=subverifier_receipt,
+    )
 
     subverifier_status = str((subverifier_receipt or {}).get("result", {}).get("status", "")).strip()
     if subverifier_receipt is None or subverifier_status != "VALID":
@@ -1581,6 +1591,7 @@ def run_promotion(
             utility_proof_hash=None,
             declared_class=declared_class,
             effect_class="EFFECT_REJECTED",
+            replay_binding_v1=replay_binding_v1,
         )
 
     bundle_path, bundle_hash = v18_promoter._find_promotion_bundle(dispatch_ctx)
@@ -1604,6 +1615,7 @@ def run_promotion(
             utility_proof_hash=None,
             declared_class=declared_class,
             effect_class=effect_class,
+            replay_binding_v1=replay_binding_v1,
         )
 
     bundle_obj = load_canon_dict(bundle_path)
@@ -1661,6 +1673,7 @@ def run_promotion(
             utility_proof_hash=None,
             declared_class=declared_class,
             effect_class="EFFECT_REJECTED",
+            replay_binding_v1=replay_binding_v1,
         )
     except Exception:
         axis_failure_context = dict(axis_gate_context)
@@ -1687,6 +1700,7 @@ def run_promotion(
             utility_proof_hash=None,
             declared_class=declared_class,
             effect_class="EFFECT_REJECTED",
+            replay_binding_v1=replay_binding_v1,
         )
 
     meta_core_root = v18_promoter._meta_core_root()  # type: ignore[attr-defined]
@@ -1886,6 +1900,7 @@ def run_promotion(
             utility_proof_hash=utility_proof_hash,
             declared_class=declared_class,
             effect_class="EFFECT_HEAVY_NO_UTILITY",
+            replay_binding_v1=replay_binding_v1,
         )
 
     original_build_meta_bundle = v18_promoter._build_meta_core_promotion_bundle
@@ -1938,6 +1953,7 @@ def run_promotion(
             utility_proof_hash=utility_proof_hash,
             declared_class=declared_class,
             effect_class=final_effect_class,
+            replay_binding_v1=replay_binding_v1,
         )
     finally:
         v18_promoter._build_meta_core_promotion_bundle = original_build_meta_bundle

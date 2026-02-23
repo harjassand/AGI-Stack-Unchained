@@ -69,6 +69,37 @@ _MUTATOR_NO_BUNDLE_REASON_CODES = {
     "NO_BUNDLE_PATCH_GENERATION_FAIL",
     "NO_BUNDLE_POLICY_GATE_FAIL",
 }
+
+
+def _replay_binding_v1_from_value(value: Any) -> dict[str, Any] | None:
+    if not isinstance(value, dict):
+        return None
+    replay_state_dir_relpath = normalize_subrun_relpath(str(value.get("replay_state_dir_relpath", "")).strip())
+    replay_state_tree_hash = str(value.get("replay_state_tree_hash", "")).strip()
+    dispatch_id = str(value.get("dispatch_id", "")).strip()
+    dispatch_receipt_hash = str(value.get("dispatch_receipt_hash", "")).strip()
+    if not replay_state_dir_relpath or not _is_sha256(replay_state_tree_hash) or not dispatch_id or not _is_sha256(dispatch_receipt_hash):
+        return None
+    return {
+        "replay_state_dir_relpath": replay_state_dir_relpath,
+        "replay_state_tree_hash": replay_state_tree_hash,
+        "dispatch_id": dispatch_id,
+        "dispatch_receipt_hash": dispatch_receipt_hash,
+    }
+
+
+def _replay_binding_v1_for_receipt(
+    *,
+    dispatch_ctx: dict[str, Any] | None,
+    subverifier_receipt: dict[str, Any] | None = None,
+) -> dict[str, Any] | None:
+    if isinstance(subverifier_receipt, dict):
+        from_subverifier = _replay_binding_v1_from_value(subverifier_receipt.get("replay_binding_v1"))
+        if isinstance(from_subverifier, dict):
+            return from_subverifier
+    if not isinstance(dispatch_ctx, dict):
+        return None
+    return _replay_binding_v1_from_value(dispatch_ctx.get("replay_binding_v1"))
 _WRITE_BITS = stat.S_IWUSR | stat.S_IWGRP | stat.S_IWOTH
 _SUBVERIFIER_STATE_ARG_BY_MODULE = {
     "cdel.v12_0.verify_rsi_sas_code_v1": "--sas_code_state_dir",
@@ -90,6 +121,13 @@ def _state_arg_for_verifier(verifier_module: str) -> str:
 
 def _is_hex64(value: str) -> bool:
     return len(value) == 64 and all(ch in _HEX64 for ch in value)
+
+
+def _is_sha256(value: Any) -> bool:
+    text = str(value).strip()
+    if not text.startswith("sha256:"):
+        return False
+    return _is_hex64(text.split(":", 1)[1])
 
 
 def _load_json_obj(path: Path) -> dict[str, Any] | None:
@@ -1299,6 +1337,9 @@ def run_subverifier(
         "stdout_hash": stdout_hash,
         "stderr_hash": stderr_hash,
     }
+    replay_binding_v1 = _replay_binding_v1_for_receipt(dispatch_ctx=dispatch_ctx)
+    if isinstance(replay_binding_v1, dict):
+        payload["replay_binding_v1"] = replay_binding_v1
     require_no_absolute_paths(payload)
     _, receipt, digest = write_hashed_json(out_dir, "omega_subverifier_receipt_v1.json", payload, id_field="receipt_id")
     validate_schema(receipt, "omega_subverifier_receipt_v1")
@@ -1363,6 +1404,12 @@ def run_promotion(
             },
             "active_manifest_hash_after": active_after_hash,
         }
+        replay_binding_v1 = _replay_binding_v1_for_receipt(
+            dispatch_ctx=dispatch_ctx,
+            subverifier_receipt=subverifier_receipt,
+        )
+        if isinstance(replay_binding_v1, dict):
+            payload["replay_binding_v1"] = replay_binding_v1
         require_no_absolute_paths(payload)
         _, receipt, digest = write_hashed_json(out_dir, "omega_promotion_receipt_v1.json", payload, id_field="receipt_id")
         validate_schema(receipt, "omega_promotion_receipt_v1")

@@ -18,6 +18,7 @@ from ..v18_0.omega_common_v1 import (
     validate_schema as validate_schema_v18,
     write_hashed_json,
 )
+from ..v18_0 import verify_rsi_omega_daemon_v1 as verify_v18_module
 from ..v18_0.verify_rsi_omega_daemon_v1 import OmegaV18Error
 from ..v18_0.verify_rsi_omega_daemon_v1 import verify as verify_v18
 from .common_v1 import validate_schema as validate_schema_v19
@@ -191,6 +192,69 @@ def _write_state_verifier_failure_detail(
         "state_verifier_failure_detail_v1.json",
         payload,
         id_field="failure_detail_id",
+    )
+    return digest
+
+
+def _tail_lines(text: Any, *, max_lines: int = 10, max_chars: int = 4096) -> list[str]:
+    rows = [str(line).rstrip() for line in str(text or "").splitlines() if str(line).rstrip()]
+    if len(rows) > int(max_lines):
+        rows = rows[-int(max_lines) :]
+    out: list[str] = []
+    for row in rows:
+        if len(row) > int(max_chars):
+            out.append(row[-int(max_chars) :])
+        else:
+            out.append(row)
+    return out
+
+
+def _write_state_verifier_replay_fail_detail(
+    *,
+    state_dir: Path,
+    exc: BaseException,
+) -> str | None:
+    try:
+        state_root = _resolve_state_dir(state_dir)
+    except Exception:
+        return None
+    out_dir = state_root.parent / "state_verifier"
+    v18_detail = verify_v18_module.get_last_subverifier_replay_fail_detail()
+    detail = dict(v18_detail) if isinstance(v18_detail, dict) else {}
+    reason_branch = str(detail.get("reason_branch", "")).strip().upper()
+    if reason_branch not in {"MISSING_REPLAY_BINDING", "IMMUTABLE_TREE_MODIFIED", "REPLAY_CMD_FAILED"}:
+        reason_branch = "MISSING_REPLAY_BINDING"
+    replay_cmd_args_raw = detail.get("replay_cmd_args_v1")
+    replay_cmd_args = [str(row) for row in replay_cmd_args_raw] if isinstance(replay_cmd_args_raw, list) else []
+    replay_cmd_exit_code = detail.get("replay_cmd_exit_code")
+    replay_cmd_stdout_tail_v1 = _tail_lines(detail.get("replay_cmd_stdout_tail_v1", ""))
+    replay_cmd_stderr_tail_v1 = _tail_lines(detail.get("replay_cmd_stderr_tail_v1", ""))
+    if isinstance(detail.get("replay_cmd_stdout_tail_v1"), list):
+        replay_cmd_stdout_tail_v1 = _tail_lines("\n".join(str(row) for row in detail.get("replay_cmd_stdout_tail_v1")))
+    if isinstance(detail.get("replay_cmd_stderr_tail_v1"), list):
+        replay_cmd_stderr_tail_v1 = _tail_lines("\n".join(str(row) for row in detail.get("replay_cmd_stderr_tail_v1")))
+    payload: dict[str, Any] = {
+        "schema_name": "state_verifier_subverifier_replay_fail_detail_v1",
+        "schema_version": "v19_0",
+        "detail_id": "sha256:" + ("0" * 64),
+        "tick_u64": int(max(0, int(detail.get("tick_u64", 0)))),
+        "campaign_id": str(detail.get("campaign_id", "")).strip() or None,
+        "verifier_module": str(detail.get("verifier_module", "")).strip() or None,
+        "subrun_state_dir_rel": str(detail.get("subrun_state_dir_rel", "")).strip() or None,
+        "expected_state_dir_hash": str(detail.get("expected_state_dir_hash", "")).strip() or None,
+        "recomputed_state_dir_hash": str(detail.get("recomputed_state_dir_hash", "")).strip() or None,
+        "reason_branch": reason_branch,
+        "reason_detail": str(detail.get("reason_detail", "")).strip() or str(exc),
+        "replay_cmd_args_v1": replay_cmd_args,
+        "replay_cmd_exit_code": (int(replay_cmd_exit_code) if replay_cmd_exit_code is not None else None),
+        "replay_cmd_stdout_tail_v1": replay_cmd_stdout_tail_v1,
+        "replay_cmd_stderr_tail_v1": replay_cmd_stderr_tail_v1,
+    }
+    _path, _payload, digest = write_hashed_json(
+        out_dir,
+        "state_verifier_subverifier_replay_fail_detail_v1.json",
+        payload,
+        id_field="detail_id",
     )
     return digest
 
@@ -2640,7 +2704,15 @@ def main() -> None:
         if not msg.startswith("INVALID:"):
             msg = f"INVALID:{msg}"
         reason_code = msg.split("INVALID:", 1)[1].strip() if msg.startswith("INVALID:") else msg.strip()
-        if str(reason_code).upper().startswith("NONDETERMINISTIC"):
+        reason_upper = str(reason_code).upper()
+        if reason_upper.startswith("SUBVERIFIER_REPLAY_FAIL"):
+            detail_hash = _write_state_verifier_replay_fail_detail(
+                state_dir=Path(args.state_dir),
+                exc=exc,
+            )
+            if isinstance(detail_hash, str) and detail_hash.startswith("sha256:"):
+                print(f"SUBVERIFIER_REPLAY_FAIL_DETAIL_HASH:{detail_hash}")
+        elif reason_upper.startswith("NONDETERMINISTIC"):
             detail_hash = _write_state_verifier_failure_detail(
                 state_dir=Path(args.state_dir),
                 reason_code="NONDETERMINISTIC",

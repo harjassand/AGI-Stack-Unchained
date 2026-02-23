@@ -145,6 +145,22 @@
         }
       ]
     },
+    "replay_binding_v1": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "replay_state_dir_relpath",
+        "replay_state_tree_hash",
+        "dispatch_id",
+        "dispatch_receipt_hash"
+      ],
+      "properties": {
+        "replay_state_dir_relpath": {"type": "string", "minLength": 1},
+        "replay_state_tree_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+        "dispatch_id": {"type": "string", "minLength": 1},
+        "dispatch_receipt_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"}
+      }
+    },
     "stdout_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
     "stderr_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"}
   }

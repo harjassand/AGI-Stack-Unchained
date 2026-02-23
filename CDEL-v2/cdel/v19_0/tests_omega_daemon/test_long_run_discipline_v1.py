@@ -26,6 +26,8 @@ from orchestrator.omega_v19_0.microkernel_v1 import (
     _goal_id_for_debt_key,
     _next_health_window,
     _pending_frontier_goals,
+    _preferred_utility_recovery_capability,
+    _recent_heavy_utility_ok_counts,
     _resolve_lane,
     _with_frontier_dispatch_failed_pre_evidence_reason,
     _with_hard_lock_override_reason,
@@ -829,6 +831,58 @@ def test_harness_startup_cleanup_prunes_orphan_ek_runs(tmp_path: Path) -> None:
     assert note_payload["lock_present_b"] is True
     cleanup_log = run_root / "index" / "long_run_orphan_ek_runs_cleanup_v1.jsonl"
     assert cleanup_log.exists() and cleanup_log.is_file()
+
+
+def test_recent_heavy_utility_ok_counts_uses_50_and_200_windows(tmp_path: Path) -> None:
+    prev_state_dir = tmp_path / "state_prev"
+    perf_dir = prev_state_dir / "perf"
+    perf_dir.mkdir(parents=True, exist_ok=True)
+    for tick in range(1, 221):
+        effect_class = "EFFECT_REJECTED"
+        if tick in {10, 120, 180}:
+            effect_class = "EFFECT_HEAVY_OK"
+        payload = {
+            "schema_version": "omega_tick_outcome_v1",
+            "outcome_id": "sha256:" + ("0" * 64),
+            "tick_u64": int(tick),
+            "declared_class": "FRONTIER_HEAVY",
+            "effect_class": effect_class,
+        }
+        payload["outcome_id"] = canon_hash_obj({k: v for k, v in payload.items() if k != "outcome_id"})
+        _write_json(perf_dir / f"sha256_{payload['outcome_id'].split(':', 1)[1]}.omega_tick_outcome_v1.json", payload)
+    counts = _recent_heavy_utility_ok_counts(prev_state_dir=prev_state_dir)
+    assert counts["last_50_heavy_utility_ok_u64"] == 1
+    assert counts["last_200_heavy_utility_ok_u64"] == 2
+
+
+def test_preferred_utility_recovery_capability_uses_telemetry() -> None:
+    assert _preferred_utility_recovery_capability(prev_dependency_debt_state=None) == "RSI_GE_SH1_OPTIMIZER"
+    preferred = _preferred_utility_recovery_capability(
+        prev_dependency_debt_state={
+            "heavy_ok_count_by_capability": {
+                "RSI_ALPHA": 2,
+                "RSI_GE_SH1_OPTIMIZER": 5,
+                "RSI_BETA": 1,
+            }
+        }
+    )
+    assert preferred == "RSI_GE_SH1_OPTIMIZER"
+
+
+def test_state_verifier_outcome_parses_replay_fail_detail_hash(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    class _Proc:
+        returncode = 1
+        stdout = "SUBVERIFIER_REPLAY_FAIL_DETAIL_HASH:sha256:" + ("a" * 64) + "\nINVALID:SUBVERIFIER_REPLAY_FAIL"
+        stderr = ""
+
+    monkeypatch.setattr(long_harness.subprocess, "run", lambda *args, **kwargs: _Proc())
+    monkeypatch.setattr(long_harness, "_latest_state_verifier_failure_detail_hash", lambda _state_dir: None)
+    monkeypatch.setattr(long_harness, "_latest_state_verifier_replay_fail_detail_hash", lambda _state_dir: None)
+    valid_b, reason, nondet_hash, replay_hash = long_harness._state_verifier_outcome(tmp_path)
+    assert valid_b is False
+    assert reason == "SUBVERIFIER_REPLAY_FAIL"
+    assert nondet_hash is None
+    assert replay_hash == "sha256:" + ("a" * 64)
 
 
 def test_eval_cadence_and_report_shape() -> None:

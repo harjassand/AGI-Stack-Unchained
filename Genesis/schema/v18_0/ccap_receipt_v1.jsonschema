@@ -178,6 +178,29 @@
         },
         "profile_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"}
       }
+    },
+    "patch_apply_fail_stage": {
+      "type": "string",
+      "enum": ["APPLY_PATCH_BYTES"]
+    },
+    "patch_apply_fail_code": {
+      "type": "string",
+      "enum": [
+        "CONTEXT_MISMATCH",
+        "TARGET_MISSING",
+        "BINARY_OR_ENCODING",
+        "JSON_CANON_MISMATCH",
+        "OTHER_EXCEPTION"
+      ]
+    },
+    "patch_apply_fail_detail_hash": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "smoke_rung_u8": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 255
     }
   }
 }

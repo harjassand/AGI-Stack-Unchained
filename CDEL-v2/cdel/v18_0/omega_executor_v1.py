@@ -13,6 +13,7 @@ from typing import Any
 from orchestrator.common.run_invoker_v1 import run_module
 
 from .omega_common_v1 import (
+    canon_hash_obj,
     fail,
     repo_root,
     require_no_absolute_paths,
@@ -38,6 +39,9 @@ _SUBRUN_PRUNE_CAMPAIGN_ALLOWLIST: dict[str, tuple[str, ...]] = {}
 _FORCED_HEAVY_ENV_KEY = "OMEGA_SH1_FORCED_HEAVY_B"
 _FORCED_DEBT_KEY_ENV_KEY = "OMEGA_SH1_FORCED_DEBT_KEY"
 _FORCED_WIRING_LOCUS_ENV_KEY = "OMEGA_SH1_WIRING_LOCUS_RELPATH"
+_CCAP_VERIFIER_MODULE = "cdel.v18_0.verify_ccap_v1"
+_REPLAY_STATE_ROOT_REL = "replay_state"
+_SHA256_ZERO = "sha256:" + ("0" * 64)
 
 
 def _pinned_pythonpath(root: Path | None = None) -> str:
@@ -129,6 +133,49 @@ def _materialize_subrun_root(*, exec_root_abs: Path, subrun_root_abs: Path, mode
     shutil.copytree(exec_root_abs, subrun_root_abs, dirs_exist_ok=True)
     _remove_path(exec_root_abs)
     return False
+
+
+def _dispatch_receipt_binding_hash(payload: dict[str, Any]) -> str:
+    no_receipt = dict(payload)
+    no_receipt.pop("receipt_id", None)
+    replay_binding = no_receipt.get("replay_binding_v1")
+    if isinstance(replay_binding, dict):
+        binding_no_hash = dict(replay_binding)
+        binding_no_hash.pop("dispatch_receipt_hash", None)
+        no_receipt["replay_binding_v1"] = binding_no_hash
+    return canon_hash_obj(no_receipt)
+
+
+def _materialize_replay_state_snapshot(
+    *,
+    state_root: Path,
+    subrun_root_abs: Path,
+    subrun_state_rel: str,
+    verifier_module: str,
+    dispatch_id: str,
+) -> tuple[str, str]:
+    if str(verifier_module).strip() == _CCAP_VERIFIER_MODULE:
+        source_root = subrun_root_abs.resolve()
+    else:
+        source_root = (subrun_root_abs / require_relpath(subrun_state_rel)).resolve()
+    if not source_root.exists() or not source_root.is_dir():
+        fail("MISSING_STATE_INPUT")
+
+    replay_rel = require_relpath(f"{_REPLAY_STATE_ROOT_REL}/{dispatch_id}")
+    state_root_abs = state_root.resolve()
+    replay_abs = (state_root_abs / replay_rel).resolve()
+    try:
+        replay_abs.relative_to(state_root_abs)
+    except ValueError:
+        fail("SCHEMA_FAIL")
+    _remove_path(replay_abs)
+    replay_abs.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copytree(source_root, replay_abs, dirs_exist_ok=True)
+    ek_runs_dir = (replay_abs / "ccap" / "ek_runs").resolve()
+    if ek_runs_dir.exists() and ek_runs_dir.is_dir():
+        _remove_path(ek_runs_dir)
+    replay_tree_hash = tree_hash(replay_abs)
+    return replay_rel, replay_tree_hash
 
 
 def _prune_subrun_root(*, subrun_root_abs: Path, campaign_id: str) -> None:
@@ -323,6 +370,20 @@ def dispatch_campaign(
         subrun_root_abs=subrun_root_abs,
     )
     _prune_subrun_root(subrun_root_abs=subrun_root_abs, campaign_id=campaign_id)
+    dispatch_id = f"{action_id}_{campaign_id}"
+    replay_state_dir_relpath, replay_state_tree_hash = _materialize_replay_state_snapshot(
+        state_root=state_root,
+        subrun_root_abs=subrun_root_abs,
+        subrun_state_rel=subrun_state_rel,
+        verifier_module=str(cap.get("verifier_module", "")).strip(),
+        dispatch_id=dispatch_id,
+    )
+    replay_binding_v1 = {
+        "replay_state_dir_relpath": str(replay_state_dir_relpath),
+        "replay_state_tree_hash": str(replay_state_tree_hash),
+        "dispatch_id": str(dispatch_id),
+        "dispatch_receipt_hash": _SHA256_ZERO,
+    }
 
     payload = {
         "schema_version": "omega_dispatch_receipt_v1",
@@ -345,10 +406,12 @@ def dispatch_campaign(
         "stdout_hash": run_result["stdout_hash"],
         "stderr_hash": run_result["stderr_hash"],
         "return_code": int(run_result["return_code"]),
+        "replay_binding_v1": replay_binding_v1,
         "dispatch_env_overrides_v1": _dispatch_env_overrides_summary(
             env_overrides=(invocation_env_overrides or {}),
         ),
     }
+    payload["replay_binding_v1"]["dispatch_receipt_hash"] = _dispatch_receipt_binding_hash(payload)
 
     require_no_absolute_paths(payload)
     out_path, receipt, digest = write_hashed_json(
@@ -370,6 +433,7 @@ def dispatch_campaign(
         "subrun_root_abs": subrun_root_abs,
         "subrun_root_rel_state": subrun_root_rel_from_state,
         "subrun_state_rel_state": f"{subrun_root_rel_from_state}/{subrun_state_rel}",
+        "replay_binding_v1": dict((receipt.get("replay_binding_v1") or {})),
         "pythonpath": _pinned_pythonpath(omega_repo_root),
         "invocation_env_overrides": dict(invocation_env_overrides or {}),
     }

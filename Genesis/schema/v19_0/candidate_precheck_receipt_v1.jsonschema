@@ -87,7 +87,35 @@
               "DROPPED_FORCED_HEAVY_PREDICTED_NO_HARD_GAIN",
               "DROPPED_INSUFFICIENT_WIRING_DELTA",
               "DROPPED_SITE_NOT_FOUND",
+              "DROPPED_PATCH_APPLY_PREFLIGHT_FAILED",
               "DROPPED_WIRING_LOCUS_UNAVAILABLE"
+            ]
+          },
+          "patch_apply_fail_stage": {
+            "anyOf": [
+              {"type": "string", "enum": ["APPLY_PATCH_BYTES"]},
+              {"type": "null"}
+            ]
+          },
+          "patch_apply_fail_code": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "CONTEXT_MISMATCH",
+                  "TARGET_MISSING",
+                  "BINARY_OR_ENCODING",
+                  "JSON_CANON_MISMATCH",
+                  "OTHER_EXCEPTION"
+                ]
+              },
+              {"type": "null"}
+            ]
+          },
+          "patch_apply_fail_detail_hash": {
+            "anyOf": [
+              {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+              {"type": "null"}
             ]
           },
           "patch_sha256": {
@@ -296,6 +324,7 @@
                   "DROPPED_FORCED_HEAVY_PREDICTED_NO_HARD_GAIN",
                   "DROPPED_INSUFFICIENT_WIRING_DELTA",
                   "DROPPED_SITE_NOT_FOUND",
+                  "DROPPED_PATCH_APPLY_PREFLIGHT_FAILED",
                   "DROPPED_WIRING_LOCUS_UNAVAILABLE"
                 ]
               },

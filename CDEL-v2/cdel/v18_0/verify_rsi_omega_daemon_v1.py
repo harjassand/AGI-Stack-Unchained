@@ -36,6 +36,7 @@ from .omega_decider_v1 import decide
 from .omega_objectives_v1 import load_objectives
 from .omega_observer_index_v1 import load_index
 from .omega_policy_ir_v1 import load_policy
+from .omega_promoter_v1 import _tree_hash_ccap_subrun_for_receipt
 from .omega_promotion_bundle_v1 import extract_touched_paths, load_bundle
 from .omega_registry_v2 import load_registry
 from .omega_test_plan_v1 import campaign_requires_test_plan_receipt, load_test_plan_receipt
@@ -89,6 +90,8 @@ _SUBVERIFIER_REASON_CODES = {
 _V14_SYSTEM_VERIFIER_MODULE = "cdel.v14_0.verify_rsi_sas_system_v1"
 _V16_1_METASEARCH_VERIFIER_MODULE = "cdel.v16_1.verify_rsi_sas_metasearch_v16_1"
 _V10_MODEL_GENESIS_VERIFIER_MODULE = "cdel.v10_0.verify_rsi_model_genesis_v1"
+_CCAP_VERIFIER_MODULE = "cdel.v18_0.verify_ccap_v1"
+_HEAVY_DECLARED_CLASSES = {"FRONTIER_HEAVY", "CANARY_HEAVY"}
 _REPLAY_REPO_ROOT_REQUIRED_VERIFIER_MODULES = {
     _V14_SYSTEM_VERIFIER_MODULE,
     _V16_1_METASEARCH_VERIFIER_MODULE,
@@ -177,6 +180,11 @@ _HARD_TASK_METRIC_IDS: tuple[str, ...] = tuple(HARD_TASK_SUITE_METRIC_IDS)
 _GE_CAMPAIGN_ID = "rsi_ge_symbiotic_optimizer_sh1_v0_1"
 _CAPABILITY_FRONTIER_WINDOW_U64 = 512
 _HEX64 = set("0123456789abcdef")
+_REPLAY_FAIL_BRANCH_MISSING_REPLAY_BINDING = "MISSING_REPLAY_BINDING"
+_REPLAY_FAIL_BRANCH_IMMUTABLE_TREE_MODIFIED = "IMMUTABLE_TREE_MODIFIED"
+_REPLAY_FAIL_BRANCH_REPLAY_CMD_FAILED = "REPLAY_CMD_FAILED"
+_LAST_SUBVERIFIER_REPLAY_FAIL_DETAIL: dict[str, Any] | None = None
+_LAST_SUBVERIFIER_REPLAY_CMD_OBS: dict[str, Any] | None = None
 
 
 def _is_epistemic_metric_key(metric_id: str) -> bool:
@@ -219,6 +227,97 @@ def _is_sha256_prefixed(value: Any) -> bool:
 
 def _state_arg_for_verifier(verifier_module: str) -> str:
     return str(_SUBVERIFIER_STATE_ARG_BY_MODULE.get(verifier_module, "--state_dir"))
+
+
+def _tail_lines(text: str, *, max_lines: int = 10, max_chars: int = 4096) -> list[str]:
+    lines = [str(row).rstrip() for row in str(text).splitlines() if str(row).rstrip()]
+    if len(lines) > int(max_lines):
+        lines = lines[-int(max_lines) :]
+    out: list[str] = []
+    for row in lines:
+        if len(row) > int(max_chars):
+            out.append(row[-int(max_chars) :])
+        else:
+            out.append(row)
+    return out
+
+
+def _sanitize_replay_cmd_args(*, state_root: Path, args: list[str] | None) -> list[str]:
+    if not isinstance(args, list):
+        return []
+    state_root_abs = state_root.resolve()
+    home = str(Path.home().resolve())
+    out: list[str] = []
+    for raw in args:
+        value = str(raw)
+        candidate = value
+        try:
+            candidate_path = Path(value)
+            if candidate_path.is_absolute():
+                resolved = candidate_path.resolve()
+                try:
+                    rel = resolved.relative_to(state_root_abs).as_posix()
+                    candidate = f"<STATE_ROOT>/{rel}"
+                except ValueError:
+                    candidate = resolved.as_posix()
+        except Exception:  # noqa: BLE001
+            candidate = value
+        if home and candidate.startswith(home):
+            candidate = candidate.replace(home, "<HOME>")
+        out.append(candidate)
+    return out
+
+
+def _clear_subverifier_replay_debug_context() -> None:
+    global _LAST_SUBVERIFIER_REPLAY_FAIL_DETAIL
+    global _LAST_SUBVERIFIER_REPLAY_CMD_OBS
+    _LAST_SUBVERIFIER_REPLAY_FAIL_DETAIL = None
+    _LAST_SUBVERIFIER_REPLAY_CMD_OBS = None
+
+
+def _record_subverifier_replay_fail_detail(
+    *,
+    state_root: Path,
+    verifier_module: str | None,
+    tick_u64: int | None,
+    campaign_id: str | None,
+    subrun_state_dir_rel: str | None,
+    expected_state_dir_hash: str | None,
+    recomputed_state_dir_hash: str | None,
+    reason_branch: str,
+    reason_detail: str | None = None,
+    replay_cmd_exit_code: int | None = None,
+    replay_cmd_stdout_text: str | None = None,
+    replay_cmd_stderr_text: str | None = None,
+    replay_cmd_args_v1: list[str] | None = None,
+) -> None:
+    global _LAST_SUBVERIFIER_REPLAY_FAIL_DETAIL
+    normalized_reason = str(reason_branch).strip().upper()
+    payload: dict[str, Any] = {
+        "tick_u64": int(max(0, int(tick_u64 or 0))),
+        "campaign_id": str(campaign_id or "").strip() or None,
+        "verifier_module": str(verifier_module or "").strip() or None,
+        "subrun_state_dir_rel": str(subrun_state_dir_rel or "").strip() or None,
+        "expected_state_dir_hash": str(expected_state_dir_hash or "").strip() or None,
+        "recomputed_state_dir_hash": str(recomputed_state_dir_hash or "").strip() or None,
+        "reason_branch": normalized_reason,
+        "reason_detail": str(reason_detail or "").strip() or None,
+        "replay_cmd_exit_code": (int(replay_cmd_exit_code) if replay_cmd_exit_code is not None else None),
+        "replay_cmd_stdout_tail_v1": _tail_lines(replay_cmd_stdout_text or ""),
+        "replay_cmd_stderr_tail_v1": _tail_lines(replay_cmd_stderr_text or ""),
+        "replay_cmd_args_v1": _sanitize_replay_cmd_args(state_root=state_root, args=(replay_cmd_args_v1 or [])),
+    }
+    _LAST_SUBVERIFIER_REPLAY_FAIL_DETAIL = payload
+
+
+def _last_subverifier_replay_fail_detail() -> dict[str, Any] | None:
+    if not isinstance(_LAST_SUBVERIFIER_REPLAY_FAIL_DETAIL, dict):
+        return None
+    return dict(_LAST_SUBVERIFIER_REPLAY_FAIL_DETAIL)
+
+
+def get_last_subverifier_replay_fail_detail() -> dict[str, Any] | None:
+    return _last_subverifier_replay_fail_detail()
 
 
 def _meta_core_root() -> Path:
@@ -1645,6 +1744,7 @@ def _run_subverifier_replay_cmd(
     env_overrides: dict[str, str] | None = None,
     replay_argv: list[str] | None = None,
 ) -> tuple[int, str, str]:
+    global _LAST_SUBVERIFIER_REPLAY_CMD_OBS
     if replay_argv is None:
         cmd = [sys.executable, "-m", verifier_module, "--mode", "full", state_arg, replay_state_dir]
     else:
@@ -1677,9 +1777,16 @@ def _run_subverifier_replay_cmd(
                     env=local_env,
                 )
             stdout_raw = stdout_path.read_text(encoding="utf-8", errors="replace")
+            stderr_raw = stderr_path.read_text(encoding="utf-8", errors="replace")
             stdout_text = stdout_raw.strip()
             stdout_lines = stdout_raw.splitlines()
             last_line = stdout_lines[-1].strip() if stdout_lines else ""
+            _LAST_SUBVERIFIER_REPLAY_CMD_OBS = {
+                "return_code": int(rc.returncode),
+                "stdout_text": stdout_text,
+                "stderr_text": stderr_raw.strip(),
+                "cmd_args_v1": list(cmd),
+            }
             return int(rc.returncode), last_line, stdout_text
         finally:
             stdout_path.unlink(missing_ok=True)
@@ -1756,6 +1863,56 @@ def _v12_replay_fallback_state_dir(subrun_state_dir: Path) -> str | None:
     return str((Path(sas_root_canon) / "state").resolve())
 
 
+def _dispatch_receipt_binding_hash(payload: dict[str, Any]) -> str:
+    no_receipt = dict(payload)
+    no_receipt.pop("receipt_id", None)
+    replay_binding = no_receipt.get("replay_binding_v1")
+    if isinstance(replay_binding, dict):
+        binding_no_hash = dict(replay_binding)
+        binding_no_hash.pop("dispatch_receipt_hash", None)
+        no_receipt["replay_binding_v1"] = binding_no_hash
+    return canon_hash_obj(no_receipt)
+
+
+def _normalize_replay_binding_v1(value: Any) -> dict[str, str] | None:
+    if not isinstance(value, dict):
+        return None
+    replay_state_dir_relpath = str(value.get("replay_state_dir_relpath", "")).strip()
+    replay_state_tree_hash = str(value.get("replay_state_tree_hash", "")).strip()
+    dispatch_id = str(value.get("dispatch_id", "")).strip()
+    dispatch_receipt_hash = str(value.get("dispatch_receipt_hash", "")).strip()
+    if (
+        not replay_state_dir_relpath
+        or not _is_sha256(replay_state_tree_hash)
+        or not dispatch_id
+        or not _is_sha256(dispatch_receipt_hash)
+    ):
+        return None
+    rel_path = Path(replay_state_dir_relpath)
+    if rel_path.is_absolute() or ".." in rel_path.parts or "\\" in replay_state_dir_relpath:
+        return None
+    return {
+        "replay_state_dir_relpath": replay_state_dir_relpath,
+        "replay_state_tree_hash": replay_state_tree_hash,
+        "dispatch_id": dispatch_id,
+        "dispatch_receipt_hash": dispatch_receipt_hash,
+    }
+
+
+def _bindings_equal(lhs: dict[str, str], rhs: dict[str, str]) -> bool:
+    return all(str(lhs.get(key, "")).strip() == str(rhs.get(key, "")).strip() for key in lhs.keys())
+
+
+def _promotion_requires_replay_binding(promotion_payload: dict[str, Any] | None) -> bool:
+    if not isinstance(promotion_payload, dict):
+        return False
+    status = str(((promotion_payload.get("result") or {}).get("status", ""))).strip().upper()
+    if status != "PROMOTED":
+        return False
+    declared_class = str(promotion_payload.get("declared_class", "")).strip().upper()
+    return declared_class in _HEAVY_DECLARED_CLASSES
+
+
 def _discover_ccap_relpath(subrun_root: Path) -> str | None:
     rows = sorted((subrun_root / "ccap").glob("sha256_*.ccap_v1.json"), key=lambda row: row.as_posix())
     if not rows:
@@ -1764,49 +1921,8 @@ def _discover_ccap_relpath(subrun_root: Path) -> str | None:
 
 
 def _tree_hash_ccap_subrun_for_replay(subrun_root: Path) -> str:
-    """Mirror CCAP subrun hashing used by subverifier receipts.
-
-    Subverifier receipts for `verify_ccap_v1` hash subrun artifacts while excluding
-    `ccap/ek_runs/**` to avoid huge workspaces and symlink-heavy trees. Replay must
-    compare against the same hash domain.
-    """
-
-    if not subrun_root.exists() or not subrun_root.is_dir():
-        fail("MISSING_STATE_INPUT")
-
-    include_files: list[dict[str, str]] = []
-
-    def _add_tree(root: Path, rel_prefix: str) -> None:
-        if not root.exists() or not root.is_dir():
-            return
-        stack = [root]
-        while stack:
-            cur = stack.pop()
-            for entry in sorted(cur.iterdir(), key=lambda p: p.name):
-                rel = (Path(rel_prefix) / entry.relative_to(root)).as_posix()
-                if rel.startswith("ccap/ek_runs/"):
-                    continue
-                if entry.is_symlink():
-                    try:
-                        target = os.readlink(entry)
-                    except OSError:
-                        fail("SCHEMA_FAIL")
-                    include_files.append({"path": rel, "sha256": hash_bytes(target.encode("utf-8"))})
-                elif entry.is_dir():
-                    stack.append(entry)
-                elif entry.is_file():
-                    include_files.append({"path": rel, "sha256": hash_file(entry)})
-
-    _add_tree((subrun_root / "ccap").resolve(), "ccap")
-    _add_tree((subrun_root / "promotion").resolve(), "promotion")
-
-    for name in ("ge_symbiotic_optimizer_summary_v0_3.json", "ge_xs_snapshot_v1.json", "ge_run_inputs_fingerprint_v2.json"):
-        p = (subrun_root / name).resolve()
-        if p.exists() and p.is_file():
-            include_files.append({"path": name, "sha256": hash_file(p)})
-
-    include_files.sort(key=lambda row: row["path"])
-    return canon_hash_obj({"schema_version": "omega_ccap_subrun_hash_v1", "files": include_files})
+    # Keep replay immutability hashing byte-for-byte aligned with receipt hashing.
+    return _tree_hash_ccap_subrun_for_receipt(subrun_root)
 
 
 def _tree_hash_for_replay_without_sidecars(state_root: Path) -> str:
@@ -1836,60 +1952,197 @@ def _replay_promoted_subverifier(
     state_root: Path,
     dispatch_payload: dict[str, Any] | None,
     subverifier_payload: dict[str, Any] | None,
+    promotion_payload: dict[str, Any] | None = None,
 ) -> None:
-    if dispatch_payload is None or subverifier_payload is None:
+    _clear_subverifier_replay_debug_context()
+    verifier_module_raw = str((subverifier_payload or {}).get("verifier_module", "")).strip()
+    tick_u64 = int(max(0, int((subverifier_payload or {}).get("tick_u64", 0))))
+    campaign_id = str((subverifier_payload or {}).get("campaign_id", "")).strip() or None
+    subrun_state_dir_rel: str | None = None
+    expected_state_hash: str | None = None
+    replay_state_abs: Path | None = None
+    subrun_root_rel = ""
+
+    def _fail_replay(
+        *,
+        reason_branch: str,
+        reason_detail: str | None = None,
+        recomputed_state_dir_hash: str | None = None,
+        replay_cmd_exit_code: int | None = None,
+        replay_cmd_stdout_text: str | None = None,
+        replay_cmd_stderr_text: str | None = None,
+        replay_cmd_args_v1: list[str] | None = None,
+    ) -> None:
+        cmd_obs = _LAST_SUBVERIFIER_REPLAY_CMD_OBS if isinstance(_LAST_SUBVERIFIER_REPLAY_CMD_OBS, dict) else {}
+        _record_subverifier_replay_fail_detail(
+            state_root=state_root,
+            verifier_module=(verifier_module_raw or None),
+            tick_u64=tick_u64,
+            campaign_id=campaign_id,
+            subrun_state_dir_rel=subrun_state_dir_rel,
+            expected_state_dir_hash=expected_state_hash,
+            recomputed_state_dir_hash=recomputed_state_dir_hash,
+            reason_branch=reason_branch,
+            reason_detail=reason_detail,
+            replay_cmd_exit_code=(
+                replay_cmd_exit_code
+                if replay_cmd_exit_code is not None
+                else (int(cmd_obs.get("return_code")) if cmd_obs.get("return_code") is not None else None)
+            ),
+            replay_cmd_stdout_text=(
+                replay_cmd_stdout_text
+                if replay_cmd_stdout_text is not None
+                else (str(cmd_obs.get("stdout_text", "")) if isinstance(cmd_obs, dict) else "")
+            ),
+            replay_cmd_stderr_text=(
+                replay_cmd_stderr_text
+                if replay_cmd_stderr_text is not None
+                else (str(cmd_obs.get("stderr_text", "")) if isinstance(cmd_obs, dict) else "")
+            ),
+            replay_cmd_args_v1=(
+                replay_cmd_args_v1
+                if replay_cmd_args_v1 is not None
+                else (list(cmd_obs.get("cmd_args_v1") or []) if isinstance(cmd_obs, dict) else [])
+            ),
+        )
         fail("SUBVERIFIER_REPLAY_FAIL")
 
-    verifier_module = str(subverifier_payload.get("verifier_module", "")).strip()
-    if not verifier_module:
-        fail("SUBVERIFIER_REPLAY_FAIL")
+    if dispatch_payload is None or subverifier_payload is None:
+        _fail_replay(
+            reason_branch=_REPLAY_FAIL_BRANCH_MISSING_REPLAY_BINDING,
+            reason_detail="MISSING_DISPATCH_OR_SUBVERIFIER_PAYLOAD",
+        )
+    if not verifier_module_raw:
+        _fail_replay(
+            reason_branch=_REPLAY_FAIL_BRANCH_MISSING_REPLAY_BINDING,
+            reason_detail="MISSING_VERIFIER_MODULE",
+        )
+
+    binding_required = _promotion_requires_replay_binding(promotion_payload)
+    dispatch_binding = _normalize_replay_binding_v1(dispatch_payload.get("replay_binding_v1"))
+    subverifier_binding = _normalize_replay_binding_v1(subverifier_payload.get("replay_binding_v1"))
+    promotion_binding = (
+        _normalize_replay_binding_v1((promotion_payload or {}).get("replay_binding_v1"))
+        if isinstance(promotion_payload, dict)
+        else None
+    )
+
+    if binding_required and (dispatch_binding is None or subverifier_binding is None):
+        _fail_replay(
+            reason_branch=_REPLAY_FAIL_BRANCH_MISSING_REPLAY_BINDING,
+            reason_detail="MISSING_REPLAY_BINDING",
+        )
+    if dispatch_binding is not None:
+        expected_dispatch_binding_hash = _dispatch_receipt_binding_hash(dispatch_payload)
+        if str(dispatch_binding.get("dispatch_receipt_hash", "")).strip() != str(expected_dispatch_binding_hash):
+            _fail_replay(
+                reason_branch=_REPLAY_FAIL_BRANCH_MISSING_REPLAY_BINDING,
+                reason_detail="DISPATCH_RECEIPT_HASH_BINDING_MISMATCH",
+            )
+    if dispatch_binding is not None and subverifier_binding is not None and (not _bindings_equal(dispatch_binding, subverifier_binding)):
+        _fail_replay(
+            reason_branch=_REPLAY_FAIL_BRANCH_MISSING_REPLAY_BINDING,
+            reason_detail="SUBVERIFIER_REPLAY_BINDING_MISMATCH",
+        )
+    if binding_required:
+        if promotion_binding is None:
+            _fail_replay(
+                reason_branch=_REPLAY_FAIL_BRANCH_MISSING_REPLAY_BINDING,
+                reason_detail="MISSING_PROMOTION_REPLAY_BINDING",
+            )
+        if dispatch_binding is None or promotion_binding is None or (not _bindings_equal(dispatch_binding, promotion_binding)):
+            _fail_replay(
+                reason_branch=_REPLAY_FAIL_BRANCH_MISSING_REPLAY_BINDING,
+                reason_detail="PROMOTION_REPLAY_BINDING_MISMATCH",
+            )
 
     subrun = dispatch_payload.get("subrun")
-    if not isinstance(subrun, dict):
-        fail("SUBVERIFIER_REPLAY_FAIL")
-    subrun_root_rel = str(subrun.get("subrun_root_rel", "")).strip()
-    subrun_state_rel = str(subrun.get("state_dir_rel", "")).strip()
-    if not subrun_root_rel or not subrun_state_rel:
-        fail("SUBVERIFIER_REPLAY_FAIL")
-    replay_state_rel = f"{subrun_root_rel}/{subrun_state_rel}"
+    if isinstance(subrun, dict):
+        subrun_root_rel = str(subrun.get("subrun_root_rel", "")).strip()
+        subrun_state_rel = str(subrun.get("state_dir_rel", "")).strip()
+    else:
+        subrun_state_rel = ""
+
+    if dispatch_binding is not None:
+        replay_state_rel = str(dispatch_binding["replay_state_dir_relpath"])
+        expected_state_hash = str(dispatch_binding["replay_state_tree_hash"])
+    else:
+        if not isinstance(subrun, dict):
+            _fail_replay(
+                reason_branch=_REPLAY_FAIL_BRANCH_MISSING_REPLAY_BINDING,
+                reason_detail="MISSING_SUBRUN_BINDING",
+            )
+        if not subrun_root_rel or not subrun_state_rel:
+            _fail_replay(
+                reason_branch=_REPLAY_FAIL_BRANCH_MISSING_REPLAY_BINDING,
+                reason_detail="MISSING_SUBRUN_PATH_BINDING",
+            )
+        replay_state_rel = f"{subrun_root_rel}/{subrun_state_rel}"
+        expected_state_hash = str((subverifier_payload or {}).get("state_dir_hash", "")).strip() or None
+
+    subrun_state_dir_rel = str(replay_state_rel)
     replay_state_abs = (state_root / replay_state_rel).resolve()
     if not replay_state_abs.exists() or not replay_state_abs.is_dir():
-        fail("SUBVERIFIER_REPLAY_FAIL")
+        _fail_replay(
+            reason_branch=_REPLAY_FAIL_BRANCH_MISSING_REPLAY_BINDING,
+            reason_detail="MISSING_REPLAY_STATE_DIR",
+        )
 
-    expected_state_hash = str(subverifier_payload.get("state_dir_hash", "")).strip()
-    if verifier_module == "cdel.v18_0.verify_ccap_v1":
-        actual_state_hash = _tree_hash_ccap_subrun_for_replay((state_root / subrun_root_rel).resolve())
-        # CCAP promotion can append artifacts under `subrun_root/promotion` after the
-        # subverifier receipt is written, which changes this hash in final tick-state
-        # snapshots. For CCAP, rely on explicit verifier replay result below.
-        _ = (expected_state_hash, actual_state_hash)
+    if expected_state_hash is None or not _is_sha256(expected_state_hash):
+        _fail_replay(
+            reason_branch=_REPLAY_FAIL_BRANCH_MISSING_REPLAY_BINDING,
+            reason_detail="MISSING_REPLAY_STATE_HASH",
+        )
+    if dispatch_binding is None and verifier_module_raw == _CCAP_VERIFIER_MODULE:
+        replay_hash_root_abs = (state_root / subrun_root_rel).resolve()
+        actual_state_hash = _tree_hash_ccap_subrun_for_replay(replay_hash_root_abs)
+        adjusted_hash = actual_state_hash
     else:
         actual_state_hash = tree_hash(replay_state_abs)
-        if expected_state_hash != actual_state_hash:
-            adjusted_hash = _tree_hash_for_replay_without_sidecars(replay_state_abs)
-            if expected_state_hash != adjusted_hash:
-                fail("SUBVERIFIER_REPLAY_FAIL")
+        adjusted_hash = _tree_hash_for_replay_without_sidecars(replay_state_abs)
+    if expected_state_hash != actual_state_hash and expected_state_hash != adjusted_hash:
+        _fail_replay(
+            reason_branch=_REPLAY_FAIL_BRANCH_IMMUTABLE_TREE_MODIFIED,
+            reason_detail="STATE_DIR_HASH_MISMATCH",
+            recomputed_state_dir_hash=adjusted_hash,
+        )
 
-    replay_repo_root = _resolve_replay_repo_root(
-        state_root=state_root,
-        verifier_module=verifier_module,
-        subverifier_payload=subverifier_payload,
-    )
+    try:
+        replay_repo_root = _resolve_replay_repo_root(
+            state_root=state_root,
+            verifier_module=verifier_module_raw,
+            subverifier_payload=subverifier_payload,
+        )
+    except OmegaV18Error as exc:
+        if "SUBVERIFIER_REPLAY_FAIL" in str(exc):
+            _fail_replay(
+                reason_branch=_REPLAY_FAIL_BRANCH_MISSING_REPLAY_BINDING,
+                reason_detail="REPLAY_REPO_ROOT_BINDING_INVALID",
+            )
+        raise
     invocation = dispatch_payload.get("invocation")
     if not isinstance(invocation, dict):
-        fail("SUBVERIFIER_REPLAY_FAIL")
+        _fail_replay(
+            reason_branch=_REPLAY_FAIL_BRANCH_MISSING_REPLAY_BINDING,
+            reason_detail="MISSING_INVOCATION_BINDING",
+        )
     raw_overrides = invocation.get("env_overrides")
     env_overrides: dict[str, str] | None = None
     if raw_overrides is not None:
         if not isinstance(raw_overrides, dict):
-            fail("SUBVERIFIER_REPLAY_FAIL")
+            _fail_replay(
+                reason_branch=_REPLAY_FAIL_BRANCH_MISSING_REPLAY_BINDING,
+                reason_detail="INVALID_ENV_OVERRIDES_BINDING",
+            )
         env_overrides = {str(k): str(v) for k, v in raw_overrides.items()}
 
-    state_arg = _state_arg_for_verifier(verifier_module)
+    state_arg = _state_arg_for_verifier(verifier_module_raw)
 
     replay_argv: list[str] | None = None
-    if verifier_module == "cdel.v18_0.verify_ccap_v1":
-        replay_subrun_root_abs = (state_root / subrun_root_rel).resolve()
+    if verifier_module_raw == _CCAP_VERIFIER_MODULE:
+        replay_subrun_root_abs = replay_state_abs
+        if dispatch_binding is None:
+            replay_subrun_root_abs = (state_root / subrun_root_rel).resolve()
         replay_receipt_out_dir = state_root / "_replay_subverifier" / replay_subrun_root_abs.name / "verifier"
         replay_receipt_out_dir.mkdir(parents=True, exist_ok=True)
         replay_argv = [
@@ -1908,36 +2161,70 @@ def _replay_promoted_subverifier(
         if ccap_relpath is not None:
             replay_argv.extend(["--ccap_relpath", ccap_relpath])
 
-    return_code, last_line, stdout_text = _run_subverifier_replay_cmd(
-        state_root=state_root,
-        verifier_module=verifier_module,
-        state_arg=state_arg,
-        replay_state_dir=str(replay_state_abs),
-        replay_repo_root=replay_repo_root,
-        env_overrides=env_overrides,
-        replay_argv=replay_argv,
-    )
+    run_kwargs: dict[str, Any] = {
+        "state_root": state_root,
+        "verifier_module": verifier_module_raw,
+        "state_arg": state_arg,
+        "replay_state_dir": str(replay_state_abs),
+        "replay_repo_root": replay_repo_root,
+    }
+    if env_overrides is not None:
+        run_kwargs["env_overrides"] = env_overrides
+    if replay_argv is not None:
+        run_kwargs["replay_argv"] = replay_argv
+
+    run_result = _run_subverifier_replay_cmd(**run_kwargs)
+    if not isinstance(run_result, tuple) or len(run_result) < 3:
+        _fail_replay(
+            reason_branch=_REPLAY_FAIL_BRANCH_REPLAY_CMD_FAILED,
+            reason_detail="REPLAY_CMD_RETURN_SHAPE_INVALID",
+            replay_cmd_args_v1=(
+                [sys.executable, "-m", verifier_module_raw, *list(replay_argv)]
+                if replay_argv is not None
+                else [sys.executable, "-m", verifier_module_raw, "--mode", "full", state_arg, str(replay_state_abs)]
+            ),
+        )
+    return_code = int(run_result[0])
+    last_line = str(run_result[1])
+    stdout_text = str(run_result[2])
     if return_code == 0 and _has_valid_line(stdout_text):
         return
-    if verifier_module == "cdel.v12_0.verify_rsi_sas_code_v1":
+    if verifier_module_raw == "cdel.v12_0.verify_rsi_sas_code_v1":
         fallback_state_dir = _v12_replay_fallback_state_dir(replay_state_abs)
         if fallback_state_dir:
-            return_code, last_line, stdout_text = _run_subverifier_replay_cmd(
-                state_root=state_root,
-                verifier_module=verifier_module,
-                state_arg=state_arg,
-                replay_state_dir=fallback_state_dir,
-                replay_repo_root=replay_repo_root,
-                env_overrides=env_overrides,
-            )
-            if return_code == 0 and _has_valid_line(stdout_text):
-                return
+            fallback_kwargs: dict[str, Any] = {
+                "state_root": state_root,
+                "verifier_module": verifier_module_raw,
+                "state_arg": state_arg,
+                "replay_state_dir": fallback_state_dir,
+                "replay_repo_root": replay_repo_root,
+            }
+            if env_overrides is not None:
+                fallback_kwargs["env_overrides"] = env_overrides
+            run_result = _run_subverifier_replay_cmd(**fallback_kwargs)
+            if isinstance(run_result, tuple) and len(run_result) >= 3:
+                return_code = int(run_result[0])
+                last_line = str(run_result[1])
+                stdout_text = str(run_result[2])
+                if return_code == 0 and _has_valid_line(stdout_text):
+                    return
 
     if return_code != 0 or not _has_valid_line(stdout_text):
-        fail("SUBVERIFIER_REPLAY_FAIL")
+        _fail_replay(
+            reason_branch=_REPLAY_FAIL_BRANCH_REPLAY_CMD_FAILED,
+            reason_detail=f"REPLAY_VERIFIER_FAILED:{last_line}",
+            replay_cmd_exit_code=return_code,
+            replay_cmd_stdout_text=stdout_text,
+            replay_cmd_args_v1=(
+                [sys.executable, "-m", verifier_module_raw, *list(replay_argv)]
+                if replay_argv is not None
+                else [sys.executable, "-m", verifier_module_raw, "--mode", "full", state_arg, str(replay_state_abs)]
+            ),
+        )
 
 
 def verify(state_dir: Path, *, mode: str = "full") -> str:
+    _clear_subverifier_replay_debug_context()
     if mode != "full":
         fail("MODE_UNSUPPORTED")
 
@@ -2458,6 +2745,7 @@ def verify(state_dir: Path, *, mode: str = "full") -> str:
             state_root=state_root,
             dispatch_payload=dispatch_payload,
             subverifier_payload=subverifier_payload,
+            promotion_payload=promotion_payload,
         )
         if promotion_path is None:
             fail("DOWNSTREAM_META_CORE_FAIL")

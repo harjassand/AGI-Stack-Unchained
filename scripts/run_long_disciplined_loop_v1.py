@@ -62,6 +62,9 @@ FRONTIER_ATTEMPT_QUALITY_HEAVY_OK = "FRONTIER_ATTEMPT_HEAVY_OK"
 FRONTIER_DISPATCH_PRE_EVIDENCE_REASON_CODE = "FRONTIER_DISPATCH_FAILED_PRE_EVIDENCE"
 DEFAULT_ORCH_LLM_BACKEND = "mlx"
 DEFAULT_ORCH_MLX_MODEL_ID = "mlx-community/Qwen2.5-Coder-14B-Instruct-4bit"
+_PATCH_APPLY_REJECTION_CODES = {"PATCH_APPLY_FAILED"}
+_DEFAULT_PATCH_APPLY_LOOP_CONSECUTIVE_U64 = 3
+_DEFAULT_SMOKE_BUDGET_EXCEEDED_STREAK_U64 = 10
 
 ENV_ALLOWLIST = (
     "PYTHONPATH",
@@ -76,6 +79,17 @@ ENV_ALLOWLIST = (
     "OMEGA_CCAP_FDS_MAX",
     "OMEGA_CCAP_PROCS_MAX",
     "OMEGA_CCAP_THREADS_MAX",
+    "OMEGA_CCAP_SMOKE_EK_B",
+    "OMEGA_CCAP_SMOKE_ONLY_B",
+    "OMEGA_CCAP_SMOKE_SCORE_TICKS_U64",
+    "OMEGA_CCAP_SMOKE_TIME_MS_MAX",
+    "OMEGA_CCAP_SMOKE_STAGE_COST_BUDGET",
+    "OMEGA_CCAP_SMOKE_DISK_MB_MAX",
+    "OMEGA_CCAP_SMOKE_ARTIFACT_BYTES_MAX",
+    "OMEGA_CCAP_SMOKE_BUDGET_LADDER_V1",
+    "OMEGA_CCAP_SMOKE_BUDGET_START_RUNG_U8",
+    "OMEGA_CCAP_SMOKE_BUDGET_MAX_BUMPS_U8",
+    "OMEGA_CCAP_SMOKE_WINNER_ESCALATE_FULL_EK_B",
     "OMEGA_BLACKBOX",
     "OMEGA_DISABLE_FORCED_RUNAWAY",
     "OMEGA_RUN_SEED_U64",
@@ -98,8 +112,14 @@ ENV_ALLOWLIST = (
     "OMEGA_SH1_FORCED_DEBT_KEY",
     "OMEGA_SH1_WIRING_LOCUS_RELPATH",
     "OMEGA_LONG_STOP_ON_HEAVY_PROMOTED_B",
+    "OMEGA_LONG_STOP_ON_FIRST_HEAVY_PROMOTED_B",
     "OMEGA_LONG_SOAK_AFTER_FIRST_HEAVY_PROMOTED_TICKS_U64",
     "OMEGA_LONG_STOP_AFTER_HEAVY_PROMOTED_TOTAL_U64",
+    "OMEGA_LONG_STOP_ON_PROBE_MISSING_B",
+    "OMEGA_LONG_STOP_ON_PATCH_APPLY_LOOP_CONSECUTIVE_U64",
+    "OMEGA_LONG_STOP_ON_SMOKE_BUDGET_EXCEEDED_STREAK_U64",
+    "OMEGA_LONG_STOP_ON_FIRST_CCAP_PROMOTE_B",
+    "OMEGA_LONG_STOP_ON_STATE_VERIFIER_INVALID_B",
     "ORCH_LLM_BACKEND",
     "ORCH_MLX_MODEL",
     "ORCH_MLX_REVISION",
@@ -187,6 +207,32 @@ def _count_quality_class(rows: list[dict[str, Any]], quality_class: str) -> int:
             if str(row.get("frontier_attempt_quality_class", "")).strip() == str(quality_class)
         )
     )
+
+
+def _is_patch_apply_refutation_row(row: dict[str, Any]) -> bool:
+    code = str(row.get("ccap_refutation_code", "")).strip().upper()
+    if code in _PATCH_APPLY_REJECTION_CODES:
+        return True
+    if code != "SITE_NOT_FOUND":
+        return False
+    summary = str(row.get("ccap_refutation_summary", "")).strip().upper()
+    if not summary:
+        return False
+    return any(
+        token in summary
+        for token in ("GIT_APPLY_CHECK_FAILED", "PATCH APPLICATION FAILED", "PATCH APPLY", "DOES NOT APPLY", "HUNK")
+    )
+
+
+def _is_smoke_budget_exceeded_row(row: dict[str, Any]) -> bool:
+    code = str(row.get("ccap_refutation_code", "")).strip().upper()
+    return code == "SMOKE_EK_BUDGET_EXCEEDED"
+
+
+def _tail_ccap_attempts(rows: list[dict[str, Any]], *, max_items_u64: int) -> list[dict[str, Any]]:
+    attempts = [row for row in rows if str(row.get("ccap_decision", "")).strip()]
+    limit = int(max(1, int(max_items_u64)))
+    return attempts[-limit:]
 
 
 def _frontier_attempt_quality_class_for_row(row: dict[str, Any]) -> str | None:
@@ -750,6 +796,54 @@ def _latest_state_verifier_failure_detail_hash(state_dir: Path) -> str | None:
     return "sha256:" + path.name.split(".", 1)[0].split("_", 1)[1]
 
 
+def _latest_state_verifier_replay_fail_detail_hash(state_dir: Path) -> str | None:
+    verifier_dir = state_dir.parent / "state_verifier"
+    if not verifier_dir.exists() or not verifier_dir.is_dir():
+        return None
+    rows = sorted(
+        verifier_dir.glob("sha256_*.state_verifier_subverifier_replay_fail_detail_v1.json"),
+        key=lambda row: row.as_posix(),
+    )
+    if not rows:
+        return None
+    path = rows[-1]
+    if not path.name.startswith("sha256_"):
+        return None
+    return "sha256:" + path.name.split(".", 1)[0].split("_", 1)[1]
+
+
+def _campaign_pack_relpath(campaign_pack: Path) -> str:
+    try:
+        return campaign_pack.resolve().relative_to(REPO_ROOT).as_posix()
+    except ValueError:
+        return str(campaign_pack)
+
+
+def _probe_coverage_report(campaign_pack: Path) -> dict[str, Any]:
+    cmd = [
+        sys.executable,
+        str((REPO_ROOT / "scripts" / "probe_coverage_report_v1.py").resolve()),
+        "--campaign_pack",
+        _campaign_pack_relpath(campaign_pack),
+    ]
+    proc = subprocess.run(
+        cmd,
+        cwd=str(REPO_ROOT),
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if proc.returncode != 0:
+        raise RuntimeError(f"PROBE_COVERAGE_REPORT_FAILED:exit={proc.returncode}")
+    lines = [line.strip() for line in str(proc.stdout or "").splitlines() if line.strip()]
+    if not lines:
+        raise RuntimeError("PROBE_COVERAGE_REPORT_EMPTY")
+    payload = json.loads(lines[-1])
+    if not isinstance(payload, dict):
+        raise RuntimeError("PROBE_COVERAGE_REPORT_INVALID")
+    return payload
+
+
 def _build_subprocess_env(
     *,
     force_lane: str | None,
@@ -771,6 +865,21 @@ def _build_subprocess_env(
     env.setdefault("OMEGA_ALLOW_SIMULATE_ACTIVATION", "1")
     env.setdefault("OMEGA_CCAP_ALLOW_DIRTY_TREE", "1")
     env.setdefault("OMEGA_RETENTION_PRUNE_CCAP_EK_RUNS_B", "1")
+    if str(force_lane or "").strip().upper() == "CANARY":
+        env.setdefault("OMEGA_CCAP_SMOKE_EK_B", "1")
+        env.setdefault("OMEGA_CCAP_SMOKE_ONLY_B", "1")
+        env.setdefault("OMEGA_CCAP_SMOKE_SCORE_TICKS_U64", "5")
+        env.setdefault("OMEGA_CCAP_SMOKE_TIME_MS_MAX", "60000")
+        env.setdefault("OMEGA_CCAP_SMOKE_STAGE_COST_BUDGET", "60000")
+        env.setdefault("OMEGA_CCAP_SMOKE_DISK_MB_MAX", "1024")
+        env.setdefault("OMEGA_CCAP_SMOKE_ARTIFACT_BYTES_MAX", "536870912")
+        env.setdefault(
+            "OMEGA_CCAP_SMOKE_BUDGET_LADDER_V1",
+            "[[60000,60000,1024,536870912],[120000,120000,2048,1073741824],[240000,240000,4096,2147483648]]",
+        )
+        env.setdefault("OMEGA_CCAP_SMOKE_BUDGET_START_RUNG_U8", "1")
+        env.setdefault("OMEGA_CCAP_SMOKE_BUDGET_MAX_BUMPS_U8", "1")
+        env.setdefault("OMEGA_CCAP_SMOKE_WINNER_ESCALATE_FULL_EK_B", "1")
     backend, model_id = _resolve_orch_runtime_provenance(env=env)
     env["ORCH_LLM_BACKEND"] = backend
     if backend == "mlx":
@@ -969,7 +1078,7 @@ def _bind_launch_manifest_to_tick_ledger(
     return binding_hash, str(event_row.get("event_id", ""))
 
 
-def _state_verifier_outcome(state_dir: Path) -> tuple[bool, str | None, str | None]:
+def _state_verifier_outcome(state_dir: Path) -> tuple[bool, str | None, str | None, str | None]:
     cmd = [
         sys.executable,
         "-m",
@@ -992,19 +1101,33 @@ def _state_verifier_outcome(state_dir: Path) -> tuple[bool, str | None, str | No
         check=False,
     )
     failure_detail_hash = _latest_state_verifier_failure_detail_hash(state_dir)
+    replay_fail_detail_hash = _latest_state_verifier_replay_fail_detail_hash(state_dir)
     if proc.returncode == 0 and "VALID" in (proc.stdout or ""):
-        return True, None, None
+        return True, None, None, None
     reason = None
     for line in ((proc.stdout or "") + "\n" + (proc.stderr or "")).splitlines():
         line = line.strip()
+        if line.startswith("FAILURE_DETAIL_HASH:"):
+            value = line.split(":", 1)[1].strip()
+            if _is_sha256(value):
+                failure_detail_hash = value
+            continue
+        if line.startswith("SUBVERIFIER_REPLAY_FAIL_DETAIL_HASH:"):
+            value = line.split(":", 1)[1].strip()
+            if _is_sha256(value):
+                replay_fail_detail_hash = value
+            continue
         if line.startswith("INVALID:"):
             reason = line.split(":", 1)[1].strip() or "STATE_VERIFIER_INVALID"
             break
     if reason is None:
         reason = "STATE_VERIFIER_FAILED"
-    if not str(reason).strip().upper().startswith("NONDETERMINISTIC"):
+    reason_upper = str(reason).strip().upper()
+    if not reason_upper.startswith("NONDETERMINISTIC"):
         failure_detail_hash = None
-    return False, reason, failure_detail_hash
+    if not reason_upper.startswith("SUBVERIFIER_REPLAY_FAIL"):
+        replay_fail_detail_hash = None
+    return False, reason, failure_detail_hash, replay_fail_detail_hash
 
 
 def _write_stop_receipt(
@@ -1056,6 +1179,28 @@ def _reason_hist(rows: list[dict[str, Any]]) -> dict[str, int]:
         key = reason.lower()
         out[key] = int(out.get(key, 0)) + 1
     return {key: out[key] for key in sorted(out.keys())}
+
+
+def _blocker_histogram_snapshot(rows: list[dict[str, Any]]) -> dict[str, int]:
+    out: dict[str, int] = {}
+    for row in rows:
+        utility_reason = str(row.get("utility_proof_reason_code", "")).strip().upper()
+        promotion_reason = str(row.get("promotion_reason_code", "")).strip().upper()
+        ccap_refutation_code = str(row.get("ccap_refutation_code", "")).strip().upper()
+        patch_apply_fail_code = str(row.get("ccap_patch_apply_fail_code", "")).strip().upper()
+        if utility_reason:
+            key = f"utility:{utility_reason}"
+            out[key] = int(out.get(key, 0) + 1)
+        if promotion_reason:
+            key = f"promotion:{promotion_reason}"
+            out[key] = int(out.get(key, 0) + 1)
+        if ccap_refutation_code:
+            key = f"ccap:{ccap_refutation_code}"
+            out[key] = int(out.get(key, 0) + 1)
+        if _is_patch_apply_refutation_row(row):
+            key = f"patch_apply:{patch_apply_fail_code or 'UNKNOWN'}"
+            out[key] = int(out.get(key, 0) + 1)
+    return {key: int(out[key]) for key in sorted(out.keys())}
 
 
 def _write_canary_summary(
@@ -1444,7 +1589,8 @@ def run_tick(
         error_class = "TICK_STATE_MISSING" if not state_dir.exists() or not state_dir.is_dir() else "TICK_PROCESS_ERROR"
     promotion_reason_value = (tick_outcome_payload or {}).get("promotion_reason_code")
     ccap_payload, ccap_receipt_hash = _latest_ccap_receipt_payload(state_dir)
-    _promotion_payload, promotion_receipt_hash = _latest_promotion_receipt_payload(state_dir)
+    promotion_payload, promotion_receipt_hash = _latest_promotion_receipt_payload(state_dir)
+    utility_proof_hash = (promotion_payload or {}).get("utility_proof_hash")
     ccap_refutation_code, ccap_refutation_summary = _ccap_refutation_fields(
         ccap_payload=ccap_payload,
         state_dir=state_dir,
@@ -1485,6 +1631,7 @@ def run_tick(
         > 0
     )
     utility_metrics = (utility_payload or {}).get("utility_metrics")
+    utility_reason_code = (utility_payload or {}).get("reason_code")
     utility_hard_task_delta_q32 = 0
     utility_j_delta_q32_i64 = 0
     utility_hard_task_baseline_init_b = False
@@ -1560,6 +1707,8 @@ def run_tick(
         "subverifier_status": (tick_outcome_payload or {}).get("subverifier_status"),
         "promotion_status": (tick_outcome_payload or {}).get("promotion_status"),
         "promotion_reason_code": promotion_reason_value,
+        "utility_proof_hash": utility_proof_hash,
+        "utility_proof_reason_code": utility_reason_code,
         "candidate_bundle_present_b": (tick_outcome_payload or {}).get("candidate_bundle_present_b"),
         "selected_capability_id": selected_capability_id,
         "declared_class": (tick_outcome_payload or {}).get("declared_class"),
@@ -1589,11 +1738,18 @@ def run_tick(
         "promotion_receipt_hash": promotion_receipt_hash,
         "promotion_receipt_present_b": bool(promotion_receipt_present_b),
         "ccap_decision": (ccap_payload or {}).get("decision"),
+        "ccap_smoke_rung_u8": _extract_ccap_u64(
+            ccap_payload if isinstance(ccap_payload, dict) else None,
+            "smoke_rung_u8",
+        ),
         "ccap_eval_status": (ccap_payload or {}).get("eval_status"),
         "ccap_determinism_check": (ccap_payload or {}).get("determinism_check"),
         "ccap_refutation_code": ccap_refutation_code,
         "ccap_refutation_summary": ccap_refutation_summary,
         "ccap_first_refutation_code": ccap_refutation_code,
+        "ccap_patch_apply_fail_stage": (ccap_payload or {}).get("patch_apply_fail_stage"),
+        "ccap_patch_apply_fail_code": (ccap_payload or {}).get("patch_apply_fail_code"),
+        "ccap_patch_apply_fail_detail_hash": (ccap_payload or {}).get("patch_apply_fail_detail_hash"),
         "ccap_cost_vector_cpu_ms": _extract_ccap_u64(
             ccap_cost_vector if isinstance(ccap_cost_vector, dict) else None,
             "cpu_ms",
@@ -1698,7 +1854,11 @@ def run_loop(
     force_lane: str | None,
     force_eval: bool,
     stop_on_error: bool,
+    stop_on_probe_missing_b: bool,
+    stop_on_state_verifier_invalid_b: bool,
     stop_on_heavy_promoted_b: bool,
+    stop_on_first_ccap_promote_b: bool,
+    stop_on_smoke_budget_exceeded_streak_u64: int,
     soak_after_first_heavy_promoted_ticks_u64: int,
     stop_after_heavy_promoted_total_u64: int,
 ) -> None:
@@ -1727,6 +1887,65 @@ def run_loop(
         force_eval=force_eval,
     )
     print(f"launch_manifest_hash={launch_manifest_hash}")
+    probe_report = _probe_coverage_report(campaign_pack)
+    _write_json(run_root / "PROBE_COVERAGE_REPORT_v1.json", probe_report)
+    missing_required_suite_ids = list(probe_report.get("missing_required_suite_ids") or [])
+    if missing_required_suite_ids:
+        stop_path, _stop_obj, stop_hash = _write_stop_receipt(
+            run_root=run_root,
+            halt_reason_code="STOP_ON_PROBE_MISSING",
+            halt_tick_u64=int(max(0, int(start_tick_u64))),
+            last_valid_state_dir_relpath="",
+            manifest_hash=launch_manifest_hash,
+            manifest_relpath=str(launch_manifest_payload.get("manifest_relpath", "")),
+            state_verifier_reason_code="HEAVY_POLICY_PROBE_REGISTRY_MISSING",
+            detail={
+                "reason_code": "HEAVY_POLICY_PROBE_REGISTRY_MISSING",
+                "first_blocking_tick_u64": int(max(0, int(start_tick_u64))),
+                "required_suite_ids": list(probe_report.get("required_suite_ids") or []),
+                "available_suite_ids": list(probe_report.get("available_suite_ids") or []),
+                "missing_required_suite_ids": list(missing_required_suite_ids),
+                "blocker_histogram_snapshot": {
+                    "probe_suite_missing:HEAVY_POLICY_PROBE_REGISTRY_MISSING": int(len(missing_required_suite_ids))
+                },
+            },
+        )
+        _append_jsonl(
+            run_root / "index" / "long_run_stop_receipt_index_v1.jsonl",
+            {
+                "tick_u64": int(max(0, int(start_tick_u64))),
+                "stop_receipt_hash": str(stop_hash),
+                "stop_receipt_relpath": _repo_relpath(stop_path),
+                "halt_reason_code": "STOP_ON_PROBE_MISSING",
+            },
+        )
+        return
+    if not bool(probe_report.get("has_probe_covered_heavy_b", False)):
+        stop_path, _stop_obj, stop_hash = _write_stop_receipt(
+            run_root=run_root,
+            halt_reason_code="PRECHECK_FAIL:NO_HEAVY_PROBE_COVERAGE",
+            halt_tick_u64=int(max(0, int(start_tick_u64))),
+            last_valid_state_dir_relpath="",
+            manifest_hash=launch_manifest_hash,
+            manifest_relpath=str(launch_manifest_payload.get("manifest_relpath", "")),
+            state_verifier_reason_code="PRECHECK_FAIL:NO_HEAVY_PROBE_COVERAGE",
+            detail={
+                "probe_covered_capability_ids": list(probe_report.get("probe_covered_capability_ids") or []),
+                "heavy_eligible_capability_ids": list(probe_report.get("heavy_eligible_capability_ids") or []),
+                "missing_probe_capability_ids": list(probe_report.get("missing_probe_capability_ids") or []),
+                "missing_asset_capability_ids": list(probe_report.get("missing_asset_capability_ids") or []),
+            },
+        )
+        _append_jsonl(
+            run_root / "index" / "long_run_stop_receipt_index_v1.jsonl",
+            {
+                "tick_u64": int(max(0, int(start_tick_u64))),
+                "stop_receipt_hash": str(stop_hash),
+                "stop_receipt_relpath": _repo_relpath(stop_path),
+                "halt_reason_code": "PRECHECK_FAIL:NO_HEAVY_PROBE_COVERAGE",
+            },
+        )
+        return
     pins_hash_initial = _authority_pins_hash()
     health_gate_thresholds = _load_health_gate_thresholds(campaign_pack)
     validate_frontier_b = _env_bool("OMEGA_LONG_VALIDATE_FRONTIER", default=False)
@@ -1735,6 +1954,12 @@ def run_loop(
     validate_min_hardlocks_u64 = _env_u64("OMEGA_LONG_VALIDATE_MIN_HARDLOCKS", default=1, minimum=0)
     validate_min_forced_u64 = _env_u64("OMEGA_LONG_VALIDATE_MIN_FORCED", default=1, minimum=0)
     validate_min_counted_u64 = _env_u64("OMEGA_LONG_VALIDATE_MIN_COUNTED", default=1, minimum=0)
+    patch_apply_loop_consecutive_u64 = _env_u64(
+        "OMEGA_LONG_STOP_ON_PATCH_APPLY_LOOP_CONSECUTIVE_U64",
+        default=_DEFAULT_PATCH_APPLY_LOOP_CONSECUTIVE_U64,
+        minimum=1,
+    )
+    smoke_budget_exceeded_streak_u64 = int(max(0, int(stop_on_smoke_budget_exceeded_streak_u64)))
     manifest_relpath = str(launch_manifest_payload.get("manifest_relpath", _repo_relpath(launch_manifest_path)))
 
     tick_rows, pruned_ticks = _read_indexes(index_dir)
@@ -1843,10 +2068,16 @@ def run_loop(
             row["launch_manifest_hash"] = launch_manifest_hash
 
         if str(row.get("status", "")) == "OK" and state_dir.exists() and state_dir.is_dir():
-            valid_b, state_verifier_reason_code, state_verifier_failure_detail_hash = _state_verifier_outcome(state_dir)
+            (
+                valid_b,
+                state_verifier_reason_code,
+                state_verifier_failure_detail_hash,
+                state_verifier_replay_fail_detail_hash,
+            ) = _state_verifier_outcome(state_dir)
             row["state_verifier_valid_b"] = bool(valid_b)
             row["state_verifier_reason_code"] = state_verifier_reason_code
             row["state_verifier_failure_detail_hash"] = state_verifier_failure_detail_hash
+            row["state_verifier_replay_fail_detail_hash"] = state_verifier_replay_fail_detail_hash
             row["error_class"] = None
             if valid_b:
                 prev_state_dir = state_dir
@@ -1855,13 +2086,16 @@ def run_loop(
                 if allow_invalid_state_continue_b:
                     prev_state_dir = state_dir
                 else:
-                    if state_verifier_reason_code == "PRECHECK_FAIL:UNBOUND_DEBT_KEY":
-                        hard_stop_reason_code = "PRECHECK_FAIL:UNBOUND_DEBT_KEY"
-                    else:
-                        hard_stop_reason_code = "STATE_VERIFIER_INVALID"
-                    hard_stop_detail = {
-                        "state_verifier_reason_code": state_verifier_reason_code,
-                    }
+                    if bool(stop_on_state_verifier_invalid_b):
+                        if state_verifier_reason_code == "PRECHECK_FAIL:UNBOUND_DEBT_KEY":
+                            hard_stop_reason_code = "PRECHECK_FAIL:UNBOUND_DEBT_KEY"
+                        else:
+                            hard_stop_reason_code = "STATE_VERIFIER_INVALID"
+                        hard_stop_detail = {
+                            "state_verifier_reason_code": state_verifier_reason_code,
+                            "state_verifier_failure_detail_hash": state_verifier_failure_detail_hash,
+                            "state_verifier_replay_fail_detail_hash": state_verifier_replay_fail_detail_hash,
+                        }
         else:
             row["state_verifier_valid_b"] = False
             error_class = None
@@ -1876,6 +2110,7 @@ def run_loop(
             state_verifier_reason_code = str(error_class)
             row["state_verifier_reason_code"] = state_verifier_reason_code
             row["state_verifier_failure_detail_hash"] = None
+            row["state_verifier_replay_fail_detail_hash"] = None
             row["error_class"] = error_class
 
         row["frontier_attempt_counted_b"] = bool(row.get("frontier_attempt_counted_b", False))
@@ -1933,6 +2168,20 @@ def run_loop(
             }
 
         if hard_stop_reason_code is None:
+            stderr_tail = row.get("stderr_tail")
+            stdout_tail = row.get("stdout_tail")
+            stderr_lines = [str(item) for item in stderr_tail] if isinstance(stderr_tail, list) else []
+            stdout_lines = [str(item) for item in stdout_tail] if isinstance(stdout_tail, list) else []
+            if any("HEAVY_POLICY_PROBE_REGISTRY_MISSING" in line for line in [*stderr_lines, *stdout_lines]):
+                scope_rows = [*live_rows, row]
+                hard_stop_reason_code = "STOP_ON_PROBE_MISSING"
+                hard_stop_detail = {
+                    "reason_code": "HEAVY_POLICY_PROBE_REGISTRY_MISSING",
+                    "first_blocking_tick_u64": int(tick_value),
+                    "blocker_histogram_snapshot": _blocker_histogram_snapshot(scope_rows),
+                }
+
+        if hard_stop_reason_code is None:
             mandatory_reason, mandatory_detail = _mandatory_frontier_guard_reason(
                 rows=[*live_rows, row],
                 tick_u64=tick_value,
@@ -1961,17 +2210,106 @@ def run_loop(
                         "missing_conditions": [str(item) for item in missing],
                     }
 
+        if hard_stop_reason_code is None:
+            scope_rows = [*live_rows, row]
+            attempts = _tail_ccap_attempts(scope_rows, max_items_u64=max(32, int(patch_apply_loop_consecutive_u64) * 8))
+            consecutive_tail: list[dict[str, Any]] = []
+            for attempt in reversed(attempts):
+                if _is_patch_apply_refutation_row(attempt):
+                    consecutive_tail.append(attempt)
+                    continue
+                break
+            consecutive_tail.reverse()
+            if int(len(consecutive_tail)) >= int(patch_apply_loop_consecutive_u64):
+                first_blocking_tick_u64 = int(consecutive_tail[0].get("tick_u64", tick_value))
+                hard_stop_reason_code = "STOP_ON_PATCH_APPLY_LOOP"
+                hard_stop_detail = {
+                    "first_blocking_tick_u64": int(first_blocking_tick_u64),
+                    "required_consecutive_u64": int(patch_apply_loop_consecutive_u64),
+                    "consecutive_patch_apply_refutations_u64": int(len(consecutive_tail)),
+                    "blocking_tick_sequence_u64": [int(item.get("tick_u64", 0)) for item in consecutive_tail],
+                    "blocker_histogram_snapshot": _blocker_histogram_snapshot(consecutive_tail),
+                }
+
+        if hard_stop_reason_code is None and int(smoke_budget_exceeded_streak_u64) > 0:
+            scope_rows = [*live_rows, row]
+            attempts = _tail_ccap_attempts(
+                scope_rows,
+                max_items_u64=max(32, int(smoke_budget_exceeded_streak_u64) * 8),
+            )
+            consecutive_tail: list[dict[str, Any]] = []
+            for attempt in reversed(attempts):
+                if _is_smoke_budget_exceeded_row(attempt):
+                    consecutive_tail.append(attempt)
+                    continue
+                break
+            consecutive_tail.reverse()
+            if int(len(consecutive_tail)) > int(smoke_budget_exceeded_streak_u64):
+                first_blocking_tick_u64 = int(consecutive_tail[0].get("tick_u64", tick_value))
+                hard_stop_reason_code = "STOP_ON_SMOKE_BUDGET_EXCEEDED_STREAK"
+                hard_stop_detail = {
+                    "first_blocking_tick_u64": int(first_blocking_tick_u64),
+                    "max_allowed_consecutive_u64": int(smoke_budget_exceeded_streak_u64),
+                    "observed_consecutive_u64": int(len(consecutive_tail)),
+                    "blocking_tick_sequence_u64": [int(item.get("tick_u64", 0)) for item in consecutive_tail],
+                    "blocker_histogram_snapshot": _blocker_histogram_snapshot(scope_rows),
+                }
+
+        if hard_stop_reason_code is None and int(tick_value) >= 30:
+            scope_rows = [*live_rows, row]
+            frontier_counted_total_u64 = int(_count_true(scope_rows, "frontier_attempt_counted_b"))
+            heavy_utility_ok_total_u64 = int(_count_true(scope_rows, "heavy_utility_ok_b"))
+            if frontier_counted_total_u64 >= 5 and heavy_utility_ok_total_u64 == 0:
+                hard_stop_reason_code = "UTILITY_DROUGHT"
+                hard_stop_detail = {
+                    "tick_u64": int(tick_value),
+                    "frontier_attempt_counted_total_u64": int(frontier_counted_total_u64),
+                    "heavy_utility_ok_total_u64": int(heavy_utility_ok_total_u64),
+                }
+
+        if hard_stop_reason_code is None and bool(stop_on_probe_missing_b):
+            scope_rows = [*live_rows, row]
+            blocking_rows = [
+                item
+                for item in scope_rows
+                if bool(item.get("frontier_attempt_counted_b", False))
+                and str(item.get("utility_proof_reason_code", "")).strip().upper() == "PROBE_MISSING"
+            ]
+            if blocking_rows:
+                first_blocking_tick_u64 = int(min(int(item.get("tick_u64", tick_value)) for item in blocking_rows))
+                hard_stop_reason_code = "STOP_ON_PROBE_MISSING"
+                hard_stop_detail = {
+                    "first_blocking_tick_u64": int(first_blocking_tick_u64),
+                    "tick_u64": int(tick_value),
+                    "utility_proof_reason_code": "PROBE_MISSING",
+                    "selected_capability_id": row.get("selected_capability_id"),
+                    "blocker_histogram_snapshot": _blocker_histogram_snapshot(blocking_rows),
+                }
+
+        if hard_stop_reason_code is None and bool(stop_on_first_ccap_promote_b):
+            ccap_decision_value = str(row.get("ccap_decision", "")).strip().upper()
+            if ccap_decision_value in {"PROMOTE", "ACCEPT"}:
+                hard_stop_reason_code = "CCAP_PROMOTE" if ccap_decision_value == "PROMOTE" else "CCAP_ACCEPT"
+                hard_stop_detail = {
+                    "tick_u64": int(tick_value),
+                    "ccap_decision": ccap_decision_value,
+                    "ccap_refutation_code": row.get("ccap_refutation_code"),
+                    "ccap_receipt_hash": row.get("ccap_receipt_hash"),
+                    "ccap_smoke_rung_u8": int(max(0, int(row.get("ccap_smoke_rung_u8") or 0))),
+                }
+
         if (
             hard_stop_reason_code is None
             and bool(stop_on_heavy_promoted_b)
             and bool(row.get("heavy_promoted_b"))
         ):
-            hard_stop_reason_code = "HEAVY_PROMOTED"
-            hard_stop_detail = {
-                "tick_u64": tick_value,
-                "ccap_decision": row.get("ccap_decision"),
-                "ccap_refutation_code": row.get("ccap_refutation_code"),
-            }
+            if int(soak_after_first_heavy_promoted_ticks_u64) <= 0:
+                hard_stop_reason_code = "HEAVY_PROMOTED"
+                hard_stop_detail = {
+                    "tick_u64": tick_value,
+                    "ccap_decision": row.get("ccap_decision"),
+                    "ccap_refutation_code": row.get("ccap_refutation_code"),
+                }
         elif (
             hard_stop_reason_code is None
             and int(stop_after_heavy_promoted_total_u64) > 0
@@ -1985,7 +2323,6 @@ def run_loop(
             }
         elif (
             hard_stop_reason_code is None
-            and (not bool(stop_on_heavy_promoted_b))
             and int(soak_after_first_heavy_promoted_ticks_u64) > 0
             and first_heavy_promoted_tick_u64 is not None
             and soak_complete_tick_u64 is not None
@@ -2134,9 +2471,38 @@ def main() -> None:
     ap.add_argument("--force_eval", action="store_true")
     ap.add_argument("--stop_on_error", action="store_true")
     ap.add_argument(
+        "--stop_on_probe_missing",
+        type=_parse_bool_cli,
+        default=_env_bool("OMEGA_LONG_STOP_ON_PROBE_MISSING_B", default=True),
+    )
+    ap.add_argument(
+        "--stop_on_state_verifier_invalid",
+        type=_parse_bool_cli,
+        default=_env_bool("OMEGA_LONG_STOP_ON_STATE_VERIFIER_INVALID_B", default=True),
+    )
+    ap.add_argument(
         "--stop_on_heavy_promoted",
         type=_parse_bool_cli,
         default=_env_bool("OMEGA_LONG_STOP_ON_HEAVY_PROMOTED_B", default=True),
+    )
+    ap.add_argument(
+        "--stop_on_first_ccap_promote",
+        type=_parse_bool_cli,
+        default=_env_bool("OMEGA_LONG_STOP_ON_FIRST_CCAP_PROMOTE_B", default=False),
+    )
+    ap.add_argument(
+        "--stop_on_smoke_budget_exceeded_streak_u64",
+        type=int,
+        default=_env_u64(
+            "OMEGA_LONG_STOP_ON_SMOKE_BUDGET_EXCEEDED_STREAK_U64",
+            default=_DEFAULT_SMOKE_BUDGET_EXCEEDED_STREAK_U64,
+            minimum=0,
+        ),
+    )
+    ap.add_argument(
+        "--stop_on_first_heavy_promoted",
+        type=_parse_bool_cli,
+        default=None,
     )
     ap.add_argument(
         "--soak_after_first_heavy_promoted_ticks",
@@ -2149,6 +2515,11 @@ def main() -> None:
         default=_env_u64("OMEGA_LONG_STOP_AFTER_HEAVY_PROMOTED_TOTAL_U64", default=0, minimum=0),
     )
     args = ap.parse_args()
+    stop_on_first_heavy_promoted_b = (
+        bool(args.stop_on_first_heavy_promoted)
+        if args.stop_on_first_heavy_promoted is not None
+        else bool(args.stop_on_heavy_promoted)
+    )
 
     run_loop(
         campaign_pack=(REPO_ROOT / args.campaign_pack).resolve(),
@@ -2162,7 +2533,11 @@ def main() -> None:
         force_lane=args.force_lane,
         force_eval=bool(args.force_eval),
         stop_on_error=bool(args.stop_on_error),
-        stop_on_heavy_promoted_b=bool(args.stop_on_heavy_promoted),
+        stop_on_probe_missing_b=bool(args.stop_on_probe_missing),
+        stop_on_state_verifier_invalid_b=bool(args.stop_on_state_verifier_invalid),
+        stop_on_heavy_promoted_b=bool(stop_on_first_heavy_promoted_b),
+        stop_on_first_ccap_promote_b=bool(args.stop_on_first_ccap_promote),
+        stop_on_smoke_budget_exceeded_streak_u64=int(max(0, int(args.stop_on_smoke_budget_exceeded_streak_u64))),
         soak_after_first_heavy_promoted_ticks_u64=int(max(0, int(args.soak_after_first_heavy_promoted_ticks))),
         stop_after_heavy_promoted_total_u64=int(max(0, int(args.stop_after_heavy_promoted_total_u64))),
     )

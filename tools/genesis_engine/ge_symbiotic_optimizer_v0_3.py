@@ -9,6 +9,7 @@ import hashlib
 import json
 import os
 import re
+import shutil
 import subprocess
 import sys
 from datetime import UTC, datetime
@@ -26,7 +27,15 @@ for candidate in (REPO_ROOT, REPO_ROOT / "CDEL-v2"):
 from cdel.v1_7r.canon import canon_bytes, write_canon_json
 from cdel.v18_0.authority.authority_hash_v1 import auth_hash, load_authority_pins
 from cdel.v18_0.ccap_budget_v1 import resolve_effective_ccap_budget_profile
-from cdel.v18_0.ccap_runtime_v1 import ccap_payload_id, compute_repo_base_tree_id_tolerant
+from cdel.v18_0.ccap_runtime_v1 import (
+    apply_patch_bytes,
+    build_patch_apply_failure_detail,
+    build_replace_file_patch_bytes,
+    ccap_payload_id,
+    classify_patch_apply_exception,
+    compute_repo_base_tree_id_tolerant,
+    materialize_repo_snapshot,
+)
 from cdel.v18_0.omega_common_v1 import canon_hash_obj, rat_q32, validate_schema, write_hashed_json
 from cdel.v18_0.patch_diff_v1 import build_unified_patch_bytes
 from cdel.v19_0.common_v1 import validate_schema as validate_schema_v19
@@ -90,6 +99,7 @@ _PRECHECK_DECISION_CODES = {
     "DROPPED_FORCED_HEAVY_PREDICTED_NO_HARD_GAIN",
     "DROPPED_INSUFFICIENT_WIRING_DELTA",
     "DROPPED_SITE_NOT_FOUND",
+    "DROPPED_PATCH_APPLY_PREFLIGHT_FAILED",
     "DROPPED_WIRING_LOCUS_UNAVAILABLE",
 }
 FORCED_HEAVY_TEMPLATE_POOL_V1 = ("CODE_REWRITE_AST",)
@@ -413,7 +423,11 @@ def _build_json_tweak_patch(*, target_relpath: str, marker: str, template_id: st
     if not target_path.exists() or not target_path.is_file():
         raise _invalid("SITE_NOT_FOUND:TARGET_PATH_MISSING")
 
-    before_text = target_path.read_text(encoding="utf-8")
+    before_bytes = target_path.read_bytes()
+    try:
+        before_text = before_bytes.decode("utf-8")
+    except Exception as exc:  # noqa: BLE001
+        raise _invalid("SITE_NOT_FOUND:JSON_PARSE_FAILED") from exc
     try:
         payload = json.loads(before_text)
     except Exception as exc:  # noqa: BLE001
@@ -483,10 +497,12 @@ def _build_json_tweak_patch(*, target_relpath: str, marker: str, template_id: st
             raise _invalid("SITE_NOT_FOUND:NO_BUDGET_HINT_DELTA")
         _json_set(root, selected, int(candidate))
 
-    after_text = json.dumps(root, sort_keys=True, separators=(",", ":")) + "\n"
-    if not before_text.endswith("\n"):
-        before_text = before_text + "\n"
-    return _build_unified_patch(target_relpath=target_relpath, before=before_text, after=after_text)
+    after_bytes = (json.dumps(root, sort_keys=True, separators=(",", ":")) + "\n").encode("utf-8")
+    return build_replace_file_patch_bytes(
+        target_relpath=target_relpath,
+        expected_base_bytes=before_bytes,
+        new_bytes=after_bytes,
+    )
 
 
 def _build_code_fastpath_guard_patch(*, target_relpath: str, repo_root: Path) -> bytes:
@@ -1709,6 +1725,9 @@ def _candidate_precheck_row(
     ccap_id: str | None,
     archetype_id: str | None = None,
     nontriviality_cert_v1: dict[str, Any] | None = None,
+    patch_apply_fail_stage: str | None = None,
+    patch_apply_fail_code: str | None = None,
+    patch_apply_fail_detail_hash: str | None = None,
 ) -> dict[str, Any]:
     code = str(precheck_decision_code).strip()
     if code not in _PRECHECK_DECISION_CODES:
@@ -1732,6 +1751,21 @@ def _candidate_precheck_row(
         "ccap_id": str(ccap_id) if isinstance(ccap_id, str) and ccap_id.strip() else None,
         "archetype_id": (str(archetype_id) if isinstance(archetype_id, str) and archetype_id.strip() else None),
         "nontriviality_cert_v1": (dict(nontriviality_cert_v1) if isinstance(nontriviality_cert_v1, dict) else None),
+        "patch_apply_fail_stage": (
+            str(patch_apply_fail_stage).strip()
+            if isinstance(patch_apply_fail_stage, str) and str(patch_apply_fail_stage).strip()
+            else None
+        ),
+        "patch_apply_fail_code": (
+            str(patch_apply_fail_code).strip()
+            if isinstance(patch_apply_fail_code, str) and str(patch_apply_fail_code).strip()
+            else None
+        ),
+        "patch_apply_fail_detail_hash": (
+            str(patch_apply_fail_detail_hash).strip()
+            if isinstance(patch_apply_fail_detail_hash, str) and str(patch_apply_fail_detail_hash).strip()
+            else None
+        ),
     }
     row["target_relpaths_key"] = _target_relpaths_key(target_relpaths=list(row["target_relpaths"]))
     if bool(row["selected_for_ccap_b"]) != (row["precheck_decision_code"] == "SELECTED_FOR_CCAP"):
@@ -1923,6 +1957,100 @@ def _write_site_not_found_repro(
             "records": ordered_rows,
         },
     )
+
+
+def _write_patch_apply_fail_detail(
+    *,
+    out_dir: Path,
+    detail_payload: dict[str, Any],
+) -> str:
+    detail_hash = canon_hash_obj(detail_payload)
+    _write_json(
+        out_dir
+        / "precheck"
+        / "patch_apply_failures"
+        / f"sha256_{detail_hash.split(':', 1)[1]}.patch_apply_fail_detail_v1.json",
+        detail_payload,
+    )
+    return detail_hash
+
+
+def _preflight_patch_applicability(
+    *,
+    repo_root: Path,
+    out_dir: Path,
+    candidate_idx_u32: int,
+    patch_bytes: bytes,
+) -> dict[str, Any]:
+    workspace = (
+        out_dir
+        / "precheck"
+        / "apply_preflight"
+        / f"candidate_{int(max(0, int(candidate_idx_u32))):04d}"
+    )
+    if workspace.exists():
+        shutil.rmtree(workspace)
+    workspace.mkdir(parents=True, exist_ok=True)
+    materialize_exc: Exception | None = None
+    try:
+        materialize_repo_snapshot(repo_root, workspace)
+    except Exception as exc:  # noqa: BLE001
+        materialize_exc = exc
+    if materialize_exc is not None:
+        prev_dirty_env = os.environ.get("OMEGA_CCAP_ALLOW_DIRTY_TREE")
+        try:
+            os.environ["OMEGA_CCAP_ALLOW_DIRTY_TREE"] = "1"
+            materialize_repo_snapshot(repo_root, workspace)
+            materialize_exc = None
+        except Exception as retry_exc:  # noqa: BLE001
+            materialize_exc = retry_exc
+        finally:
+            if prev_dirty_env is None:
+                os.environ.pop("OMEGA_CCAP_ALLOW_DIRTY_TREE", None)
+            else:
+                os.environ["OMEGA_CCAP_ALLOW_DIRTY_TREE"] = prev_dirty_env
+    if materialize_exc is not None:
+        detail_payload = build_patch_apply_failure_detail(
+            workspace_root=workspace,
+            patch_bytes=patch_bytes,
+            exc=materialize_exc,
+        )
+        detail_hash = _write_patch_apply_fail_detail(
+            out_dir=out_dir,
+            detail_payload=detail_payload,
+        )
+        shutil.rmtree(workspace, ignore_errors=True)
+        return {
+            "ok": False,
+            "precheck_decision_code": "DROPPED_PATCH_APPLY_PREFLIGHT_FAILED",
+            "patch_apply_fail_stage": "APPLY_PATCH_BYTES",
+            "patch_apply_fail_code": "OTHER_EXCEPTION",
+            "patch_apply_fail_detail_hash": detail_hash,
+        }
+    try:
+        apply_patch_bytes(workspace_root=workspace, patch_bytes=patch_bytes)
+    except Exception as exc:  # noqa: BLE001
+        classified = classify_patch_apply_exception(exc=exc)
+        detail_payload = build_patch_apply_failure_detail(
+            workspace_root=workspace,
+            patch_bytes=patch_bytes,
+            exc=exc,
+        )
+        detail_hash = _write_patch_apply_fail_detail(
+            out_dir=out_dir,
+            detail_payload=detail_payload,
+        )
+        fail_code = str(classified.get("patch_apply_fail_code", "") or "").strip() or "OTHER_EXCEPTION"
+        return {
+            "ok": False,
+            "precheck_decision_code": "DROPPED_PATCH_APPLY_PREFLIGHT_FAILED",
+            "patch_apply_fail_stage": "APPLY_PATCH_BYTES",
+            "patch_apply_fail_code": fail_code,
+            "patch_apply_fail_detail_hash": detail_hash,
+        }
+    finally:
+        shutil.rmtree(workspace, ignore_errors=True)
+    return {"ok": True}
 
 
 def _emit_ccap(
@@ -2935,6 +3063,35 @@ def main() -> None:
                         ccap_id=None,
                         archetype_id=archetype_id,
                         nontriviality_cert_v1=nontriviality_cert_v1,
+                    )
+                )
+                global_slot += 1
+                continue
+            preflight = _preflight_patch_applicability(
+                repo_root=repo_root,
+                out_dir=subrun_out_dir,
+                candidate_idx_u32=idx,
+                patch_bytes=patch_bytes,
+            )
+            if not bool(preflight.get("ok", False)):
+                precheck_rows.append(
+                    _candidate_precheck_row(
+                        candidate_idx_u32=idx,
+                        bucket=bucket,
+                        template_id=template_id,
+                        target_relpath=target,
+                        target_relpaths=selected_target_relpaths,
+                        selected_for_ccap_b=False,
+                        precheck_decision_code=str(
+                            preflight.get("precheck_decision_code", "DROPPED_PATCH_APPLY_PREFLIGHT_FAILED")
+                        ),
+                        patch_sha256=patch_sha256,
+                        ccap_id=None,
+                        archetype_id=archetype_id,
+                        nontriviality_cert_v1=nontriviality_cert_v1,
+                        patch_apply_fail_stage=str(preflight.get("patch_apply_fail_stage", "APPLY_PATCH_BYTES")),
+                        patch_apply_fail_code=str(preflight.get("patch_apply_fail_code", "OTHER_EXCEPTION")),
+                        patch_apply_fail_detail_hash=str(preflight.get("patch_apply_fail_detail_hash", "")) or None,
                     )
                 )
                 global_slot += 1

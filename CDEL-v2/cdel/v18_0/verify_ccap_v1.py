@@ -17,6 +17,7 @@ from .ccap_runtime_v1 import (
     compute_repo_base_tree_id_tolerant,
     discover_ccap_relpath,
     normalize_subrun_relpath,
+    patch_touched_relpaths,
     read_patch_blob,
 )
 from .gir.gir_extract_from_tree_v1 import is_gir_scope_path
@@ -58,28 +59,14 @@ def _prefix_match(path_rel: str, prefix: str) -> bool:
 
 
 def _parse_patch_touched_paths(patch_bytes: bytes) -> list[str]:
-    touched: list[str] = []
-    seen: set[str] = set()
-    for raw in patch_bytes.decode("utf-8", errors="replace").splitlines():
-        line = raw.strip()
-        if not line.startswith("+++ "):
-            continue
-        if line == "+++ /dev/null":
-            continue
-        if not line.startswith("+++ b/"):
-            continue
-        rel = line[len("+++ b/") :]
-        rel = rel.split("\t", 1)[0].strip()
-        if rel.startswith('"') and rel.endswith('"') and len(rel) >= 2:
-            rel = rel[1:-1]
+    touched = patch_touched_relpaths(patch_bytes=patch_bytes)
+    out: list[str] = []
+    for rel in touched:
         try:
-            normalized = _normalize_patch_relpath(rel)
+            out.append(_normalize_patch_relpath(rel))
         except RuntimeError:
-            normalized = rel
-        if normalized and normalized not in seen:
-            touched.append(normalized)
-            seen.add(normalized)
-    return touched
+            out.append(str(rel))
+    return out
 
 
 def _load_pinned_patch_allowlists(repo_root: Path, pins: dict[str, Any]) -> dict[str, list[str]]:
@@ -255,6 +242,10 @@ def _receipt_payload(
     score_cand_summary: dict[str, Any] | None = None,
     score_delta_summary: dict[str, Any] | None = None,
     effective_budget: dict[str, Any] | None = None,
+    patch_apply_fail_stage: str | None = None,
+    patch_apply_fail_code: str | None = None,
+    patch_apply_fail_detail_hash: str | None = None,
+    smoke_rung_u8: int | None = None,
 ) -> dict[str, Any]:
     def _canon_number(value: Any) -> int:
         # Canonical JSON used by receipts rejects floats; store any numeric KPI as an int.
@@ -322,6 +313,14 @@ def _receipt_payload(
             "env_overrides": dict(effective_budget.get("env_overrides") or {}),
             "profile_id": str(effective_budget.get("profile_id", "")),
         }
+    if isinstance(patch_apply_fail_stage, str) and patch_apply_fail_stage.strip():
+        payload["patch_apply_fail_stage"] = str(patch_apply_fail_stage).strip()
+    if isinstance(patch_apply_fail_code, str) and patch_apply_fail_code.strip():
+        payload["patch_apply_fail_code"] = str(patch_apply_fail_code).strip()
+    if isinstance(patch_apply_fail_detail_hash, str) and patch_apply_fail_detail_hash.strip():
+        payload["patch_apply_fail_detail_hash"] = str(patch_apply_fail_detail_hash).strip()
+    if isinstance(smoke_rung_u8, int) and int(smoke_rung_u8) > 0:
+        payload["smoke_rung_u8"] = int(smoke_rung_u8)
     validate_schema(payload, "ccap_receipt_v1")
     return payload
 
@@ -748,11 +747,34 @@ def _verify_once(
 
     refutation = ek_result.get("refutation")
     refutation_code: str | None = None
+    patch_apply_fail_stage: str | None = None
+    patch_apply_fail_code: str | None = None
+    patch_apply_fail_detail_hash: str | None = None
+    smoke_rung_u8: int | None = None
+    smoke_rung_raw = ek_result.get("smoke_rung_u8")
+    if isinstance(smoke_rung_raw, int) and int(smoke_rung_raw) > 0:
+        smoke_rung_u8 = int(smoke_rung_raw)
+    elif isinstance(smoke_rung_raw, str) and smoke_rung_raw.strip():
+        try:
+            parsed_rung = int(smoke_rung_raw)
+        except Exception:
+            parsed_rung = 0
+        if parsed_rung > 0:
+            smoke_rung_u8 = int(parsed_rung)
     if isinstance(refutation, dict):
         code = str(refutation.get("code", "EVAL_STAGE_FAIL")).strip() or "EVAL_STAGE_FAIL"
         detail = str(refutation.get("detail", "evaluation kernel stage failed")).strip() or "evaluation kernel stage failed"
         evidence = refutation.get("evidence_hashes")
         evidence_hashes = [str(row) for row in evidence] if isinstance(evidence, list) else None
+        patch_apply_fail_stage_raw = refutation.get("patch_apply_fail_stage")
+        patch_apply_fail_code_raw = refutation.get("patch_apply_fail_code")
+        patch_apply_fail_detail_hash_raw = refutation.get("patch_apply_fail_detail_hash")
+        if isinstance(patch_apply_fail_stage_raw, str) and patch_apply_fail_stage_raw.strip():
+            patch_apply_fail_stage = str(patch_apply_fail_stage_raw).strip()
+        if isinstance(patch_apply_fail_code_raw, str) and patch_apply_fail_code_raw.strip():
+            patch_apply_fail_code = str(patch_apply_fail_code_raw).strip()
+        if isinstance(patch_apply_fail_detail_hash_raw, str) and patch_apply_fail_detail_hash_raw.strip():
+            patch_apply_fail_detail_hash = str(patch_apply_fail_detail_hash_raw).strip()
         _write_refutation_cert(
             subrun_root=subrun_root,
             ccap_id=ccap_id,
@@ -780,6 +802,10 @@ def _verify_once(
         score_cand_summary=score_cand_summary,
         score_delta_summary=score_delta_summary,
         effective_budget=budget_profile,
+        patch_apply_fail_stage=patch_apply_fail_stage,
+        patch_apply_fail_code=patch_apply_fail_code,
+        patch_apply_fail_detail_hash=patch_apply_fail_detail_hash,
+        smoke_rung_u8=smoke_rung_u8,
     )
     _write_ccap_receipt(receipt_out_dir, receipt_payload)
 

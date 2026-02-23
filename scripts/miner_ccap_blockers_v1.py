@@ -39,6 +39,14 @@ def _present(value: Any) -> bool:
     return bool(text)
 
 
+def _refutation_bucket_for_row(row: dict[str, Any]) -> str:
+    code = _norm(row.get("ccap_refutation_code"), "NONE")
+    if code != "PATCH_APPLY_FAILED":
+        return code
+    subcode = _norm(row.get("ccap_patch_apply_fail_code"), "OTHER_EXCEPTION")
+    return f"PATCH_APPLY_FAILED/{subcode}"
+
+
 def _is_heavy_row(row: dict[str, Any]) -> bool:
     declared_class = _norm(row.get("declared_class"), "UNCLASSIFIED")
     if declared_class in _HEAVY_DECLARED_CLASSES:
@@ -108,6 +116,10 @@ def _refutation_for_ccap_id(*, state_dir: Path, ccap_id: str) -> tuple[str | Non
 
 def _infer_substage(*, decision: str, eval_status: str, determinism_check: str, refutation_code: str) -> str:
     code = refutation_code.strip().upper()
+    if code.startswith("PATCH_APPLY_FAILED/"):
+        return "EK_REALIZE_PATCH_APPLICATION"
+    if code == "PATCH_BASE_MISMATCH":
+        return "EK_REALIZE_PATCH_APPLICATION"
     if code == "BUDGET_EXCEEDED":
         return "EK_COST_BUDGET_GATE"
     if code == "NO_IMPROVEMENT":
@@ -132,7 +144,7 @@ def _sample_for_key(key: tuple[str, str, str, str], rows: list[dict[str, Any]]) 
             _norm(row.get("ccap_decision"), "NONE"),
             _norm(row.get("ccap_eval_status"), "NONE"),
             _norm(row.get("ccap_determinism_check"), "NONE"),
-            _norm(row.get("ccap_refutation_code"), "NONE"),
+            _refutation_bucket_for_row(row),
         )
         if row_key != key:
             continue
@@ -148,6 +160,7 @@ def _sample_for_key(key: tuple[str, str, str, str], rows: list[dict[str, Any]]) 
         ccap_id = str((receipt_payload or {}).get("ccap_id", "")).strip()
         state_dir = Path(str(row.get("state_dir", "")).strip())
         ref_code = refutation_code
+        ref_code_base = ref_code.split("/", 1)[0] if "/" in ref_code else ref_code
         ref_detail = None
         if ref_code in {"", "NONE"}:
             cert_code, cert_detail = _refutation_for_ccap_id(state_dir=state_dir, ccap_id=ccap_id)
@@ -156,7 +169,7 @@ def _sample_for_key(key: tuple[str, str, str, str], rows: list[dict[str, Any]]) 
             ref_detail = cert_detail
         else:
             cert_code, cert_detail = _refutation_for_ccap_id(state_dir=state_dir, ccap_id=ccap_id)
-            if cert_code == ref_code and cert_detail:
+            if cert_code == ref_code_base and cert_detail:
                 ref_detail = cert_detail
         return {
             "tick_u64": int(row.get("tick_u64", 0)),
@@ -201,7 +214,7 @@ def main() -> None:
             _norm(row.get("ccap_decision"), "NONE"),
             _norm(row.get("ccap_eval_status"), "NONE"),
             _norm(row.get("ccap_determinism_check"), "NONE"),
-            _norm(row.get("ccap_refutation_code"), "NONE"),
+            _refutation_bucket_for_row(row),
         )
         hist[key] = int(hist.get(key, 0) + 1)
 

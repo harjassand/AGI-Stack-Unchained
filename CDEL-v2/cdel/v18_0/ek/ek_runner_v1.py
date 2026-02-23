@@ -20,6 +20,8 @@ from ..ccap_budget_v1 import (
 )
 from ..ccap_runtime_v1 import (
     apply_patch_bytes,
+    build_patch_apply_failure_detail,
+    classify_patch_apply_exception,
     compute_workspace_tree_id,
     materialize_repo_snapshot,
     read_patch_blob,
@@ -30,6 +32,11 @@ from ..realize.repo_harness_v1 import run_repo_harness
 
 _Q32_ONE = 1 << 32
 _DEFAULT_STPS_DELTA_MIN_Q32 = int(0.02 * float(_Q32_ONE))
+_DEFAULT_SMOKE_BUDGET_LADDER_V1: tuple[tuple[int, int, int, int], ...] = (
+    (60_000, 60_000, 1_024, 536_870_912),
+    (120_000, 120_000, 2_048, 1_073_741_824),
+    (240_000, 240_000, 4_096, 2_147_483_648),
+)
 
 
 def _self_mem_mb() -> int:
@@ -87,6 +94,134 @@ def _layer3_enabled() -> bool:
 def _survival_drill_fast_ek_enabled() -> bool:
     raw = str(os.environ.get("OMEGA_SURVIVAL_DRILL", "")).strip().lower()
     return raw in {"1", "true", "yes", "on"}
+
+
+def _env_bool(name: str, *, default: bool = False) -> bool:
+    raw = str(os.environ.get(name, "1" if default else "0")).strip().lower()
+    return raw in {"1", "true", "yes", "on"}
+
+
+def _env_u64(name: str, *, default: int, minimum: int = 0) -> int:
+    raw = str(os.environ.get(name, str(int(default)))).strip()
+    value = int(raw)
+    return int(max(int(minimum), value))
+
+
+def _ccap_smoke_ek_enabled() -> bool:
+    return _env_bool("OMEGA_CCAP_SMOKE_EK_B", default=False)
+
+
+def _ccap_smoke_only_enabled() -> bool:
+    return _env_bool("OMEGA_CCAP_SMOKE_ONLY_B", default=False)
+
+
+def _smoke_score_ticks_u64(*, default_ticks_u64: int) -> int:
+    fallback = int(max(1, min(5, int(default_ticks_u64))))
+    return _env_u64("OMEGA_CCAP_SMOKE_SCORE_TICKS_U64", default=fallback, minimum=1)
+
+
+def _smoke_budget_tuple_from_env() -> dict[str, int]:
+    return {
+        "time_ms_max": _env_u64("OMEGA_CCAP_SMOKE_TIME_MS_MAX", default=60_000, minimum=1),
+        "stage_cost_budget": _env_u64("OMEGA_CCAP_SMOKE_STAGE_COST_BUDGET", default=60_000, minimum=1),
+        "disk_mb_max": _env_u64("OMEGA_CCAP_SMOKE_DISK_MB_MAX", default=1_024, minimum=1),
+        "artifact_bytes_max": _env_u64("OMEGA_CCAP_SMOKE_ARTIFACT_BYTES_MAX", default=536_870_912, minimum=1),
+    }
+
+
+def _normalize_smoke_budget_tuple(raw: dict[str, Any]) -> dict[str, int]:
+    return {
+        "time_ms_max": int(max(1, int(raw.get("time_ms_max", 60_000)))),
+        "stage_cost_budget": int(max(1, int(raw.get("stage_cost_budget", 60_000)))),
+        "disk_mb_max": int(max(1, int(raw.get("disk_mb_max", 1_024)))),
+        "artifact_bytes_max": int(max(1, int(raw.get("artifact_bytes_max", 536_870_912)))),
+    }
+
+
+def _default_smoke_budget_ladder_v1() -> list[dict[str, int]]:
+    return [
+        {
+            "time_ms_max": int(time_ms),
+            "stage_cost_budget": int(stage_cost),
+            "disk_mb_max": int(disk_mb),
+            "artifact_bytes_max": int(artifact_bytes),
+        }
+        for time_ms, stage_cost, disk_mb, artifact_bytes in _DEFAULT_SMOKE_BUDGET_LADDER_V1
+    ]
+
+
+def _smoke_budget_ladder_from_env() -> list[dict[str, int]]:
+    raw = str(os.environ.get("OMEGA_CCAP_SMOKE_BUDGET_LADDER_V1", "")).strip()
+    if not raw:
+        default_ladder = _default_smoke_budget_ladder_v1()
+        legacy_rung = _smoke_budget_tuple_from_env()
+        if legacy_rung == default_ladder[0]:
+            return default_ladder
+        rung2_default = default_ladder[1]
+        rung3_default = default_ladder[2]
+        rung2 = {
+            "time_ms_max": int(max(int(legacy_rung["time_ms_max"]) * 2, int(rung2_default["time_ms_max"]))),
+            "stage_cost_budget": int(max(int(legacy_rung["stage_cost_budget"]) * 2, int(rung2_default["stage_cost_budget"]))),
+            "disk_mb_max": int(max(int(legacy_rung["disk_mb_max"]) * 2, int(rung2_default["disk_mb_max"]))),
+            "artifact_bytes_max": int(
+                max(int(legacy_rung["artifact_bytes_max"]) * 2, int(rung2_default["artifact_bytes_max"]))
+            ),
+        }
+        rung3 = {
+            "time_ms_max": int(max(int(legacy_rung["time_ms_max"]) * 4, int(rung3_default["time_ms_max"]))),
+            "stage_cost_budget": int(max(int(legacy_rung["stage_cost_budget"]) * 4, int(rung3_default["stage_cost_budget"]))),
+            "disk_mb_max": int(max(int(legacy_rung["disk_mb_max"]) * 4, int(rung3_default["disk_mb_max"]))),
+            "artifact_bytes_max": int(
+                max(int(legacy_rung["artifact_bytes_max"]) * 4, int(rung3_default["artifact_bytes_max"]))
+            ),
+        }
+        return [legacy_rung, rung2, rung3]
+    try:
+        payload = json.loads(raw)
+    except Exception:  # noqa: BLE001
+        return _default_smoke_budget_ladder_v1()
+    parsed: list[dict[str, int]] = []
+    if isinstance(payload, list):
+        for item in payload:
+            tuple_obj: dict[str, Any] | None = None
+            if isinstance(item, list) and len(item) == 4:
+                tuple_obj = {
+                    "time_ms_max": item[0],
+                    "stage_cost_budget": item[1],
+                    "disk_mb_max": item[2],
+                    "artifact_bytes_max": item[3],
+                }
+            elif isinstance(item, dict):
+                tuple_obj = {
+                    "time_ms_max": item.get("time_ms_max"),
+                    "stage_cost_budget": item.get("stage_cost_budget"),
+                    "disk_mb_max": item.get("disk_mb_max"),
+                    "artifact_bytes_max": item.get("artifact_bytes_max"),
+                }
+            if not isinstance(tuple_obj, dict):
+                continue
+            try:
+                parsed.append(_normalize_smoke_budget_tuple(tuple_obj))
+            except Exception:  # noqa: BLE001
+                continue
+            if len(parsed) >= 8:
+                break
+    if parsed:
+        return parsed
+    return _default_smoke_budget_ladder_v1()
+
+
+def _smoke_budget_start_rung_u8(*, ladder_len: int) -> int:
+    rung = int(_env_u64("OMEGA_CCAP_SMOKE_BUDGET_START_RUNG_U8", default=1, minimum=1))
+    return int(max(1, min(int(max(1, ladder_len)), rung)))
+
+
+def _smoke_budget_max_bumps_u8() -> int:
+    return int(_env_u64("OMEGA_CCAP_SMOKE_BUDGET_MAX_BUMPS_U8", default=1, minimum=0))
+
+
+def _smoke_winner_escalate_full_ek_enabled() -> bool:
+    return _env_bool("OMEGA_CCAP_SMOKE_WINNER_ESCALATE_FULL_EK_B", default=True)
 
 
 def _scorecard_summary(scorecard: dict[str, Any]) -> dict[str, Any]:
@@ -186,6 +321,16 @@ def _realize_once(
     effective_budgets: dict[str, Any],
     out_dir: Path,
 ) -> dict[str, Any]:
+    def _write_patch_apply_fail_detail(*, payload: dict[str, Any]) -> str:
+        digest = canon_hash_obj(payload)
+        details_dir = out_dir / "patch_apply_failures"
+        details_dir.mkdir(parents=True, exist_ok=True)
+        write_canon_json(
+            details_dir / f"sha256_{digest.split(':', 1)[1]}.patch_apply_fail_detail_v1.json",
+            payload,
+        )
+        return digest
+
     workspace = out_dir / "workspace"
     materialize_repo_snapshot(repo_root, workspace)
 
@@ -201,13 +346,35 @@ def _realize_once(
     try:
         apply_patch_bytes(workspace_root=workspace, patch_bytes=patch_bytes)
     except Exception as exc:  # noqa: BLE001
-        detail = str(exc) or "patch application failed"
+        classification = classify_patch_apply_exception(exc=exc)
+        detail_payload = build_patch_apply_failure_detail(
+            workspace_root=workspace,
+            patch_bytes=patch_bytes,
+            exc=exc,
+        )
+        detail_hash = _write_patch_apply_fail_detail(payload=detail_payload)
+        refutation_code = str(classification.get("refutation_code", "PATCH_APPLY_FAILED")).strip() or "PATCH_APPLY_FAILED"
+        patch_apply_fail_code = str(classification.get("patch_apply_fail_code", "") or "").strip()
+        refutation_detail = (
+            "patch base hash mismatch before apply"
+            if refutation_code == "PATCH_BASE_MISMATCH"
+            else f"patch application failed ({patch_apply_fail_code or 'OTHER_EXCEPTION'})"
+        )
+        refutation_payload: dict[str, Any] = {
+            "code": refutation_code,
+            "detail": refutation_detail,
+            "evidence_hashes": [detail_hash],
+            "patch_apply_fail_detail_hash": detail_hash,
+        }
+        if patch_apply_fail_code:
+            refutation_payload["patch_apply_fail_stage"] = "APPLY_PATCH_BYTES"
+            refutation_payload["patch_apply_fail_code"] = patch_apply_fail_code
+        elif refutation_code == "PATCH_APPLY_FAILED":
+            refutation_payload["patch_apply_fail_stage"] = "APPLY_PATCH_BYTES"
+            refutation_payload["patch_apply_fail_code"] = "OTHER_EXCEPTION"
         return {
             "ok": False,
-            "refutation": {
-                "code": "SITE_NOT_FOUND",
-                "detail": detail,
-            },
+            "refutation": refutation_payload,
         }
 
     applied_tree_id = compute_workspace_tree_id(workspace)
@@ -347,7 +514,16 @@ def _run_score_stage_once(
     }
 
 
-def _run_score_stage(*, base_repo_root: Path, candidate_repo_root: Path, work_dir: Path, ccap_id: str, ek: dict[str, Any]) -> dict[str, Any]:
+def _run_score_stage(
+    *,
+    base_repo_root: Path,
+    candidate_repo_root: Path,
+    work_dir: Path,
+    ccap_id: str,
+    ek: dict[str, Any],
+    ticks_override_u64: int | None = None,
+    require_any_improvement_override_b: bool | None = None,
+) -> dict[str, Any]:
     scoring = ek.get("scoring_impl")
     if not isinstance(scoring, dict):
         return {"ok": False, "refutation": {"code": "EVAL_STAGE_FAIL", "detail": "scoring_impl missing"}}
@@ -355,12 +531,16 @@ def _run_score_stage(*, base_repo_root: Path, candidate_repo_root: Path, work_di
     accept_policy = scoring.get("accept_policy")
     accept_policy_obj = accept_policy if isinstance(accept_policy, dict) else {}
     require_any_improvement_b = bool(accept_policy_obj.get("require_any_improvement_b", True))
+    if isinstance(require_any_improvement_override_b, bool):
+        require_any_improvement_b = bool(require_any_improvement_override_b)
     stps_delta_min_q32 = int(accept_policy_obj.get("stps_delta_min_q32", _DEFAULT_STPS_DELTA_MIN_Q32))
     if stps_delta_min_q32 < 0:
         stps_delta_min_q32 = 0
     ticks_u64 = int(accept_policy_obj.get("ticks_u64", 10))
     if ticks_u64 <= 0:
         ticks_u64 = 10
+    if isinstance(ticks_override_u64, int) and int(ticks_override_u64) > 0:
+        ticks_u64 = int(ticks_override_u64)
 
     score_base = _run_score_stage_once(
         score_repo_root=base_repo_root,
@@ -570,6 +750,15 @@ def run_ek(
         }
 
     fast_ek = _survival_drill_fast_ek_enabled()
+    smoke_ek_enabled = bool(_ccap_smoke_ek_enabled() and (not fast_ek))
+    smoke_only_ek_enabled = bool(_ccap_smoke_only_enabled() and smoke_ek_enabled)
+    smoke_budget_ladder_v1 = _smoke_budget_ladder_from_env()
+    smoke_budget_start_rung_u8 = _smoke_budget_start_rung_u8(ladder_len=len(smoke_budget_ladder_v1))
+    smoke_budget_max_bumps_u8 = _smoke_budget_max_bumps_u8()
+    smoke_winner_escalate_full_ek_b = bool(smoke_only_ek_enabled and _smoke_winner_escalate_full_ek_enabled())
+    smoke_rung_u8 = int(smoke_budget_start_rung_u8)
+    smoke_budget_tuple = dict(smoke_budget_ladder_v1[max(0, int(smoke_rung_u8) - 1)])
+    smoke_score_ticks_u64 = _smoke_score_ticks_u64(default_ticks_u64=5)
 
     realize_a = _realize_once(
         repo_root=repo_root,
@@ -696,6 +885,195 @@ def run_ek(
 
     stage_logs.append(f"REALIZE:PASS:{applied_tree_a}:{realized_out_a}:{transcript_a}")
 
+    if smoke_ek_enabled:
+        smoke_ladder_len_u8 = int(max(1, len(smoke_budget_ladder_v1)))
+        smoke_start_idx = int(max(0, min(smoke_ladder_len_u8 - 1, int(smoke_budget_start_rung_u8) - 1)))
+        smoke_final_idx = int(
+            max(
+                smoke_start_idx,
+                min(
+                    smoke_ladder_len_u8 - 1,
+                    smoke_start_idx + int(max(0, int(smoke_budget_max_bumps_u8))),
+                ),
+            )
+        )
+        smoke_passed_b = False
+        for rung_idx in range(smoke_start_idx, smoke_final_idx + 1):
+            smoke_rung_u8 = int(rung_idx + 1)
+            smoke_budget_tuple = dict(smoke_budget_ladder_v1[rung_idx])
+            smoke_score = _run_score_stage(
+                base_repo_root=repo_root,
+                candidate_repo_root=Path(realize_a["workspace"]),
+                work_dir=out_dir / "smoke_ek" / f"rung_{int(smoke_rung_u8):02d}",
+                ccap_id=ccap_id,
+                ek=ek,
+                ticks_override_u64=int(smoke_score_ticks_u64),
+                require_any_improvement_override_b=False,
+            )
+            if not bool(smoke_score.get("ok", False)):
+                smoke_refutation = dict(
+                    smoke_score.get("refutation") or {"code": "SMOKE_EK_STAGE_FAIL", "detail": "smoke EK failed"}
+                )
+                smoke_refutation_code = (
+                    str(smoke_refutation.get("code", "SMOKE_EK_STAGE_FAIL")).strip() or "SMOKE_EK_STAGE_FAIL"
+                )
+                smoke_refutation_detail = str(smoke_refutation.get("detail", "smoke EK failed")).strip() or "smoke EK failed"
+                cpu_ms = int(time.process_time() * 1000) - cpu_start
+                wall_ms = int(time.time() * 1000) - wall_start
+                mem_mb = _self_mem_mb()
+                disk_mb = workspace_disk_mb(out_dir)
+                cost = _cost_vector(cpu_ms=cpu_ms, wall_ms=wall_ms, mem_mb=mem_mb, disk_mb=disk_mb)
+                return {
+                    "determinism_check": "PASS",
+                    "eval_status": "FAIL",
+                    "decision": "REJECT",
+                    "refutation": {
+                        "code": "SMOKE_EK_FAIL",
+                        "detail": f"{smoke_refutation_code}:{smoke_refutation_detail}",
+                    },
+                    "applied_tree_id": applied_tree_a,
+                    "realized_out_id": realized_out_a,
+                    "cost_vector": cost,
+                    "logs_hash": hash_bytes("\n".join(stage_logs).encode("utf-8")),
+                    "effective_budget_limits": dict(effective_budgets),
+                    "effective_budget_tuple": dict(effective_budget_tuple),
+                    "effective_budget_profile_id": str(budget_profile_id),
+                    "smoke_ek_enabled_b": True,
+                    "smoke_only_ek_enabled_b": bool(smoke_only_ek_enabled),
+                    "smoke_ek_score_ticks_u64": int(smoke_score_ticks_u64),
+                    "smoke_budget_ladder_len_u8": int(smoke_ladder_len_u8),
+                    "smoke_budget_start_rung_u8": int(smoke_budget_start_rung_u8),
+                    "smoke_budget_max_bumps_u8": int(smoke_budget_max_bumps_u8),
+                    "smoke_rung_u8": int(smoke_rung_u8),
+                    "smoke_budget_tuple": dict(smoke_budget_tuple),
+                }
+            stage_logs.append(
+                "SMOKE_EK:PASS:"
+                f"rung_u8={int(smoke_rung_u8)}:"
+                f"ticks_u64={int(smoke_score_ticks_u64)}:"
+                f"time_ms_max={int(smoke_budget_tuple['time_ms_max'])}"
+            )
+            smoke_base_summary = smoke_score.get("score_base_summary")
+            smoke_cand_summary = smoke_score.get("score_cand_summary")
+            smoke_delta_summary = smoke_score.get("score_delta_summary")
+            if not isinstance(smoke_base_summary, dict):
+                smoke_base_summary = None
+            if not isinstance(smoke_cand_summary, dict):
+                smoke_cand_summary = None
+            if not isinstance(smoke_delta_summary, dict):
+                smoke_delta_summary = None
+
+            if not smoke_only_ek_enabled:
+                smoke_passed_b = True
+                break
+
+            cpu_ms = int(time.process_time() * 1000) - cpu_start
+            wall_ms = int(time.time() * 1000) - wall_start
+            mem_mb = _self_mem_mb()
+            disk_mb = workspace_disk_mb(out_dir)
+            cost = _cost_vector(cpu_ms=cpu_ms, wall_ms=wall_ms, mem_mb=mem_mb, disk_mb=disk_mb)
+            smoke_time_exceeded_b = int(cost.get("wall_ms", 0)) > int(smoke_budget_tuple.get("time_ms_max", 0))
+            smoke_stage_exceeded_b = int(cost.get("cpu_ms", 0)) > int(smoke_budget_tuple.get("stage_cost_budget", 0))
+            smoke_disk_exceeded_b = int(cost.get("disk_mb", 0)) > int(smoke_budget_tuple.get("disk_mb_max", 0))
+            smoke_budget_exceeded_b = bool(smoke_time_exceeded_b or smoke_stage_exceeded_b or smoke_disk_exceeded_b)
+            if smoke_budget_exceeded_b:
+                can_bump_b = bool(rung_idx < smoke_final_idx and rung_idx < (smoke_ladder_len_u8 - 1))
+                if can_bump_b:
+                    stage_logs.append(
+                        "SMOKE_EK:BUDGET_EXCEEDED_RERUN:"
+                        f"from_rung_u8={int(smoke_rung_u8)}:"
+                        f"to_rung_u8={int(smoke_rung_u8 + 1)}"
+                    )
+                    continue
+                return {
+                    "determinism_check": "PASS",
+                    "eval_status": "FAIL",
+                    "decision": "REJECT",
+                    "refutation": {
+                        "code": "SMOKE_EK_BUDGET_EXCEEDED",
+                        "detail": (
+                            f"wall_ms={int(cost.get('wall_ms', 0))}/{int(smoke_budget_tuple.get('time_ms_max', 0))} "
+                            f"cpu_ms={int(cost.get('cpu_ms', 0))}/{int(smoke_budget_tuple.get('stage_cost_budget', 0))} "
+                            f"disk_mb={int(cost.get('disk_mb', 0))}/{int(smoke_budget_tuple.get('disk_mb_max', 0))}"
+                        ),
+                    },
+                    "applied_tree_id": applied_tree_a,
+                    "realized_out_id": realized_out_a,
+                    "cost_vector": cost,
+                    "logs_hash": hash_bytes("\n".join(stage_logs).encode("utf-8")),
+                    "effective_budget_limits": dict(effective_budgets),
+                    "effective_budget_tuple": dict(effective_budget_tuple),
+                    "effective_budget_profile_id": str(budget_profile_id),
+                    "smoke_ek_enabled_b": True,
+                    "smoke_only_ek_enabled_b": True,
+                    "smoke_ek_score_ticks_u64": int(smoke_score_ticks_u64),
+                    "smoke_budget_ladder_len_u8": int(smoke_ladder_len_u8),
+                    "smoke_budget_start_rung_u8": int(smoke_budget_start_rung_u8),
+                    "smoke_budget_max_bumps_u8": int(smoke_budget_max_bumps_u8),
+                    "smoke_rung_u8": int(smoke_rung_u8),
+                    "smoke_budget_tuple": dict(smoke_budget_tuple),
+                }
+            smoke_passed_b = True
+            if smoke_winner_escalate_full_ek_b:
+                stage_logs.append(f"SMOKE_EK:WINNER_ESCALATE_FULL_EK:rung_u8={int(smoke_rung_u8)}")
+                break
+            return {
+                "determinism_check": "PASS",
+                "eval_status": "PASS",
+                "decision": "PROMOTE",
+                "refutation": None,
+                "applied_tree_id": applied_tree_a,
+                "realized_out_id": realized_out_a,
+                "cost_vector": cost,
+                "logs_hash": hash_bytes("\n".join(stage_logs).encode("utf-8")),
+                "scorecard_summary": smoke_cand_summary if isinstance(smoke_cand_summary, dict) else None,
+                "score_base_summary": smoke_base_summary,
+                "score_cand_summary": smoke_cand_summary,
+                "score_delta_summary": smoke_delta_summary,
+                "effective_budget_limits": dict(effective_budgets),
+                "effective_budget_tuple": dict(effective_budget_tuple),
+                "effective_budget_profile_id": str(budget_profile_id),
+                "smoke_ek_enabled_b": True,
+                "smoke_only_ek_enabled_b": True,
+                "smoke_ek_score_ticks_u64": int(smoke_score_ticks_u64),
+                "smoke_budget_ladder_len_u8": int(smoke_ladder_len_u8),
+                "smoke_budget_start_rung_u8": int(smoke_budget_start_rung_u8),
+                "smoke_budget_max_bumps_u8": int(smoke_budget_max_bumps_u8),
+                "smoke_rung_u8": int(smoke_rung_u8),
+                "smoke_budget_tuple": dict(smoke_budget_tuple),
+            }
+
+        if smoke_only_ek_enabled and not smoke_passed_b:
+            cpu_ms = int(time.process_time() * 1000) - cpu_start
+            wall_ms = int(time.time() * 1000) - wall_start
+            mem_mb = _self_mem_mb()
+            disk_mb = workspace_disk_mb(out_dir)
+            cost = _cost_vector(cpu_ms=cpu_ms, wall_ms=wall_ms, mem_mb=mem_mb, disk_mb=disk_mb)
+            return {
+                "determinism_check": "PASS",
+                "eval_status": "FAIL",
+                "decision": "REJECT",
+                "refutation": {
+                    "code": "SMOKE_EK_FAIL",
+                    "detail": "smoke EK did not pass within configured ladder bounds",
+                },
+                "applied_tree_id": applied_tree_a,
+                "realized_out_id": realized_out_a,
+                "cost_vector": cost,
+                "logs_hash": hash_bytes("\n".join(stage_logs).encode("utf-8")),
+                "effective_budget_limits": dict(effective_budgets),
+                "effective_budget_tuple": dict(effective_budget_tuple),
+                "effective_budget_profile_id": str(budget_profile_id),
+                "smoke_ek_enabled_b": True,
+                "smoke_only_ek_enabled_b": True,
+                "smoke_ek_score_ticks_u64": int(smoke_score_ticks_u64),
+                "smoke_budget_ladder_len_u8": int(smoke_ladder_len_u8),
+                "smoke_budget_start_rung_u8": int(smoke_budget_start_rung_u8),
+                "smoke_budget_max_bumps_u8": int(smoke_budget_max_bumps_u8),
+                "smoke_rung_u8": int(smoke_rung_u8),
+                "smoke_budget_tuple": dict(smoke_budget_tuple),
+            }
+
     score = _run_score_stage(
         base_repo_root=repo_root,
         candidate_repo_root=Path(realize_a["workspace"]),
@@ -722,6 +1100,14 @@ def run_ek(
             "score_base_summary": score_base_summary if isinstance(score_base_summary, dict) else None,
             "score_cand_summary": score_cand_summary if isinstance(score_cand_summary, dict) else None,
             "score_delta_summary": score_delta_summary if isinstance(score_delta_summary, dict) else None,
+            "smoke_ek_enabled_b": bool(smoke_ek_enabled),
+            "smoke_only_ek_enabled_b": bool(smoke_only_ek_enabled),
+            "smoke_ek_score_ticks_u64": int(smoke_score_ticks_u64) if smoke_ek_enabled else 0,
+            "smoke_budget_ladder_len_u8": int(len(smoke_budget_ladder_v1)) if smoke_ek_enabled else 0,
+            "smoke_budget_start_rung_u8": int(smoke_budget_start_rung_u8) if smoke_ek_enabled else 0,
+            "smoke_budget_max_bumps_u8": int(smoke_budget_max_bumps_u8) if smoke_ek_enabled else 0,
+            "smoke_rung_u8": int(smoke_rung_u8) if smoke_ek_enabled else 0,
+            "smoke_budget_tuple": dict(smoke_budget_tuple) if smoke_ek_enabled else None,
         }
 
     score_base_hash = str(score.get("score_base_run_hash", "")).strip()
@@ -781,6 +1167,14 @@ def run_ek(
             "effective_budget_limits": dict(effective_budgets),
             "effective_budget_tuple": dict(effective_budget_tuple),
             "effective_budget_profile_id": str(budget_profile_id),
+            "smoke_ek_enabled_b": bool(smoke_ek_enabled),
+            "smoke_only_ek_enabled_b": bool(smoke_only_ek_enabled),
+            "smoke_ek_score_ticks_u64": int(smoke_score_ticks_u64) if smoke_ek_enabled else 0,
+            "smoke_budget_ladder_len_u8": int(len(smoke_budget_ladder_v1)) if smoke_ek_enabled else 0,
+            "smoke_budget_start_rung_u8": int(smoke_budget_start_rung_u8) if smoke_ek_enabled else 0,
+            "smoke_budget_max_bumps_u8": int(smoke_budget_max_bumps_u8) if smoke_ek_enabled else 0,
+            "smoke_rung_u8": int(smoke_rung_u8) if smoke_ek_enabled else 0,
+            "smoke_budget_tuple": dict(smoke_budget_tuple) if smoke_ek_enabled else None,
         }
 
     return {
@@ -799,6 +1193,14 @@ def run_ek(
         "effective_budget_limits": dict(effective_budgets),
         "effective_budget_tuple": dict(effective_budget_tuple),
         "effective_budget_profile_id": str(budget_profile_id),
+        "smoke_ek_enabled_b": bool(smoke_ek_enabled),
+        "smoke_only_ek_enabled_b": bool(smoke_only_ek_enabled),
+        "smoke_ek_score_ticks_u64": int(smoke_score_ticks_u64) if smoke_ek_enabled else 0,
+        "smoke_budget_ladder_len_u8": int(len(smoke_budget_ladder_v1)) if smoke_ek_enabled else 0,
+        "smoke_budget_start_rung_u8": int(smoke_budget_start_rung_u8) if smoke_ek_enabled else 0,
+        "smoke_budget_max_bumps_u8": int(smoke_budget_max_bumps_u8) if smoke_ek_enabled else 0,
+        "smoke_rung_u8": int(smoke_rung_u8) if smoke_ek_enabled else 0,
+        "smoke_budget_tuple": dict(smoke_budget_tuple) if smoke_ek_enabled else None,
     }
 
 

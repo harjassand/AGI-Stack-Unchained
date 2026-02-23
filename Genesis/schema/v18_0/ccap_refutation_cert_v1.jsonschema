@@ -27,6 +27,8 @@
         "PAYLOAD_KIND_UNSUPPORTED",
         "ILLEGAL_OPERATOR",
         "SITE_NOT_FOUND",
+        "PATCH_APPLY_FAILED",
+        "PATCH_BASE_MISMATCH",
         "TYPE_MISMATCH",
         "SSA_VIOLATION",
         "CANONICALIZATION_MISMATCH",
@@ -34,6 +36,8 @@
         "NONDETERMINISM_DETECTED",
         "BUDGET_EXCEEDED",
         "NO_IMPROVEMENT",
+        "SMOKE_EK_FAIL",
+        "SMOKE_EK_BUDGET_EXCEEDED",
         "EVAL_STAGE_FAIL"
       ]
     },

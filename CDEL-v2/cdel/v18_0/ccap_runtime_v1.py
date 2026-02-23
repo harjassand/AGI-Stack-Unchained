@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import base64
 import hashlib
+import json
 import os
 import re
 import shutil
@@ -10,6 +12,7 @@ import subprocess
 from pathlib import Path
 from typing import Any
 
+from ..v1_7r.canon import canon_bytes
 from .omega_common_v1 import canon_hash_obj, fail, hash_file_stream
 
 
@@ -280,6 +283,169 @@ def workspace_disk_mb(workspace_root: Path) -> int:
 
 
 _ABSOLUTE_PATH_RE = re.compile(r"(?<![A-Za-z0-9_.-])/[^\s:\"']+")
+_REPLACE_PATCH_SCHEMA_VERSION = "ccap_replace_file_patch_v1"
+_SHA256_RE = re.compile(r"^sha256:[0-9a-f]{64}$")
+
+
+def _normalize_workspace_relpath(path_value: str) -> str:
+    value = str(path_value).strip().replace("\\", "/")
+    if value.startswith("./"):
+        value = value[2:]
+    path = Path(value)
+    if not value or path.is_absolute() or ".." in path.parts:
+        raise ValueError("invalid relpath")
+    return value
+
+
+def _decode_replace_file_patch(patch_bytes: bytes) -> dict[str, Any] | None:
+    try:
+        payload = json.loads(patch_bytes.decode("utf-8"))
+    except Exception:  # noqa: BLE001
+        return None
+    if not isinstance(payload, dict):
+        return None
+    if str(payload.get("schema_version", "")).strip() != _REPLACE_PATCH_SCHEMA_VERSION:
+        return None
+    try:
+        target_relpath = _normalize_workspace_relpath(str(payload.get("target_relpath", "")).strip())
+    except Exception:  # noqa: BLE001
+        return None
+    expected_base_sha256 = str(payload.get("expected_base_sha256", "")).strip()
+    new_bytes_sha256 = str(payload.get("new_bytes_sha256", "")).strip()
+    new_bytes_b64 = str(payload.get("new_bytes_b64", "")).strip()
+    if not _SHA256_RE.match(expected_base_sha256):
+        return None
+    if not _SHA256_RE.match(new_bytes_sha256):
+        return None
+    try:
+        new_bytes = base64.b64decode(new_bytes_b64.encode("ascii"), validate=True)
+    except Exception:  # noqa: BLE001
+        return None
+    if f"sha256:{hashlib.sha256(new_bytes).hexdigest()}" != new_bytes_sha256:
+        return None
+    return {
+        "schema_version": _REPLACE_PATCH_SCHEMA_VERSION,
+        "target_relpath": target_relpath,
+        "expected_base_sha256": expected_base_sha256,
+        "new_bytes_sha256": new_bytes_sha256,
+        "new_bytes": new_bytes,
+    }
+
+
+def build_replace_file_patch_bytes(*, target_relpath: str, expected_base_bytes: bytes, new_bytes: bytes) -> bytes:
+    rel = _normalize_workspace_relpath(target_relpath)
+    expected_base_sha256 = f"sha256:{hashlib.sha256(expected_base_bytes).hexdigest()}"
+    new_bytes_sha256 = f"sha256:{hashlib.sha256(new_bytes).hexdigest()}"
+    payload = {
+        "schema_version": _REPLACE_PATCH_SCHEMA_VERSION,
+        "target_relpath": rel,
+        "expected_base_sha256": expected_base_sha256,
+        "new_bytes_sha256": new_bytes_sha256,
+        "new_bytes_b64": base64.b64encode(new_bytes).decode("ascii"),
+    }
+    return canon_bytes(payload) + b"\n"
+
+
+def patch_touched_relpaths(*, patch_bytes: bytes) -> list[str]:
+    replace_patch = _decode_replace_file_patch(patch_bytes)
+    if isinstance(replace_patch, dict):
+        return [str(replace_patch["target_relpath"])]
+    touched: list[str] = []
+    seen: set[str] = set()
+    for raw in patch_bytes.decode("utf-8", errors="replace").splitlines():
+        line = raw.strip()
+        if not line.startswith("+++ "):
+            continue
+        if line == "+++ /dev/null":
+            continue
+        if not line.startswith("+++ b/"):
+            continue
+        rel = line[len("+++ b/") :]
+        rel = rel.split("\t", 1)[0].strip()
+        if rel.startswith('"') and rel.endswith('"') and len(rel) >= 2:
+            rel = rel[1:-1]
+        try:
+            normalized = _normalize_workspace_relpath(rel)
+        except Exception:  # noqa: BLE001
+            normalized = rel
+        if normalized and normalized not in seen:
+            touched.append(normalized)
+            seen.add(normalized)
+    return touched
+
+
+def _patch_hunk_summary(*, patch_bytes: bytes) -> dict[str, Any] | None:
+    replace_patch = _decode_replace_file_patch(patch_bytes)
+    if isinstance(replace_patch, dict):
+        return {
+            "kind": "REPLACE_FILE",
+            "target_relpath": str(replace_patch["target_relpath"]),
+        }
+    targets = patch_touched_relpaths(patch_bytes=patch_bytes)
+    if not targets:
+        return None
+    hunk_count = 0
+    for raw in patch_bytes.decode("utf-8", errors="replace").splitlines():
+        if raw.startswith("@@ "):
+            hunk_count += 1
+    return {
+        "kind": "UNIFIED_DIFF",
+        "target_relpaths_v1": list(targets),
+        "hunk_count_u64": int(hunk_count),
+    }
+
+
+def classify_patch_apply_exception(*, exc: Exception) -> dict[str, str | None]:
+    text = str(exc).strip()
+    upper = text.upper()
+    if upper.startswith("PATCH_BASE_MISMATCH:"):
+        return {
+            "refutation_code": "PATCH_BASE_MISMATCH",
+            "patch_apply_fail_code": "JSON_CANON_MISMATCH",
+        }
+    code = "OTHER_EXCEPTION"
+    if upper.startswith("PATCH_TARGET_MISSING:"):
+        code = "TARGET_MISSING"
+    elif "JSON_CANON_MISMATCH" in upper or "CANONICALIZATION" in upper:
+        code = "JSON_CANON_MISMATCH"
+    elif any(token in upper for token in ("NO SUCH FILE", "DOES NOT EXIST", "NOT FOUND")):
+        code = "TARGET_MISSING"
+    elif any(token in upper for token in ("DOES NOT APPLY", "PATCH FAILED", "HUNK #", "CONTEXT")):
+        code = "CONTEXT_MISMATCH"
+    elif any(
+        token in upper
+        for token in ("CORRUPT", "BINARY", "ENCOD", "UTF-8", "CRLF", "LINE ENDING", "PATCH WITH ONLY GARBAGE")
+    ):
+        code = "BINARY_OR_ENCODING"
+    return {
+        "refutation_code": "PATCH_APPLY_FAILED",
+        "patch_apply_fail_code": str(code),
+    }
+
+
+def build_patch_apply_failure_detail(*, workspace_root: Path, patch_bytes: bytes, exc: Exception) -> dict[str, Any]:
+    touched = patch_touched_relpaths(patch_bytes=patch_bytes)
+    target_relpath = touched[0] if touched else None
+    base_file_sha256 = None
+    if isinstance(target_relpath, str) and target_relpath:
+        target_path = (workspace_root / target_relpath).resolve()
+        try:
+            target_path.relative_to(workspace_root.resolve())
+            if target_path.exists() and target_path.is_file():
+                base_file_sha256 = f"sha256:{hashlib.sha256(target_path.read_bytes()).hexdigest()}"
+        except Exception:  # noqa: BLE001
+            base_file_sha256 = None
+    patch_sha256 = f"sha256:{hashlib.sha256(patch_bytes).hexdigest()}"
+    exc_text = f"{exc.__class__.__name__}: {str(exc)}"
+    detail = {
+        "schema_version": "patch_apply_fail_detail_v1",
+        "target_relpath": target_relpath,
+        "base_file_sha256": base_file_sha256,
+        "patch_sha256": patch_sha256,
+        "exception": exc_text[:300],
+        "hunk_summary": _patch_hunk_summary(patch_bytes=patch_bytes),
+    }
+    return detail
 
 
 def _sanitize_git_apply_error(
@@ -303,6 +469,32 @@ def _sanitize_git_apply_error(
 
 
 def apply_patch_bytes(*, workspace_root: Path, patch_bytes: bytes) -> None:
+    replace_patch = _decode_replace_file_patch(patch_bytes)
+    if isinstance(replace_patch, dict):
+        target_relpath = str(replace_patch["target_relpath"])
+        target_path = (workspace_root / target_relpath).resolve()
+        try:
+            target_path.relative_to(workspace_root.resolve())
+        except ValueError as exc:
+            raise RuntimeError(f"patch_target_missing: {target_relpath}") from exc
+        if not target_path.exists() or not target_path.is_file():
+            raise RuntimeError(f"patch_target_missing: {target_relpath}")
+        current_bytes = target_path.read_bytes()
+        current_sha256 = f"sha256:{hashlib.sha256(current_bytes).hexdigest()}"
+        expected_base_sha256 = str(replace_patch["expected_base_sha256"])
+        if current_sha256 != expected_base_sha256:
+            raise RuntimeError(
+                f"patch_base_mismatch: target={target_relpath} expected={expected_base_sha256} actual={current_sha256}"
+            )
+        new_bytes = bytes(replace_patch["new_bytes"])
+        expected_new_sha256 = str(replace_patch["new_bytes_sha256"])
+        actual_new_sha256 = f"sha256:{hashlib.sha256(new_bytes).hexdigest()}"
+        if actual_new_sha256 != expected_new_sha256:
+            raise RuntimeError(f"patch_encoding_mismatch: expected={expected_new_sha256} actual={actual_new_sha256}")
+        target_path.parent.mkdir(parents=True, exist_ok=True)
+        target_path.write_bytes(new_bytes)
+        return
+
     patch_path = workspace_root / ".ccap_apply.patch"
     patch_path.write_bytes(patch_bytes)
     try:
@@ -401,14 +593,18 @@ def normalize_subrun_relpath(path_value: str) -> str:
 
 __all__ = [
     "apply_patch_bytes",
+    "build_patch_apply_failure_detail",
+    "build_replace_file_patch_bytes",
     "ccap_payload_id",
     "ccap_blob_path",
+    "classify_patch_apply_exception",
     "compute_repo_base_tree_id",
     "compute_repo_base_tree_id_tolerant",
     "compute_workspace_tree_id",
     "discover_ccap_relpath",
     "materialize_repo_snapshot",
     "normalize_subrun_relpath",
+    "patch_touched_relpaths",
     "patch_blob_path",
     "read_patch_blob",
     "tracked_files",

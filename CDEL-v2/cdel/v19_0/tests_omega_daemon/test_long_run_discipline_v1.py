@@ -582,6 +582,50 @@ def test_harness_heavy_success_telemetry_tracks_utility_and_promotion() -> None:
     assert row["heavy_success_counts_last_200"]["heavy_utility_ok_u64"] == 2
 
 
+def test_harness_heavy_promoted_row_invariant_requires_accept_and_receipts() -> None:
+    invalid_row = {
+        "heavy_promoted_b": True,
+        "promotion_status": "PROMOTED",
+        "ccap_decision": "REJECT",
+        "ccap_receipt_hash": "sha256:" + ("a" * 64),
+        "promotion_receipt_hash": "sha256:" + ("b" * 64),
+    }
+    assert long_harness._heavy_promoted_row_invariant_b(invalid_row) is False
+
+    missing_receipt_row = {
+        "heavy_promoted_b": True,
+        "promotion_status": "PROMOTED",
+        "ccap_decision": "PROMOTE",
+        "ccap_receipt_hash": "sha256:" + ("a" * 64),
+        "promotion_receipt_hash": None,
+    }
+    assert long_harness._heavy_promoted_row_invariant_b(missing_receipt_row) is False
+
+    valid_row = {
+        "heavy_promoted_b": True,
+        "promotion_status": "PROMOTED",
+        "ccap_decision": "PROMOTE",
+        "ccap_receipt_hash": "sha256:" + ("a" * 64),
+        "promotion_receipt_hash": "sha256:" + ("b" * 64),
+    }
+    assert long_harness._heavy_promoted_row_invariant_b(valid_row) is True
+
+
+def test_harness_env_receipt_includes_resolved_orch_provenance(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("ORCH_LLM_BACKEND", "mlx")
+    monkeypatch.setenv("ORCH_MLX_MODEL", "mlx-community/Qwen2.5-Coder-14B-Instruct-4bit")
+    env = long_harness._build_subprocess_env(
+        force_lane=None,
+        force_eval=False,
+        launch_manifest_hash=None,
+    )
+    receipt = long_harness._env_receipt(env=env)
+    assert receipt["resolved_orch_llm_backend"] == "mlx"
+    assert receipt["resolved_orch_model_id"] == "mlx-community/Qwen2.5-Coder-14B-Instruct-4bit"
+    assert receipt["env"]["ORCH_LLM_BACKEND"] == "mlx"
+    assert receipt["env"]["ORCH_MLX_MODEL"] == "mlx-community/Qwen2.5-Coder-14B-Instruct-4bit"
+
+
 def test_harness_hard_lock_transition_logs_pre_evidence_failure() -> None:
     live_rows = [
         {

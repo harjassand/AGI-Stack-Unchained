@@ -13,6 +13,8 @@
     "forced_lane_override_b",
     "frontier_gate_pass_b",
     "reason_codes",
+    "resolved_orch_llm_backend",
+    "resolved_orch_model_id",
     "health_window",
     "allowed_capability_ids"
   ],
@@ -28,6 +30,8 @@
       "type": "array",
       "items": {"type": "string", "minLength": 1}
     },
+    "resolved_orch_llm_backend": {"type": "string", "minLength": 1},
+    "resolved_orch_model_id": {"type": "string", "minLength": 1},
     "health_window": {
       "type": "object",
       "additionalProperties": false,

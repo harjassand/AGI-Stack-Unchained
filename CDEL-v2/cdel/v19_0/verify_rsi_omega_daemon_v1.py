@@ -48,6 +48,7 @@ _GE_SH1_CAMPAIGN_ID = "rsi_ge_symbiotic_optimizer_sh1_v0_1"
 _HEAVY_DECLARED_CLASSES = {"FRONTIER_HEAVY", "CANARY_HEAVY"}
 _AXIS_EXEMPTIONS_REL = "configs/omega_axis_gate_exemptions_v1.json"
 _AXIS_EXEMPTIONS_SET_CACHE: set[str] | None = None
+_DEFAULT_ORCH_MLX_MODEL_ID = "mlx-community/Qwen2.5-Coder-14B-Instruct-4bit"
 
 
 def _resolve_state_dir(path: Path) -> Path:
@@ -86,6 +87,29 @@ def _relpath_or_abs(path_value: Any) -> str | None:
 
 def _is_sha256(value: Any) -> bool:
     return isinstance(value, str) and value.startswith("sha256:") and len(value.split(":", 1)[1]) == 64
+
+
+def _resolve_orch_runtime_provenance(*, env_map: dict[str, Any] | None = None) -> tuple[str, str]:
+    source = os.environ if env_map is None else env_map
+    backend = str(source.get("ORCH_LLM_BACKEND", "mlx")).strip().lower() or "mlx"
+    if backend == "mlx":
+        model_id = str(source.get("ORCH_MLX_MODEL", _DEFAULT_ORCH_MLX_MODEL_ID)).strip() or _DEFAULT_ORCH_MLX_MODEL_ID
+        return backend, model_id
+    model_id = str(source.get("ORCH_MODEL_ID", "")).strip() or f"{backend}:default"
+    return backend, model_id
+
+
+def _verify_manifest_orch_provenance(manifest_payload: dict[str, Any]) -> None:
+    declared_backend = str(manifest_payload.get("resolved_orch_llm_backend", "")).strip().lower()
+    declared_model_id = str(manifest_payload.get("resolved_orch_model_id", "")).strip()
+    if not declared_backend or not declared_model_id:
+        env_payload = manifest_payload.get("env")
+        if not isinstance(env_payload, dict):
+            fail_v18("SCHEMA_FAIL")
+        declared_backend, declared_model_id = _resolve_orch_runtime_provenance(env_map=env_payload)
+    runtime_backend, runtime_model_id = _resolve_orch_runtime_provenance()
+    if runtime_backend != declared_backend or runtime_model_id != declared_model_id:
+        fail_v18("NONDETERMINISTIC")
 
 
 def _require_sha256(value: Any, *, reason: str = "SCHEMA_FAIL") -> str:
@@ -456,6 +480,7 @@ def _verify_long_run_ledger_bindings(state_root: Path) -> None:
                 fail_v18("NONDETERMINISTIC")
             if str(manifest_payload.get("manifest_relpath", "")).strip() != manifest_relpath:
                 fail_v18("NONDETERMINISTIC")
+            _verify_manifest_orch_provenance(manifest_payload)
         elif event_type == "LONG_RUN_STOP_RECEIPT":
             path = _path_for_hash(
                 state_root / "long_run" / "stop",
@@ -490,6 +515,7 @@ def _verify_long_run_ledger_bindings(state_root: Path) -> None:
                 fail_v18("NONDETERMINISTIC")
             if manifest_id != _require_sha256(payload.get("manifest_hash"), reason="SCHEMA_FAIL"):
                 fail_v18("NONDETERMINISTIC")
+            _verify_manifest_orch_provenance(manifest_payload)
 
 
 def _find_nested_hash(state_root: Path, digest: str, suffix: str) -> Path:
@@ -2404,6 +2430,12 @@ def _verify_hardening_bindings(*, state_root: Path, config_dir: Path, snapshot: 
         )
         if str(lane_payload.get("schema_name", "")).strip() != "lane_decision_receipt_v1":
             fail_v18("SCHEMA_FAIL")
+        lane_backend = str(lane_payload.get("resolved_orch_llm_backend", "")).strip().lower()
+        lane_model_id = str(lane_payload.get("resolved_orch_model_id", "")).strip()
+        if lane_backend or lane_model_id:
+            runtime_backend, runtime_model_id = _resolve_orch_runtime_provenance()
+            if lane_backend != runtime_backend or lane_model_id != runtime_model_id:
+                fail_v18("NONDETERMINISTIC")
         lane_name_for_frontier = str(lane_payload.get("lane_name", "")).strip().upper() or None
 
     frontier_attempt_counted_b = bool(

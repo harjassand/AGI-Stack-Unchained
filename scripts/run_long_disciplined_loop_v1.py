@@ -60,6 +60,8 @@ FRONTIER_ATTEMPT_QUALITY_VALID_BUT_NO_UTILITY = "FRONTIER_ATTEMPT_VALID_BUT_NO_U
 FRONTIER_ATTEMPT_QUALITY_INVALID = "FRONTIER_ATTEMPT_INVALID"
 FRONTIER_ATTEMPT_QUALITY_HEAVY_OK = "FRONTIER_ATTEMPT_HEAVY_OK"
 FRONTIER_DISPATCH_PRE_EVIDENCE_REASON_CODE = "FRONTIER_DISPATCH_FAILED_PRE_EVIDENCE"
+DEFAULT_ORCH_LLM_BACKEND = "mlx"
+DEFAULT_ORCH_MLX_MODEL_ID = "mlx-community/Qwen2.5-Coder-14B-Instruct-4bit"
 
 ENV_ALLOWLIST = (
     "PYTHONPATH",
@@ -95,7 +97,17 @@ ENV_ALLOWLIST = (
     "OMEGA_SH1_FORCED_HEAVY_B",
     "OMEGA_SH1_FORCED_DEBT_KEY",
     "OMEGA_SH1_WIRING_LOCUS_RELPATH",
+    "OMEGA_LONG_STOP_ON_HEAVY_PROMOTED_B",
+    "OMEGA_LONG_SOAK_AFTER_FIRST_HEAVY_PROMOTED_TICKS_U64",
+    "OMEGA_LONG_STOP_AFTER_HEAVY_PROMOTED_TOTAL_U64",
     "ORCH_LLM_BACKEND",
+    "ORCH_MLX_MODEL",
+    "ORCH_MLX_REVISION",
+    "ORCH_MLX_ADAPTER_PATH",
+    "ORCH_MLX_TRUST_REMOTE_CODE",
+    "ORCH_LLM_TEMPERATURE",
+    "ORCH_LLM_TOP_P",
+    "ORCH_LLM_MAX_TOKENS",
 )
 
 
@@ -127,6 +139,15 @@ def _load_jsonl(path: Path) -> list[dict[str, Any]]:
 def _env_bool(name: str, *, default: bool = False) -> bool:
     raw = str(os.environ.get(name, "1" if default else "0")).strip().lower()
     return raw in {"1", "true", "yes", "on"}
+
+
+def _parse_bool_cli(raw: str) -> bool:
+    text = str(raw).strip().lower()
+    if text in {"1", "true", "yes", "on"}:
+        return True
+    if text in {"0", "false", "no", "off"}:
+        return False
+    raise argparse.ArgumentTypeError(f"expected boolean value, got: {raw}")
 
 
 def _premarathon_v63_enabled() -> bool:
@@ -673,6 +694,49 @@ def _extract_ccap_u64(value: dict[str, Any] | None, key: str) -> int:
         return 0
 
 
+def _resolve_orch_runtime_provenance(*, env: dict[str, str]) -> tuple[str, str]:
+    backend = str(env.get("ORCH_LLM_BACKEND", DEFAULT_ORCH_LLM_BACKEND)).strip().lower() or DEFAULT_ORCH_LLM_BACKEND
+    if backend == "mlx":
+        model_id = str(env.get("ORCH_MLX_MODEL", DEFAULT_ORCH_MLX_MODEL_ID)).strip() or DEFAULT_ORCH_MLX_MODEL_ID
+        return backend, model_id
+    model_id = str(env.get("ORCH_MODEL_ID", "")).strip() or f"{backend}:default"
+    return backend, model_id
+
+
+def _latest_promotion_receipt_payload(state_dir: Path) -> tuple[dict[str, Any] | None, str | None]:
+    if not state_dir.exists() or not state_dir.is_dir():
+        return None, None
+    hashed_rows = sorted(
+        state_dir.glob("dispatch/*/promotion/sha256_*.omega_promotion_receipt_v1.json"),
+        key=lambda row: row.as_posix(),
+    )
+    if hashed_rows:
+        path = hashed_rows[-1]
+        payload = load_canon_dict(path)
+        digest = "sha256:" + path.name.split(".", 1)[0].split("_", 1)[1]
+        return payload, digest
+    plain_rows = sorted(
+        state_dir.glob("dispatch/*/promotion/omega_promotion_receipt_v1.json"),
+        key=lambda row: row.as_posix(),
+    )
+    if plain_rows:
+        payload = load_canon_dict(plain_rows[-1])
+        if isinstance(payload, dict):
+            digest = canon_hash_obj(payload)
+            return payload, digest
+    return None, None
+
+
+def _heavy_promoted_row_invariant_b(row: dict[str, Any]) -> bool:
+    if row.get("heavy_promoted_b") is not True:
+        return True
+    promotion_status_ok = str(row.get("promotion_status", "")).strip().upper() == "PROMOTED"
+    ccap_decision_ok = str(row.get("ccap_decision", "")).strip().upper() in {"PROMOTE", "ACCEPT"}
+    ccap_receipt_present_b = bool(_is_sha256(row.get("ccap_receipt_hash")))
+    promotion_receipt_present_b = bool(_is_sha256(row.get("promotion_receipt_hash")))
+    return bool(promotion_status_ok and ccap_decision_ok and ccap_receipt_present_b and promotion_receipt_present_b)
+
+
 def _latest_state_verifier_failure_detail_hash(state_dir: Path) -> str | None:
     verifier_dir = state_dir.parent / "state_verifier"
     if not verifier_dir.exists() or not verifier_dir.is_dir():
@@ -707,6 +771,10 @@ def _build_subprocess_env(
     env.setdefault("OMEGA_ALLOW_SIMULATE_ACTIVATION", "1")
     env.setdefault("OMEGA_CCAP_ALLOW_DIRTY_TREE", "1")
     env.setdefault("OMEGA_RETENTION_PRUNE_CCAP_EK_RUNS_B", "1")
+    backend, model_id = _resolve_orch_runtime_provenance(env=env)
+    env["ORCH_LLM_BACKEND"] = backend
+    if backend == "mlx":
+        env["ORCH_MLX_MODEL"] = model_id
     if force_lane:
         env["OMEGA_LONG_RUN_FORCE_LANE"] = force_lane
     else:
@@ -722,11 +790,14 @@ def _build_subprocess_env(
 
 def _env_receipt(*, env: dict[str, str]) -> dict[str, Any]:
     selected = {key: env[key] for key in sorted(env.keys()) if key in ENV_ALLOWLIST or key in {"PYTHONPATH"}}
+    resolved_backend, resolved_model_id = _resolve_orch_runtime_provenance(env=selected)
     payload = {
         "schema_name": "run_env_receipt_v1",
         "schema_version": "v1",
         "created_unix_s": int(time.time()),
         "env": selected,
+        "resolved_orch_llm_backend": str(resolved_backend),
+        "resolved_orch_model_id": str(resolved_model_id),
     }
     payload["receipt_id"] = canon_hash_obj({k: v for k, v in payload.items() if k != "receipt_id"})
     return payload
@@ -815,6 +886,8 @@ def _load_or_create_launch_manifest(
         "campaign_pack_hash": pack_hash,
         "long_run_profile_hash": profile_hash,
         "env_receipt_hash": canon_hash_obj(env_receipt),
+        "resolved_orch_llm_backend": str(env_receipt.get("resolved_orch_llm_backend", "")),
+        "resolved_orch_model_id": str(env_receipt.get("resolved_orch_model_id", "")),
         "execution": {
             "start_tick_u64": int(start_tick_u64),
             "max_ticks": int(max_ticks),
@@ -1348,6 +1421,8 @@ def run_tick(
         and str(selected_capability_id or "").strip() == "RSI_GE_SH1_OPTIMIZER"
     )
     lane_name = None
+    lane_resolved_orch_llm_backend = None
+    lane_resolved_orch_model_id = None
     lane_frontier_gate_pass_b = None
     lane_invalid_count_u64 = None
     lane_budget_exhaust_count_u64 = None
@@ -1355,6 +1430,8 @@ def run_tick(
     lane_payload, _lane_hash = _lane_receipt_final_payload(state_dir)
     if isinstance(lane_payload, dict):
         lane_name = lane_payload.get("lane_name")
+        lane_resolved_orch_llm_backend = lane_payload.get("resolved_orch_llm_backend")
+        lane_resolved_orch_model_id = lane_payload.get("resolved_orch_model_id")
         lane_frontier_gate_pass_b = lane_payload.get("frontier_gate_pass_b")
         lane_health = lane_payload.get("health_window")
         if isinstance(lane_health, dict):
@@ -1367,6 +1444,7 @@ def run_tick(
         error_class = "TICK_STATE_MISSING" if not state_dir.exists() or not state_dir.is_dir() else "TICK_PROCESS_ERROR"
     promotion_reason_value = (tick_outcome_payload or {}).get("promotion_reason_code")
     ccap_payload, ccap_receipt_hash = _latest_ccap_receipt_payload(state_dir)
+    _promotion_payload, promotion_receipt_hash = _latest_promotion_receipt_payload(state_dir)
     ccap_refutation_code, ccap_refutation_summary = _ccap_refutation_fields(
         ccap_payload=ccap_payload,
         state_dir=state_dir,
@@ -1452,10 +1530,14 @@ def run_tick(
         and utility_ok_b
         and utility_hard_task_any_gain_b
     )
+    ccap_receipt_present_b = bool(_is_sha256(ccap_receipt_hash))
+    promotion_receipt_present_b = bool(_is_sha256(promotion_receipt_hash))
     heavy_promoted_b = bool(
         heavy_utility_ok_b
         and promotion_status_value == "PROMOTED"
         and ccap_decision_value in {"PROMOTE", "ACCEPT"}
+        and ccap_receipt_present_b
+        and promotion_receipt_present_b
     )
     row = {
         "schema_name": "long_run_tick_index_row_v1",
@@ -1467,6 +1549,8 @@ def run_tick(
         "exit_code": int(proc.returncode),
         "snapshot_hash": snapshot_hash,
         "lane_name": lane_name,
+        "resolved_orch_llm_backend": lane_resolved_orch_llm_backend,
+        "resolved_orch_model_id": lane_resolved_orch_model_id,
         "lane_frontier_gate_pass_b": lane_frontier_gate_pass_b,
         "lane_invalid_count_u64": lane_invalid_count_u64,
         "lane_budget_exhaust_count_u64": lane_budget_exhaust_count_u64,
@@ -1501,6 +1585,9 @@ def run_tick(
         "axis_gate_bundle_sha256": axis_gate_fields["axis_gate_bundle_sha256"],
         "axis_gate_checked_relpaths_v1": list(axis_gate_fields["axis_gate_checked_relpaths_v1"]),
         "ccap_receipt_hash": ccap_receipt_hash,
+        "ccap_receipt_present_b": bool(ccap_receipt_present_b),
+        "promotion_receipt_hash": promotion_receipt_hash,
+        "promotion_receipt_present_b": bool(promotion_receipt_present_b),
         "ccap_decision": (ccap_payload or {}).get("decision"),
         "ccap_eval_status": (ccap_payload or {}).get("eval_status"),
         "ccap_determinism_check": (ccap_payload or {}).get("determinism_check"),
@@ -1611,6 +1698,9 @@ def run_loop(
     force_lane: str | None,
     force_eval: bool,
     stop_on_error: bool,
+    stop_on_heavy_promoted_b: bool,
+    soak_after_first_heavy_promoted_ticks_u64: int,
+    stop_after_heavy_promoted_total_u64: int,
 ) -> None:
     run_root.mkdir(parents=True, exist_ok=True)
     index_dir = run_root / "index"
@@ -1702,6 +1792,18 @@ def run_loop(
     ticks_run = 0
     stop_receipt_written_b = False
     last_row: dict[str, Any] | None = None
+    heavy_promoted_total_u64 = int(sum(1 for live in live_rows if live.get("heavy_promoted_b") is True))
+    first_heavy_promoted_tick_u64: int | None = None
+    historical_heavy_ticks = sorted(
+        int(live.get("tick_u64", 0))
+        for live in live_rows
+        if live.get("heavy_promoted_b") is True
+    )
+    if historical_heavy_ticks:
+        first_heavy_promoted_tick_u64 = int(historical_heavy_ticks[0])
+    soak_complete_tick_u64: int | None = None
+    if first_heavy_promoted_tick_u64 is not None and int(soak_after_first_heavy_promoted_ticks_u64) > 0:
+        soak_complete_tick_u64 = int(first_heavy_promoted_tick_u64 + int(soak_after_first_heavy_promoted_ticks_u64))
     while max_ticks <= 0 or ticks_run < max_ticks:
         row = run_tick(
             campaign_pack=campaign_pack,
@@ -1788,14 +1890,20 @@ def run_loop(
         _attach_hard_lock_transition_telemetry(rows=live_rows, row=row)
         _attach_axis_gate_telemetry(rows=live_rows, row=row)
         _attach_heavy_success_telemetry(rows=live_rows, row=row)
+        if row.get("heavy_promoted_b") is True:
+            heavy_promoted_total_u64 = int(heavy_promoted_total_u64 + 1)
+            if first_heavy_promoted_tick_u64 is None:
+                first_heavy_promoted_tick_u64 = int(tick_value)
+                if int(soak_after_first_heavy_promoted_ticks_u64) > 0:
+                    soak_complete_tick_u64 = int(
+                        int(first_heavy_promoted_tick_u64) + int(soak_after_first_heavy_promoted_ticks_u64)
+                    )
+        row["heavy_promoted_total_u64"] = int(heavy_promoted_total_u64)
+        row["first_heavy_promoted_tick_u64"] = first_heavy_promoted_tick_u64
+        row["soak_complete_tick_u64"] = soak_complete_tick_u64
 
-        if hard_stop_reason_code is None and row.get("heavy_promoted_b") is True:
-            hard_stop_reason_code = "HEAVY_PROMOTED"
-            hard_stop_detail = {
-                "tick_u64": tick_value,
-                "ccap_decision": row.get("ccap_decision"),
-                "ccap_refutation_code": row.get("ccap_refutation_code"),
-            }
+        if not _heavy_promoted_row_invariant_b(row):
+            raise RuntimeError("SCHEMA_FAIL")
 
         frontier_gate_pass_raw = row.get("lane_frontier_gate_pass_b")
         frontier_gate_pass = frontier_gate_pass_raw if isinstance(frontier_gate_pass_raw, bool) else None
@@ -1853,12 +1961,43 @@ def run_loop(
                         "missing_conditions": [str(item) for item in missing],
                     }
 
-        if bool(row.get("heavy_promoted_b")):
+        if (
+            hard_stop_reason_code is None
+            and bool(stop_on_heavy_promoted_b)
+            and bool(row.get("heavy_promoted_b"))
+        ):
             hard_stop_reason_code = "HEAVY_PROMOTED"
             hard_stop_detail = {
                 "tick_u64": tick_value,
                 "ccap_decision": row.get("ccap_decision"),
                 "ccap_refutation_code": row.get("ccap_refutation_code"),
+            }
+        elif (
+            hard_stop_reason_code is None
+            and int(stop_after_heavy_promoted_total_u64) > 0
+            and int(heavy_promoted_total_u64) >= int(stop_after_heavy_promoted_total_u64)
+        ):
+            hard_stop_reason_code = "HEAVY_PROMOTED_TARGET_REACHED"
+            hard_stop_detail = {
+                "tick_u64": tick_value,
+                "heavy_promoted_total_u64": int(heavy_promoted_total_u64),
+                "target_heavy_promoted_total_u64": int(stop_after_heavy_promoted_total_u64),
+            }
+        elif (
+            hard_stop_reason_code is None
+            and (not bool(stop_on_heavy_promoted_b))
+            and int(soak_after_first_heavy_promoted_ticks_u64) > 0
+            and first_heavy_promoted_tick_u64 is not None
+            and soak_complete_tick_u64 is not None
+            and int(tick_value) >= int(soak_complete_tick_u64)
+        ):
+            hard_stop_reason_code = "SOAK_COMPLETE"
+            hard_stop_detail = {
+                "tick_u64": tick_value,
+                "first_heavy_promoted_tick_u64": int(first_heavy_promoted_tick_u64),
+                "soak_after_first_heavy_promoted_ticks_u64": int(soak_after_first_heavy_promoted_ticks_u64),
+                "soak_complete_tick_u64": int(soak_complete_tick_u64),
+                "heavy_promoted_total_u64": int(heavy_promoted_total_u64),
             }
         elif hard_stop_reason_code is None and str(row.get("ccap_decision") or "").strip().upper() == "ACCEPT":
             hard_stop_reason_code = "CCAP_ACCEPT"
@@ -1994,6 +2133,21 @@ def main() -> None:
     ap.add_argument("--force_lane", choices=["BASELINE", "CANARY", "FRONTIER"])
     ap.add_argument("--force_eval", action="store_true")
     ap.add_argument("--stop_on_error", action="store_true")
+    ap.add_argument(
+        "--stop_on_heavy_promoted",
+        type=_parse_bool_cli,
+        default=_env_bool("OMEGA_LONG_STOP_ON_HEAVY_PROMOTED_B", default=True),
+    )
+    ap.add_argument(
+        "--soak_after_first_heavy_promoted_ticks",
+        type=int,
+        default=_env_u64("OMEGA_LONG_SOAK_AFTER_FIRST_HEAVY_PROMOTED_TICKS_U64", default=0, minimum=0),
+    )
+    ap.add_argument(
+        "--stop_after_heavy_promoted_total_u64",
+        type=int,
+        default=_env_u64("OMEGA_LONG_STOP_AFTER_HEAVY_PROMOTED_TOTAL_U64", default=0, minimum=0),
+    )
     args = ap.parse_args()
 
     run_loop(
@@ -2008,6 +2162,9 @@ def main() -> None:
         force_lane=args.force_lane,
         force_eval=bool(args.force_eval),
         stop_on_error=bool(args.stop_on_error),
+        stop_on_heavy_promoted_b=bool(args.stop_on_heavy_promoted),
+        soak_after_first_heavy_promoted_ticks_u64=int(max(0, int(args.soak_after_first_heavy_promoted_ticks))),
+        stop_after_heavy_promoted_total_u64=int(max(0, int(args.stop_after_heavy_promoted_total_u64))),
     )
 
 

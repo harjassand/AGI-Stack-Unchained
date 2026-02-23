@@ -25,6 +25,8 @@
       "enum": [
         "STATE_VERIFIER_INVALID",
         "HEAVY_PROMOTED",
+        "SOAK_COMPLETE",
+        "HEAVY_PROMOTED_TARGET_REACHED",
         "CCAP_ACCEPT",
         "HEALTH_GATE_BUDGET_EXHAUST",
         "HEALTH_GATE_ROUTE_DISABLED",

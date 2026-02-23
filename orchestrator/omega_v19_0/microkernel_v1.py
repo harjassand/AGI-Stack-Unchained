@@ -172,6 +172,7 @@ _DEFAULT_ANTI_MONOPOLY_CONSECUTIVE_LIMIT_U64 = 50
 _DEFAULT_ANTI_MONOPOLY_WINDOW_U64 = 50
 _DEFAULT_ANTI_MONOPOLY_DIVERSITY_K_U64 = 3
 _DEFAULT_ANTI_MONOPOLY_COOLDOWN_U64 = 50
+_DEFAULT_ORCH_MLX_MODEL_ID = "mlx-community/Qwen2.5-Coder-14B-Instruct-4bit"
 _SHA256_ZERO = "sha256:" + ("0" * 64)
 _SH1_CAPABILITY_ID = "RSI_GE_SH1_OPTIMIZER"
 _SH1_CAMPAIGN_ID = "rsi_ge_symbiotic_optimizer_sh1_v0_1"
@@ -247,6 +248,15 @@ def _env_u64(name: str, *, default: int, minimum: int = 0) -> int:
     raw = str(os.environ.get(name, str(int(default)))).strip()
     value = int(raw)
     return int(max(int(minimum), value))
+
+
+def _resolve_orch_runtime_provenance() -> tuple[str, str]:
+    backend = str(os.environ.get("ORCH_LLM_BACKEND", "mlx")).strip().lower() or "mlx"
+    if backend == "mlx":
+        model_id = str(os.environ.get("ORCH_MLX_MODEL", _DEFAULT_ORCH_MLX_MODEL_ID)).strip() or _DEFAULT_ORCH_MLX_MODEL_ID
+        return backend, model_id
+    model_id = str(os.environ.get("ORCH_MODEL_ID", "")).strip() or f"{backend}:default"
+    return backend, model_id
 
 
 def _premarathon_v63_enabled() -> bool:
@@ -1832,6 +1842,8 @@ def _build_lane_decision_receipt(
     health_window_ticks_u64: int,
     health_counts: dict[str, int],
     allowed_capability_ids: list[str],
+    resolved_orch_llm_backend: str,
+    resolved_orch_model_id: str,
 ) -> dict[str, Any]:
     payload: dict[str, Any] = {
         "schema_name": "lane_decision_receipt_v1",
@@ -1842,6 +1854,8 @@ def _build_lane_decision_receipt(
         "forced_lane_override_b": bool(forced_lane_override_b),
         "frontier_gate_pass_b": bool(frontier_gate_pass_b),
         "reason_codes": [str(row) for row in reason_codes],
+        "resolved_orch_llm_backend": str(resolved_orch_llm_backend).strip().lower(),
+        "resolved_orch_model_id": str(resolved_orch_model_id).strip(),
         "health_window": {
             "window_ticks_u64": int(max(1, int(health_window_ticks_u64))),
             "invalid_count_u64": int(max(0, int(health_counts.get("invalid_count_u64", 0)))),
@@ -4436,6 +4450,7 @@ def tick_once(
         anti_monopoly_cooldown_u64 = int(_DEFAULT_ANTI_MONOPOLY_COOLDOWN_U64)
         milestone_force_sh1_frontier_b = _env_bool(_MILESTONE_FORCE_SH1_FRONTIER_ENV_KEY, default=False)
         prune_ccap_ek_runs_b = _env_bool(_RETENTION_PRUNE_CCAP_EK_RUNS_ENV_KEY, default=False)
+        resolved_orch_llm_backend, resolved_orch_model_id = _resolve_orch_runtime_provenance()
         milestone_force_sh1_frontier_until_tick_u64 = _env_u64(
             _MILESTONE_FORCE_SH1_FRONTIER_UNTIL_TICK_U64_ENV_KEY,
             default=40,
@@ -4455,10 +4470,11 @@ def tick_once(
             scope_mode = str(long_run_profile.get("loop_breaker_scope_mode", "")).strip().upper()
             if scope_mode in {"RESET_ON_LAUNCH", "GLOBAL"}:
                 os.environ["OMEGA_LONG_RUN_LOOP_BREAKER_SCOPE_MODE"] = scope_mode
-            backend = str(os.environ.get("ORCH_LLM_BACKEND", "mlx")).strip().lower() or "mlx"
-            if backend != "mlx":
+            if resolved_orch_llm_backend != "mlx":
                 fail("SCHEMA_FAIL")
             os.environ["ORCH_LLM_BACKEND"] = "mlx"
+            os.environ["ORCH_MLX_MODEL"] = str(resolved_orch_model_id).strip() or _DEFAULT_ORCH_MLX_MODEL_ID
+            resolved_orch_llm_backend, resolved_orch_model_id = _resolve_orch_runtime_provenance()
 
             lanes_cfg = long_run_profile.get("lanes")
             if isinstance(lanes_cfg, dict):
@@ -4728,6 +4744,8 @@ def tick_once(
                 health_window_ticks_u64=int(prev_health_window.get("window_ticks_u64", 100)),
                 health_counts=lane_health_counts,
                 allowed_capability_ids=lane_allowed_capability_ids,
+                resolved_orch_llm_backend=resolved_orch_llm_backend,
+                resolved_orch_model_id=resolved_orch_model_id,
             )
 
             registry_caps = registry.get("capabilities")
@@ -5730,6 +5748,8 @@ def tick_once(
                     health_window_ticks_u64=int(prev_health_window.get("window_ticks_u64", 100)),
                     health_counts=lane_health_counts,
                     allowed_capability_ids=lane_allowed_capability_ids,
+                    resolved_orch_llm_backend=resolved_orch_llm_backend,
+                    resolved_orch_model_id=resolved_orch_model_id,
                 )
 
             if lane_decision_receipt is not None:

@@ -27,15 +27,32 @@ def _with_declared_id(payload: dict[str, object], *, id_field: str) -> dict[str,
     return out
 
 
-def _make_manifest(*, suite_name: str, suite_runner_relpath: str = "tools/omega/omega_benchmark_suite_v1.py") -> dict[str, object]:
+def _make_manifest(
+    *,
+    suite_name: str,
+    suite_runner_relpath: str = "tools/omega/omega_benchmark_suite_v1.py",
+    visibility: str = "PUBLIC",
+    inputs_pack_id: str | None = None,
+    labels_pack_id: str | None = None,
+    hidden_tests_pack_id: str | None = None,
+    io_contract: dict[str, object] | None = None,
+) -> dict[str, object]:
     payload = {
         "schema_version": "benchmark_suite_manifest_v1",
         "suite_name": str(suite_name),
         "suite_runner_relpath": str(suite_runner_relpath),
-        "visibility": "PUBLIC",
+        "visibility": str(visibility),
         "labels": ["public", "phase1"],
         "metrics": {"q32_metric_ids": ["median_stps_non_noop_q32"]},
     }
+    if isinstance(inputs_pack_id, str) and inputs_pack_id:
+        payload["inputs_pack_id"] = str(inputs_pack_id)
+    if isinstance(labels_pack_id, str) and labels_pack_id:
+        payload["labels_pack_id"] = str(labels_pack_id)
+    if isinstance(hidden_tests_pack_id, str) and hidden_tests_pack_id:
+        payload["hidden_tests_pack_id"] = str(hidden_tests_pack_id)
+    if isinstance(io_contract, dict):
+        payload["io_contract"] = dict(io_contract)
     return _with_declared_id(payload, id_field="suite_id")
 
 
@@ -113,6 +130,105 @@ def _bootstrap_anchor_only(tmp_path: Path) -> dict[str, object]:
         "ledger_id": str(ledger["ledger_id"]),
         "anchor_manifest": anchor_manifest,
     }
+
+
+def _write_holdout_policy(repo_root: Path, *, require_sandbox_for_live_autonomy: bool = False) -> str:
+    payload = {
+        "schema_version": "holdout_policy_v1",
+        "candidate_visible_prefixes": [
+            "tools/",
+            "authority/benchmark_suites/",
+            "authority/benchmark_suite_sets/",
+            "authority/eval_kernel_ledgers/",
+            "authority/eval_kernel_extensions/",
+        ],
+        "harness_only_prefixes": [
+            "authority/holdouts/",
+        ],
+        "candidate_output_policy": {
+            "forbidden_output_prefixes": [
+                "authority/",
+                "meta-core/",
+            ],
+            "max_output_files_u64": 8,
+            "max_output_bytes_u64": 65536,
+            "max_single_output_bytes_u64": 32768,
+        },
+        "candidate_execution_policy": {
+            "network": "forbidden",
+            "filesystem": "workspace_only",
+            "process_spawn": "restricted",
+            "require_sandbox_for_live_autonomy_b": bool(require_sandbox_for_live_autonomy),
+        },
+    }
+    with_id = _with_declared_id(payload, id_field="holdout_policy_id")
+    path = repo_root / "authority" / "holdout_policies" / "holdout_policy_core_v1.json"
+    _write_canon(path, with_id)
+    return str(with_id["holdout_policy_id"])
+
+
+def _write_holdout_pack(
+    *,
+    repo_root: Path,
+    schema_version: str,
+    rows: list[dict[str, object]],
+) -> str:
+    payload = {
+        "schema_version": str(schema_version),
+        "rows": list(rows),
+    }
+    with_id = _with_declared_id(payload, id_field="pack_id")
+    pack_id = str(with_id["pack_id"])
+    pack_path = repo_root / "authority" / "holdouts" / "packs" / f"sha256_{pack_id.split(':', 1)[1]}.json"
+    _write_canon(pack_path, with_id)
+    return pack_id
+
+
+def _write_holdout_candidate_runner(repo_root: Path, *, include_forbidden_write: bool = False) -> str:
+    rel = "tools/omega/holdout_candidate_runner_test.py"
+    path = repo_root / rel
+    path.parent.mkdir(parents=True, exist_ok=True)
+    body = [
+        "#!/usr/bin/env python3",
+        "from __future__ import annotations",
+        "import argparse",
+        "import json",
+        "from pathlib import Path",
+        "",
+        "def main() -> int:",
+        "    p = argparse.ArgumentParser()",
+        "    p.add_argument('--mode', required=True)",
+        "    p.add_argument('--inputs_pack_path', required=False)",
+        "    p.add_argument('--out_dir', required=False)",
+        "    p.add_argument('--suite_id', required=False)",
+        "    p.add_argument('--ticks', required=False)",
+        "    p.add_argument('--seed_u64', required=False)",
+        "    args = p.parse_args()",
+        "    if args.mode != 'holdout_candidate':",
+        "        return 1",
+        "    out_dir = Path(str(args.out_dir or '')).resolve()",
+        "    out_dir.mkdir(parents=True, exist_ok=True)",
+        "    payload = json.loads(Path(str(args.inputs_pack_path)).read_text(encoding='utf-8'))",
+        "    rows = payload.get('rows', []) if isinstance(payload, dict) else []",
+        "    lines = []",
+        "    for row in rows:",
+        "        if not isinstance(row, dict):",
+        "            continue",
+        "        row_id = str(row.get('id', '')).strip()",
+        "        guess = str(row.get('guess', '')).strip()",
+        "        if row_id:",
+        "            lines.append(json.dumps({'id': row_id, 'prediction': guess}, sort_keys=True, separators=(',', ':')))",
+        "    (out_dir / 'predictions.jsonl').write_text('\\n'.join(lines) + ('\\n' if lines else ''), encoding='utf-8')",
+    ]
+    if include_forbidden_write:
+        body.append("    Path('authority/holdouts/leak.txt').parent.mkdir(parents=True, exist_ok=True)")
+        body.append("    Path('authority/holdouts/leak.txt').write_text('leak\\n', encoding='utf-8')")
+    body.append("    return 0")
+    body.append("")
+    body.append("if __name__ == '__main__':")
+    body.append("    raise SystemExit(main())")
+    path.write_text("\n".join(body) + "\n", encoding="utf-8")
+    return rel
 
 
 def _append_extension_entry(
@@ -408,3 +524,299 @@ def test_executed_suite_order_is_deterministic_and_bound_to_effective_list(tmp_p
     assert ids_a == ids_b
     assert ids_a == list(receipt_a["effective_suite_ids"])
     assert ids_b == list(receipt_b["effective_suite_ids"])
+
+
+def test_holdout_workspace_excludes_harness_packs_and_binds_receipt_ids(tmp_path: Path, monkeypatch) -> None:
+    seeded = _bootstrap_anchor_only(tmp_path)
+    repo_root = Path(str(seeded["repo_root"]))
+    holdout_policy_id = _write_holdout_policy(repo_root)
+    runner_relpath = _write_holdout_candidate_runner(repo_root)
+
+    inputs_pack_id = _write_holdout_pack(
+        repo_root=repo_root,
+        schema_version="holdout_inputs_pack_v1",
+        rows=[
+            {"id": "ex1", "guess": "A"},
+            {"id": "ex2", "guess": "B"},
+        ],
+    )
+    labels_pack_id = _write_holdout_pack(
+        repo_root=repo_root,
+        schema_version="holdout_labels_pack_v1",
+        rows=[
+            {"id": "ex1", "label": "A"},
+            {"id": "ex2", "label": "B"},
+        ],
+    )
+
+    holdout_manifest_rel = "authority/benchmark_suites/holdout_suite.json"
+    holdout_manifest = _make_manifest(
+        suite_name="holdout_suite",
+        suite_runner_relpath=runner_relpath,
+        visibility="HOLDOUT",
+        inputs_pack_id=inputs_pack_id,
+        labels_pack_id=labels_pack_id,
+        io_contract={
+            "predictions_relpath": "predictions.jsonl",
+            "allowed_output_files": ["predictions.jsonl"],
+            "max_output_files_u64": 4,
+            "max_output_bytes_u64": 65536,
+            "max_single_output_bytes_u64": 65536,
+        },
+    )
+    _write_canon(repo_root / holdout_manifest_rel, holdout_manifest)
+    holdout_set = _make_suite_set(
+        suite_set_kind="ANCHOR",
+        anchor_ek_id=str(seeded["ek_id"]),
+        suites=[_suite_row(ordinal_u64=0, manifest_payload=holdout_manifest, manifest_relpath=holdout_manifest_rel)],
+    )
+    _write_canon(repo_root / "authority/benchmark_suite_sets/holdout_anchor_set.json", holdout_set)
+
+    monkeypatch.setattr(
+        composite,
+        "tracked_files",
+        lambda root: sorted(path.relative_to(root).as_posix() for path in root.rglob("*") if path.is_file()),
+    )
+
+    receipt = composite.run_composite_once(
+        repo_root=repo_root,
+        runs_root=tmp_path / "runs",
+        series_prefix="series_holdout_isolation",
+        ek_id=str(seeded["ek_id"]),
+        anchor_suite_set_id=str(holdout_set["suite_set_id"]),
+        extensions_ledger_id=str(seeded["ledger_id"]),
+        suite_runner_id=_h("9"),
+        holdout_policy_id=holdout_policy_id,
+        ticks_u64=1,
+        seed_u64=17,
+    )
+
+    executed = receipt["executed_suites"][0]
+    assert executed["suite_visibility"] == "HOLDOUT"
+    assert executed["suite_outcome"] == "PASS"
+    holdout_execution = dict(executed["holdout_execution"])
+    assert holdout_execution["holdout_policy_id"] == holdout_policy_id
+    assert holdout_execution["inputs_pack_id"] == inputs_pack_id
+    assert holdout_execution["labels_pack_id"] == labels_pack_id
+    assert str(holdout_execution["candidate_outputs_hash"]).startswith("sha256:")
+    assert int(holdout_execution["candidate_outputs_bytes_u64"]) > 0
+    assert receipt["holdout_policy_id"] == holdout_policy_id
+
+    workspace_root = tmp_path / "runs" / "series_holdout_isolation" / "suite_runs" / "suite_000" / "candidate_workspace"
+    assert not (workspace_root / "authority" / "holdouts").exists()
+    assert not (workspace_root / "authority" / "holdouts" / "packs").exists()
+
+
+def test_holdout_candidate_write_outside_output_root_fails_io_contract(tmp_path: Path, monkeypatch) -> None:
+    seeded = _bootstrap_anchor_only(tmp_path)
+    repo_root = Path(str(seeded["repo_root"]))
+    holdout_policy_id = _write_holdout_policy(repo_root)
+    runner_relpath = _write_holdout_candidate_runner(repo_root, include_forbidden_write=True)
+
+    inputs_pack_id = _write_holdout_pack(
+        repo_root=repo_root,
+        schema_version="holdout_inputs_pack_v1",
+        rows=[{"id": "ex1", "guess": "A"}],
+    )
+    labels_pack_id = _write_holdout_pack(
+        repo_root=repo_root,
+        schema_version="holdout_labels_pack_v1",
+        rows=[{"id": "ex1", "label": "A"}],
+    )
+
+    holdout_manifest_rel = "authority/benchmark_suites/holdout_suite_write_fail.json"
+    holdout_manifest = _make_manifest(
+        suite_name="holdout_suite_write_fail",
+        suite_runner_relpath=runner_relpath,
+        visibility="HOLDOUT",
+        inputs_pack_id=inputs_pack_id,
+        labels_pack_id=labels_pack_id,
+        io_contract={
+            "predictions_relpath": "predictions.jsonl",
+            "allowed_output_files": ["predictions.jsonl"],
+            "max_output_files_u64": 4,
+            "max_output_bytes_u64": 65536,
+            "max_single_output_bytes_u64": 65536,
+        },
+    )
+    _write_canon(repo_root / holdout_manifest_rel, holdout_manifest)
+    holdout_set = _make_suite_set(
+        suite_set_kind="ANCHOR",
+        anchor_ek_id=str(seeded["ek_id"]),
+        suites=[_suite_row(ordinal_u64=0, manifest_payload=holdout_manifest, manifest_relpath=holdout_manifest_rel)],
+    )
+    _write_canon(repo_root / "authority/benchmark_suite_sets/holdout_anchor_set_write_fail.json", holdout_set)
+
+    monkeypatch.setattr(
+        composite,
+        "tracked_files",
+        lambda root: sorted(path.relative_to(root).as_posix() for path in root.rglob("*") if path.is_file()),
+    )
+
+    receipt = composite.run_composite_once(
+        repo_root=repo_root,
+        runs_root=tmp_path / "runs",
+        series_prefix="series_holdout_write_fail",
+        ek_id=str(seeded["ek_id"]),
+        anchor_suite_set_id=str(holdout_set["suite_set_id"]),
+        extensions_ledger_id=str(seeded["ledger_id"]),
+        suite_runner_id=_h("8"),
+        holdout_policy_id=holdout_policy_id,
+        ticks_u64=1,
+        seed_u64=19,
+    )
+
+    executed = receipt["executed_suites"][0]
+    assert executed["suite_outcome"] == "FAIL"
+    gate_rows = list(executed["gate_results"])
+    assert gate_rows
+    assert "SUITE_IO_CONTRACT_VIOLATION" in str(gate_rows[0].get("detail", ""))
+    holdout_execution = dict(executed["holdout_execution"])
+    assert holdout_execution["candidate_stage_status"] == "FAIL"
+    assert holdout_execution["harness_stage_status"] == "SKIPPED"
+
+
+def test_holdout_requires_sandbox_in_live_autonomy_when_unavailable(tmp_path: Path, monkeypatch) -> None:
+    seeded = _bootstrap_anchor_only(tmp_path)
+    repo_root = Path(str(seeded["repo_root"]))
+    holdout_policy_id = _write_holdout_policy(repo_root, require_sandbox_for_live_autonomy=True)
+    runner_relpath = _write_holdout_candidate_runner(repo_root)
+
+    inputs_pack_id = _write_holdout_pack(
+        repo_root=repo_root,
+        schema_version="holdout_inputs_pack_v1",
+        rows=[{"id": "ex1", "guess": "A"}],
+    )
+    labels_pack_id = _write_holdout_pack(
+        repo_root=repo_root,
+        schema_version="holdout_labels_pack_v1",
+        rows=[{"id": "ex1", "label": "A"}],
+    )
+
+    holdout_manifest_rel = "authority/benchmark_suites/holdout_suite_live_autonomy.json"
+    holdout_manifest = _make_manifest(
+        suite_name="holdout_suite_live_autonomy",
+        suite_runner_relpath=runner_relpath,
+        visibility="HOLDOUT",
+        inputs_pack_id=inputs_pack_id,
+        labels_pack_id=labels_pack_id,
+        io_contract={
+            "predictions_relpath": "predictions.jsonl",
+            "allowed_output_files": ["predictions.jsonl"],
+            "max_output_files_u64": 4,
+            "max_output_bytes_u64": 65536,
+            "max_single_output_bytes_u64": 65536,
+        },
+    )
+    _write_canon(repo_root / holdout_manifest_rel, holdout_manifest)
+    holdout_set = _make_suite_set(
+        suite_set_kind="ANCHOR",
+        anchor_ek_id=str(seeded["ek_id"]),
+        suites=[_suite_row(ordinal_u64=0, manifest_payload=holdout_manifest, manifest_relpath=holdout_manifest_rel)],
+    )
+    _write_canon(repo_root / "authority/benchmark_suite_sets/holdout_anchor_set_live_autonomy.json", holdout_set)
+
+    monkeypatch.setattr(
+        composite,
+        "tracked_files",
+        lambda root: sorted(path.relative_to(root).as_posix() for path in root.rglob("*") if path.is_file()),
+    )
+    monkeypatch.setenv("OMEGA_LIVE_AUTONOMY_B", "1")
+
+    receipt = composite.run_composite_once(
+        repo_root=repo_root,
+        runs_root=tmp_path / "runs",
+        series_prefix="series_holdout_live_autonomy",
+        ek_id=str(seeded["ek_id"]),
+        anchor_suite_set_id=str(holdout_set["suite_set_id"]),
+        extensions_ledger_id=str(seeded["ledger_id"]),
+        suite_runner_id=_h("6"),
+        holdout_policy_id=holdout_policy_id,
+        ticks_u64=1,
+        seed_u64=29,
+    )
+
+    executed = receipt["executed_suites"][0]
+    assert executed["suite_outcome"] == "FAIL"
+    assert "HOLDOUT_ACCESS_VIOLATION" in str(executed["gate_results"][0]["detail"])
+
+
+def test_holdout_harness_score_changes_when_labels_change(tmp_path: Path, monkeypatch) -> None:
+    seeded = _bootstrap_anchor_only(tmp_path)
+    repo_root = Path(str(seeded["repo_root"]))
+    holdout_policy_id = _write_holdout_policy(repo_root)
+    runner_relpath = _write_holdout_candidate_runner(repo_root)
+
+    inputs_pack_id = _write_holdout_pack(
+        repo_root=repo_root,
+        schema_version="holdout_inputs_pack_v1",
+        rows=[
+            {"id": "ex1", "guess": "A"},
+            {"id": "ex2", "guess": "B"},
+        ],
+    )
+    labels_pack_match = _write_holdout_pack(
+        repo_root=repo_root,
+        schema_version="holdout_labels_pack_v1",
+        rows=[
+            {"id": "ex1", "label": "A"},
+            {"id": "ex2", "label": "B"},
+        ],
+    )
+    labels_pack_mismatch = _write_holdout_pack(
+        repo_root=repo_root,
+        schema_version="holdout_labels_pack_v1",
+        rows=[
+            {"id": "ex1", "label": "A"},
+            {"id": "ex2", "label": "C"},
+        ],
+    )
+
+    monkeypatch.setattr(
+        composite,
+        "tracked_files",
+        lambda root: sorted(path.relative_to(root).as_posix() for path in root.rglob("*") if path.is_file()),
+    )
+
+    def _run_with_labels(*, series: str, labels_pack_id: str) -> dict[str, object]:
+        holdout_manifest_rel = f"authority/benchmark_suites/holdout_suite_{series}.json"
+        holdout_manifest = _make_manifest(
+            suite_name=f"holdout_suite_{series}",
+            suite_runner_relpath=runner_relpath,
+            visibility="HOLDOUT",
+            inputs_pack_id=inputs_pack_id,
+            labels_pack_id=labels_pack_id,
+            io_contract={
+                "predictions_relpath": "predictions.jsonl",
+                "allowed_output_files": ["predictions.jsonl"],
+                "max_output_files_u64": 4,
+                "max_output_bytes_u64": 65536,
+                "max_single_output_bytes_u64": 65536,
+            },
+        )
+        _write_canon(repo_root / holdout_manifest_rel, holdout_manifest)
+        holdout_set = _make_suite_set(
+            suite_set_kind="ANCHOR",
+            anchor_ek_id=str(seeded["ek_id"]),
+            suites=[_suite_row(ordinal_u64=0, manifest_payload=holdout_manifest, manifest_relpath=holdout_manifest_rel)],
+        )
+        _write_canon(repo_root / f"authority/benchmark_suite_sets/holdout_anchor_set_{series}.json", holdout_set)
+        return composite.run_composite_once(
+            repo_root=repo_root,
+            runs_root=tmp_path / "runs",
+            series_prefix=f"series_holdout_{series}",
+            ek_id=str(seeded["ek_id"]),
+            anchor_suite_set_id=str(holdout_set["suite_set_id"]),
+            extensions_ledger_id=str(seeded["ledger_id"]),
+            suite_runner_id=_h("7"),
+            holdout_policy_id=holdout_policy_id,
+            ticks_u64=1,
+            seed_u64=23,
+        )
+
+    receipt_match = _run_with_labels(series="match", labels_pack_id=labels_pack_match)
+    receipt_mismatch = _run_with_labels(series="mismatch", labels_pack_id=labels_pack_mismatch)
+
+    acc_match = int(receipt_match["aggregate_metrics"]["holdout_accuracy_q32"]["q"])
+    acc_mismatch = int(receipt_mismatch["aggregate_metrics"]["holdout_accuracy_q32"]["q"])
+    assert acc_match > acc_mismatch

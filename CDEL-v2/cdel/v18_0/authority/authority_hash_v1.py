@@ -29,6 +29,8 @@ _OPTIONAL_V2_KEYS = {
     "anchor_suite_set_id",
     "active_kernel_extensions_ledger_id",
     "suite_runner_id",
+    "holdout_policy_id",
+    "holdout_store_root_id",
 }
 _ALLOWED_KEYS = _REQUIRED_KEYS | _OPTIONAL_V2_KEYS
 
@@ -111,6 +113,12 @@ def _normalize_authority_pins(pins: dict[str, Any], *, repo_root_path: Path | No
     suite_runner_id = pins.get("suite_runner_id")
     if suite_runner_id is not None:
         normalized["suite_runner_id"] = _require_sha256(suite_runner_id)
+    holdout_policy_id = pins.get("holdout_policy_id")
+    if holdout_policy_id is not None:
+        normalized["holdout_policy_id"] = _require_sha256(holdout_policy_id)
+    holdout_store_root_id = pins.get("holdout_store_root_id")
+    if holdout_store_root_id is not None:
+        normalized["holdout_store_root_id"] = _require_sha256(holdout_store_root_id)
 
     resolved_repo_root = Path(repo_root_path).resolve() if repo_root_path is not None else _repo_root_from_module()
     active_schema_version = _active_ek_schema_version(pins=normalized, repo_root_path=resolved_repo_root)

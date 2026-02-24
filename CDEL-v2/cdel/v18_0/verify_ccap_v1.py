@@ -373,9 +373,11 @@ def _validate_v2_benchmark_receipt_binding(
     pinned_anchor = str(pins.get("anchor_suite_set_id", "")).strip()
     pinned_ledger = str(pins.get("active_kernel_extensions_ledger_id", "")).strip()
     pinned_runner = str(pins.get("suite_runner_id", "")).strip()
+    pinned_holdout_policy = str(pins.get("holdout_policy_id", "")).strip()
     observed_anchor = str(benchmark_run_receipt_v2.get("anchor_suite_set_id", "")).strip()
     observed_ledger = str(benchmark_run_receipt_v2.get("extensions_ledger_id", "")).strip()
     observed_runner = str(benchmark_run_receipt_v2.get("suite_runner_id", "")).strip()
+    observed_holdout_policy = str(benchmark_run_receipt_v2.get("holdout_policy_id", "")).strip()
 
     if (
         not pinned_anchor.startswith("sha256:")
@@ -398,6 +400,7 @@ def _validate_v2_benchmark_receipt_binding(
         return {"code": "EK_SUITE_LIST_MISMATCH", "detail": "benchmark_run_receipt_v2 executed_suites missing"}
     actual_suite_ids: list[str] = []
     seen: set[str] = set()
+    has_holdout_suite = False
     for row in suites:
         if not isinstance(row, dict):
             return {"code": "EK_SUITE_LIST_MISMATCH", "detail": "benchmark_run_receipt_v2 executed_suites row is not object"}
@@ -406,6 +409,56 @@ def _validate_v2_benchmark_receipt_binding(
             return {"code": "EK_SUITE_LIST_MISMATCH", "detail": "benchmark_run_receipt_v2 contains duplicate/invalid suite_id"}
         actual_suite_ids.append(suite_id)
         seen.add(suite_id)
+        visibility = str(row.get("suite_visibility", "")).strip().upper()
+        if visibility == "HOLDOUT":
+            has_holdout_suite = True
+            holdout_execution = row.get("holdout_execution")
+            if not isinstance(holdout_execution, dict):
+                return {
+                    "code": "SUITE_IO_CONTRACT_VIOLATION",
+                    "detail": "holdout suite receipt missing holdout_execution",
+                }
+            holdout_policy_id = str(holdout_execution.get("holdout_policy_id", "")).strip()
+            if not pinned_holdout_policy.startswith("sha256:") or holdout_policy_id != pinned_holdout_policy:
+                return {
+                    "code": "HOLDOUT_POLICY_PIN_MISMATCH",
+                    "detail": "holdout_execution holdout_policy_id does not match active pin",
+                }
+            if not bool(holdout_execution.get("io_contract_enforced_b", False)):
+                return {
+                    "code": "SUITE_IO_CONTRACT_VIOLATION",
+                    "detail": "holdout_execution indicates io_contract was not enforced",
+                }
+            candidate_outputs_hash = str(holdout_execution.get("candidate_outputs_hash", "")).strip()
+            if not candidate_outputs_hash.startswith("sha256:"):
+                return {
+                    "code": "PREDICTIONS_MISSING_OR_MALFORMED",
+                    "detail": "holdout_execution candidate_outputs_hash is missing",
+                }
+            candidate_output_files = holdout_execution.get("candidate_output_files")
+            if not isinstance(candidate_output_files, list):
+                return {
+                    "code": "SUITE_IO_CONTRACT_VIOLATION",
+                    "detail": "holdout_execution candidate_output_files must be a list",
+                }
+            predictions_rows_u64 = int(holdout_execution.get("predictions_rows_u64", 0))
+            if predictions_rows_u64 <= 0:
+                return {
+                    "code": "PREDICTIONS_MISSING_OR_MALFORMED",
+                    "detail": "holdout_execution predictions_rows_u64 must be positive",
+                }
+            candidate_stage_status = str(holdout_execution.get("candidate_stage_status", "")).strip().upper()
+            harness_stage_status = str(holdout_execution.get("harness_stage_status", "")).strip().upper()
+            if candidate_stage_status not in {"PASS", "FAIL"}:
+                return {
+                    "code": "SUITE_IO_CONTRACT_VIOLATION",
+                    "detail": "holdout_execution candidate_stage_status is invalid",
+                }
+            if harness_stage_status not in {"PASS", "FAIL", "SKIPPED"}:
+                return {
+                    "code": "SUITE_IO_CONTRACT_VIOLATION",
+                    "detail": "holdout_execution harness_stage_status is invalid",
+                }
     try:
         expected_suite_ids = _resolve_effective_suite_ids_from_pins(
             repo_root=repo_root,
@@ -416,6 +469,17 @@ def _validate_v2_benchmark_receipt_binding(
         return {"code": "EVAL_STAGE_FAIL", "detail": "failed to resolve effective suite ids from pinned authority data"}
     if actual_suite_ids != expected_suite_ids:
         return {"code": "EK_SUITE_LIST_MISMATCH", "detail": "executed suite list does not match resolved effective suite list"}
+    if has_holdout_suite:
+        if not pinned_holdout_policy.startswith("sha256:"):
+            return {
+                "code": "HOLDOUT_POLICY_PIN_MISMATCH",
+                "detail": "holdout suites require holdout_policy_id pin in authority",
+            }
+        if observed_holdout_policy != pinned_holdout_policy:
+            return {
+                "code": "HOLDOUT_POLICY_PIN_MISMATCH",
+                "detail": "benchmark_run_receipt_v2 holdout_policy_id does not match active pin",
+            }
     return None
 
 

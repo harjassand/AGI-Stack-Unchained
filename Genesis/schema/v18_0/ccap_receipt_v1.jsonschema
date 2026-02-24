@@ -222,6 +222,7 @@
         "anchor_suite_set_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
         "extensions_ledger_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
         "suite_runner_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+        "holdout_policy_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
         "effective_suite_ids": {
           "type": "array",
           "items": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"}
@@ -247,6 +248,7 @@
               "suite_set_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
               "suite_outcome": {"type": "string", "enum": ["PASS", "FAIL", "SKIPPED"]},
               "suite_source": {"type": "string", "enum": ["ANCHOR", "EXTENSION"]},
+              "suite_visibility": {"type": "string", "enum": ["PUBLIC", "HIDDEN", "HOLDOUT"]},
               "ledger_ordinal_u64": {"type": "integer", "minimum": 0},
               "metrics": {
                 "type": "object",
@@ -267,6 +269,71 @@
                     "gate_id": {"type": "string", "minLength": 1},
                     "passed_b": {"type": "boolean"},
                     "detail": {"type": "string"}
+                  }
+                }
+              },
+              "holdout_execution": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "holdout_policy_id",
+                  "inputs_pack_id",
+                  "candidate_outputs_hash",
+                  "candidate_outputs_bytes_u64",
+                  "candidate_output_files",
+                  "io_contract_enforced_b",
+                  "candidate_stage_status",
+                  "harness_stage_status",
+                  "sandbox_available_b",
+                  "sandbox_enforced_b",
+                  "gates"
+                ],
+                "properties": {
+                  "holdout_policy_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+                  "inputs_pack_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+                  "labels_pack_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+                  "hidden_tests_pack_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+                  "harness_truth_pack_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+                  "candidate_workspace_tree_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+                  "candidate_outputs_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+                  "candidate_outputs_bytes_u64": {"type": "integer", "minimum": 0},
+                  "candidate_output_files": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "additionalProperties": false,
+                      "required": [
+                        "path",
+                        "sha256",
+                        "bytes_u64"
+                      ],
+                      "properties": {
+                        "path": {"type": "string", "minLength": 1},
+                        "sha256": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+                        "bytes_u64": {"type": "integer", "minimum": 0}
+                      }
+                    }
+                  },
+                  "predictions_relpath": {"type": "string", "minLength": 1},
+                  "predictions_rows_u64": {"type": "integer", "minimum": 0},
+                  "harness_truth_rows_u64": {"type": "integer", "minimum": 0},
+                  "io_contract_enforced_b": {"type": "boolean"},
+                  "sandbox_available_b": {"type": "boolean"},
+                  "sandbox_enforced_b": {"type": "boolean"},
+                  "candidate_stage_status": {"type": "string", "enum": ["PASS", "FAIL"]},
+                  "harness_stage_status": {"type": "string", "enum": ["PASS", "FAIL", "SKIPPED"]},
+                  "gates": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "additionalProperties": false,
+                      "required": ["gate_id", "passed_b"],
+                      "properties": {
+                        "gate_id": {"type": "string", "minLength": 1},
+                        "passed_b": {"type": "boolean"},
+                        "detail": {"type": "string"}
+                      }
+                    }
                   }
                 }
               },

@@ -40,6 +40,10 @@
       "type": "string",
       "pattern": "^sha256:[0-9a-f]{64}$"
     },
+    "holdout_policy_id": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
     "executed_suites": {
       "type": "array",
       "minItems": 1,
@@ -161,6 +165,14 @@
             "EXTENSION"
           ]
         },
+        "suite_visibility": {
+          "type": "string",
+          "enum": [
+            "PUBLIC",
+            "HIDDEN",
+            "HOLDOUT"
+          ]
+        },
         "ledger_ordinal_u64": {
           "type": "integer",
           "minimum": 0
@@ -182,8 +194,152 @@
             "$ref": "#/$defs/gate_result"
           }
         },
+        "holdout_execution": {
+          "$ref": "#/$defs/holdout_execution"
+        },
         "budget_outcome": {
           "$ref": "#/$defs/budget_outcome"
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "suite_visibility": {
+                "const": "HOLDOUT"
+              }
+            },
+            "required": [
+              "suite_visibility"
+            ]
+          },
+          "then": {
+            "required": [
+              "holdout_execution"
+            ]
+          }
+        }
+      ]
+    },
+    "holdout_output_file": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "path",
+        "sha256",
+        "bytes_u64"
+      ],
+      "properties": {
+        "path": {
+          "type": "string",
+          "minLength": 1
+        },
+        "sha256": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "bytes_u64": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    },
+    "holdout_execution": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "holdout_policy_id",
+        "inputs_pack_id",
+        "candidate_outputs_hash",
+        "candidate_outputs_bytes_u64",
+        "candidate_output_files",
+        "io_contract_enforced_b",
+        "candidate_stage_status",
+        "harness_stage_status",
+        "sandbox_available_b",
+        "sandbox_enforced_b",
+        "gates"
+      ],
+      "properties": {
+        "holdout_policy_id": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "inputs_pack_id": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "labels_pack_id": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "hidden_tests_pack_id": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "harness_truth_pack_id": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "candidate_workspace_tree_id": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "candidate_outputs_hash": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "candidate_outputs_bytes_u64": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "candidate_output_files": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/holdout_output_file"
+          }
+        },
+        "predictions_relpath": {
+          "type": "string",
+          "minLength": 1
+        },
+        "predictions_rows_u64": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "harness_truth_rows_u64": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "io_contract_enforced_b": {
+          "type": "boolean"
+        },
+        "sandbox_available_b": {
+          "type": "boolean"
+        },
+        "sandbox_enforced_b": {
+          "type": "boolean"
+        },
+        "candidate_stage_status": {
+          "type": "string",
+          "enum": [
+            "PASS",
+            "FAIL"
+          ]
+        },
+        "harness_stage_status": {
+          "type": "string",
+          "enum": [
+            "PASS",
+            "FAIL",
+            "SKIPPED"
+          ]
+        },
+        "gates": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/gate_result"
+          }
         }
       }
     }

@@ -79,33 +79,73 @@ def _setup_ccap_subrun(tmp_path: Path, repo_root: Path) -> tuple[Path, Path, str
     return subrun_root, receipt_out_dir, ccap_relpath, base_tree_id, pins, ccap_payload
 
 
-def _benchmark_receipt_for_pins(pins: dict[str, object], *, suite_ids: list[str]) -> dict[str, object]:
-    return {
+def _benchmark_receipt_for_pins(
+    pins: dict[str, object],
+    *,
+    suite_ids: list[str],
+    suite_visibility: str = "PUBLIC",
+    include_holdout_execution: bool = False,
+) -> dict[str, object]:
+    holdout_policy_id = str(pins.get("holdout_policy_id", _h("e")))
+    executed_rows: list[dict[str, object]] = []
+    for idx, suite_id in enumerate(suite_ids):
+        row: dict[str, object] = {
+            "suite_id": suite_id,
+            "suite_name": f"suite_{idx}",
+            "suite_set_id": _h("5"),
+            "suite_source": "ANCHOR",
+            "suite_visibility": str(suite_visibility),
+            "ledger_ordinal_u64": idx,
+            "suite_outcome": "PASS",
+            "metrics": {"median_stps_non_noop_q32": {"q": 100}},
+            "gate_results": [{"gate_id": "ALL_SUITES_PASS", "passed_b": True}],
+            "budget_outcome": {
+                "within_budget_b": True,
+                "cpu_ms_u64": 1,
+                "wall_ms_u64": 1,
+                "disk_mb_u64": 0,
+            },
+        }
+        if include_holdout_execution:
+            row["holdout_execution"] = {
+                "holdout_policy_id": holdout_policy_id,
+                "inputs_pack_id": _h("1"),
+                "labels_pack_id": _h("2"),
+                "harness_truth_pack_id": _h("2"),
+                "candidate_workspace_tree_id": _h("3"),
+                "candidate_outputs_hash": _h("4"),
+                "candidate_outputs_bytes_u64": 12,
+                "candidate_output_files": [
+                    {
+                        "path": "predictions.jsonl",
+                        "sha256": _h("5"),
+                        "bytes_u64": 12,
+                    }
+                ],
+                "predictions_relpath": "predictions.jsonl",
+                "predictions_rows_u64": 1,
+                "harness_truth_rows_u64": 1,
+                "io_contract_enforced_b": True,
+                "sandbox_available_b": False,
+                "sandbox_enforced_b": False,
+                "candidate_stage_status": "PASS",
+                "harness_stage_status": "PASS",
+                "gates": [{"gate_id": "ALL_SUITES_PASS", "passed_b": True}],
+            }
+            row["metrics"] = {
+                "median_stps_non_noop_q32": {"q": 100},
+                "holdout_accuracy_q32": {"q": 4294967296},
+            }
+        executed_rows.append(row)
+
+    payload: dict[str, object] = {
         "schema_version": "benchmark_run_receipt_v2",
         "receipt_id": _h("4"),
         "ek_id": str(pins["active_ek_id"]),
         "anchor_suite_set_id": str(pins["anchor_suite_set_id"]),
         "extensions_ledger_id": str(pins["active_kernel_extensions_ledger_id"]),
         "suite_runner_id": str(pins["suite_runner_id"]),
-        "executed_suites": [
-            {
-                "suite_id": suite_id,
-                "suite_name": f"suite_{idx}",
-                "suite_set_id": _h("5"),
-                "suite_source": "ANCHOR",
-                "ledger_ordinal_u64": idx,
-                "suite_outcome": "PASS",
-                "metrics": {"median_stps_non_noop_q32": {"q": 100}},
-                "gate_results": [{"gate_id": "ALL_SUITES_PASS", "passed_b": True}],
-                "budget_outcome": {
-                    "within_budget_b": True,
-                    "cpu_ms_u64": 1,
-                    "wall_ms_u64": 1,
-                    "disk_mb_u64": 0,
-                },
-            }
-            for idx, suite_id in enumerate(suite_ids)
-        ],
+        "executed_suites": executed_rows,
         "effective_suite_ids": list(suite_ids),
         "aggregate_metrics": {"median_stps_non_noop_q32": {"q": 100}},
         "gate_results": [{"gate_id": "ALL_SUITES_PASS", "passed_b": True}],
@@ -116,6 +156,9 @@ def _benchmark_receipt_for_pins(pins: dict[str, object], *, suite_ids: list[str]
             "disk_mb_u64": 0,
         },
     }
+    if include_holdout_execution:
+        payload["holdout_policy_id"] = holdout_policy_id
+    return payload
 
 
 def test_verify_ccap_rejects_v2_receipt_pin_mismatch(tmp_path: Path, monkeypatch) -> None:
@@ -264,3 +307,115 @@ def test_verify_ccap_rejects_v2_receipt_suite_runner_pin_mismatch(tmp_path: Path
     assert code == "EK_SUITE_RUNNER_PIN_MISMATCH"
     assert receipt["decision"] == "REJECT"
     assert receipt["eval_status"] == "REFUTED"
+
+
+def test_verify_ccap_rejects_v2_receipt_holdout_policy_pin_mismatch(tmp_path: Path, monkeypatch) -> None:
+    repo_root = Path(__file__).resolve().parents[4]
+    subrun_root, receipt_out_dir, ccap_relpath, base_tree_id, pins, _ccap_payload = _setup_ccap_subrun(tmp_path, repo_root)
+
+    monkeypatch.setattr("cdel.v18_0.verify_ccap_v1.compute_repo_base_tree_id", lambda _repo_root: base_tree_id)
+
+    bad_receipt = _benchmark_receipt_for_pins(
+        pins,
+        suite_ids=[_h("a")],
+        suite_visibility="HOLDOUT",
+        include_holdout_execution=True,
+    )
+    bad_receipt["holdout_policy_id"] = _h("f")
+    bad_receipt["executed_suites"][0]["holdout_execution"]["holdout_policy_id"] = _h("f")
+
+    monkeypatch.setattr(
+        "cdel.v18_0.verify_ccap_v1._resolve_effective_suite_ids_from_pins",
+        lambda **_kwargs: [_h("a")],
+    )
+    monkeypatch.setattr(
+        "cdel.v18_0.verify_ccap_v1.run_ek",
+        lambda **_kwargs: {
+            "determinism_check": "PASS",
+            "eval_status": "PASS",
+            "decision": "PROMOTE",
+            "applied_tree_id": _h("7"),
+            "realized_out_id": _h("8"),
+            "cost_vector": {
+                "cpu_ms": 1,
+                "wall_ms": 1,
+                "mem_mb": 1,
+                "disk_mb": 1,
+                "fds": 0,
+                "procs": 0,
+                "threads": 0,
+            },
+            "logs_hash": _h("9"),
+            "benchmark_run_receipt_v2": bad_receipt,
+            "refutation": None,
+        },
+    )
+
+    receipt, code = verify(
+        subrun_root=subrun_root,
+        repo_root=repo_root,
+        ccap_relpath=ccap_relpath,
+        receipt_out_dir=receipt_out_dir,
+    )
+
+    assert code == "HOLDOUT_POLICY_PIN_MISMATCH"
+    assert receipt["decision"] == "REJECT"
+    assert receipt["eval_status"] == "REFUTED"
+
+
+def test_verify_ccap_accepts_and_binds_holdout_receipt_payload(tmp_path: Path, monkeypatch) -> None:
+    repo_root = Path(__file__).resolve().parents[4]
+    subrun_root, receipt_out_dir, ccap_relpath, base_tree_id, pins, _ccap_payload = _setup_ccap_subrun(tmp_path, repo_root)
+
+    monkeypatch.setattr("cdel.v18_0.verify_ccap_v1.compute_repo_base_tree_id", lambda _repo_root: base_tree_id)
+
+    good_receipt = _benchmark_receipt_for_pins(
+        pins,
+        suite_ids=[_h("a")],
+        suite_visibility="HOLDOUT",
+        include_holdout_execution=True,
+    )
+
+    monkeypatch.setattr(
+        "cdel.v18_0.verify_ccap_v1._resolve_effective_suite_ids_from_pins",
+        lambda **_kwargs: [_h("a")],
+    )
+    monkeypatch.setattr(
+        "cdel.v18_0.verify_ccap_v1.run_ek",
+        lambda **_kwargs: {
+            "determinism_check": "PASS",
+            "eval_status": "PASS",
+            "decision": "PROMOTE",
+            "applied_tree_id": _h("7"),
+            "realized_out_id": _h("8"),
+            "cost_vector": {
+                "cpu_ms": 1,
+                "wall_ms": 1,
+                "mem_mb": 1,
+                "disk_mb": 1,
+                "fds": 0,
+                "procs": 0,
+                "threads": 0,
+            },
+            "logs_hash": _h("9"),
+            "benchmark_run_receipt_v2": good_receipt,
+            "refutation": None,
+        },
+    )
+
+    receipt, code = verify(
+        subrun_root=subrun_root,
+        repo_root=repo_root,
+        ccap_relpath=ccap_relpath,
+        receipt_out_dir=receipt_out_dir,
+    )
+
+    assert code is None
+    assert receipt["decision"] == "PROMOTE"
+    assert receipt["eval_status"] == "PASS"
+    run_receipt = dict(receipt["benchmark_run_receipt_v2"])
+    assert run_receipt["holdout_policy_id"] == str(pins["holdout_policy_id"])
+    executed = list(run_receipt["executed_suites"])[0]
+    holdout_execution = dict(executed["holdout_execution"])
+    assert holdout_execution["inputs_pack_id"].startswith("sha256:")
+    assert holdout_execution["candidate_outputs_hash"].startswith("sha256:")

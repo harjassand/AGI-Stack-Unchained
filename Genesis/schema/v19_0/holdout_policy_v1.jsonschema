@@ -1,0 +1,107 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v19_0/holdout_policy_v1",
+  "title": "Holdout policy v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "holdout_policy_id",
+    "candidate_visible_prefixes",
+    "harness_only_prefixes",
+    "candidate_output_policy",
+    "candidate_execution_policy"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "holdout_policy_v1"
+    },
+    "holdout_policy_id": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "candidate_visible_prefixes": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/relpath_prefix"
+      }
+    },
+    "harness_only_prefixes": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "$ref": "#/$defs/relpath_prefix"
+      }
+    },
+    "candidate_output_policy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "max_output_files_u64",
+        "max_output_bytes_u64",
+        "max_single_output_bytes_u64",
+        "forbidden_output_prefixes"
+      ],
+      "properties": {
+        "max_output_files_u64": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "max_output_bytes_u64": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "max_single_output_bytes_u64": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "forbidden_output_prefixes": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/relpath_prefix"
+          }
+        }
+      }
+    },
+    "candidate_execution_policy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "network",
+        "filesystem",
+        "process_spawn",
+        "require_sandbox_for_live_autonomy_b"
+      ],
+      "properties": {
+        "network": {
+          "type": "string",
+          "enum": [
+            "forbidden"
+          ]
+        },
+        "filesystem": {
+          "type": "string",
+          "enum": [
+            "workspace_only"
+          ]
+        },
+        "process_spawn": {
+          "type": "string",
+          "enum": [
+            "restricted"
+          ]
+        },
+        "require_sandbox_for_live_autonomy_b": {
+          "type": "boolean"
+        }
+      }
+    }
+  },
+  "$defs": {
+    "relpath_prefix": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^(?!/)(?!.*\\.\\.).+$"
+    }
+  }
+}

@@ -1,0 +1,54 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v19_0/rsi_proposer_arena_pack_v1",
+  "title": "RSI proposer arena pack v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "arena_spec_rel",
+    "agent_registry_rel",
+    "task_distribution_rel",
+    "surrogate_policy_rel",
+    "max_candidates_u32",
+    "max_winners_u32",
+    "output_layout_version_u32",
+    "budgets"
+  ],
+  "properties": {
+    "schema_version": {"const": "rsi_proposer_arena_pack_v1"},
+    "arena_spec_rel": {"type": "string", "minLength": 1},
+    "agent_registry_rel": {"type": "string", "minLength": 1},
+    "task_distribution_rel": {"type": "string", "minLength": 1},
+    "surrogate_policy_rel": {"type": "string", "minLength": 1},
+    "max_candidates_u32": {"type": "integer", "minimum": 1},
+    "max_winners_u32": {"type": "integer", "minimum": 1},
+    "output_layout_version_u32": {"type": "integer", "minimum": 1},
+    "budgets": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "arena_total_wallclock_s",
+        "per_candidate_surrogate_wallclock_s",
+        "per_agent_wallclock_s",
+        "max_candidates_u32",
+        "max_admitted_u32",
+        "max_winners_u32",
+        "backlog_max_u32",
+        "max_patch_bytes_u32",
+        "max_total_written_bytes_u64"
+      ],
+      "properties": {
+        "arena_total_wallclock_s": {"type": "integer", "minimum": 1},
+        "per_candidate_surrogate_wallclock_s": {"type": "integer", "minimum": 1},
+        "per_agent_wallclock_s": {"type": "integer", "minimum": 1},
+        "max_candidates_u32": {"type": "integer", "minimum": 1},
+        "max_admitted_u32": {"type": "integer", "minimum": 1},
+        "max_winners_u32": {"type": "integer", "minimum": 1},
+        "backlog_max_u32": {"type": "integer", "minimum": 1},
+        "max_patch_bytes_u32": {"type": "integer", "minimum": 1},
+        "max_total_written_bytes_u64": {"type": "integer", "minimum": 1}
+      }
+    }
+  }
+}

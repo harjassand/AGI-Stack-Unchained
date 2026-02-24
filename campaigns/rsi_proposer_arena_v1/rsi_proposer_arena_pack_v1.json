@@ -1,0 +1,21 @@
+{
+  "schema_version": "rsi_proposer_arena_pack_v1",
+  "arena_spec_rel": "campaigns/rsi_proposer_arena_v1/proposer_arena_spec_v1.json",
+  "agent_registry_rel": "campaigns/rsi_proposer_arena_v1/proposer_arena_agent_registry_v1.json",
+  "task_distribution_rel": "campaigns/rsi_proposer_arena_v1/proposer_arena_task_distribution_v1.json",
+  "surrogate_policy_rel": "campaigns/rsi_proposer_arena_v1/proposer_arena_surrogate_policy_v1.json",
+  "max_candidates_u32": 16,
+  "max_winners_u32": 1,
+  "output_layout_version_u32": 1,
+  "budgets": {
+    "arena_total_wallclock_s": 120,
+    "per_candidate_surrogate_wallclock_s": 8,
+    "per_agent_wallclock_s": 20,
+    "max_candidates_u32": 16,
+    "max_admitted_u32": 8,
+    "max_winners_u32": 1,
+    "backlog_max_u32": 128,
+    "max_patch_bytes_u32": 200000,
+    "max_total_written_bytes_u64": 50000000
+  }
+}

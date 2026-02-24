@@ -1,0 +1,47 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v19_0/extension_queued_receipt_v1",
+  "title": "Extension queued receipt v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "receipt_id",
+    "tick_u64",
+    "extension_id",
+    "source_run_id",
+    "copied_files",
+    "operator_next_step",
+    "activation_kind",
+    "status_code"
+  ],
+  "properties": {
+    "schema_version": {"const": "extension_queued_receipt_v1"},
+    "receipt_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "tick_u64": {"type": "integer", "minimum": 0},
+    "extension_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "source_run_id": {"type": "string", "minLength": 1},
+    "copied_files": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["relpath", "sha256"],
+        "properties": {
+          "relpath": {"type": "string", "minLength": 1},
+          "sha256": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"}
+        }
+      }
+    },
+    "operator_next_step": {"type": "string", "minLength": 1},
+    "activation_kind": {"const": "ACTIVATION_KIND_EXT_QUEUED"},
+    "status_code": {
+      "type": "string",
+      "enum": [
+        "ACT_EXT_QUEUED:OK",
+        "ACT_EXT_QUEUED:WRITE_FAIL",
+        "ACT_EXT_QUEUED:HASH_MISMATCH"
+      ]
+    }
+  }
+}

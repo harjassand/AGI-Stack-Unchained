@@ -1,0 +1,54 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v19_0/arena_candidate_v1",
+  "title": "Arena candidate v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "candidate_id",
+    "agent_id",
+    "candidate_kind",
+    "declared_touched_paths",
+    "derived_touched_paths",
+    "base_tree_id",
+    "nontriviality_cert_id",
+    "candidate_precheck_receipt_id",
+    "oracle_trace_id",
+    "surrogate_eval_receipt_id"
+  ],
+  "properties": {
+    "schema_version": {"const": "arena_candidate_v1"},
+    "candidate_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "agent_id": {"type": "string", "minLength": 1},
+    "candidate_kind": {"type": "string", "enum": ["PATCH", "KERNEL_EXT_PROPOSAL"]},
+    "declared_touched_paths": {
+      "type": "array",
+      "items": {"type": "string", "minLength": 1}
+    },
+    "derived_touched_paths": {
+      "type": "array",
+      "items": {"type": "string", "minLength": 1}
+    },
+    "base_tree_id": {"type": "string", "minLength": 1},
+    "nontriviality_cert_id": {
+      "anyOf": [
+        {"type": "null"},
+        {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"}
+      ]
+    },
+    "candidate_precheck_receipt_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "oracle_trace_id": {
+      "anyOf": [
+        {"type": "null"},
+        {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"}
+      ]
+    },
+    "surrogate_eval_receipt_id": {
+      "anyOf": [
+        {"type": "null"},
+        {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"}
+      ]
+    }
+  }
+}

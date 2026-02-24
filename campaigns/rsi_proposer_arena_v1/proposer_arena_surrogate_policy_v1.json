@@ -1,0 +1,11 @@
+{
+  "schema_version": "proposer_arena_surrogate_policy_v1",
+  "enable_py_compile_b": true,
+  "enable_json_schema_check_b": true,
+  "anchor_public_fast_cmd": "python3 -m pytest -q CDEL-v2/cdel/v18_0/tests_omega_daemon/test_composite_benchmark_runner_v1.py",
+  "anchor_public_fast_timeout_s": 8,
+  "risk_class_defaults": {
+    "PATCH": "MED",
+    "KERNEL_EXT_PROPOSAL": "HIGH"
+  }
+}

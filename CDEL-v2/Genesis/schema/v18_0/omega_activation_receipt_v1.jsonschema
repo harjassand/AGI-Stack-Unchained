@@ -25,9 +25,29 @@
     "after_active_manifest_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
     "healthcheck_suite_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
     "healthcheck_result": {"type": "string", "enum": ["PASS", "FAIL"]},
-    "activation_method": {"const": "ATOMIC_POINTER_SWAP"},
+    "activation_method": {"type": "string", "enum": ["ATOMIC_POINTER_SWAP", "ACTIVATION_KIND_EXT_QUEUED"]},
+    "activation_kind": {"type": "string", "enum": ["ATOMIC_POINTER_SWAP", "ACTIVATION_KIND_EXT_QUEUED"]},
     "activation_success": {"type": "boolean"},
     "pass": {"type": "boolean"},
+    "extension_queued_receipt_hash": {
+      "anyOf": [
+        {"type": "null"},
+        {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"}
+      ]
+    },
+    "extension_queued_status_code": {
+      "anyOf": [
+        {"type": "null"},
+        {
+          "type": "string",
+          "enum": [
+            "ACT_EXT_QUEUED:OK",
+            "ACT_EXT_QUEUED:WRITE_FAIL",
+            "ACT_EXT_QUEUED:HASH_MISMATCH"
+          ]
+        }
+      ]
+    },
     "native_runtime_contract_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
     "native_healthcheck_vectors_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
     "native_restricted_ir_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
@@ -94,7 +114,11 @@
           "BINDING_MISSING_OR_MISMATCH",
           "ROLLBACK_REQUIRED",
           "NATIVE_GATE_REQUIRED",
-          "NATIVE_GATE_FAILED"
+          "NATIVE_GATE_FAILED",
+          "EXTENSION_QUEUED",
+          "ACT_EXT_QUEUED:OK",
+          "ACT_EXT_QUEUED:WRITE_FAIL",
+          "ACT_EXT_QUEUED:HASH_MISMATCH"
         ]
       }
     }

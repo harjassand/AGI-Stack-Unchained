@@ -74,42 +74,102 @@
         {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"}
       ]
     },
+    "result_kind": {
+      "type": "string",
+      "enum": ["PROMOTED_COMMIT", "PROMOTED_EXT_QUEUED", "REJECTED"]
+    },
     "result": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["status", "reason_code"],
+      "required": ["status", "reason_code", "route"],
       "properties": {
         "status": {"type": "string", "enum": ["PROMOTED", "REJECTED", "SKIPPED"]},
+        "route": {"type": "string", "enum": ["ACTIVE", "SHADOW", "NONE"]},
         "reason_code": {
           "anyOf": [
             {"type": "null"},
             {
-              "type": "string",
-              "enum": [
-                "NO_PROMOTION_BUNDLE",
-                "NO_BUNDLE_MICRO_BENCH_GATE_FAIL",
-                "NO_BUNDLE_TRIVIALITY_GATE_FAIL",
-                "NO_BUNDLE_REPLAY_INVALID",
-                "NO_BUNDLE_STRUCTURAL_FAIL",
-                "NO_BUNDLE_BENCH_FAIL",
-                "NO_BUNDLE_PATCH_GENERATION_FAIL",
-                "NO_BUNDLE_POLICY_GATE_FAIL",
-                "SUBVERIFIER_INVALID",
-                "META_CORE_REJECT",
-                "FORBIDDEN_PATH",
-                "TEST_PLAN_RECEIPT_MISSING_OR_FAIL",
-                "ALREADY_ACTIVE",
-                "TOOLCHAIN_MISMATCH",
-                "UNKNOWN",
-                "CCAP_RECEIPT_MISSING_OR_MISMATCH",
-                "CCAP_RECEIPT_REJECTED",
-                "CCAP_APPLY_MISMATCH",
-                "CCAP_TOUCHED_PATHS_INVALID",
-                "EK_META_VERIFY_MISSING_OR_FAIL"
+              "anyOf": [
+                {
+                  "type": "string",
+                  "enum": [
+                    "NO_PROMOTION_BUNDLE",
+                    "NO_BUNDLE_MICRO_BENCH_GATE_FAIL",
+                    "NO_BUNDLE_TRIVIALITY_GATE_FAIL",
+                    "NO_BUNDLE_REPLAY_INVALID",
+                    "NO_BUNDLE_STRUCTURAL_FAIL",
+                    "NO_BUNDLE_BENCH_FAIL",
+                    "NO_BUNDLE_PATCH_GENERATION_FAIL",
+                    "NO_BUNDLE_POLICY_GATE_FAIL",
+                    "SUBVERIFIER_INVALID",
+                    "META_CORE_REJECT",
+                    "FORBIDDEN_PATH",
+                    "TEST_PLAN_RECEIPT_MISSING_OR_FAIL",
+                    "ALREADY_ACTIVE",
+                    "TOOLCHAIN_MISMATCH",
+                    "UNKNOWN",
+                    "CCAP_RECEIPT_MISSING_OR_MISMATCH",
+                    "CCAP_RECEIPT_REJECTED",
+                    "CCAP_APPLY_MISMATCH",
+                    "CCAP_TOUCHED_PATHS_INVALID",
+                    "EK_META_VERIFY_MISSING_OR_FAIL",
+                    "NO_UTILITY_GAIN_SHADOW",
+                    "ARENA_REJECT:SANDBOX_NOT_ENFORCED",
+                    "ARENA_REJECT:EXT_PUBLIC_ONLY_VIOLATION",
+                    "ARENA_REJECT:EXT_LEDGER_CONFLICT",
+                    "ARENA_REJECT:EXT_SCHEMA_INVALID"
+                  ]
+                },
+                {"type": "string", "pattern": "^ARENA_REJECT:CCAP_REJECTED:[A-Z0-9_:-]+$"},
+                {"type": "string", "pattern": "^ARENA_REJECT:EK_FAIL:[A-Z0-9_:-]+$"},
+                {"type": "string", "pattern": "^ARENA_REJECT:UTILITY_FAIL:[A-Z0-9_:-]+$"}
               ]
             }
           ]
         }
+      }
+    },
+    "utility_proof_hash": {
+      "anyOf": [
+        {"type": "null"},
+        {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"}
+      ]
+    },
+    "declared_class": {
+      "anyOf": [
+        {"type": "null"},
+        {"type": "string", "enum": ["FRONTIER_HEAVY", "CANARY_HEAVY", "BASELINE_CORE", "MAINTENANCE", "UNCLASSIFIED"]}
+      ]
+    },
+    "effect_class": {
+      "anyOf": [
+        {"type": "null"},
+        {
+          "type": "string",
+          "enum": [
+            "EFFECT_HEAVY_OK",
+            "EFFECT_HEAVY_NO_UTILITY",
+            "EFFECT_BASELINE_CORE_OK",
+            "EFFECT_MAINTENANCE_OK",
+            "EFFECT_REJECTED"
+          ]
+        }
+      ]
+    },
+    "replay_binding_v1": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "replay_state_dir_relpath",
+        "replay_state_tree_hash",
+        "dispatch_id",
+        "dispatch_receipt_hash"
+      ],
+      "properties": {
+        "replay_state_dir_relpath": {"type": "string", "minLength": 1},
+        "replay_state_tree_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+        "dispatch_id": {"type": "string", "minLength": 1},
+        "dispatch_receipt_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"}
       }
     },
     "active_manifest_hash_after": {

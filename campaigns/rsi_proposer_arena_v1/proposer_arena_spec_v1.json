@@ -1,0 +1,19 @@
+{
+  "schema_version": "proposer_arena_spec_v1",
+  "arena_spec_id": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
+  "initial_bankroll_q32": 4294967296,
+  "initial_credibility_q32": 2147483648,
+  "candidate_ttl_ticks_u64": 32,
+  "backlog_max_u32": 128,
+  "max_patch_bytes_u32": 200000,
+  "public_only_ext_required_b": true,
+  "forbid_lock_prefixes": [
+    "authority/",
+    "meta-core/",
+    "CDEL-v2/",
+    "Genesis/",
+    ".git/",
+    "runs/",
+    ".omega_cache/"
+  ]
+}

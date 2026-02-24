@@ -15,6 +15,7 @@ from ..v18_0.omega_common_v1 import (
     canon_hash_obj,
     load_canon_dict,
     repo_root,
+    require_relpath,
     resolve_execution_mode,
     require_no_absolute_paths,
     validate_schema as validate_v18_schema,
@@ -41,6 +42,7 @@ from .federation.check_treaty_v1 import T_AXIS_MORPHISM_TYPE, check_treaty
 from .federation.ok_ican_v1 import DEFAULT_ICAN_PROFILE, ican_id
 from .nontriviality_cert_v1 import build_nontriviality_cert_v1 as build_shared_nontriviality_cert_v1
 from .shadow_j_eval_v1 import build_ccap_receipt_metric_index_for_state_root
+from .verify_kernel_extension_proposal_v1 import verify_extension_proposal_dir
 from .world.check_world_snapshot_v1 import W_AXIS_MORPHISM_TYPE, check_world_snapshot
 
 
@@ -67,6 +69,28 @@ _HARD_TASK_METRIC_IDS: tuple[str, ...] = (
     "hard_task_reasoning_q32",
     "hard_task_suite_score_q32",
 )
+_PROPOSER_ARENA_CAPABILITY_ID = "RSI_PROPOSER_ARENA_V1"
+_PROMOTION_RESULT_KIND_COMMIT = "PROMOTED_COMMIT"
+_PROMOTION_RESULT_KIND_EXT = "PROMOTED_EXT_QUEUED"
+_PROMOTION_RESULT_KIND_REJECTED = "REJECTED"
+_CANDIDATE_KIND_PATCH = "PATCH"
+_CANDIDATE_KIND_EXT = "KERNEL_EXT_PROPOSAL"
+
+
+def _map_arena_patch_reject_reason(*, promotion_status: str, reason_code: str | None) -> str:
+    reason_norm = str(reason_code or "").strip().upper()
+    if reason_norm == "ARENA_REJECT:SANDBOX_NOT_ENFORCED":
+        return "ARENA_REJECT:SANDBOX_NOT_ENFORCED"
+    if "SANDBOX" in reason_norm:
+        return "ARENA_REJECT:SANDBOX_NOT_ENFORCED"
+    if reason_norm in {"NO_UTILITY_GAIN_SHADOW", "NO_UTILITY_GAIN"} or reason_norm.startswith("UTILITY_"):
+        suffix = reason_norm if reason_norm else "UNKNOWN"
+        return f"ARENA_REJECT:UTILITY_FAIL:{suffix}"
+    if reason_norm.startswith("EK_"):
+        suffix = reason_norm if reason_norm else "UNKNOWN"
+        return f"ARENA_REJECT:EK_FAIL:{suffix}"
+    suffix = reason_norm if reason_norm else "UNKNOWN"
+    return f"ARENA_REJECT:CCAP_REJECTED:{suffix}"
 
 
 def _canonical_axis_gate_relpath(path_value: str) -> str:
@@ -1571,6 +1595,7 @@ def _write_promotion_receipt_v19(
     utility_proof_hash: str | None,
     declared_class: str,
     effect_class: str,
+    result_kind: str | None = None,
     replay_binding_v1: dict[str, Any] | None = None,
 ) -> tuple[dict[str, Any], str]:
     out_dir = Path(dispatch_ctx["dispatch_dir"]) / "promotion"
@@ -1595,6 +1620,17 @@ def _write_promotion_receipt_v19(
         },
         "active_manifest_hash_after": active_manifest_hash_after if _is_sha256(active_manifest_hash_after) else None,
     }
+    if isinstance(result_kind, str) and result_kind in {
+        _PROMOTION_RESULT_KIND_COMMIT,
+        _PROMOTION_RESULT_KIND_EXT,
+        _PROMOTION_RESULT_KIND_REJECTED,
+    }:
+        payload["result_kind"] = str(result_kind)
+    else:
+        normalized_status = str(status).strip().upper()
+        payload["result_kind"] = (
+            _PROMOTION_RESULT_KIND_COMMIT if normalized_status == "PROMOTED" else _PROMOTION_RESULT_KIND_REJECTED
+        )
     if isinstance(replay_binding_v1, dict):
         payload["replay_binding_v1"] = dict(replay_binding_v1)
     require_no_absolute_paths(payload)
@@ -1625,10 +1661,108 @@ def _augment_promotion_receipt_with_effect(
         route = "ACTIVE" if str(result.get("status", "")).strip() == "PROMOTED" else "NONE"
     result["route"] = route
     payload["result"] = result
+    if str(payload.get("result_kind", "")).strip() not in {
+        _PROMOTION_RESULT_KIND_COMMIT,
+        _PROMOTION_RESULT_KIND_EXT,
+        _PROMOTION_RESULT_KIND_REJECTED,
+    }:
+        payload["result_kind"] = (
+            _PROMOTION_RESULT_KIND_COMMIT
+            if str(result.get("status", "")).strip().upper() == "PROMOTED"
+            else _PROMOTION_RESULT_KIND_REJECTED
+        )
     require_no_absolute_paths(payload)
     _, receipt, digest = write_hashed_json(out_dir, "omega_promotion_receipt_v1.json", payload, id_field="receipt_id")
     validate_v18_schema(receipt, "omega_promotion_receipt_v1")
     return receipt, digest
+
+
+def _hash_from_hashed_filename(path: Path, *, suffix: str) -> str:
+    name = path.name
+    if not name.startswith("sha256_") or not name.endswith(suffix):
+        fail("SCHEMA_FAIL", safe_halt=True)
+    hexd = name[len("sha256_") : -len(suffix)]
+    digest = f"sha256:{hexd}"
+    if not _is_sha256(digest):
+        fail("SCHEMA_FAIL", safe_halt=True)
+    return digest
+
+
+def _resolve_campaign_state_dir(dispatch_ctx: dict[str, Any]) -> Path:
+    cap = dispatch_ctx.get("campaign_entry")
+    if not isinstance(cap, dict):
+        fail("MISSING_STATE_INPUT", safe_halt=True)
+    state_dir_rel = require_relpath(cap.get("state_dir_rel"))
+    subrun_root_raw = dispatch_ctx.get("subrun_root_abs")
+    if not isinstance(subrun_root_raw, (str, Path)):
+        fail("MISSING_STATE_INPUT", safe_halt=True)
+    subrun_root = Path(subrun_root_raw).resolve()
+    state_dir = (subrun_root / state_dir_rel).resolve()
+    if not state_dir.exists() or not state_dir.is_dir():
+        fail("MISSING_STATE_INPUT", safe_halt=True)
+    return state_dir
+
+
+def _load_latest_arena_receipts(dispatch_ctx: dict[str, Any]) -> tuple[dict[str, Any], dict[str, Any]]:
+    state_dir = _resolve_campaign_state_dir(dispatch_ctx)
+    arena_dir = state_dir / "arena"
+    run_rows = sorted(
+        arena_dir.glob("sha256_*.proposer_arena_run_receipt_v1.json"),
+        key=lambda row: row.as_posix(),
+    )
+    sel_rows = sorted(
+        arena_dir.glob("sha256_*.arena_selection_receipt_v1.json"),
+        key=lambda row: row.as_posix(),
+    )
+    if not run_rows or not sel_rows:
+        fail("MISSING_STATE_INPUT", safe_halt=True)
+    run_path = run_rows[-1]
+    sel_path = sel_rows[-1]
+    run_payload = load_canon_dict(run_path)
+    sel_payload = load_canon_dict(sel_path)
+    validate_schema(run_payload, "proposer_arena_run_receipt_v1")
+    validate_schema(sel_payload, "arena_selection_receipt_v1")
+    if canon_hash_obj(run_payload) != _hash_from_hashed_filename(
+        run_path,
+        suffix=".proposer_arena_run_receipt_v1.json",
+    ):
+        fail("NONDETERMINISTIC", safe_halt=True)
+    if canon_hash_obj(sel_payload) != _hash_from_hashed_filename(
+        sel_path,
+        suffix=".arena_selection_receipt_v1.json",
+    ):
+        fail("NONDETERMINISTIC", safe_halt=True)
+    run_winner = str(run_payload.get("winner_candidate_id", "")).strip()
+    sel_winner = str(sel_payload.get("winner_candidate_id", "")).strip()
+    if not _is_sha256(run_winner) or run_winner != sel_winner:
+        fail("NONDETERMINISTIC", safe_halt=True)
+    ranked_ids = sel_payload.get("ranked_candidate_ids")
+    if not isinstance(ranked_ids, list) or not ranked_ids:
+        fail("SCHEMA_FAIL", safe_halt=True)
+    ranked_norm = [str(row).strip() for row in ranked_ids if str(row).strip()]
+    if not ranked_norm or ranked_norm[0] != run_winner:
+        fail("NONDETERMINISTIC", safe_halt=True)
+    return run_payload, sel_payload
+
+
+def _load_arena_pack_and_assert_single_winner(dispatch_ctx: dict[str, Any]) -> None:
+    cap = dispatch_ctx.get("campaign_entry")
+    if not isinstance(cap, dict):
+        fail("MISSING_STATE_INPUT", safe_halt=True)
+    rel = require_relpath(cap.get("campaign_pack_rel"))
+    payload = load_canon_dict((repo_root() / rel).resolve())
+    validate_schema(payload, "rsi_proposer_arena_pack_v1")
+    if int(payload.get("max_winners_u32", 0)) != 1:
+        fail("SCHEMA_FAIL", safe_halt=True)
+    budgets = payload.get("budgets")
+    if not isinstance(budgets, dict):
+        fail("SCHEMA_FAIL", safe_halt=True)
+    if int(budgets.get("max_winners_u32", 0)) != 1:
+        fail("SCHEMA_FAIL", safe_halt=True)
+
+
+def _arena_state_promotion_dir(dispatch_ctx: dict[str, Any]) -> Path:
+    return _resolve_campaign_state_dir(dispatch_ctx) / "promotion"
 
 
 def run_subverifier(*, tick_u64: int, dispatch_ctx: dict[str, Any] | None) -> tuple[dict[str, Any] | None, str | None]:
@@ -1726,8 +1860,82 @@ def run_promotion(
             replay_binding_v1=replay_binding_v1,
         )
 
+    arena_winner_kind: str | None = None
+    if capability_id == _PROPOSER_ARENA_CAPABILITY_ID:
+        _load_arena_pack_and_assert_single_winner(dispatch_ctx)
+        arena_run_receipt, _arena_selection_receipt = _load_latest_arena_receipts(dispatch_ctx)
+        arena_winner_kind = str(arena_run_receipt.get("winner_kind", "")).strip()
+        if arena_winner_kind not in {_CANDIDATE_KIND_PATCH, _CANDIDATE_KIND_EXT}:
+            fail("SCHEMA_FAIL", safe_halt=True)
+        if arena_winner_kind == _CANDIDATE_KIND_EXT:
+            promotion_dir = _arena_state_promotion_dir(dispatch_ctx)
+            try:
+                extension_id, _ext_payload, _suite_payload, _suite_set_payload = verify_extension_proposal_dir(
+                    promotion_dir=promotion_dir
+                )
+            except Exception as exc:  # noqa: BLE001
+                reason_text = str(exc).strip()
+                if reason_text.startswith("INVALID:"):
+                    reason_text = reason_text.split("INVALID:", 1)[1].strip()
+                if reason_text.startswith("PHASE1_PUBLIC_ONLY_VIOLATION"):
+                    reason_code = "ARENA_REJECT:EXT_PUBLIC_ONLY_VIOLATION"
+                elif reason_text.startswith("EXT_LEDGER_CONFLICT"):
+                    reason_code = "ARENA_REJECT:EXT_LEDGER_CONFLICT"
+                else:
+                    reason_code = "ARENA_REJECT:EXT_SCHEMA_INVALID"
+                return _write_promotion_receipt_v19(
+                    tick_u64=tick_u64,
+                    dispatch_ctx=dispatch_ctx,
+                    promotion_bundle_hash=_SHA256_ZERO,
+                    status="REJECTED",
+                    reason=reason_code,
+                    route="NONE",
+                    active_manifest_hash_after=None,
+                    utility_proof_hash=None,
+                    declared_class=declared_class,
+                    effect_class="EFFECT_REJECTED",
+                    result_kind=_PROMOTION_RESULT_KIND_REJECTED,
+                    replay_binding_v1=replay_binding_v1,
+                )
+            return _write_promotion_receipt_v19(
+                tick_u64=tick_u64,
+                dispatch_ctx=dispatch_ctx,
+                promotion_bundle_hash=extension_id,
+                status="PROMOTED",
+                reason=None,
+                route="ACTIVE",
+                active_manifest_hash_after=None,
+                utility_proof_hash=None,
+                declared_class=declared_class,
+                effect_class=_compute_effect_class(
+                    declared_class=declared_class,
+                    correctness_ok_b=True,
+                    utility_ok_b=True,
+                ),
+                result_kind=_PROMOTION_RESULT_KIND_EXT,
+                replay_binding_v1=replay_binding_v1,
+            )
+
     bundle_path, bundle_hash = v18_promoter._find_promotion_bundle(dispatch_ctx)
     if bundle_path is None:
+        if arena_winner_kind == _CANDIDATE_KIND_PATCH:
+            return _write_promotion_receipt_v19(
+                tick_u64=tick_u64,
+                dispatch_ctx=dispatch_ctx,
+                promotion_bundle_hash=_SHA256_ZERO,
+                status="REJECTED",
+                reason=_map_arena_patch_reject_reason(
+                    promotion_status="REJECTED",
+                    reason_code="NO_PROMOTION_BUNDLE",
+                ),
+                route="NONE",
+                active_manifest_hash_after=None,
+                utility_proof_hash=None,
+                declared_class=declared_class,
+                effect_class="EFFECT_REJECTED",
+                result_kind=_PROMOTION_RESULT_KIND_REJECTED,
+                replay_binding_v1=replay_binding_v1,
+            )
         receipt, digest = v18_promoter.run_promotion(
             tick_u64=tick_u64,
             dispatch_ctx=dispatch_ctx,
@@ -1982,7 +2190,8 @@ def run_promotion(
             else None
         ),
         "hard_task_required_metrics_present_b": bool(hard_task_required_metrics_present_b),
-        "hard_task_missing_metric_ids_v1": list(hard_task_missing_metric_ids_v1),
+        "hard_task_missing_metric_count_u64": int(len(hard_task_missing_metric_ids_v1)),
+        "hard_task_missing_metric_ids_csv": ",".join(hard_task_missing_metric_ids_v1),
         "hard_task_receipt_metric_index_error_b": bool(hard_task_receipt_metric_index_error_b),
         "hard_task_code_correctness_delta_q32": int(hard_task_code_delta_q32),
         "hard_task_performance_delta_q32": int(hard_task_performance_delta_q32),
@@ -2082,6 +2291,17 @@ def run_promotion(
         )
         if receipt is None or digest is None:
             return receipt, digest
+        if capability_id == _PROPOSER_ARENA_CAPABILITY_ID and arena_winner_kind == _CANDIDATE_KIND_PATCH:
+            result_obj = dict(receipt.get("result") or {})
+            status_norm = str(result_obj.get("status", "")).strip().upper()
+            if status_norm != "PROMOTED":
+                mapped_reason = _map_arena_patch_reject_reason(
+                    promotion_status=status_norm,
+                    reason_code=result_obj.get("reason_code"),
+                )
+                result_obj["reason_code"] = mapped_reason
+                receipt = dict(receipt)
+                receipt["result"] = result_obj
         promotion_status = str((receipt.get("result") or {}).get("status", "")).strip()
         if declared_class in _HEAVY_DECLARED_CLASSES:
             # Heavy utility success is counted as EFFECT_HEAVY_OK even when CCAP

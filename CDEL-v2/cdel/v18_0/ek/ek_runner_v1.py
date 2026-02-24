@@ -733,6 +733,24 @@ def _run_score_stage_once(
                         },
                         "benchmark_run_receipt_v2": benchmark_run_receipt_v2,
                     }
+                if not bool(holdout_execution.get("sandbox_available_b", False)):
+                    return {
+                        "ok": False,
+                        "refutation": {
+                            "code": "HOLDOUT_ACCESS_VIOLATION",
+                            "detail": "holdout_execution indicates OS sandbox backend was unavailable",
+                        },
+                        "benchmark_run_receipt_v2": benchmark_run_receipt_v2,
+                    }
+                if not bool(holdout_execution.get("sandbox_enforced_b", False)):
+                    return {
+                        "ok": False,
+                        "refutation": {
+                            "code": "HOLDOUT_ACCESS_VIOLATION",
+                            "detail": "holdout_execution indicates OS sandbox was not enforced",
+                        },
+                        "benchmark_run_receipt_v2": benchmark_run_receipt_v2,
+                    }
                 outputs_hash = str(holdout_execution.get("candidate_outputs_hash", "")).strip()
                 if not outputs_hash.startswith("sha256:"):
                     return {

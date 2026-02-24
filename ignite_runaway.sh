@@ -725,6 +725,11 @@ def hash_from_filename(path: Path | None, suffix: str) -> str:
     return ""
 
 
+def is_sha256(value: Any) -> bool:
+    text = str(value).strip()
+    return bool(re.fullmatch(r"sha256:[0-9a-f]{64}", text))
+
+
 def emit(signal: str, **fields: Any) -> None:
     parts = [f"SIGNAL={signal}", f"tick={tick_u64}"]
     for key, value in fields.items():
@@ -778,6 +783,9 @@ promotion_status = str((promotion.get("result") or {}).get("status", "")).strip(
 activation_path = latest(str(state_dir / "dispatch" / "*" / "activation" / "sha256_*.omega_activation_receipt_v1.json"))
 activation = load_json(activation_path) or {}
 activation_success = bool(activation.get("activation_success", False))
+
+dispatch_path = latest(str(state_dir / "dispatch" / "*" / "sha256_*.omega_dispatch_receipt_v1.json"))
+dispatch = load_json(dispatch_path) or {}
 
 ccap_path = latest(str(state_dir / "dispatch" / "*" / "verifier" / "sha256_*.ccap_receipt_v1.json"))
 ccap = load_json(ccap_path) or {}
@@ -844,6 +852,51 @@ if rewrite_commit:
         receipt=hash_from_filename(promotion_path, ".omega_promotion_receipt_v1.json"),
     )
 
+selected_capability_id = str(dispatch.get("capability_id", "")).strip()
+if selected_capability_id == "RSI_PROPOSER_ARENA_V1":
+    arena_run_receipts = sorted(
+        state_dir.glob("subruns/*/state/arena/sha256_*.proposer_arena_run_receipt_v1.json"),
+        key=lambda p: p.as_posix(),
+    )
+    arena_state_receipts = sorted(
+        state_dir.glob("subruns/*/state/arena/sha256_*.proposer_arena_state_v1.json"),
+        key=lambda p: p.as_posix(),
+    )
+    arena_run = None
+    for path in reversed(arena_run_receipts):
+        payload = load_json(path)
+        if isinstance(payload, dict) and int(payload.get("tick_u64", -1)) == int(tick_u64):
+            arena_run = payload
+            break
+    if isinstance(arena_run, dict):
+        emit(
+            "ARENA_WINNER",
+            agent_id=str(arena_run.get("winner_agent_id", "")),
+            kind=str(arena_run.get("winner_kind", "")),
+            candidate_id=str(arena_run.get("winner_candidate_id", "")),
+        )
+    arena_state = None
+    for path in reversed(arena_state_receipts):
+        payload = load_json(path)
+        if isinstance(payload, dict) and int(payload.get("tick_u64", -1)) == int(tick_u64):
+            arena_state = payload
+            break
+    if isinstance(arena_state, dict):
+        for row in list(arena_state.get("agent_states") or []):
+            if not isinstance(row, dict):
+                continue
+            if not bool(row.get("quarantined_b", False)):
+                continue
+            reason = str(row.get("quarantine_reason_code", "")).strip()
+            cooldown_until = int(row.get("cooldown_until_tick_u64", -1))
+            if (not reason) or cooldown_until != (int(tick_u64) + 10000):
+                continue
+            emit(
+                "ARENA_QUARANTINE",
+                agent_id=str(row.get("agent_id", "")),
+                reason=reason,
+            )
+
 if activation_commit:
     emit(
         "ACTIVATION_COMMIT",
@@ -851,6 +904,25 @@ if activation_commit:
         manifest_changed=str(manifest_changed).lower(),
         receipt=hash_from_filename(activation_path, ".omega_activation_receipt_v1.json"),
     )
+
+ext_queued_hash = str(activation.get("extension_queued_receipt_hash", "")).strip()
+if is_sha256(ext_queued_hash):
+    ext_hex = ext_queued_hash.split(":", 1)[1]
+    ext_path = latest(
+        str(
+            state_dir
+            / "dispatch"
+            / "*"
+            / "activation"
+            / f"sha256_{ext_hex}.extension_queued_receipt_v1.json"
+        )
+    )
+    ext_payload = load_json(ext_path) or {}
+    if str(ext_payload.get("status_code", "")).strip() == "ACT_EXT_QUEUED:OK":
+        emit(
+            "EXTENSION_QUEUED",
+            extension_id=str(ext_payload.get("extension_id", "")),
+        )
 
 action_kind = str(decision.get("action_kind", "")).strip() or action_kind_cli
 emit(

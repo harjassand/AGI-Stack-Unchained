@@ -713,8 +713,81 @@ def _env_truthy(name: str, *, default: bool = False) -> bool:
     return raw in {"1", "true", "yes", "on"}
 
 
+def _sandbox_backend_for_holdout() -> tuple[str, str] | None:
+    forced = str(os.environ.get("OMEGA_HOLDOUT_SANDBOX_BACKEND", "auto")).strip().lower()
+    if forced in {"none", "off", "disabled"}:
+        return None
+    if forced in {"darwin", "darwin_sandbox_exec", "sandbox-exec"}:
+        binary = shutil.which("sandbox-exec")
+        if not binary:
+            raise CompositeRunnerError("HOLDOUT_ACCESS_VIOLATION", "sandbox-exec is unavailable for forced holdout sandbox backend")
+        return ("DARWIN_SANDBOX_EXEC", str(binary))
+    if forced not in {"", "auto"}:
+        raise CompositeRunnerError("SCHEMA_FAIL", "OMEGA_HOLDOUT_SANDBOX_BACKEND must be auto|none|darwin")
+    if sys.platform == "darwin":
+        binary = shutil.which("sandbox-exec")
+        if binary:
+            return ("DARWIN_SANDBOX_EXEC", str(binary))
+    return None
+
+
+def _darwin_sandbox_escape(value: str) -> str:
+    return value.replace("\\", "\\\\").replace('"', '\\"')
+
+
+def _write_darwin_holdout_profile(
+    *,
+    profile_path: Path,
+    denied_paths: list[Path],
+) -> None:
+    deny_rows: list[str] = []
+    seen: set[str] = set()
+    for row in sorted(denied_paths, key=lambda item: item.as_posix()):
+        text = str(row.resolve())
+        if text in seen:
+            continue
+        seen.add(text)
+        escaped = _darwin_sandbox_escape(text)
+        deny_rows.append(f'(deny file-read* (subpath "{escaped}"))')
+        deny_rows.append(f'(deny file-write* (subpath "{escaped}"))')
+    payload = ["(version 1)", "(allow default)", "(deny network*)", *deny_rows]
+    profile_path.parent.mkdir(parents=True, exist_ok=True)
+    profile_path.write_text("\n".join(payload) + "\n", encoding="utf-8")
+
+
+def _run_holdout_candidate_process(
+    *,
+    repo_root: Path,
+    candidate_workspace: Path,
+    candidate_cmd: list[str],
+    env: dict[str, str],
+    harness_only_prefixes: list[str],
+) -> tuple[subprocess.CompletedProcess[str], bool]:
+    backend = _sandbox_backend_for_holdout()
+    if backend is None:
+        raise CompositeRunnerError(
+            "HOLDOUT_ACCESS_VIOLATION",
+            "no supported OS sandbox backend is available for holdout candidate execution",
+        )
+    backend_kind, backend_bin = backend
+    if backend_kind == "DARWIN_SANDBOX_EXEC":
+        denied_paths = [(repo_root / row).resolve() for row in harness_only_prefixes]
+        profile_path = candidate_workspace.parent / ".holdout_dsbx_profile.sb"
+        _write_darwin_holdout_profile(profile_path=profile_path, denied_paths=denied_paths)
+        proc = subprocess.run(
+            [backend_bin, "-f", str(profile_path), *candidate_cmd],
+            cwd=candidate_workspace,
+            env=env,
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+        return proc, True
+    raise CompositeRunnerError("HOLDOUT_ACCESS_VIOLATION", f"unsupported holdout sandbox backend: {backend_kind}")
+
+
 def _sandbox_available_for_holdout() -> bool:
-    return False
+    return _sandbox_backend_for_holdout() is not None
 
 
 def _workspace_file_hashes(root: Path) -> dict[str, str]:
@@ -896,11 +969,16 @@ def _run_holdout_suite(
 
     sandbox_available_b = _sandbox_available_for_holdout()
     sandbox_enforced_b = False
+    policy_filesystem = str(policy_exec.get("filesystem", "")).strip().lower()
+    policy_network = str(policy_exec.get("network", "")).strip().lower()
     require_sandbox_for_live_autonomy_b = bool(policy_exec.get("require_sandbox_for_live_autonomy_b", False))
-    if require_sandbox_for_live_autonomy_b and _env_truthy("OMEGA_LIVE_AUTONOMY_B", default=False) and not sandbox_available_b:
+    sandbox_required_b = policy_filesystem == "workspace_only" or policy_network == "forbidden"
+    if require_sandbox_for_live_autonomy_b and _env_truthy("OMEGA_LIVE_AUTONOMY_B", default=False):
+        sandbox_required_b = True
+    if sandbox_required_b and not sandbox_available_b:
         raise CompositeRunnerError(
             "HOLDOUT_ACCESS_VIOLATION",
-            "sandbox is unavailable and holdout policy requires it for live autonomy",
+            "sandbox backend unavailable for holdout execution policy",
         )
 
     candidate_mode = str(io_contract.get("candidate_mode", "holdout_candidate")).strip() or "holdout_candidate"
@@ -933,14 +1011,23 @@ def _run_holdout_suite(
         "--seed_u64",
         str(int(max(0, seed_u64))),
     ]
-    candidate_proc = subprocess.run(
-        candidate_cmd,
-        cwd=candidate_workspace,
-        env=env,
-        check=False,
-        capture_output=True,
-        text=True,
-    )
+    if sandbox_required_b:
+        candidate_proc, sandbox_enforced_b = _run_holdout_candidate_process(
+            repo_root=repo_root,
+            candidate_workspace=candidate_workspace,
+            candidate_cmd=candidate_cmd,
+            env=env,
+            harness_only_prefixes=excluded_prefixes,
+        )
+    else:
+        candidate_proc = subprocess.run(
+            candidate_cmd,
+            cwd=candidate_workspace,
+            env=env,
+            check=False,
+            capture_output=True,
+            text=True,
+        )
 
     stdout_relpath_raw = io_contract.get("stdout_relpath")
     stderr_relpath_raw = io_contract.get("stderr_relpath")

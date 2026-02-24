@@ -184,7 +184,12 @@ def _write_holdout_pack(
     return pack_id
 
 
-def _write_holdout_candidate_runner(repo_root: Path, *, include_forbidden_write: bool = False) -> str:
+def _write_holdout_candidate_runner(
+    repo_root: Path,
+    *,
+    include_forbidden_write: bool = False,
+    include_forbidden_abs_read_probe: bool = False,
+) -> str:
     rel = "tools/omega/holdout_candidate_runner_test.py"
     path = repo_root / rel
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -193,6 +198,7 @@ def _write_holdout_candidate_runner(repo_root: Path, *, include_forbidden_write:
         "from __future__ import annotations",
         "import argparse",
         "import json",
+        "import os",
         "from pathlib import Path",
         "",
         "def main() -> int:",
@@ -220,6 +226,15 @@ def _write_holdout_candidate_runner(repo_root: Path, *, include_forbidden_write:
         "            lines.append(json.dumps({'id': row_id, 'prediction': guess}, sort_keys=True, separators=(',', ':')))",
         "    (out_dir / 'predictions.jsonl').write_text('\\n'.join(lines) + ('\\n' if lines else ''), encoding='utf-8')",
     ]
+    if include_forbidden_abs_read_probe:
+        body.append("    probe = str(os.environ.get('OMEGA_HOLDOUT_FORBIDDEN_READ_PATH', '')).strip()")
+        body.append("    if probe:")
+        body.append("        try:")
+        body.append("            Path(probe).read_text(encoding='utf-8')")
+        body.append("        except Exception:")
+        body.append("            pass")
+        body.append("        else:")
+        body.append("            return 86")
     if include_forbidden_write:
         body.append("    Path('authority/holdouts/leak.txt').parent.mkdir(parents=True, exist_ok=True)")
         body.append("    Path('authority/holdouts/leak.txt').write_text('leak\\n', encoding='utf-8')")
@@ -527,6 +542,8 @@ def test_executed_suite_order_is_deterministic_and_bound_to_effective_list(tmp_p
 
 
 def test_holdout_workspace_excludes_harness_packs_and_binds_receipt_ids(tmp_path: Path, monkeypatch) -> None:
+    if not composite._sandbox_available_for_holdout():
+        pytest.skip("no holdout OS sandbox backend available")
     seeded = _bootstrap_anchor_only(tmp_path)
     repo_root = Path(str(seeded["repo_root"]))
     holdout_policy_id = _write_holdout_policy(repo_root)
@@ -608,6 +625,8 @@ def test_holdout_workspace_excludes_harness_packs_and_binds_receipt_ids(tmp_path
 
 
 def test_holdout_candidate_write_outside_output_root_fails_io_contract(tmp_path: Path, monkeypatch) -> None:
+    if not composite._sandbox_available_for_holdout():
+        pytest.skip("no holdout OS sandbox backend available")
     seeded = _bootstrap_anchor_only(tmp_path)
     repo_root = Path(str(seeded["repo_root"]))
     holdout_policy_id = _write_holdout_policy(repo_root)
@@ -676,7 +695,7 @@ def test_holdout_candidate_write_outside_output_root_fails_io_contract(tmp_path:
     assert holdout_execution["harness_stage_status"] == "SKIPPED"
 
 
-def test_holdout_requires_sandbox_in_live_autonomy_when_unavailable(tmp_path: Path, monkeypatch) -> None:
+def test_holdout_requires_os_sandbox_when_unavailable(tmp_path: Path, monkeypatch) -> None:
     seeded = _bootstrap_anchor_only(tmp_path)
     repo_root = Path(str(seeded["repo_root"]))
     holdout_policy_id = _write_holdout_policy(repo_root, require_sandbox_for_live_autonomy=True)
@@ -721,12 +740,12 @@ def test_holdout_requires_sandbox_in_live_autonomy_when_unavailable(tmp_path: Pa
         "tracked_files",
         lambda root: sorted(path.relative_to(root).as_posix() for path in root.rglob("*") if path.is_file()),
     )
-    monkeypatch.setenv("OMEGA_LIVE_AUTONOMY_B", "1")
+    monkeypatch.setattr(composite, "_sandbox_backend_for_holdout", lambda: None)
 
     receipt = composite.run_composite_once(
         repo_root=repo_root,
         runs_root=tmp_path / "runs",
-        series_prefix="series_holdout_live_autonomy",
+        series_prefix="series_holdout_sandbox_required",
         ek_id=str(seeded["ek_id"]),
         anchor_suite_set_id=str(holdout_set["suite_set_id"]),
         extensions_ledger_id=str(seeded["ledger_id"]),
@@ -741,7 +760,79 @@ def test_holdout_requires_sandbox_in_live_autonomy_when_unavailable(tmp_path: Pa
     assert "HOLDOUT_ACCESS_VIOLATION" in str(executed["gate_results"][0]["detail"])
 
 
+def test_holdout_os_sandbox_blocks_absolute_holdout_read_probe(tmp_path: Path, monkeypatch) -> None:
+    if not composite._sandbox_available_for_holdout():
+        pytest.skip("no holdout OS sandbox backend available")
+    seeded = _bootstrap_anchor_only(tmp_path)
+    repo_root = Path(str(seeded["repo_root"]))
+    holdout_policy_id = _write_holdout_policy(repo_root)
+    runner_relpath = _write_holdout_candidate_runner(repo_root, include_forbidden_abs_read_probe=True)
+
+    inputs_pack_id = _write_holdout_pack(
+        repo_root=repo_root,
+        schema_version="holdout_inputs_pack_v1",
+        rows=[{"id": "ex1", "guess": "A"}],
+    )
+    labels_pack_id = _write_holdout_pack(
+        repo_root=repo_root,
+        schema_version="holdout_labels_pack_v1",
+        rows=[{"id": "ex1", "label": "A"}],
+    )
+    labels_pack_path = repo_root / "authority" / "holdouts" / "packs" / f"sha256_{labels_pack_id.split(':', 1)[1]}.json"
+
+    holdout_manifest_rel = "authority/benchmark_suites/holdout_suite_abs_read_probe.json"
+    holdout_manifest = _make_manifest(
+        suite_name="holdout_suite_abs_read_probe",
+        suite_runner_relpath=runner_relpath,
+        visibility="HOLDOUT",
+        inputs_pack_id=inputs_pack_id,
+        labels_pack_id=labels_pack_id,
+        io_contract={
+            "predictions_relpath": "predictions.jsonl",
+            "allowed_output_files": ["predictions.jsonl"],
+            "max_output_files_u64": 4,
+            "max_output_bytes_u64": 65536,
+            "max_single_output_bytes_u64": 65536,
+        },
+    )
+    _write_canon(repo_root / holdout_manifest_rel, holdout_manifest)
+    holdout_set = _make_suite_set(
+        suite_set_kind="ANCHOR",
+        anchor_ek_id=str(seeded["ek_id"]),
+        suites=[_suite_row(ordinal_u64=0, manifest_payload=holdout_manifest, manifest_relpath=holdout_manifest_rel)],
+    )
+    _write_canon(repo_root / "authority/benchmark_suite_sets/holdout_anchor_set_abs_read_probe.json", holdout_set)
+
+    monkeypatch.setattr(
+        composite,
+        "tracked_files",
+        lambda root: sorted(path.relative_to(root).as_posix() for path in root.rglob("*") if path.is_file()),
+    )
+    monkeypatch.setenv("OMEGA_HOLDOUT_FORBIDDEN_READ_PATH", str(labels_pack_path.resolve()))
+
+    receipt = composite.run_composite_once(
+        repo_root=repo_root,
+        runs_root=tmp_path / "runs",
+        series_prefix="series_holdout_abs_read_probe",
+        ek_id=str(seeded["ek_id"]),
+        anchor_suite_set_id=str(holdout_set["suite_set_id"]),
+        extensions_ledger_id=str(seeded["ledger_id"]),
+        suite_runner_id=_h("5"),
+        holdout_policy_id=holdout_policy_id,
+        ticks_u64=1,
+        seed_u64=31,
+    )
+
+    executed = receipt["executed_suites"][0]
+    assert executed["suite_outcome"] == "PASS"
+    holdout_execution = dict(executed["holdout_execution"])
+    assert holdout_execution["sandbox_available_b"] is True
+    assert holdout_execution["sandbox_enforced_b"] is True
+
+
 def test_holdout_harness_score_changes_when_labels_change(tmp_path: Path, monkeypatch) -> None:
+    if not composite._sandbox_available_for_holdout():
+        pytest.skip("no holdout OS sandbox backend available")
     seeded = _bootstrap_anchor_only(tmp_path)
     repo_root = Path(str(seeded["repo_root"]))
     holdout_policy_id = _write_holdout_policy(repo_root)

@@ -30,6 +30,13 @@ def _ensure_sha256(value: Any) -> str:
     return text
 
 
+def _declared_id_matches(payload: dict[str, Any], id_field: str) -> bool:
+    declared = _ensure_sha256(payload.get(id_field))
+    material = dict(payload)
+    material.pop(id_field, None)
+    return str(canon_hash_obj(material)) == declared
+
+
 def _normalize_relpath(path_value: Any) -> str:
     rel = str(path_value).strip().replace("\\", "/")
     if rel.startswith("./"):
@@ -98,11 +105,11 @@ def _load_extension_payloads(promotion_dir: Path) -> tuple[dict[str, Any], dict[
     ext_id = _ensure_sha256(ext_payload.get("extension_spec_id"))
     manifest_id = _ensure_sha256(manifest_payload.get("suite_id"))
     set_id = _ensure_sha256(set_payload.get("suite_set_id"))
-    if ext_id != canon_hash_obj(ext_payload):
+    if not _declared_id_matches(ext_payload, "extension_spec_id"):
         _fail("EXT_SCHEMA_INVALID")
-    if manifest_id != canon_hash_obj(manifest_payload):
+    if not _declared_id_matches(manifest_payload, "suite_id"):
         _fail("EXT_SCHEMA_INVALID")
-    if set_id != canon_hash_obj(set_payload):
+    if not _declared_id_matches(set_payload, "suite_set_id"):
         _fail("EXT_SCHEMA_INVALID")
     return ext_payload, manifest_payload, set_payload
 
@@ -249,4 +256,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-

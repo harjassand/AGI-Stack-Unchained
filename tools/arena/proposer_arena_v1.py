@@ -15,6 +15,7 @@ import re
 import shlex
 import subprocess
 import tempfile
+import time
 from pathlib import Path
 from typing import Any
 
@@ -137,6 +138,41 @@ def _latest(path_glob: str) -> Path | None:
     return Path(rows[-1]).resolve()
 
 
+def _enforce_wallclock_budget(*, started_s: float, max_seconds: int) -> None:
+    if int(max_seconds) <= 0:
+        return
+    if (time.monotonic() - float(started_s)) > float(max_seconds):
+        raise RuntimeError("BUDGET_EXCEEDED")
+
+
+def _dir_size_bytes(root: Path) -> int:
+    if not root.exists() or not root.is_dir():
+        return 0
+    total = 0
+    stack = [root]
+    while stack:
+        cur = stack.pop()
+        for entry in cur.iterdir():
+            if entry.is_symlink():
+                continue
+            if entry.is_dir():
+                stack.append(entry)
+                continue
+            if entry.is_file():
+                total += int(entry.stat().st_size)
+    return int(total)
+
+
+def _enforce_total_written_budget(*, max_bytes: int, roots: list[Path]) -> None:
+    if int(max_bytes) <= 0:
+        return
+    written = 0
+    for root in roots:
+        written += _dir_size_bytes(root)
+    if int(written) > int(max_bytes):
+        raise RuntimeError("BUDGET_EXCEEDED")
+
+
 def _load_pack(path: Path) -> dict[str, Any]:
     payload = _load_json(path)
     validate_schema_v19(payload, "rsi_proposer_arena_pack_v1")
@@ -155,6 +191,10 @@ def _load_structured_configs(root: Path, pack: dict[str, Any]) -> tuple[dict[str
     agent_registry = _load_json(root / _canonical_relpath(pack.get("agent_registry_rel")))
     task_distribution = _load_json(root / _canonical_relpath(pack.get("task_distribution_rel")))
     surrogate_policy = _load_json(root / _canonical_relpath(pack.get("surrogate_policy_rel")))
+    validate_schema_v19(arena_spec, "proposer_arena_spec_v1")
+    validate_schema_v19(agent_registry, "proposer_arena_agent_registry_v1")
+    validate_schema_v19(task_distribution, "proposer_arena_task_distribution_v1")
+    validate_schema_v19(surrogate_policy, "proposer_arena_surrogate_policy_v1")
     return arena_spec, agent_registry, task_distribution, surrogate_policy
 
 
@@ -443,6 +483,15 @@ def _with_declared_id(payload: dict[str, Any], id_field: str) -> dict[str, Any]:
     return out
 
 
+def _declared_id_matches(payload: dict[str, Any], id_field: str) -> bool:
+    declared = str(payload.get(id_field, "")).strip()
+    if not _is_sha256(declared):
+        return False
+    material = dict(payload)
+    material.pop(id_field, None)
+    return str(canon_hash_obj(material)) == declared
+
+
 def _build_extension_candidate(
     *,
     tick_u64: int,
@@ -524,10 +573,16 @@ def _candidate_payload_hashes(candidate: dict[str, Any]) -> dict[str, str]:
         ext_spec = dict(candidate.get("extension_spec") or {})
         suite_manifest = dict(candidate.get("benchmark_suite_manifest") or {})
         suite_set = dict(candidate.get("benchmark_suite_set") or {})
+        if not _declared_id_matches(ext_spec, "extension_spec_id"):
+            raise RuntimeError("SCHEMA_FAIL")
+        if not _declared_id_matches(suite_manifest, "suite_id"):
+            raise RuntimeError("SCHEMA_FAIL")
+        if not _declared_id_matches(suite_set, "suite_set_id"):
+            raise RuntimeError("SCHEMA_FAIL")
         return {
-            "extension_spec_id": canon_hash_obj(ext_spec),
-            "suite_manifest_id": canon_hash_obj(suite_manifest),
-            "suite_set_id": canon_hash_obj(suite_set),
+            "extension_spec_id": str(ext_spec.get("extension_spec_id", "")),
+            "suite_manifest_id": str(suite_manifest.get("suite_id", "")),
+            "suite_set_id": str(suite_set.get("suite_set_id", "")),
         }
     raise RuntimeError("SCHEMA_FAIL")
 
@@ -579,7 +634,7 @@ def _admission_allowlist_and_preflight(
         if not _path_allowed_by_ccap_allowlist(rel, allowlists):
             return False, _DROP_ALLOWLIST, derived_touched, payload_hashes
 
-    if lane_requires_wiring_b and candidate.get("nontriviality_cert_id") is None:
+    if lane_requires_wiring_b and candidate.get("oracle_trace_id") is None:
         return False, _DROP_WIRING, derived_touched, payload_hashes
     if lane_requires_wiring_b and candidate.get("nontriviality_cert_id") is None:
         return False, _DROP_NONTRIVIALITY, derived_touched, payload_hashes
@@ -678,13 +733,28 @@ def _surrogate_eval_candidate(
                 continue
             verdict = "PASS"
             try:
-                _ = json.loads((root / rel).read_text(encoding="utf-8"))
+                parsed = json.loads((root / rel).read_text(encoding="utf-8"))
+                if not isinstance(parsed, dict):
+                    raise RuntimeError("JSON_NOT_OBJECT")
+                schema_version = str(parsed.get("schema_version", "")).strip()
+                if not schema_version:
+                    raise RuntimeError("SCHEMA_VERSION_MISSING")
+                validated = False
+                for validator in (validate_schema_v19, validate_schema):
+                    try:
+                        validator(parsed, schema_version)
+                        validated = True
+                        break
+                    except Exception:
+                        continue
+                if not validated:
+                    raise RuntimeError("SCHEMA_INVALID")
             except Exception:
                 verdict = "FAIL"
-            checks.append({"kind": f"JSON_PARSE:{rel}", "verdict": verdict})
+            checks.append({"kind": f"JSON_SCHEMA:{rel}", "verdict": verdict})
             if verdict != "PASS":
                 fail_count += 1
-                reason_codes.append("SURROGATE:JSON_PARSE_FAIL")
+                reason_codes.append("SURROGATE:JSON_SCHEMA_FAIL")
 
     fast_cmd = str(surrogate_policy.get("anchor_public_fast_cmd", "")).strip()
     fast_timeout = int(max(1, int(surrogate_policy.get("anchor_public_fast_timeout_s", per_candidate_timeout_s))))
@@ -881,15 +951,13 @@ def _emit_extension_winner_payload(*, promotion_dir: Path, extension_payload: di
     validate_schema_v19(suite_manifest, "benchmark_suite_manifest_v1")
     validate_schema_v19(suite_set, "benchmark_suite_set_v1")
 
-    ext_spec_id = canon_hash_obj(ext_spec)
-    suite_manifest_id = canon_hash_obj(suite_manifest)
-    suite_set_id = canon_hash_obj(suite_set)
-    if str(ext_spec.get("extension_spec_id", "")) != ext_spec_id:
+    if not _declared_id_matches(ext_spec, "extension_spec_id"):
         raise RuntimeError("NONDETERMINISTIC")
-    if str(suite_manifest.get("suite_id", "")) != suite_manifest_id:
+    if not _declared_id_matches(suite_manifest, "suite_id"):
         raise RuntimeError("NONDETERMINISTIC")
-    if str(suite_set.get("suite_set_id", "")) != suite_set_id:
+    if not _declared_id_matches(suite_set, "suite_set_id"):
         raise RuntimeError("NONDETERMINISTIC")
+    ext_spec_id = str(ext_spec.get("extension_spec_id", "")).strip()
 
     write_canon_json(promotion_dir / "kernel_extension_spec_v1.json", ext_spec)
     write_canon_json(promotion_dir / "benchmark_suite_manifest_v1.json", suite_manifest)
@@ -995,9 +1063,13 @@ def run(*, campaign_pack: Path, out_dir: Path) -> None:
     max_patch_bytes_u32 = int(budgets.get("max_patch_bytes_u32", 200_000))
     max_admitted_u32 = int(budgets.get("max_admitted_u32", 8))
     backlog_max_u32 = int(budgets.get("backlog_max_u32", 128))
+    arena_total_wallclock_s = int(budgets.get("arena_total_wallclock_s", 120))
+    per_agent_wallclock_s = int(budgets.get("per_agent_wallclock_s", 20))
     per_candidate_surrogate_wallclock_s = int(budgets.get("per_candidate_surrogate_wallclock_s", 8))
+    max_total_written_bytes_u64 = int(budgets.get("max_total_written_bytes_u64", 50_000_000))
     candidate_ttl_u64 = int(max(1, int(arena_spec.get("candidate_ttl_ticks_u64", 32))))
     lane_requires_wiring_b = _load_lane_requires_wiring(daemon_state_root)
+    arena_started_s = time.monotonic()
 
     allocations = _bankroll_allocations(
         tick_u64=tick_u64,
@@ -1009,11 +1081,15 @@ def run(*, campaign_pack: Path, out_dir: Path) -> None:
     generated: list[dict[str, Any]] = []
     generated_count_u64 = 0
     for row in sorted(agent_states, key=lambda x: str(x.get("agent_id", ""))):
+        _enforce_wallclock_budget(started_s=arena_started_s, max_seconds=arena_total_wallclock_s)
         agent_id = str(row.get("agent_id", "")).strip()
         quota = int(max(0, allocations.get(agent_id, 0)))
         if quota <= 0:
             continue
+        agent_started_s = time.monotonic()
         for idx in range(quota):
+            _enforce_wallclock_budget(started_s=arena_started_s, max_seconds=arena_total_wallclock_s)
+            _enforce_wallclock_budget(started_s=agent_started_s, max_seconds=per_agent_wallclock_s)
             generated_count_u64 += 1
             kind = _CANDIDATE_KIND_PATCH if "kernel" not in agent_id.lower() else _CANDIDATE_KIND_EXT
             try:
@@ -1062,6 +1138,7 @@ def run(*, campaign_pack: Path, out_dir: Path) -> None:
     raw_by_candidate_id: dict[str, dict[str, Any]] = {}
 
     for candidate in generated:
+        _enforce_wallclock_budget(started_s=arena_started_s, max_seconds=arena_total_wallclock_s)
         agent_id = str(candidate.get("agent_id", "")).strip()
         quarantined_b = False
         for row in agent_states:
@@ -1104,6 +1181,9 @@ def run(*, campaign_pack: Path, out_dir: Path) -> None:
             reason_codes=reason_codes,
         )
 
+        if admitted_b and len(admitted_candidates) >= int(max_admitted_u32):
+            admitted_b = False
+            decision_code = _DROP_INVALID_SCHEMA_EDIT
         if not admitted_b:
             drop_hist[decision_code] = int(drop_hist.get(decision_code, 0)) + 1
             continue
@@ -1125,6 +1205,10 @@ def run(*, campaign_pack: Path, out_dir: Path) -> None:
         admitted_candidates.append(candidate_payload_obj)
         metadata_by_candidate_id[candidate_id] = candidate_payload_obj
         raw_by_candidate_id[candidate_id] = candidate
+        _enforce_total_written_budget(
+            max_bytes=max_total_written_bytes_u64,
+            roots=[state_root, arena_root],
+        )
         for row in agent_states:
             if str(row.get("agent_id", "")).strip() == agent_id:
                 row["last_submitted_tick_u64"] = int(tick_u64)
@@ -1132,6 +1216,7 @@ def run(*, campaign_pack: Path, out_dir: Path) -> None:
 
     surrogate_eval_rows: list[dict[str, Any]] = []
     for payload in admitted_candidates:
+        _enforce_wallclock_budget(started_s=arena_started_s, max_seconds=arena_total_wallclock_s)
         receipt_payload, candidate_id, score_q32, cost_q32, risk_class, reason_codes = _surrogate_eval_candidate(
             root=root,
             candidate_payload=payload,
@@ -1154,6 +1239,10 @@ def run(*, campaign_pack: Path, out_dir: Path) -> None:
         surrogate_eval_rows.append(row)
         write_hashed_json(candidate_dir, "arena_candidate_v1.json", row)
         metadata_by_candidate_id[candidate_id] = row
+        _enforce_total_written_budget(
+            max_bytes=max_total_written_bytes_u64,
+            roots=[state_root, arena_root],
+        )
 
     backlog_rows: list[dict[str, Any]] = []
     for row in list(state_in.get("candidate_backlog") or []):
@@ -1193,7 +1282,6 @@ def run(*, campaign_pack: Path, out_dir: Path) -> None:
     backlog_rows = [dict(row) for row in dedup.values()]
     backlog_rows = _trim_backlog(backlog_rows, backlog_max_u32=backlog_max_u32)
     ranked, winner_row = _deterministic_rank_and_select(backlog_rows)
-    ranked = ranked[: max(1, int(max_admitted_u32))]
     winner_row = ranked[0] if ranked else None
     if winner_row is None:
         raise RuntimeError("MISSING_STATE_INPUT")
@@ -1330,7 +1418,7 @@ def run(*, campaign_pack: Path, out_dir: Path) -> None:
         "winner_candidate_id": winner_candidate_id,
         "winner_agent_id": winner_agent_id,
         "drop_reason_histogram": {str(k): int(v) for k, v in sorted(drop_hist.items())},
-        "notes": None,
+        "notes": "",
     }
     validate_schema_v19(run_receipt_payload, "proposer_arena_run_receipt_v1")
     _, run_receipt_obj, run_receipt_hash = write_hashed_json(
@@ -1358,6 +1446,10 @@ def run(*, campaign_pack: Path, out_dir: Path) -> None:
         "run_receipt_id": run_receipt_hash,
     }
     write_canon_json(state_root / "proposer_arena_outcome_marker_v1.json", marker)
+    _enforce_total_written_budget(
+        max_bytes=max_total_written_bytes_u64,
+        roots=[state_root, arena_root],
+    )
 
     print("OK")
 
@@ -1379,4 +1471,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-

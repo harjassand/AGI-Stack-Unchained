@@ -1,0 +1,42 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v19_0/arena_surrogate_eval_receipt_v1",
+  "title": "Arena surrogate eval receipt v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "receipt_id",
+    "candidate_id",
+    "surrogate_checks",
+    "surrogate_score_q32",
+    "surrogate_cost_q32",
+    "risk_class",
+    "reason_codes"
+  ],
+  "properties": {
+    "schema_version": {"const": "arena_surrogate_eval_receipt_v1"},
+    "receipt_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "candidate_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "surrogate_checks": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["kind", "verdict"],
+        "properties": {
+          "kind": {"type": "string", "minLength": 1},
+          "verdict": {"type": "string", "enum": ["PASS", "FAIL", "SKIP"]},
+          "detail_q32": {"type": "integer"}
+        }
+      }
+    },
+    "surrogate_score_q32": {"type": "integer"},
+    "surrogate_cost_q32": {"type": "integer"},
+    "risk_class": {"type": "string", "enum": ["LOW", "MED", "HIGH", "FRONTIER_HEAVY"]},
+    "reason_codes": {
+      "type": "array",
+      "items": {"type": "string", "minLength": 1}
+    }
+  }
+}

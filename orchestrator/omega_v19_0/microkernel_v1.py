@@ -7928,6 +7928,9 @@ def tick_once(
             _emit("UTILITY_PROOF", utility_proof_hash)
         if activation_hash is not None:
             _emit("ACTIVATION", activation_hash)
+        extension_queued_hash = str((activation_receipt or {}).get("extension_queued_receipt_hash", "")).strip()
+        if _is_sha256(extension_queued_hash):
+            _emit("EXTENSION_QUEUED", extension_queued_hash)
         if rollback_hash is not None:
             _emit("ROLLBACK", rollback_hash)
         if dependency_routing_receipt_hash is not None:

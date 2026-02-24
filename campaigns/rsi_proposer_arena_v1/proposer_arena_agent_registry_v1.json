@@ -1,0 +1,17 @@
+{
+  "schema_version": "proposer_arena_agent_registry_v1",
+  "agents": [
+    {
+      "agent_id": "sh1_v0_3",
+      "agent_kind": "PATCH_PROPOSER",
+      "entry_module": "tools.arena.proposer_arena_v1",
+      "enabled": true
+    },
+    {
+      "agent_id": "kernel_ext_mutator_v1",
+      "agent_kind": "KERNEL_EXT_PROPOSER",
+      "entry_module": "tools.arena.proposer_arena_v1",
+      "enabled": true
+    }
+  ]
+}

@@ -1,0 +1,61 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v19_0/arena_selection_receipt_v1",
+  "title": "Arena selection receipt v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "receipt_id",
+    "inputs_descriptor_id",
+    "arena_state_in_id",
+    "candidates_considered",
+    "ranked_candidate_ids",
+    "winner_candidate_id",
+    "tie_break_proof",
+    "selection_reason_codes"
+  ],
+  "properties": {
+    "schema_version": {"const": "arena_selection_receipt_v1"},
+    "receipt_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "inputs_descriptor_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "arena_state_in_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "candidates_considered": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["candidate_id", "score_q32", "cost_q32", "risk_class"],
+        "properties": {
+          "candidate_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+          "score_q32": {"type": "integer"},
+          "cost_q32": {"type": "integer"},
+          "risk_class": {"type": "string", "enum": ["LOW", "MED", "HIGH", "FRONTIER_HEAVY"]}
+        }
+      }
+    },
+    "ranked_candidate_ids": {
+      "type": "array",
+      "minItems": 1,
+      "items": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"}
+    },
+    "winner_candidate_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "tie_break_proof": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["seed", "ordered_candidate_ids", "chosen_candidate_id"],
+      "properties": {
+        "seed": {"type": "string", "minLength": 1},
+        "ordered_candidate_ids": {
+          "type": "array",
+          "items": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"}
+        },
+        "chosen_candidate_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"}
+      }
+    },
+    "selection_reason_codes": {
+      "type": "array",
+      "items": {"type": "string", "minLength": 1}
+    }
+  }
+}

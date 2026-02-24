@@ -1,0 +1,41 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v19_0/arena_candidate_precheck_receipt_v1",
+  "title": "Arena candidate precheck receipt v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "receipt_id",
+    "candidate_id",
+    "agent_id",
+    "admitted_b",
+    "decision_code",
+    "reason_codes"
+  ],
+  "properties": {
+    "schema_version": {"const": "arena_candidate_precheck_receipt_v1"},
+    "receipt_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "candidate_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "agent_id": {"type": "string", "minLength": 1},
+    "admitted_b": {"type": "boolean"},
+    "decision_code": {
+      "type": "string",
+      "enum": [
+        "PASS",
+        "ARENA_DROP:PATCH_APPLY_PREFLIGHT_FAILED",
+        "ARENA_DROP:ALLOWLIST_VIOLATION",
+        "ARENA_DROP:FORBID_LOCK_TOUCH",
+        "ARENA_DROP:WIRING_EVIDENCE_REQUIRED",
+        "ARENA_DROP:NONTRIVIALITY_CERT_REQUIRED",
+        "ARENA_DROP:OVERSIZE_PATCH",
+        "ARENA_DROP:INVALID_SCHEMA_EDIT",
+        "ARENA_DROP:AGENT_QUARANTINED"
+      ]
+    },
+    "reason_codes": {
+      "type": "array",
+      "items": {"type": "string", "minLength": 1}
+    }
+  }
+}

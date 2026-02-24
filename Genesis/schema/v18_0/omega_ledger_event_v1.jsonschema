@@ -36,6 +36,7 @@
         "PROMOTION",
         "UTILITY_PROOF",
         "ACTIVATION",
+        "EXTENSION_QUEUED",
         "ROLLBACK",
         "DEPENDENCY_ROUTING",
         "DEPENDENCY_DEBT_STATE",

@@ -126,8 +126,8 @@ def _benchmark_receipt_for_pins(
                 "predictions_rows_u64": 1,
                 "harness_truth_rows_u64": 1,
                 "io_contract_enforced_b": True,
-                "sandbox_available_b": False,
-                "sandbox_enforced_b": False,
+                "sandbox_available_b": True,
+                "sandbox_enforced_b": True,
                 "candidate_stage_status": "PASS",
                 "harness_stage_status": "PASS",
                 "gates": [{"gate_id": "ALL_SUITES_PASS", "passed_b": True}],
@@ -359,6 +359,59 @@ def test_verify_ccap_rejects_v2_receipt_holdout_policy_pin_mismatch(tmp_path: Pa
     )
 
     assert code == "HOLDOUT_POLICY_PIN_MISMATCH"
+    assert receipt["decision"] == "REJECT"
+    assert receipt["eval_status"] == "REFUTED"
+
+
+def test_verify_ccap_rejects_v2_receipt_when_holdout_sandbox_not_enforced(tmp_path: Path, monkeypatch) -> None:
+    repo_root = Path(__file__).resolve().parents[4]
+    subrun_root, receipt_out_dir, ccap_relpath, base_tree_id, pins, _ccap_payload = _setup_ccap_subrun(tmp_path, repo_root)
+
+    monkeypatch.setattr("cdel.v18_0.verify_ccap_v1.compute_repo_base_tree_id", lambda _repo_root: base_tree_id)
+
+    bad_receipt = _benchmark_receipt_for_pins(
+        pins,
+        suite_ids=[_h("a")],
+        suite_visibility="HOLDOUT",
+        include_holdout_execution=True,
+    )
+    bad_receipt["executed_suites"][0]["holdout_execution"]["sandbox_enforced_b"] = False
+
+    monkeypatch.setattr(
+        "cdel.v18_0.verify_ccap_v1._resolve_effective_suite_ids_from_pins",
+        lambda **_kwargs: [_h("a")],
+    )
+    monkeypatch.setattr(
+        "cdel.v18_0.verify_ccap_v1.run_ek",
+        lambda **_kwargs: {
+            "determinism_check": "PASS",
+            "eval_status": "PASS",
+            "decision": "PROMOTE",
+            "applied_tree_id": _h("7"),
+            "realized_out_id": _h("8"),
+            "cost_vector": {
+                "cpu_ms": 1,
+                "wall_ms": 1,
+                "mem_mb": 1,
+                "disk_mb": 1,
+                "fds": 0,
+                "procs": 0,
+                "threads": 0,
+            },
+            "logs_hash": _h("9"),
+            "benchmark_run_receipt_v2": bad_receipt,
+            "refutation": None,
+        },
+    )
+
+    receipt, code = verify(
+        subrun_root=subrun_root,
+        repo_root=repo_root,
+        ccap_relpath=ccap_relpath,
+        receipt_out_dir=receipt_out_dir,
+    )
+
+    assert code == "HOLDOUT_ACCESS_VIOLATION"
     assert receipt["decision"] == "REJECT"
     assert receipt["eval_status"] == "REFUTED"
 

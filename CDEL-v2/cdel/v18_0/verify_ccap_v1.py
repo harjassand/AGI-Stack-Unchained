@@ -429,6 +429,16 @@ def _validate_v2_benchmark_receipt_binding(
                     "code": "SUITE_IO_CONTRACT_VIOLATION",
                     "detail": "holdout_execution indicates io_contract was not enforced",
                 }
+            if not bool(holdout_execution.get("sandbox_available_b", False)):
+                return {
+                    "code": "HOLDOUT_ACCESS_VIOLATION",
+                    "detail": "holdout_execution indicates OS sandbox backend was unavailable",
+                }
+            if not bool(holdout_execution.get("sandbox_enforced_b", False)):
+                return {
+                    "code": "HOLDOUT_ACCESS_VIOLATION",
+                    "detail": "holdout_execution indicates OS sandbox was not enforced",
+                }
             candidate_outputs_hash = str(holdout_execution.get("candidate_outputs_hash", "")).strip()
             if not candidate_outputs_hash.startswith("sha256:"):
                 return {

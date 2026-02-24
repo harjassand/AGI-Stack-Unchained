@@ -21,6 +21,7 @@ from .omega_common_v1 import (
     validate_schema,
     write_hashed_json,
 )
+from ..v19_0.common_v1 import validate_schema as validate_schema_v19
 
 _HEX64_RE = re.compile(r"^[0-9a-f]{64}$")
 
@@ -630,6 +631,173 @@ def _binding_matches_after_bundle(*, meta_core_root: Path, after_hash: str, expe
     return canon_hash_obj(no_id) == expected
 
 
+def _run_root_from_state_root(state_root: Path) -> Path:
+    try:
+        return state_root.parents[2]
+    except Exception:  # noqa: BLE001
+        return state_root.parent
+
+
+def _required_extension_source_files(promotion_dir: Path) -> list[Path]:
+    suffixes = (
+        "kernel_extension_spec_v1.json",
+        "benchmark_suite_manifest_v1.json",
+        "benchmark_suite_set_v1.json",
+    )
+    files: list[Path] = []
+    seen: set[str] = set()
+    for suffix in suffixes:
+        plain = (promotion_dir / suffix).resolve()
+        if not plain.exists() or not plain.is_file():
+            raise RuntimeError("WRITE_FAIL")
+        key = plain.as_posix()
+        if key not in seen:
+            files.append(plain)
+            seen.add(key)
+        hashed_rows = sorted(
+            promotion_dir.glob(f"sha256_*.{suffix}"),
+            key=lambda row: row.as_posix(),
+        )
+        if not hashed_rows:
+            raise RuntimeError("WRITE_FAIL")
+        for row in hashed_rows:
+            resolved = row.resolve()
+            rkey = resolved.as_posix()
+            if rkey in seen:
+                continue
+            files.append(resolved)
+            seen.add(rkey)
+    return files
+
+
+def _queue_extension_artifacts(
+    *,
+    tick_u64: int,
+    dispatch_ctx: dict[str, Any],
+    promotion_receipt: dict[str, Any],
+    out_dir: Path,
+    state_root: Path,
+) -> tuple[dict[str, Any], str]:
+    extension_id = _require_sha256_prefixed(
+        promotion_receipt.get("promotion_bundle_hash"),
+        field="promotion_bundle_hash",
+    )
+    promotion_dir = Path(dispatch_ctx["dispatch_dir"]) / "promotion"
+    source_files = _required_extension_source_files(promotion_dir)
+    run_root = _run_root_from_state_root(state_root)
+    approved_root = (run_root / "approved_extensions" / extension_id).resolve()
+    copied_rows: list[dict[str, str]] = []
+    for src in source_files:
+        dst = (approved_root / src.name).resolve()
+        _atomic_copy(src, dst)
+        src_hash = _hash_file_bytes(src)
+        dst_hash = _hash_file_bytes(dst)
+        if src_hash != dst_hash:
+            raise RuntimeError("HASH_MISMATCH")
+        copied_rows.append(
+            {
+                "relpath": str(dst.relative_to(approved_root).as_posix()),
+                "sha256": str(dst_hash),
+            }
+        )
+    source_run_id = str(run_root.name).strip() or f"tick_{int(tick_u64)}"
+    queued_payload = {
+        "schema_version": "extension_queued_receipt_v1",
+        "receipt_id": "sha256:" + ("0" * 64),
+        "tick_u64": int(tick_u64),
+        "extension_id": extension_id,
+        "source_run_id": source_run_id,
+        "copied_files": copied_rows,
+        "operator_next_step": "RUN append_kernel_extension_v1.py WITH THESE FILES",
+        "activation_kind": "ACTIVATION_KIND_EXT_QUEUED",
+        "status_code": "ACT_EXT_QUEUED:OK",
+    }
+    validate_schema_v19(queued_payload, "extension_queued_receipt_v1")
+    _, queued_receipt, queued_hash = write_hashed_json(
+        out_dir,
+        "extension_queued_receipt_v1.json",
+        queued_payload,
+        id_field="receipt_id",
+    )
+    validate_schema_v19(queued_receipt, "extension_queued_receipt_v1")
+    return queued_receipt, queued_hash
+
+
+def _run_activation_ext_queued(
+    *,
+    tick_u64: int,
+    dispatch_ctx: dict[str, Any],
+    promotion_receipt: dict[str, Any],
+    healthcheck_suite_hash: str,
+    active_manifest_hash_before: str,
+) -> tuple[
+    dict[str, Any] | None,
+    str | None,
+    dict[str, Any] | None,
+    str | None,
+    str,
+]:
+    out_dir = Path(dispatch_ctx["dispatch_dir"]) / "activation"
+    state_root = Path(dispatch_ctx["dispatch_dir"]).parents[1]
+    before_hash = (
+        str(active_manifest_hash_before)
+        if _is_sha256_prefixed(str(active_manifest_hash_before))
+        else _active_manifest_hash(_meta_core_root())
+    )
+    after_hash = before_hash
+    ext_status_code = "ACT_EXT_QUEUED:OK"
+    extension_queued_receipt_hash: str | None = None
+    try:
+        _queued_receipt, extension_queued_receipt_hash = _queue_extension_artifacts(
+            tick_u64=tick_u64,
+            dispatch_ctx=dispatch_ctx,
+            promotion_receipt=promotion_receipt,
+            out_dir=out_dir,
+            state_root=state_root,
+        )
+    except Exception as exc:  # noqa: BLE001
+        reason_text = str(exc).strip().upper()
+        if reason_text == "HASH_MISMATCH":
+            ext_status_code = "ACT_EXT_QUEUED:HASH_MISMATCH"
+        else:
+            ext_status_code = "ACT_EXT_QUEUED:WRITE_FAIL"
+        extension_queued_receipt_hash = None
+    activation_success = ext_status_code == "ACT_EXT_QUEUED:OK" and _is_sha256_prefixed(
+        str(extension_queued_receipt_hash or "")
+    )
+    reasons = ["EXTENSION_QUEUED", ext_status_code, ("HEALTHCHECK_PASS" if activation_success else "HEALTHCHECK_FAIL")]
+    activation_payload = {
+        "schema_version": "omega_activation_receipt_v1",
+        "receipt_id": "sha256:" + "0" * 64,
+        "tick_u64": int(tick_u64),
+        "before_active_manifest_hash": before_hash,
+        "after_active_manifest_hash": after_hash,
+        "healthcheck_suite_hash": healthcheck_suite_hash,
+        "healthcheck_result": ("PASS" if activation_success else "FAIL"),
+        "activation_method": "ACTIVATION_KIND_EXT_QUEUED",
+        "activation_kind": "ACTIVATION_KIND_EXT_QUEUED",
+        "activation_success": bool(activation_success),
+        "pass": bool(activation_success),
+        "native_module": None,
+        "native_activation_gate_result": None,
+        "native_gate_reason": None,
+        "extension_queued_receipt_hash": (
+            extension_queued_receipt_hash if _is_sha256_prefixed(str(extension_queued_receipt_hash or "")) else None
+        ),
+        "extension_queued_status_code": ext_status_code,
+        "reasons": sorted(set(str(row) for row in reasons)),
+    }
+    require_no_absolute_paths(activation_payload)
+    _, activation_receipt, activation_hash = write_hashed_json(
+        out_dir,
+        "omega_activation_receipt_v1.json",
+        activation_payload,
+        id_field="receipt_id",
+    )
+    validate_schema(activation_receipt, "omega_activation_receipt_v1")
+    return activation_receipt, activation_hash, None, None, after_hash
+
+
 def run_activation(
     *,
     tick_u64: int,
@@ -650,6 +818,16 @@ def run_activation(
 
     if ((promotion_receipt.get("result") or {}).get("status")) != "PROMOTED":
         return None, None, None, None, active_manifest_hash_before
+
+    result_kind = str(promotion_receipt.get("result_kind", "")).strip().upper()
+    if result_kind == "PROMOTED_EXT_QUEUED":
+        return _run_activation_ext_queued(
+            tick_u64=tick_u64,
+            dispatch_ctx=dispatch_ctx,
+            promotion_receipt=promotion_receipt,
+            healthcheck_suite_hash=healthcheck_suite_hash,
+            active_manifest_hash_before=active_manifest_hash_before,
+        )
 
     out_dir = Path(dispatch_ctx["dispatch_dir"]) / "activation"
     state_root = Path(dispatch_ctx["dispatch_dir"]).parents[1]
@@ -798,6 +976,7 @@ def run_activation(
         "healthcheck_suite_hash": healthcheck_suite_hash,
         "healthcheck_result": "PASS" if health_ok else "FAIL",
         "activation_method": "ATOMIC_POINTER_SWAP",
+        "activation_kind": "ATOMIC_POINTER_SWAP",
         "activation_success": bool(activation_success),
         "pass": bool(activation_success),
         "native_module": native_module,

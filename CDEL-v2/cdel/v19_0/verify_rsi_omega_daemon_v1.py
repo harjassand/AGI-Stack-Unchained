@@ -2429,9 +2429,12 @@ def _verify_hardening_bindings(*, state_root: Path, config_dir: Path, snapshot: 
             fail_v18("NONDETERMINISTIC")
         validate_schema_v19(utility_payload, "utility_proof_receipt_v1")
 
+    promotion_status = str(((promotion_payload or {}).get("result") or {}).get("status", "")).strip().upper()
+    promotion_result_kind = str((promotion_payload or {}).get("result_kind", "")).strip().upper()
+    promoted_ext_queued_b = promotion_status == "PROMOTED" and promotion_result_kind == "PROMOTED_EXT_QUEUED"
     bundle_hash = str((promotion_payload or {}).get("promotion_bundle_hash", "")).strip()
     candidate_bundle_present_b = False
-    if _is_sha256(bundle_hash) and bundle_hash != ("sha256:" + ("0" * 64)):
+    if (not promoted_ext_queued_b) and _is_sha256(bundle_hash) and bundle_hash != ("sha256:" + ("0" * 64)):
         bundle_path = _load_promotion_bundle_by_hash(state_root, bundle_hash)
         if bundle_path is None:
             fail_v18("MISSING_STATE_INPUT")
@@ -2679,6 +2682,10 @@ def verify(state_dir: Path, *, mode: str = "full") -> str:
     promotion_payload = _load_canon_json(promotion_path)
     status = str((promotion_payload.get("result") or {}).get("status", ""))
     if status != "PROMOTED":
+        return "VALID"
+
+    result_kind = str(promotion_payload.get("result_kind", "")).strip().upper()
+    if result_kind == "PROMOTED_EXT_QUEUED":
         return "VALID"
 
     bundle_hash = str(promotion_payload.get("promotion_bundle_hash", ""))

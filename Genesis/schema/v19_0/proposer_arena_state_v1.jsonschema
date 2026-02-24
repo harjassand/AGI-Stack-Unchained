@@ -1,0 +1,82 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v19_0/proposer_arena_state_v1",
+  "title": "Proposer arena state v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "tick_u64",
+    "parent_state_hash",
+    "agent_states",
+    "candidate_backlog"
+  ],
+  "properties": {
+    "schema_version": {"const": "proposer_arena_state_v1"},
+    "tick_u64": {"type": "integer", "minimum": 0},
+    "parent_state_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "agent_states": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "agent_id",
+          "credibility_q32",
+          "bankroll_q32",
+          "wins_u64",
+          "losses_u64",
+          "last_submitted_tick_u64",
+          "last_promoted_tick_u64",
+          "cooldown_until_tick_u64",
+          "quarantined_b",
+          "quarantine_reason_code"
+        ],
+        "properties": {
+          "agent_id": {"type": "string", "minLength": 1},
+          "credibility_q32": {"type": "integer"},
+          "bankroll_q32": {"type": "integer"},
+          "wins_u64": {"type": "integer", "minimum": 0},
+          "losses_u64": {"type": "integer", "minimum": 0},
+          "last_submitted_tick_u64": {"type": "integer", "minimum": 0},
+          "last_promoted_tick_u64": {"type": "integer", "minimum": 0},
+          "cooldown_until_tick_u64": {"type": "integer", "minimum": 0},
+          "quarantined_b": {"type": "boolean"},
+          "quarantine_reason_code": {
+            "anyOf": [
+              {"type": "null"},
+              {"type": "string", "minLength": 1}
+            ]
+          }
+        }
+      }
+    },
+    "candidate_backlog": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "candidate_id",
+          "agent_id",
+          "candidate_kind",
+          "surrogate_score_q32",
+          "surrogate_cost_q32",
+          "created_tick_u64",
+          "expires_tick_u64",
+          "status"
+        ],
+        "properties": {
+          "candidate_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+          "agent_id": {"type": "string", "minLength": 1},
+          "candidate_kind": {"type": "string", "enum": ["PATCH", "KERNEL_EXT_PROPOSAL"]},
+          "surrogate_score_q32": {"type": "integer"},
+          "surrogate_cost_q32": {"type": "integer"},
+          "created_tick_u64": {"type": "integer", "minimum": 0},
+          "expires_tick_u64": {"type": "integer", "minimum": 0},
+          "status": {"type": "string", "enum": ["PENDING", "WINNER", "EXPIRED", "DROPPED"]}
+        }
+      }
+    }
+  }
+}

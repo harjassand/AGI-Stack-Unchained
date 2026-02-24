@@ -77,6 +77,7 @@ except Exception:  # pragma: no cover
     )
 from .omega_temperature_v1 import compute_temperature_q32
 from .omega_trace_hash_chain_v1 import recompute_head
+from ..v19_0.common_v1 import validate_schema as validate_schema_v19
 
 _SUBVERIFIER_REASON_CODES = {
     "SCHEMA_FAIL",
@@ -2725,6 +2726,12 @@ def verify(state_dir: Path, *, mode: str = "full") -> str:
                 fail("SCHEMA_FAIL")
 
     promotion_reason = (promotion_payload or {}).get("result", {}).get("reason_code")
+    promotion_result_kind = str((promotion_payload or {}).get("result_kind", "")).strip().upper()
+    promoted_ext_queued_b = (
+        promotion_payload is not None
+        and promotion_status == "PROMOTED"
+        and promotion_result_kind == "PROMOTED_EXT_QUEUED"
+    )
     if promotion_payload is not None:
         if subverifier_payload is None:
             fail("SUBVERIFIER_REQUIRED")
@@ -2738,7 +2745,53 @@ def verify(state_dir: Path, *, mode: str = "full") -> str:
             fail("SCHEMA_FAIL")
 
     meta_core_promo_payload = None
-    if promotion_payload is not None and promotion_status == "PROMOTED":
+    if promoted_ext_queued_b:
+        if subverifier_status != "VALID":
+            fail("SUBVERIFIER_REQUIRED")
+        _replay_promoted_subverifier(
+            state_root=state_root,
+            dispatch_payload=dispatch_payload,
+            subverifier_payload=subverifier_payload,
+            promotion_payload=promotion_payload,
+        )
+        if promotion_path is None:
+            fail("MISSING_STATE_INPUT")
+        promo_dir = promotion_path.parent
+        if (promo_dir / "meta_core_promo_verify_receipt_v1.json").exists():
+            fail("NONDETERMINISTIC")
+        if any(promo_dir.glob("sha256_*.meta_core_promo_verify_receipt_v1.json")):
+            fail("NONDETERMINISTIC")
+        if activation_payload is None:
+            fail("ACTIVATION_REQUIRES_PROMOTION")
+        if not bool(activation_payload.get("activation_success", False)):
+            fail("DOWNSTREAM_META_CORE_FAIL")
+        activation_kind = str(
+            activation_payload.get("activation_kind")
+            or activation_payload.get("activation_method")
+            or ""
+        ).strip()
+        if activation_kind != "ACTIVATION_KIND_EXT_QUEUED":
+            fail("SCHEMA_FAIL")
+        if activation_payload.get("before_active_manifest_hash") != activation_payload.get("after_active_manifest_hash"):
+            fail("NONDETERMINISTIC")
+        ext_status = str(activation_payload.get("extension_queued_status_code", "")).strip()
+        if ext_status != "ACT_EXT_QUEUED:OK":
+            fail("DOWNSTREAM_META_CORE_FAIL")
+        ext_hash = str(activation_payload.get("extension_queued_receipt_hash", "")).strip()
+        if not _is_sha256(ext_hash):
+            fail("MISSING_STATE_INPUT")
+        ext_path = _find_nested_hash(state_root, ext_hash, "extension_queued_receipt_v1.json")
+        ext_payload = load_canon_dict(ext_path)
+        validate_schema_v19(ext_payload, "extension_queued_receipt_v1")
+        if canon_hash_obj(ext_payload) != ext_hash:
+            fail("NONDETERMINISTIC")
+        if str(ext_payload.get("status_code", "")).strip() != "ACT_EXT_QUEUED:OK":
+            fail("DOWNSTREAM_META_CORE_FAIL")
+        if str(ext_payload.get("activation_kind", "")).strip() != "ACTIVATION_KIND_EXT_QUEUED":
+            fail("SCHEMA_FAIL")
+        if str(ext_payload.get("extension_id", "")).strip() != str((promotion_payload or {}).get("promotion_bundle_hash", "")).strip():
+            fail("NONDETERMINISTIC")
+    if promotion_payload is not None and promotion_status == "PROMOTED" and not promoted_ext_queued_b:
         if subverifier_status != "VALID":
             fail("SUBVERIFIER_REQUIRED")
         _replay_promoted_subverifier(
@@ -3043,8 +3096,14 @@ def verify(state_dir: Path, *, mode: str = "full") -> str:
             fail("PROMOTION_INCONSISTENT_WITH_SUBVERIFIER")
 
     if activation_payload is not None and bool(activation_payload.get("activation_success", False)):
-        if activation_payload.get("before_active_manifest_hash") == activation_payload.get("after_active_manifest_hash"):
-            fail("ACTIVATION_NO_MANIFEST_CHANGE")
+        activation_kind = str(
+            activation_payload.get("activation_kind")
+            or activation_payload.get("activation_method")
+            or ""
+        ).strip()
+        if activation_kind != "ACTIVATION_KIND_EXT_QUEUED":
+            if activation_payload.get("before_active_manifest_hash") == activation_payload.get("after_active_manifest_hash"):
+                fail("ACTIVATION_NO_MANIFEST_CHANGE")
 
     if promotion_payload is not None and promotion_path is not None:
         bundle_hash = str(promotion_payload.get("promotion_bundle_hash", "")).strip()

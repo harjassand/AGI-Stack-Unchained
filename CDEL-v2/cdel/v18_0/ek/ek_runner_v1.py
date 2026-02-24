@@ -976,6 +976,46 @@ def run_ek(
             smoke_stage_exceeded_b = int(cost.get("cpu_ms", 0)) > int(smoke_budget_tuple.get("stage_cost_budget", 0))
             smoke_disk_exceeded_b = int(cost.get("disk_mb", 0)) > int(smoke_budget_tuple.get("disk_mb_max", 0))
             smoke_budget_exceeded_b = bool(smoke_time_exceeded_b or smoke_stage_exceeded_b or smoke_disk_exceeded_b)
+            smoke_time_ms_max = int(smoke_budget_tuple.get("time_ms_max", 0))
+            smoke_too_slow_b = bool(
+                smoke_time_ms_max > 0
+                and int(cost.get("wall_ms", 0)) > int(2 * smoke_time_ms_max)
+            )
+            if smoke_too_slow_b and int(rung_idx) >= int(smoke_final_idx):
+                stage_logs.append(
+                    "SMOKE_EK:TOO_SLOW_DROP:"
+                    f"rung_u8={int(smoke_rung_u8)}:"
+                    f"wall_ms={int(cost.get('wall_ms', 0))}:"
+                    f"time_ms_max={int(smoke_time_ms_max)}"
+                )
+                return {
+                    "determinism_check": "PASS",
+                    "eval_status": "FAIL",
+                    "decision": "REJECT",
+                    "refutation": {
+                        "code": "SMOKE_TOO_SLOW",
+                        "detail": (
+                            f"wall_ms={int(cost.get('wall_ms', 0))} "
+                            f"max_allowed_wall_ms={int(2 * smoke_time_ms_max)} "
+                            f"rung_u8={int(smoke_rung_u8)}"
+                        ),
+                    },
+                    "applied_tree_id": applied_tree_a,
+                    "realized_out_id": realized_out_a,
+                    "cost_vector": cost,
+                    "logs_hash": hash_bytes("\n".join(stage_logs).encode("utf-8")),
+                    "effective_budget_limits": dict(effective_budgets),
+                    "effective_budget_tuple": dict(effective_budget_tuple),
+                    "effective_budget_profile_id": str(budget_profile_id),
+                    "smoke_ek_enabled_b": True,
+                    "smoke_only_ek_enabled_b": True,
+                    "smoke_ek_score_ticks_u64": int(smoke_score_ticks_u64),
+                    "smoke_budget_ladder_len_u8": int(smoke_ladder_len_u8),
+                    "smoke_budget_start_rung_u8": int(smoke_budget_start_rung_u8),
+                    "smoke_budget_max_bumps_u8": int(smoke_budget_max_bumps_u8),
+                    "smoke_rung_u8": int(smoke_rung_u8),
+                    "smoke_budget_tuple": dict(smoke_budget_tuple),
+                }
             if smoke_budget_exceeded_b:
                 can_bump_b = bool(rung_idx < smoke_final_idx and rung_idx < (smoke_ladder_len_u8 - 1))
                 if can_bump_b:

@@ -2200,6 +2200,14 @@ def _verify_candidate_precheck_for_dispatch(*, state_root: Path, dispatch_payloa
     campaign_id = str(dispatch_payload.get("campaign_id", "")).strip()
     if campaign_id != _GE_SH1_CAMPAIGN_ID:
         return
+    # Failed campaign invocations can terminate before candidate precheck emission.
+    # Only require precheck receipts for successful dispatch executions.
+    try:
+        return_code = int(dispatch_payload.get("return_code"))
+    except Exception:
+        fail_v18("SCHEMA_FAIL")
+    if return_code != 0:
+        return
     subrun = dispatch_payload.get("subrun")
     if not isinstance(subrun, dict):
         fail_v18("SCHEMA_FAIL")

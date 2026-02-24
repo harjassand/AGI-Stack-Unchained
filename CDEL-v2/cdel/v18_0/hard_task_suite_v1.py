@@ -14,6 +14,7 @@ _Q32_ONE = 1 << 32
 HARD_TASK_SUITE_SCHEMA_NAME = "hard_task_suite_v1"
 HARD_TASK_SUITE_SCHEMA_VERSION = "v1"
 HARD_TASK_SUITE_TARGET_RELPATH = "orchestrator/omega_v18_0/goal_synthesizer_v1.py"
+HARD_TASK_SUITE_NATIVE_TARGET_RELPATH = "CDEL-v2/cdel/v18_0/campaign_omega_native_module_v0_1.py"
 
 HARD_TASK_METRIC_IDS: tuple[str, ...] = (
     "hard_task_code_correctness_q32",
@@ -105,6 +106,12 @@ _GOAL_ID_SUFFIX_CASES: tuple[dict[str, Any], ...] = (
     },
 )
 
+_NATIVE_PLATFORM_CASES: tuple[tuple[str, str], ...] = (
+    ("Darwin", ".dylib"),
+    ("Linux", ".so"),
+    ("FreeBSD", ".so"),
+)
+
 _TASK_DEFINITIONS_V1: tuple[dict[str, Any], ...] = (
     {
         "task_id": "slug_canonicalization_accuracy",
@@ -136,12 +143,20 @@ _TASK_DEFINITIONS_V1: tuple[dict[str, Any], ...] = (
             for row in _GOAL_ID_SUFFIX_CASES
         ],
     },
+    {
+        "task_id": "native_module_platform_portability",
+        "target_relpath": HARD_TASK_SUITE_NATIVE_TARGET_RELPATH,
+        "cases": [
+            {"sysname": sysname, "expected": expected}
+            for sysname, expected in _NATIVE_PLATFORM_CASES
+        ],
+    },
 )
 
 _TASK_ID_TO_METRIC_ID: dict[str, str] = {
     "slug_canonicalization_accuracy": HARD_TASK_METRIC_IDS[0],
     "goal_id_route_quality": HARD_TASK_METRIC_IDS[1],
-    "goal_id_suffix_consistency": HARD_TASK_METRIC_IDS[2],
+    "native_module_platform_portability": HARD_TASK_METRIC_IDS[2],
 }
 
 
@@ -272,8 +287,9 @@ def hard_task_suite_hash_v1() -> str:
     return canon_hash_obj(hard_task_suite_definition_v1())
 
 
-def _source_text_with_patch(*, repo_root: Path, patch_bytes: bytes | None) -> str:
-    target_path = (Path(repo_root).resolve() / HARD_TASK_SUITE_TARGET_RELPATH).resolve()
+def _source_text_with_patch(*, repo_root: Path, target_relpath: str, patch_bytes: bytes | None) -> str:
+    target_relpath_norm = _normalize_relpath(target_relpath)
+    target_path = (Path(repo_root).resolve() / target_relpath_norm).resolve()
     if not target_path.exists() or not target_path.is_file():
         raise RuntimeError("MISSING_STATE_INPUT")
     before_text = target_path.read_text(encoding="utf-8")
@@ -282,7 +298,7 @@ def _source_text_with_patch(*, repo_root: Path, patch_bytes: bytes | None) -> st
     file_patches = _parse_unified_patch(patch_bytes)
     after_text = before_text
     for file_patch in file_patches:
-        if str(file_patch.relpath) != HARD_TASK_SUITE_TARGET_RELPATH:
+        if str(file_patch.relpath) != target_relpath_norm:
             continue
         after_text = _apply_patch_to_text(before_text=before_text, file_patch=file_patch)
         break
@@ -377,16 +393,77 @@ def _score_task_goal_id_suffix_consistency(namespace: dict[str, Any]) -> dict[st
     }
 
 
+def _score_task_native_module_platform_portability(namespace: dict[str, Any]) -> dict[str, Any]:
+    task_id = "native_module_platform_portability"
+    fn = namespace.get("_platform_ext")
+    if not callable(fn):
+        return {
+            "task_id": task_id,
+            "score_q32": 0,
+            "passed_u64": 0,
+            "total_u64": int(len(_NATIVE_PLATFORM_CASES)),
+            "error_code": "MISSING_SYMBOL:_platform_ext",
+        }
+
+    class _FakeOS:
+        def __init__(self, sysname: str) -> None:
+            self._sysname = str(sysname)
+
+        def uname(self) -> Any:
+            return type("_UName", (), {"sysname": str(self._sysname)})()
+
+    original_os = namespace.get("os")
+    passed = 0
+    try:
+        for sysname, expected in _NATIVE_PLATFORM_CASES:
+            namespace["os"] = _FakeOS(sysname)
+            try:
+                observed = str(fn())
+            except Exception:
+                observed = "<error>"
+            if observed == expected:
+                passed += 1
+    finally:
+        if original_os is None:
+            namespace.pop("os", None)
+        else:
+            namespace["os"] = original_os
+
+    total = max(1, len(_NATIVE_PLATFORM_CASES))
+    return {
+        "task_id": task_id,
+        "score_q32": int(rat_q32(passed, total)),
+        "passed_u64": int(passed),
+        "total_u64": int(total),
+    }
+
+
 def evaluate_hard_task_suite_v1(*, repo_root: Path, patch_bytes: bytes | None = None) -> dict[str, Any]:
     suite_hash = hard_task_suite_hash_v1()
     try:
-        source_text = _source_text_with_patch(repo_root=repo_root, patch_bytes=patch_bytes)
-        namespace: dict[str, Any] = {"__name__": "hard_task_suite_goal_synth_eval"}
-        exec(compile(source_text, HARD_TASK_SUITE_TARGET_RELPATH, "exec"), namespace, namespace)
+        goal_source_text = _source_text_with_patch(
+            repo_root=repo_root,
+            target_relpath=HARD_TASK_SUITE_TARGET_RELPATH,
+            patch_bytes=patch_bytes,
+        )
+        native_source_text = _source_text_with_patch(
+            repo_root=repo_root,
+            target_relpath=HARD_TASK_SUITE_NATIVE_TARGET_RELPATH,
+            patch_bytes=patch_bytes,
+        )
+        goal_namespace: dict[str, Any] = {"__name__": "hard_task_suite_goal_synth_eval"}
+        native_namespace: dict[str, Any] = {"__name__": "hard_task_suite_native_module_eval"}
+        exec(compile(goal_source_text, HARD_TASK_SUITE_TARGET_RELPATH, "exec"), goal_namespace, goal_namespace)
+        exec(
+            compile(native_source_text, HARD_TASK_SUITE_NATIVE_TARGET_RELPATH, "exec"),
+            native_namespace,
+            native_namespace,
+        )
         task_rows = [
-            _score_task_slug_canonicalization(namespace),
-            _score_task_goal_id_route_quality(namespace),
-            _score_task_goal_id_suffix_consistency(namespace),
+            _score_task_slug_canonicalization(goal_namespace),
+            _score_task_goal_id_route_quality(goal_namespace),
+            _score_task_goal_id_suffix_consistency(goal_namespace),
+            _score_task_native_module_platform_portability(native_namespace),
         ]
         total_score_q32 = int(
             sum(int(row.get("score_q32", 0)) for row in task_rows) // max(1, len(task_rows))

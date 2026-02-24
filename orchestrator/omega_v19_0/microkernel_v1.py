@@ -170,6 +170,10 @@ _DEFAULT_DEBT_LIMIT_U64 = 3
 _DEFAULT_MAX_TICKS_WITHOUT_FRONTIER_ATTEMPT_U64 = 40
 _UTILITY_RECOVERY_WINDOW_SHORT_U64 = 50
 _UTILITY_RECOVERY_WINDOW_LONG_U64 = 200
+_BOOTSTRAP_SH1_FRONTIER_ATTEMPT_THRESHOLD_U64 = 5
+_BOOTSTRAP_SH1_UTILITY_DROUGHT_TICK_U64 = 30
+_BOOTSTRAP_SH1_REASON_FIRST_HEAVY = "BOOTSTRAP_HEAVY_FIRST_PROMOTION_SH1"
+_BOOTSTRAP_SH1_REASON_UTILITY_DROUGHT = "BOOTSTRAP_HEAVY_UTILITY_DROUGHT_SH1"
 _DEFAULT_ANTI_MONOPOLY_CONSECUTIVE_LIMIT_U64 = 50
 _DEFAULT_ANTI_MONOPOLY_WINDOW_U64 = 50
 _DEFAULT_ANTI_MONOPOLY_DIVERSITY_K_U64 = 3
@@ -177,6 +181,7 @@ _DEFAULT_ANTI_MONOPOLY_COOLDOWN_U64 = 50
 _DEFAULT_ORCH_MLX_MODEL_ID = "mlx-community/Qwen2.5-Coder-14B-Instruct-4bit"
 _SHA256_ZERO = "sha256:" + ("0" * 64)
 _SH1_CAPABILITY_ID = "RSI_GE_SH1_OPTIMIZER"
+_SH1_FRONTIER_DEBT_KEY = "frontier:rsi_ge_sh1_optimizer"
 _SH1_CAMPAIGN_ID = "rsi_ge_symbiotic_optimizer_sh1_v0_1"
 _BUILTIN_PROBE_SUITE_IDS = (
     "utility_probe_suite_default_v1",
@@ -2051,6 +2056,40 @@ def _recent_heavy_utility_ok_counts(*, prev_state_dir: Path | None) -> dict[str,
     last_200 = rows[-int(_UTILITY_RECOVERY_WINDOW_LONG_U64) :]
     out["last_50_heavy_utility_ok_u64"] = int(sum(1 for row in last_50 if bool(row[2])))
     out["last_200_heavy_utility_ok_u64"] = int(sum(1 for row in last_200 if bool(row[2])))
+    return out
+
+
+def _frontier_progress_totals(*, prev_state_dir: Path | None) -> dict[str, int]:
+    out = {
+        "frontier_attempt_counted_total_u64": 0,
+        "heavy_utility_ok_total_u64": 0,
+        "heavy_promoted_total_u64": 0,
+    }
+    if prev_state_dir is None:
+        return out
+    perf_dir = Path(prev_state_dir) / "perf"
+    if not perf_dir.exists() or not perf_dir.is_dir():
+        return out
+    frontier_attempt_counted_total_u64 = 0
+    heavy_utility_ok_total_u64 = 0
+    heavy_promoted_total_u64 = 0
+    for path in sorted(perf_dir.glob("sha256_*.omega_tick_outcome_v1.json"), key=lambda p: p.as_posix()):
+        payload = load_canon_dict(path)
+        if str(payload.get("schema_version", "")).strip() != "omega_tick_outcome_v1":
+            continue
+        if bool(payload.get("frontier_attempt_counted_b", False)):
+            frontier_attempt_counted_total_u64 += 1
+        declared_class = str(payload.get("declared_class", "")).strip().upper()
+        effect_class = str(payload.get("effect_class", "")).strip().upper()
+        promotion_status = str(payload.get("promotion_status", "")).strip().upper()
+        heavy_declared_b = declared_class in _HEAVY_DECLARED_CLASSES
+        if heavy_declared_b and effect_class == "EFFECT_HEAVY_OK":
+            heavy_utility_ok_total_u64 += 1
+        if heavy_declared_b and promotion_status == "PROMOTED":
+            heavy_promoted_total_u64 += 1
+    out["frontier_attempt_counted_total_u64"] = int(frontier_attempt_counted_total_u64)
+    out["heavy_utility_ok_total_u64"] = int(heavy_utility_ok_total_u64)
+    out["heavy_promoted_total_u64"] = int(heavy_promoted_total_u64)
     return out
 
 
@@ -6077,6 +6116,75 @@ def tick_once(
                     resolved_orch_model_id=resolved_orch_model_id,
                 )
 
+            frontier_progress_totals = _frontier_progress_totals(prev_state_dir=prev_state_dir)
+            frontier_attempt_counted_total_u64 = int(
+                frontier_progress_totals.get("frontier_attempt_counted_total_u64", 0)
+            )
+            heavy_utility_ok_total_u64 = int(
+                frontier_progress_totals.get("heavy_utility_ok_total_u64", 0)
+            )
+            heavy_promoted_total_u64 = int(
+                frontier_progress_totals.get("heavy_promoted_total_u64", 0)
+            )
+            bootstrap_reason_code: str | None = None
+            if (
+                lane_name == "FRONTIER"
+                and not forced_frontier_attempt_b
+                and not milestone_force_sh1_trigger_b
+            ):
+                if (
+                    heavy_promoted_total_u64 == 0
+                    and frontier_attempt_counted_total_u64 == int(_BOOTSTRAP_SH1_FRONTIER_ATTEMPT_THRESHOLD_U64)
+                ):
+                    bootstrap_reason_code = _BOOTSTRAP_SH1_REASON_FIRST_HEAVY
+                elif int(tick_u64) >= int(_BOOTSTRAP_SH1_UTILITY_DROUGHT_TICK_U64) and heavy_utility_ok_total_u64 == 0:
+                    bootstrap_reason_code = _BOOTSTRAP_SH1_REASON_UTILITY_DROUGHT
+            if isinstance(bootstrap_reason_code, str):
+                bootstrap_cap_row = _capability_id_to_campaign(
+                    registry=registry,
+                    capability_id=_SH1_CAPABILITY_ID,
+                    tick_u64=int(tick_u64),
+                    state=prev_state,
+                )
+                if bootstrap_cap_row is None:
+                    bootstrap_cap_row = _capability_row_for_forced_frontier(
+                        registry=registry,
+                        capability_id=_SH1_CAPABILITY_ID,
+                    )
+                if bootstrap_cap_row is not None:
+                    current_capability = _selected_capability_id_from_plan(decision_plan)
+                    current_action_kind = str(decision_plan.get("action_kind", "")).strip()
+                    if current_capability != _SH1_CAPABILITY_ID or current_action_kind not in {"RUN_CAMPAIGN", "RUN_GOAL_TASK"}:
+                        decision_plan, decision_hash = _rewrite_plan_for_frontier_capability_bias(
+                            decision_plan=decision_plan,
+                            cap_row=bootstrap_cap_row,
+                            capability_id=_SH1_CAPABILITY_ID,
+                            tie_break_reason=str(bootstrap_reason_code),
+                        )
+                        _, decision_plan, decision_hash = _write_payload(
+                            state_root / "decisions",
+                            "omega_decision_plan_v1.json",
+                            decision_plan,
+                        )
+                    if str(bootstrap_reason_code) not in dependency_routing_reason_codes:
+                        dependency_routing_reason_codes.append(str(bootstrap_reason_code))
+                    lane_reason_codes = [str(row).strip() for row in lane_reason_codes if str(row).strip()]
+                    if str(bootstrap_reason_code) not in lane_reason_codes:
+                        lane_reason_codes.append(str(bootstrap_reason_code))
+                    lane_allowed_capability_ids = _sorted_unique_strings([*lane_allowed_capability_ids, _SH1_CAPABILITY_ID])
+                    lane_decision_receipt = _build_lane_decision_receipt(
+                        tick_u64=tick_u64,
+                        lane_name=lane_name,
+                        forced_lane_override_b=str(os.environ.get("OMEGA_LONG_RUN_FORCE_LANE", "")).strip().upper() in _LANE_NAMES,
+                        frontier_gate_pass_b=frontier_gate_pass_b,
+                        reason_codes=lane_reason_codes,
+                        health_window_ticks_u64=int(prev_health_window.get("window_ticks_u64", 100)),
+                        health_counts=lane_health_counts,
+                        allowed_capability_ids=lane_allowed_capability_ids,
+                        resolved_orch_llm_backend=resolved_orch_llm_backend,
+                        resolved_orch_model_id=resolved_orch_model_id,
+                    )
+
             utility_recovery_counts = _recent_heavy_utility_ok_counts(prev_state_dir=prev_state_dir)
             utility_recovery_drought_b = bool(
                 int(utility_recovery_counts.get("last_50_heavy_utility_ok_u64", 0)) == 0
@@ -6361,23 +6469,7 @@ def tick_once(
             and bool(forced_frontier_attempt_b or milestone_force_sh1_dispatch_b)
             and str(selected_capability_id).strip() == _SH1_CAPABILITY_ID
         ):
-            dispatch_env_overrides[_FORCED_HEAVY_ENV_KEY] = "1"
             forced_debt_key_for_env = str(forced_frontier_debt_key or blocks_debt_key or "").strip()
-            if milestone_force_sh1_dispatch_b:
-                dispatch_env_overrides[_FORCED_WIRING_LOCUS_ENV_KEY] = str(_FORCED_WIRING_LOCUS_PRIMARY_RELPATH)
-            elif forced_debt_key_for_env:
-                wiring_locus_relpath = _compute_wiring_locus_relpath(
-                    tick_u64=int(tick_u64),
-                    debt_key=str(forced_debt_key_for_env),
-                    capability_id=str(selected_capability_id),
-                    last_failure_cert=(
-                        dict(prev_last_failure_nontriviality_cert_by_debt_key.get(str(forced_debt_key_for_env)))
-                        if isinstance(prev_last_failure_nontriviality_cert_by_debt_key.get(str(forced_debt_key_for_env)), dict)
-                        else None
-                    ),
-                )
-                if isinstance(wiring_locus_relpath, str) and wiring_locus_relpath.strip():
-                    dispatch_env_overrides[_FORCED_WIRING_LOCUS_ENV_KEY] = str(wiring_locus_relpath).strip()
             if forced_debt_key_for_env:
                 dispatch_env_overrides[_FORCED_DEBT_KEY_ENV_KEY] = forced_debt_key_for_env
                 ban_rows = _failed_patch_ban_rows_for_debt_key(

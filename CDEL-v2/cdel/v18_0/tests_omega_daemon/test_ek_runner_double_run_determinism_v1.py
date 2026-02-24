@@ -84,3 +84,89 @@ def test_run_ek_allows_double_run_divergence_when_determinism_enforcement_disabl
     assert result["eval_status"] == "PASS"
     assert result["decision"] == "PROMOTE"
     assert result["refutation"] is None
+
+
+def test_run_ek_smoke_too_slow_refutes_candidate_at_final_rung(tmp_path: Path, monkeypatch) -> None:
+    ccap = {
+        "meta": {
+            "ek_id": "sha256:" + ("1" * 64),
+        },
+        "budgets": {
+            "cpu_ms_max": 10_000_000,
+            "wall_ms_max": 10_000_000,
+            "mem_mb_max": 10_000_000,
+            "disk_mb_max": 10_000_000,
+            "fds_max": 100_000,
+            "procs_max": 100_000,
+            "threads_max": 100_000,
+            "net": "forbidden",
+        },
+    }
+
+    monkeypatch.setenv("OMEGA_CCAP_SMOKE_EK_B", "1")
+    monkeypatch.setenv("OMEGA_CCAP_SMOKE_ONLY_B", "1")
+    monkeypatch.setenv("OMEGA_CCAP_SMOKE_BUDGET_LADDER_V1", "[[1,60000,1024,536870912]]")
+    monkeypatch.setenv("OMEGA_CCAP_SMOKE_BUDGET_START_RUNG_U8", "1")
+    monkeypatch.setenv("OMEGA_CCAP_SMOKE_BUDGET_MAX_BUMPS_U8", "0")
+
+    monkeypatch.setattr(
+        ek_runner_v1,
+        "_load_active_ek",
+        lambda _repo_root, _expected: {
+            "schema_version": "evaluation_kernel_v1",
+            "stages": [
+                {"stage_name": "REALIZE"},
+                {"stage_name": "SCORE"},
+                {"stage_name": "FINAL_AUDIT"},
+            ],
+            "scoring_impl": {"code_ref": {"path": "tools/omega/omega_benchmark_suite_v1.py"}},
+        },
+    )
+    monkeypatch.setattr(
+        ek_runner_v1,
+        "_realize_once",
+        lambda **_kwargs: {
+            "ok": True,
+            "workspace": str(tmp_path / "workspace"),
+            "applied_tree_id": "sha256:" + ("a" * 64),
+            "realized_out_id": "sha256:" + ("b" * 64),
+            "transcript_id": "sha256:" + ("c" * 64),
+            "realize_logs_hash": "sha256:" + ("d" * 64),
+            "harness_cost_vector": {},
+        },
+    )
+    monkeypatch.setattr(
+        ek_runner_v1,
+        "_run_score_stage",
+        lambda **_kwargs: {
+            "ok": True,
+            "score_base_summary": {"median_stps_non_noop_q32": 10},
+            "score_cand_summary": {"median_stps_non_noop_q32": 11},
+            "score_delta_summary": {"stps_delta_q32": 1},
+        },
+    )
+    monkeypatch.setattr(ek_runner_v1, "_self_mem_mb", lambda: 0)
+    monkeypatch.setattr(ek_runner_v1, "workspace_disk_mb", lambda _path: 0)
+
+    calls = {"u64": 0}
+
+    def _fake_time() -> float:
+        calls["u64"] += 1
+        return 0.0 if calls["u64"] == 1 else 10.0
+
+    monkeypatch.setattr(ek_runner_v1.time, "time", _fake_time)
+    monkeypatch.setattr(ek_runner_v1.time, "process_time", lambda: 0.0)
+
+    result = ek_runner_v1.run_ek(
+        repo_root=tmp_path,
+        subrun_root=tmp_path,
+        ccap_id="sha256:" + ("9" * 64),
+        ccap=ccap,
+        out_dir=tmp_path / "ek_out_smoke_too_slow",
+    )
+
+    assert result["determinism_check"] == "PASS"
+    assert result["eval_status"] == "FAIL"
+    assert result["decision"] == "REJECT"
+    assert isinstance(result["refutation"], dict)
+    assert result["refutation"]["code"] == "SMOKE_TOO_SLOW"

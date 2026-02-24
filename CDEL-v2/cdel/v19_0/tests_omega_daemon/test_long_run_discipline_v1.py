@@ -21,6 +21,7 @@ from orchestrator.omega_v19_0.mission_goal_ingest_v1 import ingest_mission_goals
 from orchestrator.omega_v19_0.microkernel_v1 import (
     _build_dependency_routing_receipt,
     _filter_pending_goals_for_lane,
+    _frontier_progress_totals,
     _forced_frontier_debt_key,
     _frontier_attempt_evidence_satisfied,
     _goal_id_for_debt_key,
@@ -855,6 +856,55 @@ def test_recent_heavy_utility_ok_counts_uses_50_and_200_windows(tmp_path: Path) 
     assert counts["last_200_heavy_utility_ok_u64"] == 2
 
 
+def test_frontier_progress_totals_counts_frontier_attempts_utility_and_promotions(tmp_path: Path) -> None:
+    prev_state_dir = tmp_path / "state_prev"
+    perf_dir = prev_state_dir / "perf"
+    perf_dir.mkdir(parents=True, exist_ok=True)
+    rows = [
+        {
+            "tick_u64": 1,
+            "frontier_attempt_counted_b": True,
+            "declared_class": "FRONTIER_HEAVY",
+            "effect_class": "EFFECT_HEAVY_NO_UTILITY",
+            "promotion_status": "SKIPPED",
+        },
+        {
+            "tick_u64": 2,
+            "frontier_attempt_counted_b": True,
+            "declared_class": "FRONTIER_HEAVY",
+            "effect_class": "EFFECT_HEAVY_OK",
+            "promotion_status": "SKIPPED",
+        },
+        {
+            "tick_u64": 3,
+            "frontier_attempt_counted_b": True,
+            "declared_class": "FRONTIER_HEAVY",
+            "effect_class": "EFFECT_HEAVY_OK",
+            "promotion_status": "PROMOTED",
+        },
+        {
+            "tick_u64": 4,
+            "frontier_attempt_counted_b": False,
+            "declared_class": "BASELINE_CORE",
+            "effect_class": "EFFECT_BASELINE_CORE_OK",
+            "promotion_status": "PROMOTED",
+        },
+    ]
+    for row in rows:
+        payload = {
+            "schema_version": "omega_tick_outcome_v1",
+            "outcome_id": "sha256:" + ("0" * 64),
+            **row,
+        }
+        payload["outcome_id"] = canon_hash_obj({k: v for k, v in payload.items() if k != "outcome_id"})
+        _write_json(perf_dir / f"sha256_{payload['outcome_id'].split(':', 1)[1]}.omega_tick_outcome_v1.json", payload)
+
+    totals = _frontier_progress_totals(prev_state_dir=prev_state_dir)
+    assert totals["frontier_attempt_counted_total_u64"] == 3
+    assert totals["heavy_utility_ok_total_u64"] == 2
+    assert totals["heavy_promoted_total_u64"] == 1
+
+
 def test_preferred_utility_recovery_capability_uses_telemetry() -> None:
     assert _preferred_utility_recovery_capability(prev_dependency_debt_state=None) == "RSI_GE_SH1_OPTIMIZER"
     preferred = _preferred_utility_recovery_capability(
@@ -867,6 +917,18 @@ def test_preferred_utility_recovery_capability_uses_telemetry() -> None:
         }
     )
     assert preferred == "RSI_GE_SH1_OPTIMIZER"
+
+
+def test_harness_defaults_disable_milestone_forcing(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("OMEGA_MILESTONE_FORCE_SH1_FRONTIER_B", raising=False)
+    monkeypatch.delenv("OMEGA_MILESTONE_FORCE_SH1_FRONTIER_UNTIL_TICK_U64", raising=False)
+    env = long_harness._build_subprocess_env(
+        force_lane=None,
+        force_eval=False,
+        launch_manifest_hash=None,
+    )
+    assert env["OMEGA_MILESTONE_FORCE_SH1_FRONTIER_B"] == "0"
+    assert env["OMEGA_MILESTONE_FORCE_SH1_FRONTIER_UNTIL_TICK_U64"] == "0"
 
 
 def test_state_verifier_outcome_parses_replay_fail_detail_hash(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:

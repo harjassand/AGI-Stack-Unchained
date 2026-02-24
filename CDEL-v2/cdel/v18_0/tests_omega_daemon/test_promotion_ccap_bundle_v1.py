@@ -342,3 +342,41 @@ def test_ccap_promotion_blackbox_accepts_refuted_receipt_without_realized(tmp_pa
     assert receipt["execution_mode"] == "BLACKBOX"
     assert receipt["result"]["status"] == "PROMOTED"
     assert receipt["result"]["reason_code"] is None
+
+
+def test_ccap_promotion_rewrites_active_preflight_apply_fail_diagnostic_to_stale(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.delenv("OMEGA_BLACKBOX", raising=False)
+    dispatch_ctx, subverifier = _setup_dispatch(tmp_path, receipt_decision="PROMOTE")
+    diagnostic_path = Path(dispatch_ctx["subrun_root_abs"]) / "ge_preflight_loop_breaker_diagnostic_v1.json"
+    write_canon_json(
+        diagnostic_path,
+        {
+            "schema_version": "ge_preflight_loop_breaker_diagnostic_v1",
+            "tick_u64": 1,
+            "reason_code": "VERIFY_ERROR:PATCH_PREFLIGHT_APPLY_CHECK_FAILED",
+            "reason_text": "git_apply_check_failed",
+            "signature_hash": "sha256:" + ("f" * 64),
+            "repeat_count_u64": 1,
+            "window_k_u64": 16,
+            "repeat_threshold_u64": 3,
+            "disable_ticks_u64": 100,
+            "disabled_until_tick_u64": 0,
+            "rolling_window_hash": "sha256:" + ("0" * 64),
+            "diagnostic_only_active_b": False,
+        },
+    )
+    _patch_meta_core(monkeypatch, tmp_path)
+    monkeypatch.setattr("cdel.v18_0.omega_promoter_v1._verify_ccap_apply_matches_receipt", lambda **_: True)
+
+    receipt, _ = run_promotion(
+        tick_u64=1,
+        dispatch_ctx=dispatch_ctx,
+        subverifier_receipt=subverifier,
+        allowlists=_allowlists(),
+    )
+    assert receipt is not None
+    assert receipt["result"]["status"] == "PROMOTED"
+    rewritten = load_canon_json(diagnostic_path)
+    assert rewritten["reason_code"] == "STALE_DIAGNOSTIC_IGNORED"
+    assert rewritten["diagnostic_only_active_b"] is True
+    assert rewritten["stale_source_reason_code"] == "VERIFY_ERROR:PATCH_PREFLIGHT_APPLY_CHECK_FAILED"

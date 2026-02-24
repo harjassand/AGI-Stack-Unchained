@@ -865,6 +865,8 @@ def _build_subprocess_env(
     env.setdefault("OMEGA_ALLOW_SIMULATE_ACTIVATION", "1")
     env.setdefault("OMEGA_CCAP_ALLOW_DIRTY_TREE", "1")
     env.setdefault("OMEGA_RETENTION_PRUNE_CCAP_EK_RUNS_B", "1")
+    env.setdefault("OMEGA_MILESTONE_FORCE_SH1_FRONTIER_B", "0")
+    env.setdefault("OMEGA_MILESTONE_FORCE_SH1_FRONTIER_UNTIL_TICK_U64", "0")
     if str(force_lane or "").strip().upper() == "CANARY":
         env.setdefault("OMEGA_CCAP_SMOKE_EK_B", "1")
         env.setdefault("OMEGA_CCAP_SMOKE_ONLY_B", "1")

@@ -1028,7 +1028,18 @@ def _rewrite_subverifier_receipt(
     result["status"] = status
     result["reason_code"] = reason_code
     payload["result"] = result
-    payload["nontriviality_cert_v1"] = nontriviality_cert_v1 if isinstance(nontriviality_cert_v1, dict) else None
+    cert_payload = dict(nontriviality_cert_v1) if isinstance(nontriviality_cert_v1, dict) else None
+    if cert_payload is not None:
+        probe_payload = dict(payload)
+        probe_payload["nontriviality_cert_v1"] = cert_payload
+        probe_no_id = dict(probe_payload)
+        probe_no_id.pop("receipt_id", None)
+        probe_payload["receipt_id"] = canon_hash_obj(probe_no_id)
+        try:
+            validate_v18_schema(probe_payload, "omega_subverifier_receipt_v1")
+        except Exception:
+            cert_payload = None
+    payload["nontriviality_cert_v1"] = cert_payload
     _, new_receipt, digest = write_hashed_json(out_dir, "omega_subverifier_receipt_v1.json", payload, id_field="receipt_id")
     validate_v18_schema(new_receipt, "omega_subverifier_receipt_v1")
     return new_receipt, digest

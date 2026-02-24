@@ -13,7 +13,7 @@ from pathlib import Path
 from typing import Any
 
 from ..v1_7r.canon import write_canon_json
-from .ccap_runtime_v1 import compute_repo_base_tree_id_tolerant, materialize_repo_snapshot
+from .ccap_runtime_v1 import apply_patch_bytes, compute_repo_base_tree_id_tolerant, materialize_repo_snapshot
 from .omega_common_v1 import OmegaV18Error, canon_hash_obj, fail, load_canon_dict, repo_root, validate_schema
 from .patch_diff_v1 import build_unified_patch_bytes
 
@@ -400,37 +400,17 @@ def _preflight_merged_patch(*, root: Path, out_dir: Path, merged_patch: bytes) -
     scratch_root.mkdir(parents=True, exist_ok=True)
     try:
         materialize_repo_snapshot(root, scratch_root)
-        patch_path = scratch_root / ".merged.patch"
-        patch_path.write_bytes(merged_patch)
-
-        init_run = subprocess.run(
-            ["git", "init", "-q"],
-            cwd=scratch_root,
-            capture_output=True,
-            text=True,
-            check=False,
-        )
-        if int(init_run.returncode) != 0:
-            fail(f"VERIFY_ERROR:PATCH_PREFLIGHT_GIT_INIT_FAILED:status_u64={int(init_run.returncode)}")
-
-        check_run = subprocess.run(
-            ["git", "apply", "--check", "-p1", str(patch_path)],
-            cwd=scratch_root,
-            capture_output=True,
-            text=True,
-            check=False,
-        )
-        if int(check_run.returncode) != 0:
+        try:
+            apply_patch_bytes(workspace_root=scratch_root, patch_bytes=merged_patch)
+        except Exception as exc:  # noqa: BLE001
             head_rows = _patch_head_rows(merged_patch, max_lines=80)
             head_text = ("\n".join(head_rows) + "\n") if head_rows else ""
             debug_path.write_text(head_text, encoding="utf-8")
-            detail = (check_run.stderr or check_run.stdout).strip()
+            detail = str(exc).strip()
             if not detail:
-                detail = f"git apply --check exited with status {int(check_run.returncode)}"
+                detail = "patch apply primitive raised an unknown error"
             detail = detail.replace(str(scratch_root.resolve()), "<workspace>")
             detail = detail.replace(str(scratch_root), "<workspace>")
-            detail = detail.replace(str(patch_path.resolve()), "<patch>")
-            detail = detail.replace(str(patch_path), "<patch>")
             head_inline = "\\n".join(head_rows)
             fail(
                 "VERIFY_ERROR:PATCH_PREFLIGHT_APPLY_CHECK_FAILED:"

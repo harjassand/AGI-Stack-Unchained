@@ -211,6 +211,36 @@ def _persist_ccap_receipt(*, verifier_dir: Path, receipt: dict[str, Any]) -> Non
     write_canon_json(verifier_dir / "ccap_receipt_v1.json", receipt)
 
 
+def _rewrite_preflight_diagnostic_as_stale(
+    *,
+    subrun_root: Path,
+    ccap_receipt: dict[str, Any],
+) -> None:
+    decision = str(ccap_receipt.get("decision", "")).strip().upper()
+    determinism_check = str(ccap_receipt.get("determinism_check", "")).strip().upper()
+    if decision != "PROMOTE" or determinism_check != "PASS":
+        return
+    diagnostic_path = (subrun_root / "ge_preflight_loop_breaker_diagnostic_v1.json").resolve()
+    payload = _load_json_obj(diagnostic_path)
+    if payload is None:
+        return
+    reason_code_prev = str(payload.get("reason_code", "")).strip()
+    if bool(payload.get("diagnostic_only_active_b", False)) and reason_code_prev == "STALE_DIAGNOSTIC_IGNORED":
+        return
+    reason_text_prev = str(payload.get("reason_text", "")).strip()
+    next_payload = dict(payload)
+    next_payload["reason_code"] = "STALE_DIAGNOSTIC_IGNORED"
+    next_payload["reason_text"] = "winning CCAP promotion superseded preflight apply-fail diagnostic"
+    next_payload["diagnostic_only_active_b"] = True
+    next_payload["stale_diagnostic_ignored_b"] = True
+    next_payload["stale_source_reason_code"] = reason_code_prev or None
+    next_payload["stale_source_reason_text"] = reason_text_prev or None
+    next_payload["ccap_id"] = str(ccap_receipt.get("ccap_id", "")).strip() or None
+    next_payload["ccap_decision"] = "PROMOTE"
+    next_payload["ccap_determinism_check"] = "PASS"
+    write_canon_json(diagnostic_path, next_payload)
+
+
 def _load_ccap_receipt_for_id_with_fallback(
     *,
     verifier_dir: Path,
@@ -1582,6 +1612,10 @@ def run_promotion(
                     reason="CCAP_APPLY_MISMATCH",
                     active_after_hash=None,
                 )
+            _rewrite_preflight_diagnostic_as_stale(
+                subrun_root=subrun_root_abs,
+                ccap_receipt=ccap_receipt,
+            )
         else:
             try:
                 activation_key = _extract_activation_key(campaign_id, bundle_obj)

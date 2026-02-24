@@ -424,6 +424,214 @@ def _bankroll_allocations(*, tick_u64: int, max_candidates_u32: int, agent_state
     return {k: int(v) for k, v in alloc.items() if int(v) > 0}
 
 
+def _agent_registry_by_id(agent_registry: dict[str, Any]) -> dict[str, dict[str, Any]]:
+    rows = agent_registry.get("agents")
+    if not isinstance(rows, list):
+        raise RuntimeError("SCHEMA_FAIL")
+    out: dict[str, dict[str, Any]] = {}
+    for row in rows:
+        if not isinstance(row, dict):
+            continue
+        if not bool(row.get("enabled", True)):
+            continue
+        agent_id = str(row.get("agent_id", "")).strip()
+        if not agent_id:
+            continue
+        out[agent_id] = dict(row)
+    return out
+
+
+def _patch_targets(task_distribution: dict[str, Any]) -> list[str]:
+    targets_raw = task_distribution.get("patch_targets")
+    targets = [str(row).strip() for row in targets_raw] if isinstance(targets_raw, list) and targets_raw else list(_DEFAULT_PATCH_TARGETS)
+    targets = [require_relpath(row) for row in targets if str(row).strip()]
+    if not targets:
+        raise RuntimeError("SCHEMA_FAIL")
+    return targets
+
+
+def _candidate_kind_for_agent(*, agent_id: str, agent_def: dict[str, Any] | None) -> str:
+    kind = str((agent_def or {}).get("agent_kind", "")).strip().upper()
+    if kind == "KERNEL_EXT_PROPOSER":
+        return _CANDIDATE_KIND_EXT
+    if kind == "PATCH_PROPOSER":
+        return _CANDIDATE_KIND_PATCH
+    return _CANDIDATE_KIND_PATCH if "kernel" not in str(agent_id).lower() else _CANDIDATE_KIND_EXT
+
+
+def _build_patch_candidate_via_sh1(
+    *,
+    root: Path,
+    tick_u64: int,
+    ordinal_u32: int,
+    agent_id: str,
+    task_distribution: dict[str, Any],
+) -> dict[str, Any]:
+    from tools.genesis_engine import ge_symbiotic_optimizer_v0_3 as sh1_mod
+
+    targets = _patch_targets(task_distribution)
+    target_rel = targets[int(ordinal_u32) % len(targets)]
+    marker = f"apa_v1|sh1|{int(tick_u64)}|{agent_id}|{int(ordinal_u32)}"
+    template_order = ["COMMENT_APPEND"]
+    if target_rel.endswith(".json"):
+        template_order = [
+            "JSON_TWEAK_COOLDOWN",
+            "JSON_TWEAK_BUDGET_HINT",
+            "JSON_TWEAK_COOLDOWN_MINUS_1",
+            "JSON_TWEAK_BUDGET_HINT_MINUS_1STEP",
+            "COMMENT_APPEND",
+        ]
+    elif target_rel.endswith(".py"):
+        template_order = ["CODE_FASTPATH_GUARD", "COMMENT_APPEND"]
+
+    patch_bytes: bytes | None = None
+    for template_id in template_order:
+        try:
+            if not bool(sh1_mod._template_supports_target(template_id=template_id, target_relpath=target_rel)):
+                continue
+            patch_bytes = sh1_mod._build_patch_bytes_for_template(
+                template_id=template_id,
+                target_relpath=target_rel,
+                marker=marker,
+                repo_root=root,
+            )
+            if patch_bytes:
+                break
+        except Exception:
+            continue
+    if not patch_bytes:
+        raise RuntimeError("SH1_TEMPLATE_GENERATION_FAILED")
+
+    touched = _parse_patch_touched_paths(patch_bytes)
+    return {
+        "agent_id": str(agent_id),
+        "candidate_kind": _CANDIDATE_KIND_PATCH,
+        "declared_touched_paths": (touched if touched else [target_rel]),
+        "patch_bytes": bytes(patch_bytes),
+        "nontriviality_cert_id": None,
+        "oracle_trace_id": None,
+        "base_tree_id": compute_repo_base_tree_id_tolerant(root),
+    }
+
+
+def _build_patch_candidate_via_coordinator_mutator(
+    *,
+    root: Path,
+    tick_u64: int,
+    ordinal_u32: int,
+    agent_id: str,
+) -> dict[str, Any]:
+    import orchestrator.rsi_coordinator_mutator_v1 as coord_mut
+
+    target_rel = require_relpath(str(coord_mut._LOCKED_TARGET_RELPATH))
+    target_abs = (root / target_rel).resolve()
+    if not target_abs.exists() or not target_abs.is_file():
+        raise RuntimeError("MISSING_STATE_INPUT")
+    target_text = target_abs.read_text(encoding="utf-8")
+    patch_bytes = coord_mut._template_patch_for_target(
+        target_relpath=target_rel,
+        target_text=target_text,
+        tick_u64=int(tick_u64 + ordinal_u32),
+    )
+    if not patch_bytes:
+        raise RuntimeError("NO_PATCH")
+    touched = _parse_patch_touched_paths(bytes(patch_bytes))
+    return {
+        "agent_id": str(agent_id),
+        "candidate_kind": _CANDIDATE_KIND_PATCH,
+        "declared_touched_paths": (touched if touched else [target_rel]),
+        "patch_bytes": bytes(patch_bytes),
+        "nontriviality_cert_id": None,
+        "oracle_trace_id": None,
+        "base_tree_id": compute_repo_base_tree_id_tolerant(root),
+    }
+
+
+def _build_patch_candidate_via_market_mutator(
+    *,
+    root: Path,
+    tick_u64: int,
+    ordinal_u32: int,
+    agent_id: str,
+) -> dict[str, Any]:
+    import orchestrator.rsi_market_rules_mutator_v1 as market_mut
+
+    target_rel = require_relpath(str(market_mut._LOCKED_TARGET_RELPATH))
+    target_abs = (root / target_rel).resolve()
+    if not target_abs.exists() or not target_abs.is_file():
+        raise RuntimeError("MISSING_STATE_INPUT")
+    target_text = target_abs.read_text(encoding="utf-8")
+    patch_text = market_mut._template_patch_for_target(
+        target_relpath=target_rel,
+        target_text=target_text,
+        tick_u64=int(tick_u64 + ordinal_u32),
+    )
+    patch_bytes = str(patch_text).encode("utf-8")
+    if not patch_bytes:
+        raise RuntimeError("NO_PATCH")
+    touched = _parse_patch_touched_paths(patch_bytes)
+    return {
+        "agent_id": str(agent_id),
+        "candidate_kind": _CANDIDATE_KIND_PATCH,
+        "declared_touched_paths": (touched if touched else [target_rel]),
+        "patch_bytes": bytes(patch_bytes),
+        "nontriviality_cert_id": None,
+        "oracle_trace_id": None,
+        "base_tree_id": compute_repo_base_tree_id_tolerant(root),
+    }
+
+
+def _generate_candidate_for_agent(
+    *,
+    root: Path,
+    tick_u64: int,
+    ordinal_u32: int,
+    agent_id: str,
+    task_distribution: dict[str, Any],
+    pins: dict[str, Any],
+    agent_def: dict[str, Any] | None,
+) -> dict[str, Any]:
+    kind = _candidate_kind_for_agent(agent_id=agent_id, agent_def=agent_def)
+    if kind == _CANDIDATE_KIND_EXT:
+        return _build_extension_candidate(
+            tick_u64=tick_u64,
+            ordinal_u32=ordinal_u32,
+            agent_id=agent_id,
+            pins=pins,
+        )
+
+    entry_module = str((agent_def or {}).get("entry_module", "")).strip()
+    if agent_id == "sh1_v0_3" or entry_module == "tools.genesis_engine.ge_symbiotic_optimizer_v0_3":
+        return _build_patch_candidate_via_sh1(
+            root=root,
+            tick_u64=tick_u64,
+            ordinal_u32=ordinal_u32,
+            agent_id=agent_id,
+            task_distribution=task_distribution,
+        )
+    if agent_id == "coordinator_mutator_v1" or entry_module == "orchestrator.rsi_coordinator_mutator_v1":
+        return _build_patch_candidate_via_coordinator_mutator(
+            root=root,
+            tick_u64=tick_u64,
+            ordinal_u32=ordinal_u32,
+            agent_id=agent_id,
+        )
+    if agent_id == "market_rules_mutator_v1" or entry_module == "orchestrator.rsi_market_rules_mutator_v1":
+        return _build_patch_candidate_via_market_mutator(
+            root=root,
+            tick_u64=tick_u64,
+            ordinal_u32=ordinal_u32,
+            agent_id=agent_id,
+        )
+    return _build_patch_candidate(
+        root=root,
+        tick_u64=tick_u64,
+        ordinal_u32=ordinal_u32,
+        agent_id=agent_id,
+        task_distribution=task_distribution,
+    )
+
+
 def _build_patch_candidate(
     *,
     root: Path,
@@ -1047,6 +1255,7 @@ def run(*, campaign_pack: Path, out_dir: Path) -> None:
         agent_registry=agent_registry,
         arena_spec=arena_spec,
     )
+    agent_defs_by_id = _agent_registry_by_id(agent_registry)
     agent_states = [dict(row) for row in list(state_in.get("agent_states") or []) if isinstance(row, dict)]
 
     last_promotion = _load_last_official_promotion(daemon_state_root)
@@ -1083,6 +1292,7 @@ def run(*, campaign_pack: Path, out_dir: Path) -> None:
     for row in sorted(agent_states, key=lambda x: str(x.get("agent_id", ""))):
         _enforce_wallclock_budget(started_s=arena_started_s, max_seconds=arena_total_wallclock_s)
         agent_id = str(row.get("agent_id", "")).strip()
+        agent_def = dict(agent_defs_by_id.get(agent_id) or {})
         quota = int(max(0, allocations.get(agent_id, 0)))
         if quota <= 0:
             continue
@@ -1091,23 +1301,17 @@ def run(*, campaign_pack: Path, out_dir: Path) -> None:
             _enforce_wallclock_budget(started_s=arena_started_s, max_seconds=arena_total_wallclock_s)
             _enforce_wallclock_budget(started_s=agent_started_s, max_seconds=per_agent_wallclock_s)
             generated_count_u64 += 1
-            kind = _CANDIDATE_KIND_PATCH if "kernel" not in agent_id.lower() else _CANDIDATE_KIND_EXT
+            kind = _candidate_kind_for_agent(agent_id=agent_id, agent_def=agent_def)
             try:
-                if kind == _CANDIDATE_KIND_PATCH:
-                    candidate = _build_patch_candidate(
-                        root=root,
-                        tick_u64=tick_u64,
-                        ordinal_u32=int(idx),
-                        agent_id=agent_id,
-                        task_distribution=task_distribution,
-                    )
-                else:
-                    candidate = _build_extension_candidate(
-                        tick_u64=tick_u64,
-                        ordinal_u32=int(idx),
-                        agent_id=agent_id,
-                        pins=pins,
-                    )
+                candidate = _generate_candidate_for_agent(
+                    root=root,
+                    tick_u64=tick_u64,
+                    ordinal_u32=int(idx),
+                    agent_id=agent_id,
+                    task_distribution=task_distribution,
+                    pins=pins,
+                    agent_def=agent_def,
+                )
                 generated.append(candidate)
             except Exception:
                 generated.append(
@@ -1122,12 +1326,17 @@ def run(*, campaign_pack: Path, out_dir: Path) -> None:
                     }
                 )
     if not generated:
+        fallback_agent_id = "kernel_ext_mutator_v1" if "kernel_ext_mutator_v1" in agent_defs_by_id else "sh1_v0_3"
+        fallback_agent_def = dict(agent_defs_by_id.get(fallback_agent_id) or {})
         generated.append(
-            _build_extension_candidate(
+            _generate_candidate_for_agent(
+                root=root,
                 tick_u64=tick_u64,
                 ordinal_u32=0,
-                agent_id="kernel_ext_mutator_v1",
+                agent_id=fallback_agent_id,
+                task_distribution=task_distribution,
                 pins=pins,
+                agent_def=fallback_agent_def,
             )
         )
         generated_count_u64 = 1

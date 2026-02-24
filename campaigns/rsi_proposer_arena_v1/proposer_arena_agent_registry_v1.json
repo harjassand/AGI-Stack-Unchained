@@ -4,7 +4,19 @@
     {
       "agent_id": "sh1_v0_3",
       "agent_kind": "PATCH_PROPOSER",
-      "entry_module": "tools.arena.proposer_arena_v1",
+      "entry_module": "tools.genesis_engine.ge_symbiotic_optimizer_v0_3",
+      "enabled": true
+    },
+    {
+      "agent_id": "coordinator_mutator_v1",
+      "agent_kind": "PATCH_PROPOSER",
+      "entry_module": "orchestrator.rsi_coordinator_mutator_v1",
+      "enabled": true
+    },
+    {
+      "agent_id": "market_rules_mutator_v1",
+      "agent_kind": "PATCH_PROPOSER",
+      "entry_module": "orchestrator.rsi_market_rules_mutator_v1",
       "enabled": true
     },
     {

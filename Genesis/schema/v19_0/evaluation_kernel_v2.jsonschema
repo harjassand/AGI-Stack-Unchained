@@ -14,7 +14,8 @@
     "scoring_impl",
     "anchor_suite_set_id",
     "extensions_ledger_id",
-    "suite_runner_id"
+    "suite_runner_id",
+    "holdout_policy_id"
   ],
   "properties": {
     "schema_version": {
@@ -50,6 +51,10 @@
       "pattern": "^sha256:[0-9a-f]{64}$"
     },
     "suite_runner_id": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "holdout_policy_id": {
       "type": "string",
       "pattern": "^sha256:[0-9a-f]{64}$"
     },

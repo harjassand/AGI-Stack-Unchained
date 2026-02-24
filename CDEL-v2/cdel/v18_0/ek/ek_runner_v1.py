@@ -451,10 +451,12 @@ def _run_score_stage_once(
         anchor_suite_set_id = str(ek.get("anchor_suite_set_id", "")).strip()
         extensions_ledger_id = str(ek.get("extensions_ledger_id", "")).strip()
         suite_runner_id = str(ek.get("suite_runner_id", "")).strip()
+        holdout_policy_id = str(ek.get("holdout_policy_id", "")).strip()
         if (
             not anchor_suite_set_id.startswith("sha256:")
             or not extensions_ledger_id.startswith("sha256:")
             or not suite_runner_id.startswith("sha256:")
+            or not holdout_policy_id.startswith("sha256:")
         ):
             return {
                 "ok": False,
@@ -464,6 +466,7 @@ def _run_score_stage_once(
         pinned_anchor = str((authority_pins or {}).get("anchor_suite_set_id", "")).strip()
         pinned_ledger = str((authority_pins or {}).get("active_kernel_extensions_ledger_id", "")).strip()
         pinned_runner = str((authority_pins or {}).get("suite_runner_id", "")).strip()
+        pinned_holdout_policy = str((authority_pins or {}).get("holdout_policy_id", "")).strip()
         if (
             not pinned_anchor.startswith("sha256:")
             or not pinned_ledger.startswith("sha256:")
@@ -483,6 +486,14 @@ def _run_score_stage_once(
                 "refutation": {
                     "code": "EK_SUITE_RUNNER_PIN_MISMATCH",
                     "detail": "evaluation_kernel_v2 suite runner binding does not match active pins",
+                },
+            }
+        if not pinned_holdout_policy.startswith("sha256:") or holdout_policy_id != pinned_holdout_policy:
+            return {
+                "ok": False,
+                "refutation": {
+                    "code": "HOLDOUT_POLICY_PIN_MISMATCH",
+                    "detail": "evaluation_kernel_v2 holdout policy binding does not match active pins",
                 },
             }
 
@@ -544,6 +555,8 @@ def _run_score_stage_once(
             str(ek.get("extensions_ledger_id")),
             "--suite_runner_id",
             str(ek.get("suite_runner_id")),
+            "--holdout_policy_id",
+            str(ek.get("holdout_policy_id")),
         ]
         run = subprocess.run(
             cmd,
@@ -579,6 +592,8 @@ def _run_score_stage_once(
                 == str(ek.get("suite_runner_id", "")).strip()
             ):
                 benchmark_run_receipt_v2 = None
+            elif str(benchmark_run_receipt_v2.get("holdout_policy_id", "")).strip() not in {"", str(ek.get("holdout_policy_id", "")).strip()}:
+                benchmark_run_receipt_v2 = None
 
         if run.returncode != 0:
             invalid_code = "EVAL_STAGE_FAIL"
@@ -597,6 +612,11 @@ def _run_score_stage_once(
                 "EK_SUITE_LIST_MISMATCH",
                 "EK_EXTENSION_SUITE_FAILED",
                 "EK_ANCHOR_SUITE_FAILED",
+                "HOLDOUT_POLICY_PIN_MISMATCH",
+                "HOLDOUT_ACCESS_VIOLATION",
+                "SUITE_IO_CONTRACT_VIOLATION",
+                "HOLDOUT_PACK_MATERIALIZED",
+                "PREDICTIONS_MISSING_OR_MALFORMED",
                 "NONDETERMINISM_DETECTED",
             }:
                 mapped_code = invalid_code
@@ -647,6 +667,18 @@ def _run_score_stage_once(
         seen_suite_ids: set[str] = set()
         failed_anchor = False
         failed_extension = False
+        expected_holdout_policy_id = str(ek.get("holdout_policy_id", "")).strip()
+        receipt_holdout_policy_id = str(benchmark_run_receipt_v2.get("holdout_policy_id", "")).strip()
+        if receipt_holdout_policy_id and receipt_holdout_policy_id != expected_holdout_policy_id:
+            return {
+                "ok": False,
+                "refutation": {
+                    "code": "HOLDOUT_POLICY_PIN_MISMATCH",
+                    "detail": "benchmark_run_receipt_v2 holdout_policy_id does not match evaluation kernel",
+                },
+                "benchmark_run_receipt_v2": benchmark_run_receipt_v2,
+            }
+        has_holdout_suite = False
         for row in suites_raw:
             if not isinstance(row, dict):
                 return {
@@ -664,11 +696,93 @@ def _run_score_stage_once(
             seen_suite_ids.add(suite_id)
             outcome = str(row.get("suite_outcome", "")).strip().upper()
             source = str(row.get("suite_source", "")).strip().upper()
+            visibility = str(row.get("suite_visibility", "")).strip().upper()
+            holdout_execution = row.get("holdout_execution")
             if outcome != "PASS":
                 if source == "ANCHOR":
                     failed_anchor = True
                 else:
                     failed_extension = True
+            if visibility == "HOLDOUT":
+                has_holdout_suite = True
+                if not isinstance(holdout_execution, dict):
+                    return {
+                        "ok": False,
+                        "refutation": {
+                            "code": "SUITE_IO_CONTRACT_VIOLATION",
+                            "detail": "holdout suite is missing holdout_execution evidence",
+                        },
+                        "benchmark_run_receipt_v2": benchmark_run_receipt_v2,
+                    }
+                holdout_id = str(holdout_execution.get("holdout_policy_id", "")).strip()
+                if holdout_id != expected_holdout_policy_id:
+                    return {
+                        "ok": False,
+                        "refutation": {
+                            "code": "HOLDOUT_POLICY_PIN_MISMATCH",
+                            "detail": "holdout_execution holdout_policy_id does not match evaluation kernel",
+                        },
+                        "benchmark_run_receipt_v2": benchmark_run_receipt_v2,
+                    }
+                if not bool(holdout_execution.get("io_contract_enforced_b", False)):
+                    return {
+                        "ok": False,
+                        "refutation": {
+                            "code": "SUITE_IO_CONTRACT_VIOLATION",
+                            "detail": "holdout_execution indicates io_contract was not enforced",
+                        },
+                        "benchmark_run_receipt_v2": benchmark_run_receipt_v2,
+                    }
+                outputs_hash = str(holdout_execution.get("candidate_outputs_hash", "")).strip()
+                if not outputs_hash.startswith("sha256:"):
+                    return {
+                        "ok": False,
+                        "refutation": {
+                            "code": "PREDICTIONS_MISSING_OR_MALFORMED",
+                            "detail": "holdout_execution candidate_outputs_hash is missing",
+                        },
+                        "benchmark_run_receipt_v2": benchmark_run_receipt_v2,
+                    }
+                output_files = holdout_execution.get("candidate_output_files")
+                if not isinstance(output_files, list):
+                    return {
+                        "ok": False,
+                        "refutation": {
+                            "code": "SUITE_IO_CONTRACT_VIOLATION",
+                            "detail": "holdout_execution candidate_output_files must be a list",
+                        },
+                        "benchmark_run_receipt_v2": benchmark_run_receipt_v2,
+                    }
+                predictions_rows = int(holdout_execution.get("predictions_rows_u64", 0))
+                if predictions_rows <= 0:
+                    return {
+                        "ok": False,
+                        "refutation": {
+                            "code": "PREDICTIONS_MISSING_OR_MALFORMED",
+                            "detail": "holdout_execution predictions_rows_u64 must be positive",
+                        },
+                        "benchmark_run_receipt_v2": benchmark_run_receipt_v2,
+                    }
+                candidate_stage_status = str(holdout_execution.get("candidate_stage_status", "")).strip().upper()
+                harness_stage_status = str(holdout_execution.get("harness_stage_status", "")).strip().upper()
+                if candidate_stage_status not in {"PASS", "FAIL"} or harness_stage_status not in {"PASS", "FAIL", "SKIPPED"}:
+                    return {
+                        "ok": False,
+                        "refutation": {
+                            "code": "SUITE_IO_CONTRACT_VIOLATION",
+                            "detail": "holdout_execution stage status is invalid",
+                        },
+                        "benchmark_run_receipt_v2": benchmark_run_receipt_v2,
+                    }
+        if has_holdout_suite and receipt_holdout_policy_id != expected_holdout_policy_id:
+            return {
+                "ok": False,
+                "refutation": {
+                    "code": "HOLDOUT_POLICY_PIN_MISMATCH",
+                    "detail": "benchmark_run_receipt_v2 holdout suites require matching holdout_policy_id",
+                },
+                "benchmark_run_receipt_v2": benchmark_run_receipt_v2,
+            }
         if failed_anchor or failed_extension:
             return {
                 "ok": False,
@@ -1037,9 +1151,11 @@ def run_ek(
         pinned_anchor = str((authority_pins or {}).get("anchor_suite_set_id", "")).strip()
         pinned_ledger = str((authority_pins or {}).get("active_kernel_extensions_ledger_id", "")).strip()
         pinned_runner = str((authority_pins or {}).get("suite_runner_id", "")).strip()
+        pinned_holdout = str((authority_pins or {}).get("holdout_policy_id", "")).strip()
         ek_anchor = str(ek.get("anchor_suite_set_id", "")).strip()
         ek_ledger = str(ek.get("extensions_ledger_id", "")).strip()
         ek_runner_id = str(ek.get("suite_runner_id", "")).strip()
+        ek_holdout_id = str(ek.get("holdout_policy_id", "")).strip()
         if (
             not pinned_anchor.startswith("sha256:")
             or not pinned_ledger.startswith("sha256:")
@@ -1073,6 +1189,24 @@ def run_ek(
                 "refutation": {
                     "code": "EK_SUITE_RUNNER_PIN_MISMATCH",
                     "detail": "active evaluation_kernel_v2 suite runner binding mismatch active pin",
+                },
+                "applied_tree_id": "sha256:" + ("0" * 64),
+                "realized_out_id": "",
+                "cost_vector": _cost_vector(cpu_ms=0, wall_ms=0, mem_mb=0, disk_mb=0),
+                "logs_hash": hash_bytes(b""),
+            }
+        if (
+            not pinned_holdout.startswith("sha256:")
+            or not ek_holdout_id.startswith("sha256:")
+            or ek_holdout_id != pinned_holdout
+        ):
+            return {
+                "determinism_check": "REFUTED",
+                "eval_status": "REFUTED",
+                "decision": "REJECT",
+                "refutation": {
+                    "code": "HOLDOUT_POLICY_PIN_MISMATCH",
+                    "detail": "active evaluation_kernel_v2 holdout policy binding mismatch active pin",
                 },
                 "applied_tree_id": "sha256:" + ("0" * 64),
                 "realized_out_id": "",

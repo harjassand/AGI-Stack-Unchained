@@ -1,0 +1,191 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v18_0/benchmark_run_receipt_v2",
+  "title": "Benchmark run receipt v2",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "receipt_id",
+    "ek_id",
+    "anchor_suite_set_id",
+    "extensions_ledger_id",
+    "suite_runner_id",
+    "executed_suites",
+    "aggregate_metrics",
+    "gate_results",
+    "budget_outcome"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "benchmark_run_receipt_v2"
+    },
+    "receipt_id": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "ek_id": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "anchor_suite_set_id": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "extensions_ledger_id": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "suite_runner_id": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "executed_suites": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "$ref": "#/$defs/executed_suite"
+      }
+    },
+    "effective_suite_ids": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "pattern": "^sha256:[0-9a-f]{64}$"
+      }
+    },
+    "aggregate_metrics": {
+      "$ref": "#/$defs/metric_map"
+    },
+    "gate_results": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/gate_result"
+      }
+    },
+    "budget_outcome": {
+      "$ref": "#/$defs/budget_outcome"
+    }
+  },
+  "$defs": {
+    "q32": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "q"
+      ],
+      "properties": {
+        "q": {
+          "type": "integer"
+        }
+      }
+    },
+    "metric_map": {
+      "type": "object",
+      "additionalProperties": {
+        "$ref": "#/$defs/q32"
+      }
+    },
+    "gate_result": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "gate_id",
+        "passed_b"
+      ],
+      "properties": {
+        "gate_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "passed_b": {
+          "type": "boolean"
+        },
+        "detail": {
+          "type": "string"
+        }
+      }
+    },
+    "budget_outcome": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "within_budget_b",
+        "cpu_ms_u64",
+        "wall_ms_u64"
+      ],
+      "properties": {
+        "within_budget_b": {
+          "type": "boolean"
+        },
+        "cpu_ms_u64": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "wall_ms_u64": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "disk_mb_u64": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    },
+    "executed_suite": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "suite_id",
+        "suite_outcome",
+        "metrics",
+        "gate_results",
+        "budget_outcome"
+      ],
+      "properties": {
+        "suite_id": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "suite_name": {
+          "type": "string"
+        },
+        "suite_set_id": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "suite_source": {
+          "type": "string",
+          "enum": [
+            "ANCHOR",
+            "EXTENSION"
+          ]
+        },
+        "ledger_ordinal_u64": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "suite_outcome": {
+          "type": "string",
+          "enum": [
+            "PASS",
+            "FAIL",
+            "SKIPPED"
+          ]
+        },
+        "metrics": {
+          "$ref": "#/$defs/metric_map"
+        },
+        "gate_results": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/gate_result"
+          }
+        },
+        "budget_outcome": {
+          "$ref": "#/$defs/budget_outcome"
+        }
+      }
+    }
+  }
+}

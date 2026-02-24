@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import Any
 
 from ...v1_7r.canon import canon_bytes, sha256_prefixed
-from ..omega_common_v1 import fail, load_canon_dict
+from ..omega_common_v1 import canon_hash_obj, fail, load_canon_dict
 
 
 _SHA256_RE = re.compile(r"^sha256:[0-9a-f]{64}$")
@@ -25,6 +25,12 @@ _REQUIRED_KEYS = {
     "ccap_patch_allowlists_id",
     "canon_version_ids",
 }
+_OPTIONAL_V2_KEYS = {
+    "anchor_suite_set_id",
+    "active_kernel_extensions_ledger_id",
+    "suite_runner_id",
+}
+_ALLOWED_KEYS = _REQUIRED_KEYS | _OPTIONAL_V2_KEYS
 
 _CANON_KEYS = {"ccap_can_v", "ir_can_v", "op_can_v", "obs_can_v"}
 
@@ -44,10 +50,33 @@ def _require_sha256_list(value: Any) -> list[str]:
     return out
 
 
-def _normalize_authority_pins(pins: dict[str, Any]) -> dict[str, Any]:
+def _repo_root_from_module() -> Path:
+    return Path(__file__).resolve().parents[4]
+
+
+def _active_ek_schema_version(*, pins: dict[str, Any], repo_root_path: Path) -> str:
+    active_ek_id = _require_sha256(pins.get("active_ek_id"))
+    kernels_dir = repo_root_path / "authority" / "evaluation_kernels"
+    if not kernels_dir.exists() or not kernels_dir.is_dir():
+        fail("SCHEMA_FAIL")
+    for path in sorted(kernels_dir.glob("*.json"), key=lambda row: row.as_posix()):
+        payload = load_canon_dict(path)
+        schema_version = str(payload.get("schema_version", "")).strip()
+        if schema_version not in {"evaluation_kernel_v1", "evaluation_kernel_v2"}:
+            continue
+        if canon_hash_obj(payload) == active_ek_id:
+            return schema_version
+    fail("SCHEMA_FAIL")
+    return "evaluation_kernel_v1"
+
+
+def _normalize_authority_pins(pins: dict[str, Any], *, repo_root_path: Path | None = None) -> dict[str, Any]:
     if not isinstance(pins, dict):
         fail("SCHEMA_FAIL")
-    if set(pins.keys()) != _REQUIRED_KEYS:
+    keys = set(pins.keys())
+    if not _REQUIRED_KEYS.issubset(keys):
+        fail("SCHEMA_FAIL")
+    if not keys.issubset(_ALLOWED_KEYS):
         fail("SCHEMA_FAIL")
     if pins.get("schema_version") != "authority_pins_v1":
         fail("SCHEMA_FAIL")
@@ -56,7 +85,7 @@ def _normalize_authority_pins(pins: dict[str, Any]) -> dict[str, Any]:
     if not isinstance(canon, dict) or set(canon.keys()) != _CANON_KEYS:
         fail("SCHEMA_FAIL")
 
-    return {
+    normalized = {
         "schema_version": "authority_pins_v1",
         "re1_constitution_state_id": _require_sha256(pins.get("re1_constitution_state_id")),
         "re2_verifier_state_id": _require_sha256(pins.get("re2_verifier_state_id")),
@@ -73,6 +102,23 @@ def _normalize_authority_pins(pins: dict[str, Any]) -> dict[str, Any]:
             "obs_can_v": _require_sha256(canon.get("obs_can_v")),
         },
     }
+    anchor_suite_set_id = pins.get("anchor_suite_set_id")
+    if anchor_suite_set_id is not None:
+        normalized["anchor_suite_set_id"] = _require_sha256(anchor_suite_set_id)
+    active_kernel_extensions_ledger_id = pins.get("active_kernel_extensions_ledger_id")
+    if active_kernel_extensions_ledger_id is not None:
+        normalized["active_kernel_extensions_ledger_id"] = _require_sha256(active_kernel_extensions_ledger_id)
+    suite_runner_id = pins.get("suite_runner_id")
+    if suite_runner_id is not None:
+        normalized["suite_runner_id"] = _require_sha256(suite_runner_id)
+
+    resolved_repo_root = Path(repo_root_path).resolve() if repo_root_path is not None else _repo_root_from_module()
+    active_schema_version = _active_ek_schema_version(pins=normalized, repo_root_path=resolved_repo_root)
+    if active_schema_version == "evaluation_kernel_v2":
+        missing = [key for key in sorted(_OPTIONAL_V2_KEYS) if key not in normalized]
+        if missing:
+            fail("SCHEMA_FAIL")
+    return normalized
 
 
 def authority_pins_path(repo_root: Path) -> Path:
@@ -91,7 +137,7 @@ def load_authority_pins(repo_root: Path) -> dict[str, Any]:
     if not pins_path.exists() or not pins_path.is_file():
         fail("MISSING_STATE_INPUT")
     payload = load_canon_dict(pins_path)
-    return _normalize_authority_pins(payload)
+    return _normalize_authority_pins(payload, repo_root_path=Path(repo_root).resolve())
 
 
 def canon_authority(pins: dict[str, Any]) -> bytes:

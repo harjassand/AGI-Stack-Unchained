@@ -68,7 +68,10 @@ from cdel.v19_0.shadow_fs_guard_v1 import (
     diff_file_maps,
     hash_protected_roots,
 )
-from cdel.v19_0.shadow_j_eval_v1 import evaluate_j_comparison
+from cdel.v19_0.shadow_j_eval_v1 import (
+    build_ccap_receipt_metric_index_for_state_root,
+    evaluate_j_comparison,
+)
 from cdel.v19_0.shadow_invariance_v1 import (
     build_shadow_corpus_invariance_receipt,
 )
@@ -3808,6 +3811,7 @@ def _compute_realized_delta_j_q32(
     prev_observation_report: dict[str, Any] | None,
     observation_report: dict[str, Any],
     j_profile_payload: dict[str, Any] | None,
+    state_root: Path | None = None,
 ) -> int:
     if not isinstance(prev_observation_report, dict):
         return 0
@@ -3815,9 +3819,46 @@ def _compute_realized_delta_j_q32(
     metrics_prev = prev_observation_report.get("metrics")
     if not isinstance(metrics_now, dict) or not isinstance(metrics_prev, dict):
         return 0
+    tick_now_u64 = int(observation_report.get("tick_u64", -1))
+    tick_prev_u64 = int(prev_observation_report.get("tick_u64", -1))
     weights = j_profile_payload.get("metric_weights") if isinstance(j_profile_payload, dict) else []
     if not isinstance(weights, list):
         weights = []
+
+    required_metric_ids: list[str] = []
+    for row in weights:
+        if not isinstance(row, dict):
+            continue
+        metric_id = str(row.get("metric_id", "")).strip()
+        if metric_id:
+            required_metric_ids.append(metric_id)
+    required_metric_ids.extend(_HARD_TASK_METRIC_IDS)
+
+    ccap_metric_index_by_tick: dict[int, dict[str, int]] = {}
+    if isinstance(state_root, Path):
+        try:
+            ccap_metric_index_by_tick = build_ccap_receipt_metric_index_for_state_root(
+                state_root=state_root,
+                required_metric_ids=required_metric_ids,
+                require_consistent_mirror_b=True,
+            )
+        except Exception:
+            ccap_metric_index_by_tick = {}
+
+    def _metric_q32_with_receipt_fallback(
+        *,
+        metrics: dict[str, Any],
+        tick_u64: int,
+        metric_id: str,
+    ) -> int:
+        metric = metrics.get(metric_id)
+        if isinstance(metric, dict) and isinstance(metric.get("q"), int):
+            return int(metric.get("q", 0))
+        tick_metrics = ccap_metric_index_by_tick.get(int(tick_u64))
+        if isinstance(tick_metrics, dict) and str(metric_id) in tick_metrics:
+            return int(tick_metrics[str(metric_id)])
+        return 0
+
     bias_now = 0
     bias_obj = j_profile_payload.get("bias_q32") if isinstance(j_profile_payload, dict) else None
     if isinstance(bias_obj, dict) and set(bias_obj.keys()) == {"q"} and isinstance(bias_obj.get("q"), int):
@@ -3835,19 +3876,31 @@ def _compute_realized_delta_j_q32(
             continue
         if not (isinstance(weight, dict) and set(weight.keys()) == {"q"} and isinstance(weight.get("q"), int)):
             continue
-        now_metric = metrics_now.get(metric_id)
-        prev_metric = metrics_prev.get(metric_id)
-        now_q = int(now_metric.get("q", 0)) if isinstance(now_metric, dict) and isinstance(now_metric.get("q"), int) else 0
-        prev_q = int(prev_metric.get("q", 0)) if isinstance(prev_metric, dict) and isinstance(prev_metric.get("q"), int) else 0
+        now_q = _metric_q32_with_receipt_fallback(
+            metrics=metrics_now,
+            tick_u64=int(tick_now_u64),
+            metric_id=metric_id,
+        )
+        prev_q = _metric_q32_with_receipt_fallback(
+            metrics=metrics_prev,
+            tick_u64=int(tick_prev_u64),
+            metric_id=metric_id,
+        )
         w_q = int(weight.get("q"))
         j_now += q32_mul(now_q, w_q)
         j_prev += q32_mul(prev_q, w_q)
     hard_task_delta_q32 = 0
     for metric_id in _HARD_TASK_METRIC_IDS:
-        now_metric = metrics_now.get(metric_id)
-        prev_metric = metrics_prev.get(metric_id)
-        now_q = int(now_metric.get("q", 0)) if isinstance(now_metric, dict) and isinstance(now_metric.get("q"), int) else 0
-        prev_q = int(prev_metric.get("q", 0)) if isinstance(prev_metric, dict) and isinstance(prev_metric.get("q"), int) else 0
+        now_q = _metric_q32_with_receipt_fallback(
+            metrics=metrics_now,
+            tick_u64=int(tick_now_u64),
+            metric_id=metric_id,
+        )
+        prev_q = _metric_q32_with_receipt_fallback(
+            metrics=metrics_prev,
+            tick_u64=int(tick_prev_u64),
+            metric_id=metric_id,
+        )
         hard_task_delta_q32 += int(now_q) - int(prev_q)
     return int((j_now - j_prev) + int(hard_task_delta_q32))
 
@@ -7452,6 +7505,7 @@ def tick_once(
                 prev_observation_report=prev_observation_report,
                 observation_report=observation_report,
                 j_profile_payload=policy_market_j_profile_payload,
+                state_root=state_root,
             )
             target_cfg = {}
             if isinstance(policy_market_selection_policy_payload, dict):

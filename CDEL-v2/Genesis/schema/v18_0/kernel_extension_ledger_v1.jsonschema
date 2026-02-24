@@ -1,0 +1,79 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v18_0/kernel_extension_ledger_v1",
+  "title": "Kernel extension ledger v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "ledger_id",
+    "anchor_ek_id",
+    "parent_ledger_id",
+    "entries"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "kernel_extension_ledger_v1"
+    },
+    "ledger_id": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "anchor_ek_id": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "parent_ledger_id": {
+      "anyOf": [
+        {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        {
+          "const": ""
+        }
+      ]
+    },
+    "entries": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/entry"
+      }
+    }
+  },
+  "$defs": {
+    "entry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "ordinal_u64",
+        "extension_spec_id",
+        "extension_spec_relpath",
+        "suite_set_id",
+        "suite_set_relpath"
+      ],
+      "properties": {
+        "ordinal_u64": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "extension_spec_id": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "extension_spec_relpath": {
+          "type": "string",
+          "minLength": 1
+        },
+        "suite_set_id": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "suite_set_relpath": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    }
+  }
+}

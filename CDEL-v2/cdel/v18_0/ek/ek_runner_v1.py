@@ -425,16 +425,66 @@ def _run_score_stage_once(
     ek: dict[str, Any],
     run_label: str,
     ticks_u64: int,
+    authority_pins: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
+    schema_version = str(ek.get("schema_version", "")).strip()
     scoring = ek.get("scoring_impl")
     if not isinstance(scoring, dict):
         return {"ok": False, "refutation": {"code": "EVAL_STAGE_FAIL", "detail": "scoring_impl missing"}}
+    scoring_kind = str(scoring.get("kind", "")).strip()
     code_ref = scoring.get("code_ref")
     if not isinstance(code_ref, dict):
         return {"ok": False, "refutation": {"code": "EVAL_STAGE_FAIL", "detail": "scoring_impl.code_ref missing"}}
     rel = str(code_ref.get("path", "")).strip()
     if not rel:
         return {"ok": False, "refutation": {"code": "EVAL_STAGE_FAIL", "detail": "scoring_impl.code_ref.path missing"}}
+
+    if schema_version == "evaluation_kernel_v2" or scoring_kind == "OMEGA_BENCHMARK_SUITE_COMPOSITE":
+        if schema_version != "evaluation_kernel_v2":
+            return {
+                "ok": False,
+                "refutation": {
+                    "code": "EVAL_STAGE_FAIL",
+                    "detail": "OMEGA_BENCHMARK_SUITE_COMPOSITE requires evaluation_kernel_v2",
+                },
+            }
+        anchor_suite_set_id = str(ek.get("anchor_suite_set_id", "")).strip()
+        extensions_ledger_id = str(ek.get("extensions_ledger_id", "")).strip()
+        suite_runner_id = str(ek.get("suite_runner_id", "")).strip()
+        if (
+            not anchor_suite_set_id.startswith("sha256:")
+            or not extensions_ledger_id.startswith("sha256:")
+            or not suite_runner_id.startswith("sha256:")
+        ):
+            return {
+                "ok": False,
+                "refutation": {"code": "EVAL_STAGE_FAIL", "detail": "evaluation_kernel_v2 missing binding ids"},
+            }
+
+        pinned_anchor = str((authority_pins or {}).get("anchor_suite_set_id", "")).strip()
+        pinned_ledger = str((authority_pins or {}).get("active_kernel_extensions_ledger_id", "")).strip()
+        pinned_runner = str((authority_pins or {}).get("suite_runner_id", "")).strip()
+        if (
+            not pinned_anchor.startswith("sha256:")
+            or not pinned_ledger.startswith("sha256:")
+            or anchor_suite_set_id != pinned_anchor
+            or extensions_ledger_id != pinned_ledger
+        ):
+            return {
+                "ok": False,
+                "refutation": {
+                    "code": "EK_EXT_LEDGER_PIN_MISMATCH",
+                    "detail": "evaluation_kernel_v2 suite-set/ledger bindings do not match active pins",
+                },
+            }
+        if not pinned_runner.startswith("sha256:") or suite_runner_id != pinned_runner:
+            return {
+                "ok": False,
+                "refutation": {
+                    "code": "EK_SUITE_RUNNER_PIN_MISMATCH",
+                    "detail": "evaluation_kernel_v2 suite runner binding does not match active pins",
+                },
+            }
 
     tool_path = (score_repo_root / rel).resolve()
     if not tool_path.exists() or not tool_path.is_file():
@@ -451,6 +501,212 @@ def _run_score_stage_once(
     env["OMEGA_META_CORE_ACTIVATION_MODE"] = "simulate"
     env["OMEGA_ALLOW_SIMULATE_ACTIVATION"] = "1"
     env["PYTHONPATH"] = f"{score_repo_root}:{score_repo_root / 'CDEL-v2'}:{env.get('PYTHONPATH', '')}".rstrip(":")
+
+    if schema_version == "evaluation_kernel_v2" or scoring_kind == "OMEGA_BENCHMARK_SUITE_COMPOSITE":
+        observed_runner_id = hash_bytes(tool_path.read_bytes())
+        pinned_runner = str((authority_pins or {}).get("suite_runner_id", "")).strip()
+        if observed_runner_id != str(ek.get("suite_runner_id", "")).strip():
+            return {
+                "ok": False,
+                "refutation": {
+                    "code": "EK_SUITE_RUNNER_PIN_MISMATCH",
+                    "detail": "composite score runner hash does not match kernel suite_runner_id",
+                },
+            }
+        if not pinned_runner.startswith("sha256:") or observed_runner_id != pinned_runner:
+            return {
+                "ok": False,
+                "refutation": {
+                    "code": "EK_SUITE_RUNNER_PIN_MISMATCH",
+                    "detail": "composite score runner hash does not match pinned suite_runner_id",
+                },
+            }
+        cmd = [
+            sys.executable,
+            str(tool_path),
+            "--mode",
+            "composite_once",
+            "--repo_root",
+            str(score_repo_root),
+            "--ticks",
+            str(max(1, int(ticks_u64))),
+            "--seed_u64",
+            "0",
+            "--series_prefix",
+            series_prefix,
+            "--runs_root",
+            str(runs_root),
+            "--ek_id",
+            str(ek.get("ek_id", "")) if str(ek.get("ek_id", "")).strip().startswith("sha256:") else _active_ek_id(score_repo_root),
+            "--anchor_suite_set_id",
+            str(ek.get("anchor_suite_set_id")),
+            "--extensions_ledger_id",
+            str(ek.get("extensions_ledger_id")),
+            "--suite_runner_id",
+            str(ek.get("suite_runner_id")),
+        ]
+        run = subprocess.run(
+            cmd,
+            cwd=score_repo_root,
+            env=env,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        stdout_path = score_root / "stdout.log"
+        stderr_path = score_root / "stderr.log"
+        stdout_path.write_text(run.stdout, encoding="utf-8")
+        stderr_path.write_text(run.stderr, encoding="utf-8")
+
+        run_dir = runs_root / series_prefix
+        receipt_path = run_dir / "BENCHMARK_RUN_RECEIPT_v2.json"
+        benchmark_run_receipt_v2: dict[str, Any] | None = None
+        if receipt_path.exists() and receipt_path.is_file():
+            try:
+                benchmark_run_receipt_v2 = json.loads(receipt_path.read_text(encoding="utf-8"))
+            except Exception:  # noqa: BLE001
+                benchmark_run_receipt_v2 = None
+            if not isinstance(benchmark_run_receipt_v2, dict):
+                benchmark_run_receipt_v2 = None
+            elif str(benchmark_run_receipt_v2.get("schema_version", "")).strip() != "benchmark_run_receipt_v2":
+                benchmark_run_receipt_v2 = None
+            elif not (
+                str(benchmark_run_receipt_v2.get("anchor_suite_set_id", "")).strip()
+                == str(ek.get("anchor_suite_set_id", "")).strip()
+                and str(benchmark_run_receipt_v2.get("extensions_ledger_id", "")).strip()
+                == str(ek.get("extensions_ledger_id", "")).strip()
+                and str(benchmark_run_receipt_v2.get("suite_runner_id", "")).strip()
+                == str(ek.get("suite_runner_id", "")).strip()
+            ):
+                benchmark_run_receipt_v2 = None
+
+        if run.returncode != 0:
+            invalid_code = "EVAL_STAGE_FAIL"
+            invalid_detail = "composite benchmark runner failed"
+            for line in (run.stdout.splitlines() + run.stderr.splitlines()):
+                text = str(line).strip()
+                if text.startswith("INVALID:"):
+                    invalid_code = text.split(":", 1)[1].strip() or "EVAL_STAGE_FAIL"
+                    break
+                if text.startswith("DETAIL:"):
+                    invalid_detail = text.split(":", 1)[1].strip() or invalid_detail
+            mapped_code = "EVAL_STAGE_FAIL"
+            if invalid_code in {
+                "EK_EXT_LEDGER_PIN_MISMATCH",
+                "EK_SUITE_RUNNER_PIN_MISMATCH",
+                "EK_SUITE_LIST_MISMATCH",
+                "EK_EXTENSION_SUITE_FAILED",
+                "EK_ANCHOR_SUITE_FAILED",
+                "NONDETERMINISM_DETECTED",
+            }:
+                mapped_code = invalid_code
+            elif invalid_code == "SUITE_FAILURE":
+                mapped_code = "EK_EXTENSION_SUITE_FAILED"
+            if isinstance(benchmark_run_receipt_v2, dict):
+                suites = benchmark_run_receipt_v2.get("executed_suites")
+                if isinstance(suites, list):
+                    failed_sources = sorted(
+                        {
+                            str(row.get("suite_source", "")).strip().upper()
+                            for row in suites
+                            if isinstance(row, dict) and str(row.get("suite_outcome", "")).strip().upper() != "PASS"
+                        }
+                    )
+                    if "ANCHOR" in failed_sources:
+                        mapped_code = "EK_ANCHOR_SUITE_FAILED"
+                    elif failed_sources:
+                        mapped_code = "EK_EXTENSION_SUITE_FAILED"
+            return {
+                "ok": False,
+                "refutation": {
+                    "code": mapped_code,
+                    "detail": invalid_detail,
+                    "evidence_hashes": [hash_bytes(run.stdout.encode("utf-8")), hash_bytes(run.stderr.encode("utf-8"))],
+                },
+                "benchmark_run_receipt_v2": benchmark_run_receipt_v2,
+            }
+
+        if not isinstance(benchmark_run_receipt_v2, dict):
+            return {
+                "ok": False,
+                "refutation": {
+                    "code": "EVAL_STAGE_FAIL",
+                    "detail": "composite score stage missing BENCHMARK_RUN_RECEIPT_v2.json",
+                },
+            }
+        suites_raw = benchmark_run_receipt_v2.get("executed_suites")
+        if not isinstance(suites_raw, list) or not suites_raw:
+            return {
+                "ok": False,
+                "refutation": {
+                    "code": "EK_SUITE_LIST_MISMATCH",
+                    "detail": "benchmark_run_receipt_v2 missing executed_suites",
+                },
+                "benchmark_run_receipt_v2": benchmark_run_receipt_v2,
+            }
+        seen_suite_ids: set[str] = set()
+        failed_anchor = False
+        failed_extension = False
+        for row in suites_raw:
+            if not isinstance(row, dict):
+                return {
+                    "ok": False,
+                    "refutation": {"code": "EK_SUITE_LIST_MISMATCH", "detail": "executed_suites row must be object"},
+                    "benchmark_run_receipt_v2": benchmark_run_receipt_v2,
+                }
+            suite_id = str(row.get("suite_id", "")).strip()
+            if not suite_id.startswith("sha256:") or suite_id in seen_suite_ids:
+                return {
+                    "ok": False,
+                    "refutation": {"code": "EK_SUITE_LIST_MISMATCH", "detail": "executed_suites has duplicate/invalid suite_id"},
+                    "benchmark_run_receipt_v2": benchmark_run_receipt_v2,
+                }
+            seen_suite_ids.add(suite_id)
+            outcome = str(row.get("suite_outcome", "")).strip().upper()
+            source = str(row.get("suite_source", "")).strip().upper()
+            if outcome != "PASS":
+                if source == "ANCHOR":
+                    failed_anchor = True
+                else:
+                    failed_extension = True
+        if failed_anchor or failed_extension:
+            return {
+                "ok": False,
+                "refutation": {
+                    "code": "EK_ANCHOR_SUITE_FAILED" if failed_anchor else "EK_EXTENSION_SUITE_FAILED",
+                    "detail": "composite score stage includes failed suite outcome",
+                },
+                "benchmark_run_receipt_v2": benchmark_run_receipt_v2,
+            }
+
+        aggregate_metrics = benchmark_run_receipt_v2.get("aggregate_metrics")
+        if not isinstance(aggregate_metrics, dict):
+            aggregate_metrics = {}
+        median_stps_obj = aggregate_metrics.get("median_stps_non_noop_q32")
+        tpm_obj = aggregate_metrics.get("non_noop_ticks_per_min_q32")
+        promotions_obj = aggregate_metrics.get("promotions_u64_q32")
+        activation_obj = aggregate_metrics.get("activation_success_u64_q32")
+        median_stps_q32 = int(median_stps_obj.get("q", 0)) if isinstance(median_stps_obj, dict) else 0
+        tpm_q32 = int(tpm_obj.get("q", 0)) if isinstance(tpm_obj, dict) else 0
+        promotions_u64 = int(promotions_obj.get("q", 0) >> 32) if isinstance(promotions_obj, dict) else len(suites_raw)
+        activation_u64 = int(activation_obj.get("q", 0) >> 32) if isinstance(activation_obj, dict) else len(suites_raw)
+        scorecard_summary = {
+            "median_stps_non_noop_q32": int(median_stps_q32),
+            "non_noop_ticks_per_min_f64": float(max(0.0, float(tpm_q32) / float(_Q32_ONE))),
+            "promotions_u64": int(max(0, promotions_u64)),
+            "activation_success_u64": int(max(0, activation_u64)),
+        }
+        effective_suite_ids = benchmark_run_receipt_v2.get("effective_suite_ids")
+        if not isinstance(effective_suite_ids, list):
+            effective_suite_ids = [str(row.get("suite_id", "")).strip() for row in suites_raw]
+        return {
+            "ok": True,
+            "score_run_root": run_dir,
+            "score_run_hash": compute_workspace_tree_id(run_dir),
+            "scorecard_summary": scorecard_summary,
+            "benchmark_run_receipt_v2": benchmark_run_receipt_v2,
+            "effective_suite_ids": list(effective_suite_ids),
+        }
 
     cmd = [
         sys.executable,
@@ -523,6 +779,7 @@ def _run_score_stage(
     ek: dict[str, Any],
     ticks_override_u64: int | None = None,
     require_any_improvement_override_b: bool | None = None,
+    authority_pins: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     scoring = ek.get("scoring_impl")
     if not isinstance(scoring, dict):
@@ -549,6 +806,7 @@ def _run_score_stage(
         ek=ek,
         run_label="base",
         ticks_u64=ticks_u64,
+        authority_pins=authority_pins,
     )
     if not bool(score_base.get("ok", False)):
         return score_base
@@ -559,6 +817,7 @@ def _run_score_stage(
         ek=ek,
         run_label="cand",
         ticks_u64=ticks_u64,
+        authority_pins=authority_pins,
     )
     if not bool(score_cand.get("ok", False)):
         return score_cand
@@ -601,6 +860,14 @@ def _run_score_stage(
             "score_delta_summary": score_delta_summary,
             "score_base_run_hash": str(score_base.get("score_run_hash", "")),
             "score_cand_run_hash": str(score_cand.get("score_run_hash", "")),
+            "benchmark_run_receipt_v2": (
+                dict(score_cand.get("benchmark_run_receipt_v2"))
+                if isinstance(score_cand.get("benchmark_run_receipt_v2"), dict)
+                else None
+            ),
+            "effective_suite_ids": list(score_cand.get("effective_suite_ids", []))
+            if isinstance(score_cand.get("effective_suite_ids"), list)
+            else None,
         }
 
     return {
@@ -610,6 +877,14 @@ def _run_score_stage(
         "score_delta_summary": score_delta_summary,
         "score_base_run_hash": str(score_base.get("score_run_hash", "")),
         "score_cand_run_hash": str(score_cand.get("score_run_hash", "")),
+        "benchmark_run_receipt_v2": (
+            dict(score_cand.get("benchmark_run_receipt_v2"))
+            if isinstance(score_cand.get("benchmark_run_receipt_v2"), dict)
+            else None
+        ),
+        "effective_suite_ids": list(score_cand.get("effective_suite_ids", []))
+        if isinstance(score_cand.get("effective_suite_ids"), list)
+        else None,
     }
 
 
@@ -640,12 +915,15 @@ def _load_active_ek(repo_root: Path, expected_ek_id: str) -> dict[str, Any]:
     kernels_dir = repo_root / "authority" / "evaluation_kernels"
     for path in sorted(kernels_dir.glob("*.json"), key=lambda row: row.as_posix()):
         payload = load_canon_dict(path)
-        if not isinstance(payload, dict) or payload.get("schema_version") != "evaluation_kernel_v1":
+        if not isinstance(payload, dict):
+            continue
+        schema_version = str(payload.get("schema_version", "")).strip()
+        if schema_version not in {"evaluation_kernel_v1", "evaluation_kernel_v2"}:
             continue
         digest = canon_hash_obj(payload)
         if digest != active_ek_id:
             continue
-        validate_schema(payload, "evaluation_kernel_v1")
+        validate_schema(payload, schema_version)
         return payload
     raise RuntimeError("EVAL_STAGE_FAIL")
 
@@ -722,6 +1000,12 @@ def run_ek(
             "logs_hash": hash_bytes(b""),
         }
 
+    try:
+        authority_pins = load_authority_pins(repo_root)
+    except Exception:  # noqa: BLE001
+        authority_pins = {}
+    ek_schema_version = str(ek.get("schema_version", "")).strip()
+
     stage_specs = ek.get("stages")
     if not isinstance(stage_specs, list):
         return {
@@ -748,6 +1032,53 @@ def run_ek(
             "cost_vector": _cost_vector(cpu_ms=0, wall_ms=0, mem_mb=0, disk_mb=0),
             "logs_hash": hash_bytes(b""),
         }
+
+    if ek_schema_version == "evaluation_kernel_v2":
+        pinned_anchor = str((authority_pins or {}).get("anchor_suite_set_id", "")).strip()
+        pinned_ledger = str((authority_pins or {}).get("active_kernel_extensions_ledger_id", "")).strip()
+        pinned_runner = str((authority_pins or {}).get("suite_runner_id", "")).strip()
+        ek_anchor = str(ek.get("anchor_suite_set_id", "")).strip()
+        ek_ledger = str(ek.get("extensions_ledger_id", "")).strip()
+        ek_runner_id = str(ek.get("suite_runner_id", "")).strip()
+        if (
+            not pinned_anchor.startswith("sha256:")
+            or not pinned_ledger.startswith("sha256:")
+            or not ek_anchor.startswith("sha256:")
+            or not ek_ledger.startswith("sha256:")
+            or ek_anchor != pinned_anchor
+            or ek_ledger != pinned_ledger
+        ):
+            return {
+                "determinism_check": "REFUTED",
+                "eval_status": "REFUTED",
+                "decision": "REJECT",
+                "refutation": {
+                    "code": "EK_EXT_LEDGER_PIN_MISMATCH",
+                    "detail": "active evaluation_kernel_v2 suite-set/ledger bindings mismatch active pins",
+                },
+                "applied_tree_id": "sha256:" + ("0" * 64),
+                "realized_out_id": "",
+                "cost_vector": _cost_vector(cpu_ms=0, wall_ms=0, mem_mb=0, disk_mb=0),
+                "logs_hash": hash_bytes(b""),
+            }
+        if (
+            not pinned_runner.startswith("sha256:")
+            or not ek_runner_id.startswith("sha256:")
+            or ek_runner_id != pinned_runner
+        ):
+            return {
+                "determinism_check": "REFUTED",
+                "eval_status": "REFUTED",
+                "decision": "REJECT",
+                "refutation": {
+                    "code": "EK_SUITE_RUNNER_PIN_MISMATCH",
+                    "detail": "active evaluation_kernel_v2 suite runner binding mismatch active pin",
+                },
+                "applied_tree_id": "sha256:" + ("0" * 64),
+                "realized_out_id": "",
+                "cost_vector": _cost_vector(cpu_ms=0, wall_ms=0, mem_mb=0, disk_mb=0),
+                "logs_hash": hash_bytes(b""),
+            }
 
     fast_ek = _survival_drill_fast_ek_enabled()
     smoke_ek_enabled = bool(_ccap_smoke_ek_enabled() and (not fast_ek))
@@ -909,6 +1240,7 @@ def run_ek(
                 ek=ek,
                 ticks_override_u64=int(smoke_score_ticks_u64),
                 require_any_improvement_override_b=False,
+                authority_pins=authority_pins if isinstance(authority_pins, dict) else None,
             )
             if not bool(smoke_score.get("ok", False)):
                 smoke_refutation = dict(
@@ -918,6 +1250,13 @@ def run_ek(
                     str(smoke_refutation.get("code", "SMOKE_EK_STAGE_FAIL")).strip() or "SMOKE_EK_STAGE_FAIL"
                 )
                 smoke_refutation_detail = str(smoke_refutation.get("detail", "smoke EK failed")).strip() or "smoke EK failed"
+                pass_through_smoke_code = smoke_refutation_code in {
+                    "EK_EXT_LEDGER_PIN_MISMATCH",
+                    "EK_SUITE_RUNNER_PIN_MISMATCH",
+                    "EK_SUITE_LIST_MISMATCH",
+                    "EK_EXTENSION_SUITE_FAILED",
+                    "EK_ANCHOR_SUITE_FAILED",
+                }
                 cpu_ms = int(time.process_time() * 1000) - cpu_start
                 wall_ms = int(time.time() * 1000) - wall_start
                 mem_mb = _self_mem_mb()
@@ -928,8 +1267,12 @@ def run_ek(
                     "eval_status": "FAIL",
                     "decision": "REJECT",
                     "refutation": {
-                        "code": "SMOKE_EK_FAIL",
-                        "detail": f"{smoke_refutation_code}:{smoke_refutation_detail}",
+                        "code": smoke_refutation_code if pass_through_smoke_code else "SMOKE_EK_FAIL",
+                        "detail": (
+                            smoke_refutation_detail
+                            if pass_through_smoke_code
+                            else f"{smoke_refutation_code}:{smoke_refutation_detail}"
+                        ),
                     },
                     "applied_tree_id": applied_tree_a,
                     "realized_out_id": realized_out_a,
@@ -1070,6 +1413,11 @@ def run_ek(
                 "score_base_summary": smoke_base_summary,
                 "score_cand_summary": smoke_cand_summary,
                 "score_delta_summary": smoke_delta_summary,
+                "benchmark_run_receipt_v2": (
+                    dict(smoke_score.get("benchmark_run_receipt_v2"))
+                    if isinstance(smoke_score.get("benchmark_run_receipt_v2"), dict)
+                    else None
+                ),
                 "effective_budget_limits": dict(effective_budgets),
                 "effective_budget_tuple": dict(effective_budget_tuple),
                 "effective_budget_profile_id": str(budget_profile_id),
@@ -1120,6 +1468,7 @@ def run_ek(
         work_dir=out_dir,
         ccap_id=ccap_id,
         ek=ek,
+        authority_pins=authority_pins if isinstance(authority_pins, dict) else None,
     )
     if not bool(score.get("ok", False)):
         ref = dict(score.get("refutation") or {"code": "EVAL_STAGE_FAIL", "detail": "score stage failed"})
@@ -1127,6 +1476,9 @@ def run_ek(
         score_cand_summary = score.get("score_cand_summary")
         score_delta_summary = score.get("score_delta_summary")
         scorecard_summary = score_cand_summary if isinstance(score_cand_summary, dict) else None
+        benchmark_run_receipt_v2 = score.get("benchmark_run_receipt_v2")
+        if not isinstance(benchmark_run_receipt_v2, dict):
+            benchmark_run_receipt_v2 = None
         return {
             "determinism_check": "PASS",
             "eval_status": "FAIL",
@@ -1140,6 +1492,7 @@ def run_ek(
             "score_base_summary": score_base_summary if isinstance(score_base_summary, dict) else None,
             "score_cand_summary": score_cand_summary if isinstance(score_cand_summary, dict) else None,
             "score_delta_summary": score_delta_summary if isinstance(score_delta_summary, dict) else None,
+            "benchmark_run_receipt_v2": benchmark_run_receipt_v2,
             "smoke_ek_enabled_b": bool(smoke_ek_enabled),
             "smoke_only_ek_enabled_b": bool(smoke_only_ek_enabled),
             "smoke_ek_score_ticks_u64": int(smoke_score_ticks_u64) if smoke_ek_enabled else 0,
@@ -1157,6 +1510,9 @@ def run_ek(
     score_cand_summary = score.get("score_cand_summary")
     score_delta_summary = score.get("score_delta_summary")
     scorecard_summary = score.get("scorecard_summary")
+    benchmark_run_receipt_v2 = score.get("benchmark_run_receipt_v2")
+    if not isinstance(benchmark_run_receipt_v2, dict):
+        benchmark_run_receipt_v2 = None
     if isinstance(score_cand_summary, dict):
         scorecard_summary = score_cand_summary
     if not isinstance(score_base_summary, dict):
@@ -1204,6 +1560,7 @@ def run_ek(
             "score_base_summary": score_base_summary,
             "score_cand_summary": score_cand_summary,
             "score_delta_summary": score_delta_summary,
+            "benchmark_run_receipt_v2": benchmark_run_receipt_v2,
             "effective_budget_limits": dict(effective_budgets),
             "effective_budget_tuple": dict(effective_budget_tuple),
             "effective_budget_profile_id": str(budget_profile_id),
@@ -1230,6 +1587,7 @@ def run_ek(
         "score_base_summary": score_base_summary,
         "score_cand_summary": score_cand_summary,
         "score_delta_summary": score_delta_summary,
+        "benchmark_run_receipt_v2": benchmark_run_receipt_v2,
         "effective_budget_limits": dict(effective_budgets),
         "effective_budget_tuple": dict(effective_budget_tuple),
         "effective_budget_profile_id": str(budget_profile_id),

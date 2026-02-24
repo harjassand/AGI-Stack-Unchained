@@ -241,6 +241,7 @@ def _receipt_payload(
     score_base_summary: dict[str, Any] | None = None,
     score_cand_summary: dict[str, Any] | None = None,
     score_delta_summary: dict[str, Any] | None = None,
+    benchmark_run_receipt_v2: dict[str, Any] | None = None,
     effective_budget: dict[str, Any] | None = None,
     patch_apply_fail_stage: str | None = None,
     patch_apply_fail_code: str | None = None,
@@ -306,6 +307,8 @@ def _receipt_payload(
             "promotions_u64": int(score_delta_summary.get("promotions_u64", 0)),
             "activation_success_u64": int(score_delta_summary.get("activation_success_u64", 0)),
         }
+    if isinstance(benchmark_run_receipt_v2, dict):
+        payload["benchmark_run_receipt_v2"] = dict(benchmark_run_receipt_v2)
     if isinstance(effective_budget, dict):
         payload["effective_budget"] = {
             "limits": dict(effective_budget.get("limits") or {}),
@@ -330,6 +333,90 @@ def _write_ccap_receipt(out_dir: Path, payload: dict[str, Any]) -> tuple[dict[st
     validate_schema(receipt, "ccap_receipt_v1")
     write_canon_json(out_dir / "ccap_receipt_v1.json", receipt)
     return receipt, digest
+
+
+def _resolve_effective_suite_ids_from_pins(
+    *,
+    repo_root: Path,
+    pins: dict[str, Any],
+    ek_id: str,
+) -> list[str]:
+    try:
+        from tools.omega.omega_benchmark_suite_composite_v1 import resolve_effective_suites
+    except Exception as exc:  # noqa: BLE001
+        raise RuntimeError("EVAL_STAGE_FAIL") from exc
+    anchor_suite_set_id = str(pins.get("anchor_suite_set_id", "")).strip()
+    extensions_ledger_id = str(pins.get("active_kernel_extensions_ledger_id", "")).strip()
+    if not anchor_suite_set_id.startswith("sha256:") or not extensions_ledger_id.startswith("sha256:"):
+        raise RuntimeError("EVAL_STAGE_FAIL")
+    suites = resolve_effective_suites(
+        repo_root=repo_root,
+        ek_id=ek_id,
+        anchor_suite_set_id=anchor_suite_set_id,
+        extensions_ledger_id=extensions_ledger_id,
+    )
+    return [str(row.suite_id).strip() for row in suites]
+
+
+def _validate_v2_benchmark_receipt_binding(
+    *,
+    repo_root: Path,
+    pins: dict[str, Any],
+    ek_id: str,
+    benchmark_run_receipt_v2: dict[str, Any],
+) -> dict[str, Any] | None:
+    if str(benchmark_run_receipt_v2.get("schema_version", "")).strip() != "benchmark_run_receipt_v2":
+        return {"code": "EVAL_STAGE_FAIL", "detail": "invalid benchmark_run_receipt_v2 schema_version"}
+    if str(benchmark_run_receipt_v2.get("ek_id", "")).strip() != str(ek_id).strip():
+        return {"code": "EVAL_STAGE_FAIL", "detail": "benchmark_run_receipt_v2 ek_id mismatch"}
+
+    pinned_anchor = str(pins.get("anchor_suite_set_id", "")).strip()
+    pinned_ledger = str(pins.get("active_kernel_extensions_ledger_id", "")).strip()
+    pinned_runner = str(pins.get("suite_runner_id", "")).strip()
+    observed_anchor = str(benchmark_run_receipt_v2.get("anchor_suite_set_id", "")).strip()
+    observed_ledger = str(benchmark_run_receipt_v2.get("extensions_ledger_id", "")).strip()
+    observed_runner = str(benchmark_run_receipt_v2.get("suite_runner_id", "")).strip()
+
+    if (
+        not pinned_anchor.startswith("sha256:")
+        or not pinned_ledger.startswith("sha256:")
+        or observed_anchor != pinned_anchor
+        or observed_ledger != pinned_ledger
+    ):
+        return {
+            "code": "EK_EXT_LEDGER_PIN_MISMATCH",
+            "detail": "benchmark_run_receipt_v2 anchor/ledger ids do not match active pins",
+        }
+    if not pinned_runner.startswith("sha256:") or observed_runner != pinned_runner:
+        return {
+            "code": "EK_SUITE_RUNNER_PIN_MISMATCH",
+            "detail": "benchmark_run_receipt_v2 suite_runner_id does not match active pin",
+        }
+
+    suites = benchmark_run_receipt_v2.get("executed_suites")
+    if not isinstance(suites, list) or not suites:
+        return {"code": "EK_SUITE_LIST_MISMATCH", "detail": "benchmark_run_receipt_v2 executed_suites missing"}
+    actual_suite_ids: list[str] = []
+    seen: set[str] = set()
+    for row in suites:
+        if not isinstance(row, dict):
+            return {"code": "EK_SUITE_LIST_MISMATCH", "detail": "benchmark_run_receipt_v2 executed_suites row is not object"}
+        suite_id = str(row.get("suite_id", "")).strip()
+        if not suite_id.startswith("sha256:") or suite_id in seen:
+            return {"code": "EK_SUITE_LIST_MISMATCH", "detail": "benchmark_run_receipt_v2 contains duplicate/invalid suite_id"}
+        actual_suite_ids.append(suite_id)
+        seen.add(suite_id)
+    try:
+        expected_suite_ids = _resolve_effective_suite_ids_from_pins(
+            repo_root=repo_root,
+            pins=pins,
+            ek_id=ek_id,
+        )
+    except Exception:
+        return {"code": "EVAL_STAGE_FAIL", "detail": "failed to resolve effective suite ids from pinned authority data"}
+    if actual_suite_ids != expected_suite_ids:
+        return {"code": "EK_SUITE_LIST_MISMATCH", "detail": "executed suite list does not match resolved effective suite list"}
+    return None
 
 
 def _verify_once(
@@ -744,8 +831,24 @@ def _verify_once(
     score_delta_summary = ek_result.get("score_delta_summary")
     if not isinstance(score_delta_summary, dict):
         score_delta_summary = None
+    benchmark_run_receipt_v2 = ek_result.get("benchmark_run_receipt_v2")
+    if not isinstance(benchmark_run_receipt_v2, dict):
+        benchmark_run_receipt_v2 = None
 
     refutation = ek_result.get("refutation")
+    if benchmark_run_receipt_v2 is not None and not isinstance(refutation, dict):
+        v2_refutation = _validate_v2_benchmark_receipt_binding(
+            repo_root=repo_root,
+            pins=pins,
+            ek_id=str(meta.get("ek_id", _ZERO_SHA)),
+            benchmark_run_receipt_v2=benchmark_run_receipt_v2,
+        )
+        if isinstance(v2_refutation, dict):
+            refutation = dict(v2_refutation)
+            determinism_check = "REFUTED"
+            eval_status = "REFUTED"
+            decision = "REJECT"
+
     refutation_code: str | None = None
     patch_apply_fail_stage: str | None = None
     patch_apply_fail_code: str | None = None
@@ -801,6 +904,7 @@ def _verify_once(
         score_base_summary=score_base_summary,
         score_cand_summary=score_cand_summary,
         score_delta_summary=score_delta_summary,
+        benchmark_run_receipt_v2=benchmark_run_receipt_v2,
         effective_budget=budget_profile,
         patch_apply_fail_stage=patch_apply_fail_stage,
         patch_apply_fail_code=patch_apply_fail_code,

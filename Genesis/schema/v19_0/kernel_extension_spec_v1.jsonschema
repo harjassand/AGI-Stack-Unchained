@@ -1,0 +1,44 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v19_0/kernel_extension_spec_v1",
+  "title": "Kernel extension spec v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "extension_spec_id",
+    "anchor_ek_id",
+    "extension_name",
+    "suite_set_id",
+    "suite_set_relpath",
+    "additive_only_b"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "kernel_extension_spec_v1"
+    },
+    "extension_spec_id": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "anchor_ek_id": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "extension_name": {
+      "type": "string",
+      "minLength": 1
+    },
+    "suite_set_id": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "suite_set_relpath": {
+      "type": "string",
+      "minLength": 1
+    },
+    "additive_only_b": {
+      "type": "boolean"
+    }
+  }
+}

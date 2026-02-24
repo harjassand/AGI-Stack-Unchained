@@ -1,0 +1,73 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v18_0/benchmark_suite_manifest_v1",
+  "title": "Benchmark suite manifest v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "suite_id",
+    "suite_name",
+    "suite_runner_relpath",
+    "visibility",
+    "metrics"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "benchmark_suite_manifest_v1"
+    },
+    "suite_id": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "suite_name": {
+      "type": "string",
+      "minLength": 1
+    },
+    "suite_runner_relpath": {
+      "type": "string",
+      "minLength": 1
+    },
+    "visibility": {
+      "type": "string",
+      "enum": [
+        "PUBLIC",
+        "HIDDEN",
+        "HOLDOUT"
+      ]
+    },
+    "labels": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
+    },
+    "metrics": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "q32_metric_ids"
+      ],
+      "properties": {
+        "q32_metric_ids": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "gate_ids": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "public_only_b": {
+          "type": "boolean"
+        }
+      }
+    }
+  }
+}

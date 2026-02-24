@@ -40,6 +40,7 @@ from .continuity.objective_J_v1 import compute_J
 from .federation.check_treaty_v1 import T_AXIS_MORPHISM_TYPE, check_treaty
 from .federation.ok_ican_v1 import DEFAULT_ICAN_PROFILE, ican_id
 from .nontriviality_cert_v1 import build_nontriviality_cert_v1 as build_shared_nontriviality_cert_v1
+from .shadow_j_eval_v1 import build_ccap_receipt_metric_index_for_state_root
 from .world.check_world_snapshot_v1 import W_AXIS_MORPHISM_TYPE, check_world_snapshot
 
 
@@ -1152,6 +1153,32 @@ def _metric_q32(metrics: dict[str, Any], metric_id: str) -> int:
     return int(raw.get("q", 0))
 
 
+def _metric_q32_with_presence(metrics: dict[str, Any], metric_id: str) -> tuple[int, bool]:
+    raw = metrics.get(metric_id)
+    if not isinstance(raw, dict):
+        return 0, False
+    if set(raw.keys()) != {"q"}:
+        return 0, False
+    q_raw = raw.get("q")
+    if not isinstance(q_raw, int):
+        return 0, False
+    return int(q_raw), True
+
+
+def _ccap_metric_q32_for_tick(
+    *,
+    metric_index_by_tick: dict[int, dict[str, int]],
+    tick_u64: int,
+    metric_id: str,
+) -> tuple[int, bool]:
+    tick_metrics = metric_index_by_tick.get(int(tick_u64))
+    if not isinstance(tick_metrics, dict):
+        return 0, False
+    if str(metric_id) not in tick_metrics:
+        return 0, False
+    return int(tick_metrics[str(metric_id)]), True
+
+
 def _selected_precheck_hard_task_prediction(dispatch_ctx: dict[str, Any]) -> dict[str, int]:
     out = {
         "predicted_hard_task_delta_q32": 0,
@@ -1220,6 +1247,9 @@ def _hard_task_observation_deltas(dispatch_ctx: dict[str, Any]) -> dict[str, Any
         "baseline_init_b": False,
         "prev_score_q32": 0,
         "gain_count_u64": 0,
+        "required_metrics_present_b": False,
+        "missing_required_metric_ids_v1": list(_HARD_TASK_METRIC_IDS),
+        "receipt_metric_index_error_b": False,
         "delta_by_metric": {metric_id: 0 for metric_id in _HARD_TASK_METRIC_IDS},
     }
     state_root_raw = dispatch_ctx.get("state_root")
@@ -1246,11 +1276,48 @@ def _hard_task_observation_deltas(dispatch_ctx: dict[str, Any]) -> dict[str, Any
         return out
 
     rows.sort(key=lambda row: (int(row[0]), str(row[1])))
-    _tick_now, _path_now, now_payload, now_hash = rows[-1]
+    tick_now, _path_now, now_payload, now_hash = rows[-1]
+    tick_prev = -1
     prev_payload: dict[str, Any] | None = None
     prev_hash: str | None = None
     if len(rows) >= 2:
-        _tick_prev, _path_prev, prev_payload, prev_hash = rows[-2]
+        tick_prev, _path_prev, prev_payload, prev_hash = rows[-2]
+
+    required_metric_ids: tuple[str, ...] = (
+        "hard_task_score_q32",
+        "hard_task_prev_score_q32",
+        "hard_task_delta_q32",
+        *_HARD_TASK_METRIC_IDS,
+    )
+    ccap_metric_index_by_tick: dict[int, dict[str, int]] = {}
+    try:
+        ccap_metric_index_by_tick = build_ccap_receipt_metric_index_for_state_root(
+            state_root=state_root,
+            required_metric_ids=required_metric_ids,
+            require_consistent_mirror_b=True,
+        )
+    except Exception:
+        out["receipt_metric_index_error_b"] = True
+        ccap_metric_index_by_tick = {}
+
+    def _resolved_metric_q32(
+        *,
+        metrics: dict[str, Any] | None,
+        tick_u64: int,
+        metric_id: str,
+    ) -> tuple[int, bool]:
+        if isinstance(metrics, dict):
+            q_obs, present_obs = _metric_q32_with_presence(metrics, metric_id)
+            if present_obs:
+                return int(q_obs), True
+        q_receipt, present_receipt = _ccap_metric_q32_for_tick(
+            metric_index_by_tick=ccap_metric_index_by_tick,
+            tick_u64=tick_u64,
+            metric_id=metric_id,
+        )
+        if present_receipt:
+            return int(q_receipt), True
+        return 0, False
 
     now_metrics = now_payload.get("metrics")
     prev_metrics = (prev_payload or {}).get("metrics")
@@ -1261,26 +1328,73 @@ def _hard_task_observation_deltas(dispatch_ctx: dict[str, Any]) -> dict[str, Any
         baseline_init_u64 = int((baseline_raw or {}).get("q", 0) if isinstance(baseline_raw, dict) else baseline_raw)
     except Exception:
         baseline_init_u64 = 1
-    now_prev_score_q32 = int(_metric_q32(now_metrics, "hard_task_prev_score_q32"))
-    now_suite_delta_q32 = int(_metric_q32(now_metrics, "hard_task_delta_q32"))
+    now_prev_score_q32, now_prev_present_b = _resolved_metric_q32(
+        metrics=now_metrics,
+        tick_u64=int(tick_now),
+        metric_id="hard_task_prev_score_q32",
+    )
+    now_suite_delta_q32, now_suite_delta_present_b = _resolved_metric_q32(
+        metrics=now_metrics,
+        tick_u64=int(tick_now),
+        metric_id="hard_task_delta_q32",
+    )
+    now_metric_presence_by_id: dict[str, bool] = {}
+    for metric_id in _HARD_TASK_METRIC_IDS:
+        _now_q32, now_present_b = _resolved_metric_q32(
+            metrics=now_metrics,
+            tick_u64=int(tick_now),
+            metric_id=metric_id,
+        )
+        now_metric_presence_by_id[str(metric_id)] = bool(now_present_b)
+    missing_required_metric_ids = sorted([metric_id for metric_id, present_b in now_metric_presence_by_id.items() if not present_b])
+    out["required_metrics_present_b"] = bool(not missing_required_metric_ids and not bool(out["receipt_metric_index_error_b"]))
+    out["missing_required_metric_ids_v1"] = list(missing_required_metric_ids)
     if not isinstance(prev_metrics, dict):
         out["observation_hash"] = str(now_hash)
         out["previous_observation_hash"] = str(prev_hash) if isinstance(prev_hash, str) and prev_hash else None
         out["baseline_init_b"] = bool(baseline_init_u64 > 0)
-        out["prev_score_q32"] = int(now_prev_score_q32)
+        out["prev_score_q32"] = int(now_prev_score_q32 if now_prev_present_b else 0)
         deltas = {metric_id: 0 for metric_id in _HARD_TASK_METRIC_IDS}
-        deltas["hard_task_suite_score_q32"] = int(now_suite_delta_q32)
-        out["gain_count_u64"] = int(1 if int(now_suite_delta_q32) > 0 else 0)
+        if now_suite_delta_present_b:
+            deltas["hard_task_suite_score_q32"] = int(now_suite_delta_q32)
+        out["gain_count_u64"] = int(1 if now_suite_delta_present_b and int(now_suite_delta_q32) > 0 else 0)
         out["delta_by_metric"] = deltas
         return out
 
     deltas: dict[str, int] = {}
     gain_count = 0
-    previous_hard_task_score_q32 = int(_metric_q32(prev_metrics, "hard_task_score_q32"))
+    previous_hard_task_score_q32, prev_score_present_b = _resolved_metric_q32(
+        metrics=prev_metrics,
+        tick_u64=int(tick_prev),
+        metric_id="hard_task_score_q32",
+    )
     if previous_hard_task_score_q32 == 0:
-        previous_hard_task_score_q32 = int(_metric_q32(prev_metrics, "hard_task_suite_score_q32"))
+        previous_hard_task_score_q32, prev_score_present_b = _resolved_metric_q32(
+            metrics=prev_metrics,
+            tick_u64=int(tick_prev),
+            metric_id="hard_task_suite_score_q32",
+        )
+    if not bool(baseline_init_u64 > 0):
+        for metric_id in _HARD_TASK_METRIC_IDS:
+            _prev_q32, prev_present_b = _resolved_metric_q32(
+                metrics=prev_metrics,
+                tick_u64=int(tick_prev),
+                metric_id=metric_id,
+            )
+            if not prev_present_b and metric_id not in missing_required_metric_ids:
+                missing_required_metric_ids.append(metric_id)
     for metric_id in _HARD_TASK_METRIC_IDS:
-        delta_q32 = int(_metric_q32(now_metrics, metric_id)) - int(_metric_q32(prev_metrics, metric_id))
+        now_q32, _now_present_b = _resolved_metric_q32(
+            metrics=now_metrics,
+            tick_u64=int(tick_now),
+            metric_id=metric_id,
+        )
+        prev_q32, _prev_present_b = _resolved_metric_q32(
+            metrics=prev_metrics,
+            tick_u64=int(tick_prev),
+            metric_id=metric_id,
+        )
+        delta_q32 = int(now_q32) - int(prev_q32)
         deltas[metric_id] = int(delta_q32)
         if int(delta_q32) > 0:
             gain_count += 1
@@ -1288,7 +1402,14 @@ def _hard_task_observation_deltas(dispatch_ctx: dict[str, Any]) -> dict[str, Any
     out["observation_hash"] = str(now_hash)
     out["previous_observation_hash"] = str(prev_hash) if isinstance(prev_hash, str) and prev_hash else None
     out["baseline_init_b"] = bool(baseline_init_u64 > 0)
-    out["prev_score_q32"] = int(now_prev_score_q32 if int(now_prev_score_q32) > 0 else previous_hard_task_score_q32)
+    out["required_metrics_present_b"] = bool(not missing_required_metric_ids and not bool(out["receipt_metric_index_error_b"]))
+    out["missing_required_metric_ids_v1"] = sorted(set(str(row) for row in missing_required_metric_ids if str(row).strip()))
+    if now_prev_present_b and int(now_prev_score_q32) > 0:
+        out["prev_score_q32"] = int(now_prev_score_q32)
+    elif prev_score_present_b:
+        out["prev_score_q32"] = int(previous_hard_task_score_q32)
+    else:
+        out["prev_score_q32"] = 0
     out["gain_count_u64"] = int(gain_count)
     out["delta_by_metric"] = dict(deltas)
     return out
@@ -1771,6 +1892,14 @@ def run_promotion(
     )
     hard_task_baseline_init_b = bool(hard_task_observation.get("baseline_init_b", False))
     hard_task_prev_score_q32 = int(hard_task_observation.get("prev_score_q32", 0))
+    hard_task_required_metrics_present_b = bool(hard_task_observation.get("required_metrics_present_b", False))
+    hard_task_missing_metric_ids_v1_raw = hard_task_observation.get("missing_required_metric_ids_v1")
+    hard_task_missing_metric_ids_v1 = (
+        sorted({str(row).strip() for row in hard_task_missing_metric_ids_v1_raw if str(row).strip()})
+        if isinstance(hard_task_missing_metric_ids_v1_raw, list)
+        else list(_HARD_TASK_METRIC_IDS)
+    )
+    hard_task_receipt_metric_index_error_b = bool(hard_task_observation.get("receipt_metric_index_error_b", False))
     effective_hard_task_delta_q32 = 0
     if not hard_task_baseline_init_b:
         effective_hard_task_delta_q32 = int(max(hard_task_suite_delta_q32, predicted_hard_task_delta_q32))
@@ -1826,10 +1955,15 @@ def run_promotion(
             if str(primary_signal).strip().upper() == "WORK_UNITS_REDUCTION" and baseline_work_units_u64 is None:
                 utility_reason_code = "PROBE_MISSING"
             if require_hard_task_gain_b:
-                hard_task_ok_b = bool(hard_task_any_gain_b)
-                utility_ok_b = bool(utility_ok_b and hard_task_ok_b)
-                if not utility_ok_b and utility_reason_code == "UTILITY_OK":
-                    utility_reason_code = "NO_UTILITY_GAIN"
+                if not hard_task_required_metrics_present_b:
+                    hard_task_ok_b = False
+                    utility_ok_b = False
+                    utility_reason_code = "PROBE_MISSING"
+                else:
+                    hard_task_ok_b = bool(hard_task_any_gain_b)
+                    utility_ok_b = bool(utility_ok_b and hard_task_ok_b)
+                    if not utility_ok_b and utility_reason_code == "UTILITY_OK":
+                        utility_reason_code = "NO_UTILITY_GAIN"
 
     utility_metrics = {
         "binary_artifact_delta_present_b": bool(binary_delta_b),
@@ -1847,6 +1981,9 @@ def run_promotion(
             if isinstance(hard_task_observation.get("previous_observation_hash"), str)
             else None
         ),
+        "hard_task_required_metrics_present_b": bool(hard_task_required_metrics_present_b),
+        "hard_task_missing_metric_ids_v1": list(hard_task_missing_metric_ids_v1),
+        "hard_task_receipt_metric_index_error_b": bool(hard_task_receipt_metric_index_error_b),
         "hard_task_code_correctness_delta_q32": int(hard_task_code_delta_q32),
         "hard_task_performance_delta_q32": int(hard_task_performance_delta_q32),
         "hard_task_reasoning_delta_q32": int(hard_task_reasoning_delta_q32),

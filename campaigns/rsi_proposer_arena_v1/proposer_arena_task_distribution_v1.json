@@ -1,7 +1,13 @@
 {
   "schema_version": "proposer_arena_task_distribution_v1",
   "weights": {
-    "sh1_v0_3": 3,
+    "sh1_v0_3": 2,
+    "coordinator_mutator_v1": 1,
+    "market_rules_mutator_v1": 1,
     "kernel_ext_mutator_v1": 1
-  }
+  },
+  "patch_targets": [
+    "campaigns/rsi_proposer_arena_v1/proposer_arena_spec_v1.json",
+    "campaigns/rsi_proposer_arena_v1/proposer_arena_surrogate_policy_v1.json"
+  ]
 }

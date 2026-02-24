@@ -1,0 +1,29 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v19_0/proposer_arena_surrogate_policy_v1",
+  "title": "Proposer arena surrogate policy v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "enable_py_compile_b",
+    "enable_json_schema_check_b",
+    "anchor_public_fast_cmd",
+    "anchor_public_fast_timeout_s",
+    "risk_class_defaults"
+  ],
+  "properties": {
+    "schema_version": {"const": "proposer_arena_surrogate_policy_v1"},
+    "enable_py_compile_b": {"type": "boolean"},
+    "enable_json_schema_check_b": {"type": "boolean"},
+    "anchor_public_fast_cmd": {"type": "string"},
+    "anchor_public_fast_timeout_s": {"type": "integer", "minimum": 1},
+    "risk_class_defaults": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "string",
+        "enum": ["LOW", "MED", "HIGH", "FRONTIER_HEAVY"]
+      }
+    }
+  }
+}

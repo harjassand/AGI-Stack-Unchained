@@ -1,0 +1,26 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v19_0/proposer_arena_agent_registry_v1",
+  "title": "Proposer arena agent registry v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "agents"],
+  "properties": {
+    "schema_version": {"const": "proposer_arena_agent_registry_v1"},
+    "agents": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["agent_id", "agent_kind", "entry_module", "enabled"],
+        "properties": {
+          "agent_id": {"type": "string", "minLength": 1},
+          "agent_kind": {"type": "string", "minLength": 1},
+          "entry_module": {"type": "string", "minLength": 1},
+          "enabled": {"type": "boolean"}
+        }
+      }
+    }
+  }
+}

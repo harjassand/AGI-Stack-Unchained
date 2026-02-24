@@ -1,0 +1,32 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v19_0/proposer_arena_spec_v1",
+  "title": "Proposer arena spec v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "arena_spec_id",
+    "initial_bankroll_q32",
+    "initial_credibility_q32",
+    "candidate_ttl_ticks_u64",
+    "backlog_max_u32",
+    "max_patch_bytes_u32",
+    "public_only_ext_required_b",
+    "forbid_lock_prefixes"
+  ],
+  "properties": {
+    "schema_version": {"const": "proposer_arena_spec_v1"},
+    "arena_spec_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "initial_bankroll_q32": {"type": "integer", "minimum": 0},
+    "initial_credibility_q32": {"type": "integer", "minimum": 0},
+    "candidate_ttl_ticks_u64": {"type": "integer", "minimum": 1},
+    "backlog_max_u32": {"type": "integer", "minimum": 1},
+    "max_patch_bytes_u32": {"type": "integer", "minimum": 1},
+    "public_only_ext_required_b": {"type": "boolean"},
+    "forbid_lock_prefixes": {
+      "type": "array",
+      "items": {"type": "string", "minLength": 1}
+    }
+  }
+}

@@ -869,10 +869,16 @@ if selected_capability_id == "RSI_PROPOSER_ARENA_V1":
             arena_run = payload
             break
     if isinstance(arena_run, dict):
+        winner_kind_raw = str(arena_run.get("winner_kind", ""))
+        winner_kind = (
+            "EXT"
+            if winner_kind_raw.strip().upper() == "KERNEL_EXT_PROPOSAL"
+            else ("PATCH" if winner_kind_raw.strip().upper() == "PATCH" else winner_kind_raw)
+        )
         emit(
             "ARENA_WINNER",
             agent_id=str(arena_run.get("winner_agent_id", "")),
-            kind=str(arena_run.get("winner_kind", "")),
+            kind=str(winner_kind),
             candidate_id=str(arena_run.get("winner_candidate_id", "")),
         )
     arena_state = None

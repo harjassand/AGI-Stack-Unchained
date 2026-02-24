@@ -75,6 +75,22 @@ def _selection_sort_key(row: dict[str, Any]) -> tuple[int, int, int, str]:
     )
 
 
+def _configured_backlog_max_u32() -> int:
+    repo_root = Path(__file__).resolve().parents[3]
+    pack_path = repo_root / "campaigns" / "rsi_proposer_arena_v1" / "rsi_proposer_arena_pack_v1.json"
+    if not pack_path.exists() or not pack_path.is_file():
+        return int(_DEFAULT_BACKLOG_MAX_U32)
+    try:
+        pack_payload = load_canon_dict(pack_path)
+        validate_schema_v19(pack_payload, "rsi_proposer_arena_pack_v1")
+        budgets = pack_payload.get("budgets")
+        if isinstance(budgets, dict):
+            return int(max(1, int(budgets.get("backlog_max_u32", _DEFAULT_BACKLOG_MAX_U32))))
+    except Exception:
+        return int(_DEFAULT_BACKLOG_MAX_U32)
+    return int(_DEFAULT_BACKLOG_MAX_U32)
+
+
 def _candidate_material_id(*, candidate_payload: dict[str, Any], payload_hashes: dict[str, str]) -> str:
     material = {
         "schema_version": "arena_candidate_material_v1",
@@ -170,7 +186,8 @@ def _validate_quarantine_rules(*, state_root: Path, arena_state: dict[str, Any])
     for row in quarantined_rows:
         cooldown = int(max(0, int(row.get("cooldown_until_tick_u64", 0))))
         tick_u64 = int(max(0, int(arena_state.get("tick_u64", 0))))
-        if cooldown < tick_u64:
+        expected = int(tick_u64 + 10_000)
+        if cooldown != expected:
             _fail("NONDETERMINISTIC")
 
 
@@ -221,6 +238,8 @@ def verify(state_dir: Path, *, mode: str = "full") -> str:
         _fail("SCHEMA_FAIL")
     if not isinstance(ranked_ids, list) or len(ranked_ids) != len(considered):
         _fail("SCHEMA_FAIL")
+    if int(run_payload.get("n_considered_u64", -1)) != len(considered):
+        _fail("NONDETERMINISTIC")
 
     recomputed = sorted(considered, key=_selection_sort_key)
     recomputed_ids = [_ensure_sha256(row.get("candidate_id")) for row in recomputed]
@@ -233,7 +252,9 @@ def verify(state_dir: Path, *, mode: str = "full") -> str:
     backlog = arena_state_payload.get("candidate_backlog")
     if not isinstance(backlog, list):
         _fail("SCHEMA_FAIL")
-    if len(backlog) > int(_DEFAULT_BACKLOG_MAX_U32):
+    if int(run_payload.get("n_backlogged_u64", -1)) != len(backlog):
+        _fail("NONDETERMINISTIC")
+    if len(backlog) > int(_configured_backlog_max_u32()):
         _fail("NONDETERMINISTIC")
 
     candidate_rows = sorted(candidates_dir.glob("sha256_*.arena_candidate_v1.json"), key=lambda row: row.as_posix())
@@ -278,4 +299,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-

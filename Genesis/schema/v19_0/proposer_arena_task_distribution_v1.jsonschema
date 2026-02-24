@@ -1,0 +1,19 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v19_0/proposer_arena_task_distribution_v1",
+  "title": "Proposer arena task distribution v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "weights"],
+  "properties": {
+    "schema_version": {"const": "proposer_arena_task_distribution_v1"},
+    "weights": {
+      "type": "object",
+      "additionalProperties": {"type": "integer", "minimum": 1}
+    },
+    "patch_targets": {
+      "type": "array",
+      "items": {"type": "string", "minLength": 1}
+    }
+  }
+}

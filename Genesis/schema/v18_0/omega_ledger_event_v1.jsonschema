@@ -66,6 +66,7 @@
         "LONG_RUN_LAUNCH_MANIFEST",
         "LONG_RUN_STOP_RECEIPT",
         "ORCH_BANDIT_UPDATE",
+        "ORCH_POLICY_UPDATE",
         "SNAPSHOT",
         "SAFE_HALT"
       ],

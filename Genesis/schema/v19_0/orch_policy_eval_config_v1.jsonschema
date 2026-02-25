@@ -1,0 +1,23 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v19_0/orch_policy_eval_config_v1",
+  "title": "Orch policy eval config v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "holdout_dataset_id",
+    "min_delta_q32",
+    "min_coverage_q32",
+    "max_toxic_increase_q32",
+    "baseline_kind"
+  ],
+  "properties": {
+    "schema_version": {"const": "orch_policy_eval_config_v1"},
+    "holdout_dataset_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "min_delta_q32": {"type": "integer"},
+    "min_coverage_q32": {"type": "integer", "minimum": 0, "maximum": 4294967296},
+    "max_toxic_increase_q32": {"type": "integer"},
+    "baseline_kind": {"type": "string", "enum": ["ACTIVE_POLICY", "CURRENT_BANDIT_STATE"]}
+  }
+}

@@ -1,0 +1,21 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v19_0/orch_policy_activation_receipt_v1",
+  "title": "Orch policy activation receipt v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "status",
+    "reason_code",
+    "policy_bundle_id",
+    "pointer_path"
+  ],
+  "properties": {
+    "schema_version": {"const": "orch_policy_activation_receipt_v1"},
+    "status": {"type": "string", "enum": ["OK", "FAIL"]},
+    "reason_code": {"type": "string"},
+    "policy_bundle_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "pointer_path": {"type": "string", "minLength": 1}
+  }
+}

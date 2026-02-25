@@ -522,6 +522,8 @@ def _verify_forbidden_paths(
 ) -> None:
     if promotion_receipt is None:
         return
+    if str(promotion_receipt.get("result_kind", "")).strip().upper() == "PROMOTED_POLICY_UPDATE":
+        return
     bundle_hash = str(promotion_receipt.get("promotion_bundle_hash", ""))
     if bundle_hash == "sha256:" + "0" * 64:
         return
@@ -2732,6 +2734,11 @@ def verify(state_dir: Path, *, mode: str = "full") -> str:
         and promotion_status == "PROMOTED"
         and promotion_result_kind == "PROMOTED_EXT_QUEUED"
     )
+    promoted_policy_update_b = (
+        promotion_payload is not None
+        and promotion_status == "PROMOTED"
+        and promotion_result_kind == "PROMOTED_POLICY_UPDATE"
+    )
     if promotion_payload is not None:
         if subverifier_payload is None:
             fail("SUBVERIFIER_REQUIRED")
@@ -2791,7 +2798,39 @@ def verify(state_dir: Path, *, mode: str = "full") -> str:
             fail("SCHEMA_FAIL")
         if str(ext_payload.get("extension_id", "")).strip() != str((promotion_payload or {}).get("promotion_bundle_hash", "")).strip():
             fail("NONDETERMINISTIC")
-    if promotion_payload is not None and promotion_status == "PROMOTED" and not promoted_ext_queued_b:
+    if promoted_policy_update_b:
+        if subverifier_status != "VALID":
+            fail("SUBVERIFIER_REQUIRED")
+        _replay_promoted_subverifier(
+            state_root=state_root,
+            dispatch_payload=dispatch_payload,
+            subverifier_payload=subverifier_payload,
+            promotion_payload=promotion_payload,
+        )
+        if promotion_path is None:
+            fail("MISSING_STATE_INPUT")
+        promo_dir = promotion_path.parent
+        if (promo_dir / "meta_core_promo_verify_receipt_v1.json").exists():
+            fail("NONDETERMINISTIC")
+        if any(promo_dir.glob("sha256_*.meta_core_promo_verify_receipt_v1.json")):
+            fail("NONDETERMINISTIC")
+        if activation_payload is None:
+            fail("ACTIVATION_REQUIRES_PROMOTION")
+        if not bool(activation_payload.get("activation_success", False)):
+            fail("DOWNSTREAM_META_CORE_FAIL")
+        activation_kind = str(
+            activation_payload.get("activation_kind")
+            or activation_payload.get("activation_method")
+            or ""
+        ).strip()
+        if activation_kind != "ACTIVATION_KIND_ORCH_POLICY_UPDATE":
+            fail("SCHEMA_FAIL")
+        if activation_payload.get("before_active_manifest_hash") != activation_payload.get("after_active_manifest_hash"):
+            fail("NONDETERMINISTIC")
+        policy_receipt_hash = str(activation_payload.get("orch_policy_activation_receipt_hash", "")).strip()
+        if not _is_sha256(policy_receipt_hash):
+            fail("MISSING_STATE_INPUT")
+    if promotion_payload is not None and promotion_status == "PROMOTED" and (not promoted_ext_queued_b) and (not promoted_policy_update_b):
         if subverifier_status != "VALID":
             fail("SUBVERIFIER_REQUIRED")
         _replay_promoted_subverifier(
@@ -3101,12 +3140,15 @@ def verify(state_dir: Path, *, mode: str = "full") -> str:
             or activation_payload.get("activation_method")
             or ""
         ).strip()
-        if activation_kind != "ACTIVATION_KIND_EXT_QUEUED":
+        if activation_kind not in {"ACTIVATION_KIND_EXT_QUEUED", "ACTIVATION_KIND_ORCH_POLICY_UPDATE"}:
             if activation_payload.get("before_active_manifest_hash") == activation_payload.get("after_active_manifest_hash"):
                 fail("ACTIVATION_NO_MANIFEST_CHANGE")
 
     if promotion_payload is not None and promotion_path is not None:
-        bundle_hash = str(promotion_payload.get("promotion_bundle_hash", "")).strip()
+        if str(promotion_payload.get("result_kind", "")).strip().upper() == "PROMOTED_POLICY_UPDATE":
+            bundle_hash = ""
+        else:
+            bundle_hash = str(promotion_payload.get("promotion_bundle_hash", "")).strip()
         if bundle_hash.startswith("sha256:") and len(bundle_hash.split(":", 1)[1]) == 64:
             bundle_hex = bundle_hash.split(":", 1)[1]
             bundle_paths = sorted(state_root.glob(f"subruns/**/sha256_{bundle_hex}.*.json"))

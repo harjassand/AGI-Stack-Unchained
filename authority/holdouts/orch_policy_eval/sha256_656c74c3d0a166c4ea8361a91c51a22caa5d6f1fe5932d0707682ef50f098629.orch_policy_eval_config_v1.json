@@ -1,0 +1,1 @@
+{"baseline_kind":"CURRENT_BANDIT_STATE","holdout_dataset_id":"sha256:a3be90d158d17da13e98d07cbc7ea499e087050c9add1bba83987cc60b73a5af","max_toxic_increase_q32":0,"min_coverage_q32":3435973837,"min_delta_q32":214748365,"schema_version":"orch_policy_eval_config_v1"}

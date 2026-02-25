@@ -19,6 +19,9 @@
     "forced_frontier_debt_key",
     "routing_selector_id",
     "context_key",
+    "orch_policy_bundle_id_used",
+    "orch_policy_row_hit_b",
+    "orch_policy_selected_bonus_q32",
     "market_frozen_b",
     "market_used_for_selection_b",
     "reason_codes"
@@ -69,6 +72,14 @@
         {"type": "null"}
       ]
     },
+    "orch_policy_bundle_id_used": {
+      "anyOf": [
+        {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+        {"type": "null"}
+      ]
+    },
+    "orch_policy_row_hit_b": {"type": "boolean"},
+    "orch_policy_selected_bonus_q32": {"type": "integer"},
     "market_frozen_b": {"type": "boolean"},
     "market_used_for_selection_b": {"type": "boolean"},
     "reason_codes": {

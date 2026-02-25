@@ -1,0 +1,19 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v19_0/orch_policy_bundle_v1",
+  "title": "Orch policy bundle v1",
+  "type": "object",
+  "additionalProperties": true,
+  "required": [
+    "schema_version",
+    "policy_bundle_id",
+    "policy_table_id",
+    "policy_table"
+  ],
+  "properties": {
+    "schema_version": {"const": "orch_policy_bundle_v1"},
+    "policy_bundle_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "policy_table_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "policy_table": {"$ref": "https://genesis.engine/specs/v19_0/orch_policy_table_v1"}
+  }
+}

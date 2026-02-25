@@ -2566,6 +2566,9 @@ def _verify_hardening_bindings(
             fail_v18("SCHEMA_FAIL")
         routing_payload.setdefault("blocks_debt_key", None)
         routing_payload.setdefault("forced_frontier_debt_key", None)
+        routing_payload.setdefault("orch_policy_bundle_id_used", None)
+        routing_payload.setdefault("orch_policy_row_hit_b", False)
+        routing_payload.setdefault("orch_policy_selected_bonus_q32", 0)
         validate_schema_v19(routing_payload, "dependency_routing_receipt_v1")
         market_selection_in_play_b = bool(
             (snapshot.get("bid_selection_receipt_hash") is not None)
@@ -2651,6 +2654,91 @@ def _verify_hardening_bindings(
                 fail_v18("NONDETERMINISTIC")
             validate_schema_v18(ccap_payload, "ccap_v1")
 
+
+def _verify_orch_policy_update_activation(
+    *,
+    state_root: Path,
+    snapshot: dict[str, Any],
+    promotion_payload: dict[str, Any],
+) -> None:
+    activation_hash = snapshot.get("activation_receipt_hash")
+    if not _is_sha256(activation_hash):
+        fail_v18("MISSING_STATE_INPUT")
+    activation_path = _find_nested_hash(state_root, str(activation_hash), "omega_activation_receipt_v1.json")
+    activation_payload = _load_canon_json(activation_path)
+    if canon_hash_obj(activation_payload) != str(activation_hash):
+        fail_v18("NONDETERMINISTIC")
+    validate_schema_v18(activation_payload, "omega_activation_receipt_v1")
+    activation_kind = str(
+        activation_payload.get("activation_kind")
+        or activation_payload.get("activation_method")
+        or ""
+    ).strip()
+    if activation_kind != "ACTIVATION_KIND_ORCH_POLICY_UPDATE":
+        fail_v18("SCHEMA_FAIL")
+    if not bool(activation_payload.get("activation_success", False)):
+        fail_v18("DOWNSTREAM_META_CORE_FAIL")
+
+    orch_policy_activation_hash = str(activation_payload.get("orch_policy_activation_receipt_hash", "")).strip()
+    if not _is_sha256(orch_policy_activation_hash):
+        fail_v18("MISSING_STATE_INPUT")
+    orch_policy_activation_path = _find_nested_hash(
+        state_root,
+        orch_policy_activation_hash,
+        "orch_policy_activation_receipt_v1.json",
+    )
+    orch_policy_activation_payload = _load_canon_json(orch_policy_activation_path)
+    if canon_hash_obj(orch_policy_activation_payload) != orch_policy_activation_hash:
+        fail_v18("NONDETERMINISTIC")
+    validate_schema_v19(orch_policy_activation_payload, "orch_policy_activation_receipt_v1")
+    if str(orch_policy_activation_payload.get("status", "")).strip() != "OK":
+        fail_v18("DOWNSTREAM_META_CORE_FAIL")
+
+    promotion_bundle_hash = _require_sha256(promotion_payload.get("promotion_bundle_hash"), reason="SCHEMA_FAIL")
+    if str(orch_policy_activation_payload.get("policy_bundle_id", "")).strip() != str(promotion_bundle_hash):
+        fail_v18("NONDETERMINISTIC")
+
+    pointer_rel = str(orch_policy_activation_payload.get("pointer_path", "")).strip()
+    pointer_rel_path = Path(pointer_rel)
+    if not pointer_rel or pointer_rel_path.is_absolute() or ".." in pointer_rel_path.parts:
+        fail_v18("SCHEMA_FAIL")
+    try:
+        daemon_root = state_root.parents[1]
+    except Exception:
+        fail_v18("MISSING_STATE_INPUT")
+    pointer_path = (daemon_root / pointer_rel_path).resolve()
+    if not pointer_path.exists() or not pointer_path.is_file():
+        fail_v18("MISSING_STATE_INPUT")
+    pointer_payload = _load_canon_json(pointer_path)
+    validate_schema_v19(pointer_payload, "orch_policy_pointer_v1")
+    if str(pointer_payload.get("active_policy_bundle_id", "")).strip() != str(promotion_bundle_hash):
+        fail_v18("NONDETERMINISTIC")
+    if int(max(0, int(pointer_payload.get("updated_tick_u64", 0)))) != int(max(0, int(snapshot.get("tick_u64", 0)))):
+        fail_v18("NONDETERMINISTIC")
+
+    ledger_path = state_root / "ledger" / "omega_ledger_v1.jsonl"
+    if not ledger_path.exists() or not ledger_path.is_file():
+        fail_v18("MISSING_STATE_INPUT")
+    rows = [line.strip() for line in ledger_path.read_text(encoding="utf-8").splitlines() if line.strip()]
+    event_rows: list[dict[str, Any]] = []
+    for line in rows:
+        try:
+            payload = json.loads(line)
+        except Exception:
+            fail_v18("SCHEMA_FAIL")
+        if not isinstance(payload, dict):
+            fail_v18("SCHEMA_FAIL")
+        validate_schema_v18(payload, "omega_ledger_event_v1")
+        if int(max(0, int(payload.get("tick_u64", -1)))) != int(max(0, int(snapshot.get("tick_u64", 0)))):
+            continue
+        if str(payload.get("event_type", "")).strip() == "ORCH_POLICY_UPDATE":
+            event_rows.append(payload)
+    if len(event_rows) != 1:
+        fail_v18("NONDETERMINISTIC")
+    if str(event_rows[0].get("artifact_hash", "")).strip() != str(orch_policy_activation_hash):
+        fail_v18("NONDETERMINISTIC")
+
+
 def verify(state_dir: Path, *, mode: str = "full") -> str:
     # Verifier replay is pinned-only; force network off regardless of caller env.
     os.environ["OMEGA_NET_LIVE_OK"] = "0"
@@ -2712,6 +2800,13 @@ def verify(state_dir: Path, *, mode: str = "full") -> str:
 
     result_kind = str(promotion_payload.get("result_kind", "")).strip().upper()
     if result_kind == "PROMOTED_EXT_QUEUED":
+        return "VALID"
+    if result_kind == "PROMOTED_POLICY_UPDATE":
+        _verify_orch_policy_update_activation(
+            state_root=state_root,
+            snapshot=snapshot,
+            promotion_payload=promotion_payload,
+        )
         return "VALID"
 
     bundle_hash = str(promotion_payload.get("promotion_bundle_hash", ""))

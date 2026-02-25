@@ -60,3 +60,5 @@ daemon/orch_policy/eval_cache/*
 # Python/tool caches
 .ruff_cache/
 # OS junk
+authority/benchmark_suites/micdrop_novelty_*
+authority/benchmark_suite_sets/micdrop_novelty_*

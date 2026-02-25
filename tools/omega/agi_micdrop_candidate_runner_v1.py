@@ -1,65 +1,90 @@
 #!/usr/bin/env python3
-"""Micdrop holdout candidate runner v1."""
+"""Holdout candidate runner for micdrop tasks."""
 
 from __future__ import annotations
 
 import argparse
 import json
+import os
+import sys
 from pathlib import Path
 from typing import Any
 
-from tools.omega.agi_micdrop_solver_v1 import solve
+_REPO_ROOT = Path(__file__).resolve().parents[2]
+if str(_REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(_REPO_ROOT))
+
+from tools.omega.agi_micdrop_solver_v1 import solve_prompt
 
 
-def _parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(prog="agi_micdrop_candidate_runner_v1")
-    parser.add_argument("--mode", required=True)
-    parser.add_argument("--inputs_pack_path", required=True)
-    parser.add_argument("--out_dir", required=True)
-    parser.add_argument("--suite_id", required=True)
-    parser.add_argument("--ticks")
-    parser.add_argument("--seed_u64")
-    return parser.parse_args()
-
-
-def _load_inputs(path: Path) -> list[dict[str, Any]]:
+def _load_inputs_pack(path: Path) -> list[dict[str, Any]]:
     payload = json.loads(path.read_text(encoding="utf-8"))
     if not isinstance(payload, dict):
-        raise ValueError("inputs pack must be an object")
+        raise RuntimeError("inputs pack must be a JSON object")
     rows = payload.get("rows")
     if not isinstance(rows, list):
-        raise ValueError("inputs pack rows must be an array")
+        raise RuntimeError("inputs pack rows missing")
     out: list[dict[str, Any]] = []
     for row in rows:
-        if isinstance(row, dict):
-            out.append(dict(row))
+        if not isinstance(row, dict):
+            raise RuntimeError("input row must be an object")
+        row_id = str(row.get("id", "")).strip()
+        prompt = str(row.get("prompt", "")).strip()
+        if not row_id or not prompt:
+            raise RuntimeError("input row missing id/prompt")
+        meta = row.get("meta")
+        out.append({"id": row_id, "prompt": prompt, "meta": meta if isinstance(meta, dict) else {}})
     return out
 
 
 def _write_predictions(path: Path, rows: list[dict[str, Any]]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    lines: list[str] = []
-    for row in rows:
-        row_id = str(row.get("id", "")).strip()
-        if not row_id:
-            continue
-        prompt = str(row.get("prompt", ""))
-        meta = row.get("meta")
-        meta_obj = dict(meta) if isinstance(meta, dict) else {}
-        prediction = solve(prompt, meta=meta_obj)
-        line_obj = {"id": row_id, "prediction": str(prediction)}
-        lines.append(json.dumps(line_obj, sort_keys=True, separators=(",", ":")))
-    path.write_text(("\n".join(lines) + "\n") if lines else "", encoding="utf-8")
+    with path.open("w", encoding="utf-8") as handle:
+        for row in rows:
+            handle.write(json.dumps(row, sort_keys=True, separators=(",", ":")) + "\n")
+
+
+def _run_holdout_candidate(*, inputs_pack_path: Path, out_dir: Path) -> int:
+    inputs = _load_inputs_pack(inputs_pack_path)
+    predictions: list[dict[str, Any]] = []
+    for row in inputs:
+        pred = solve_prompt(str(row["prompt"]), row.get("meta") if isinstance(row.get("meta"), dict) else None)
+        predictions.append({"id": str(row["id"]), "prediction": str(pred)})
+    _write_predictions(out_dir / "predictions.jsonl", predictions)
+    return 0
+
+
+def _parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(prog="agi_micdrop_candidate_runner_v1")
+    parser.add_argument("--mode", default="holdout_candidate")
+    parser.add_argument("--suite_id", default="")
+    parser.add_argument("--inputs_pack_path", required=True)
+    parser.add_argument("--out_dir", required=True)
+    parser.add_argument("--ticks", type=int, default=1)
+    parser.add_argument("--seed_u64", type=int, default=0)
+    return parser.parse_args()
 
 
 def main() -> int:
     args = _parse_args()
-    if str(args.mode).strip() != "holdout_candidate":
-        return 2
+    mode = str(args.mode).strip()
+    if mode != "holdout_candidate":
+        print("INVALID:MODE_UNSUPPORTED")
+        return 1
 
-    rows = _load_inputs(Path(str(args.inputs_pack_path)))
+    inputs_pack_path = Path(str(args.inputs_pack_path)).resolve()
     out_dir = Path(str(args.out_dir)).resolve()
-    _write_predictions(out_dir / "predictions.jsonl", rows)
+    if not inputs_pack_path.exists() or not inputs_pack_path.is_file():
+        print("INVALID:MISSING_INPUTS_PACK")
+        return 1
+
+    os.environ.setdefault("PYTHONHASHSEED", "0")
+    try:
+        _run_holdout_candidate(inputs_pack_path=inputs_pack_path, out_dir=out_dir)
+    except Exception as exc:  # noqa: BLE001
+        print(f"INVALID:{str(exc) or 'candidate runner failed'}")
+        return 1
+    print("VALID")
     return 0
 
 

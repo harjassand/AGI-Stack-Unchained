@@ -1,0 +1,29 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v19_0/orch_bandit_config_v1",
+  "title": "Orchestration bandit config v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "selector_kind",
+    "max_contexts_u32",
+    "max_arms_per_context_u32",
+    "alpha_q32",
+    "explore_weight_q32",
+    "cost_weight_q32",
+    "cost_scale_ms_u64",
+    "min_trials_before_exploit_u32"
+  ],
+  "properties": {
+    "schema_version": {"const": "orch_bandit_config_v1"},
+    "selector_kind": {"const": "BANDIT_V1"},
+    "max_contexts_u32": {"type": "integer", "minimum": 1},
+    "max_arms_per_context_u32": {"type": "integer", "minimum": 1},
+    "alpha_q32": {"type": "integer", "minimum": 0, "maximum": 4294967296},
+    "explore_weight_q32": {"type": "integer", "minimum": 0},
+    "cost_weight_q32": {"type": "integer", "minimum": 0},
+    "cost_scale_ms_u64": {"type": "integer", "minimum": 1},
+    "min_trials_before_exploit_u32": {"type": "integer", "minimum": 0}
+  }
+}

@@ -18,6 +18,7 @@
     "forced_frontier_attempt_b",
     "forced_frontier_debt_key",
     "routing_selector_id",
+    "context_key",
     "market_frozen_b",
     "market_used_for_selection_b",
     "reason_codes"
@@ -54,8 +55,19 @@
       ]
     },
     "routing_selector_id": {
-      "type": "string",
-      "enum": ["MARKET", "NON_MARKET", "SCAFFOLD_OVERRIDE", "HARD_LOCK_OVERRIDE"]
+      "anyOf": [
+        {
+          "type": "string",
+          "enum": ["MARKET", "NON_MARKET", "SCAFFOLD_OVERRIDE", "HARD_LOCK_OVERRIDE"]
+        },
+        {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"}
+      ]
+    },
+    "context_key": {
+      "anyOf": [
+        {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+        {"type": "null"}
+      ]
     },
     "market_frozen_b": {"type": "boolean"},
     "market_used_for_selection_b": {"type": "boolean"},

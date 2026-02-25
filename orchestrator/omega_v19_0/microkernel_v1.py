@@ -124,6 +124,13 @@ from orchestrator.omega_v18_0.observer_v1 import observe, read_meta_core_active_
 from orchestrator.omega_bid_market_v2 import select_policy_proposal
 from .policy_vm_v1 import run_policy_vm_v1
 from .promoter_v1 import run_promotion, run_subverifier
+from .orch_bandit.bandit_v1 import (
+    BanditError as OrchBanditError,
+    compute_context_key as orch_bandit_compute_context_key,
+    compute_cost_norm_q32 as orch_bandit_compute_cost_norm_q32,
+    select_capability_id as orch_bandit_select_capability_id,
+    update_bandit_state as orch_bandit_update_bandit_state,
+)
 from orchestrator.native.runtime_stats_v1 import (
     RUNTIME_STATS_SOURCE_ID,
     WORK_UNITS_FORMULA_ID,
@@ -221,6 +228,26 @@ _HARD_TASK_METRIC_IDS: tuple[str, ...] = (
     "hard_task_reasoning_q32",
     "hard_task_suite_score_q32",
 )
+_ORCH_PROMOTION_RESULT_KINDS = {
+    "PROMOTED_COMMIT",
+    "PROMOTED_EXT_QUEUED",
+    "REJECTED",
+}
+_ORCH_TOXIC_REASON_PREFIXES = (
+    "HOLDOUT_",
+    "PHASE1_PUBLIC_ONLY_VIOLATION",
+    "SANDBOX_",
+)
+_ORCH_TOXIC_REASON_EXACT = {
+    "CCAP_ALLOWLIST_VIOLATION",
+    "CCAP_PATCH_ALLOWLIST_VIOLATION",
+    "BUDGET_EXHAUSTED",
+}
+_ORCH_REWARD_COMMIT_Q32 = _Q32_ONE
+_ORCH_REWARD_EXT_Q32 = _Q32_ONE // 2
+_ORCH_REWARD_TOXIC_Q32 = -(_Q32_ONE // 2)
+_ORCH_REWARD_HEAVY_UTILITY_BONUS_Q32 = _Q32_ONE // 4
+_ACTIVE_ORCH_BANDIT_STATE_POINTER = "ACTIVE_ORCH_BANDIT_STATE"
 
 
 @contextmanager
@@ -1518,6 +1545,220 @@ def _load_long_run_utility_policy(
         fail("PIN_HASH_MISMATCH")
     _validate_probe_suite_resolution_contract(utility_policy=payload)
     return payload, observed_id
+
+
+def _load_optional_orch_bandit_config(
+    *,
+    config_dir: Path,
+    pack: dict[str, Any],
+) -> tuple[dict[str, Any] | None, str | None]:
+    rel_raw = str(pack.get("orch_bandit_config_rel", "")).strip()
+    if not rel_raw:
+        return None, None
+    rel = _require_safe_relpath(rel_raw)
+    path = config_dir / rel
+    if not path.exists() or not path.is_file():
+        fail("MISSING_STATE_INPUT")
+    payload = load_canon_dict(path)
+    validate_schema_v19(payload, "orch_bandit_config_v1")
+    return payload, canon_hash_obj(payload)
+
+
+def _normalize_orch_bandit_lane_kind(*, lane_name: str | None) -> str:
+    lane = str(lane_name or "").strip().upper()
+    if lane == "FRONTIER":
+        return "FRONTIER_HEAVY"
+    if lane in {"BASELINE", "CANARY"}:
+        return "BASELINE"
+    return "UNKNOWN"
+
+
+def _normalize_orch_promotion_result_kind(
+    *,
+    result_kind: Any,
+    status: Any,
+    activation_kind: Any,
+) -> str:
+    kind = str(result_kind).strip()
+    if kind in _ORCH_PROMOTION_RESULT_KINDS:
+        return kind
+    normalized_status = str(status).strip().upper()
+    if normalized_status == "PROMOTED":
+        normalized_activation_kind = str(activation_kind).strip()
+        if normalized_activation_kind == "ACTIVATION_KIND_EXT_QUEUED":
+            return "PROMOTED_EXT_QUEUED"
+        return "PROMOTED_COMMIT"
+    return "REJECTED"
+
+
+def _is_toxic_reason_code(reason_code: Any) -> bool:
+    code = str(reason_code).strip()
+    if not code:
+        return False
+    for prefix in _ORCH_TOXIC_REASON_PREFIXES:
+        if code.startswith(prefix):
+            return True
+    return code in _ORCH_TOXIC_REASON_EXACT
+
+
+def _utility_indicates_effect_heavy_ok(utility_receipt: dict[str, Any] | None) -> bool:
+    if not isinstance(utility_receipt, dict):
+        return False
+    return str(utility_receipt.get("effect_class", "")).strip() == "EFFECT_HEAVY_OK"
+
+
+def _clamp_orch_reward_q32(value: int) -> int:
+    if int(value) < -_Q32_ONE:
+        return -_Q32_ONE
+    if int(value) > _Q32_ONE:
+        return _Q32_ONE
+    return int(value)
+
+
+def _compute_orch_reward_q32(
+    *,
+    promotion_result_kind: str,
+    toxic_fail_b: bool,
+    lane_kind: str,
+    utility_receipt: dict[str, Any] | None,
+) -> int:
+    if str(promotion_result_kind) == "PROMOTED_COMMIT":
+        r_commit_q32 = int(_ORCH_REWARD_COMMIT_Q32)
+        r_ext_q32 = 0
+    elif str(promotion_result_kind) == "PROMOTED_EXT_QUEUED":
+        r_commit_q32 = 0
+        r_ext_q32 = int(_ORCH_REWARD_EXT_Q32)
+    else:
+        r_commit_q32 = 0
+        r_ext_q32 = 0
+
+    r_toxic_penalty_q32 = int(_ORCH_REWARD_TOXIC_Q32 if bool(toxic_fail_b) else 0)
+    r_heavy_utility_bonus_q32 = int(
+        _ORCH_REWARD_HEAVY_UTILITY_BONUS_Q32
+        if str(lane_kind).strip() == "FRONTIER_HEAVY" and _utility_indicates_effect_heavy_ok(utility_receipt)
+        else 0
+    )
+    reward_q32 = int(r_commit_q32) + int(r_ext_q32) + int(r_toxic_penalty_q32) + int(r_heavy_utility_bonus_q32)
+    return int(_clamp_orch_reward_q32(reward_q32))
+
+
+def _orch_bandit_state_dir(*, state_root: Path) -> Path:
+    return state_root / "orch_bandit" / "state"
+
+
+def _read_orch_bandit_pointer(*, state_dir: Path) -> str | None:
+    pointer_path = state_dir / _ACTIVE_ORCH_BANDIT_STATE_POINTER
+    if not pointer_path.exists() or not pointer_path.is_file():
+        return None
+    value = pointer_path.read_text(encoding="utf-8").strip()
+    return value or None
+
+
+def _write_orch_bandit_pointer(*, state_dir: Path, state_hash: str) -> None:
+    if not _is_sha256(state_hash):
+        fail("SCHEMA_FAIL")
+    state_dir.mkdir(parents=True, exist_ok=True)
+    pointer_path = state_dir / _ACTIVE_ORCH_BANDIT_STATE_POINTER
+    tmp_name = f".tmp_{_ACTIVE_ORCH_BANDIT_STATE_POINTER}.{os.getpid()}.{time.monotonic_ns()}"
+    tmp_path = state_dir / tmp_name
+    tmp_path.write_text(str(state_hash) + "\n", encoding="utf-8")
+    os.replace(tmp_path, pointer_path)
+    fd = os.open(str(state_dir), os.O_RDONLY)
+    try:
+        os.fsync(fd)
+    finally:
+        os.close(fd)
+
+
+def _load_or_bootstrap_orch_bandit_state(
+    *,
+    state_root: Path,
+    ek_id: str,
+    kernel_ledger_id: str,
+) -> tuple[dict[str, Any], str]:
+    state_dir = _orch_bandit_state_dir(state_root=state_root)
+    state_dir.mkdir(parents=True, exist_ok=True)
+    pointer = _read_orch_bandit_pointer(state_dir=state_dir)
+    if isinstance(pointer, str) and pointer:
+        if not _is_sha256(pointer):
+            fail("NONDETERMINISTIC")
+        hexd = pointer.split(":", 1)[1]
+        state_path = state_dir / f"sha256_{hexd}.orch_bandit_state_v1.json"
+        if not state_path.exists() or not state_path.is_file():
+            fail("MISSING_STATE_INPUT")
+        payload = load_canon_dict(state_path)
+        validate_schema_v19(payload, "orch_bandit_state_v1")
+        if canon_hash_obj(payload) != pointer:
+            fail("NONDETERMINISTIC")
+        return payload, pointer
+
+    bootstrap = {
+        "schema_version": "orch_bandit_state_v1",
+        "tick_u64": 0,
+        "parent_state_hash": _SHA256_ZERO,
+        "ek_id": _sha256_or_zero(ek_id),
+        "kernel_ledger_id": _sha256_or_zero(kernel_ledger_id),
+        "contexts": [],
+    }
+    validate_schema_v19(bootstrap, "orch_bandit_state_v1")
+    _path, obj, digest = _write_payload_atomic(
+        state_dir,
+        "orch_bandit_state_v1.json",
+        bootstrap,
+    )
+    _write_orch_bandit_pointer(state_dir=state_dir, state_hash=digest)
+    return obj, digest
+
+
+def _derive_orch_bandit_eligible_capability_ids(
+    *,
+    registry: dict[str, Any],
+    utility_policy: dict[str, Any] | None,
+    lane_kind: str,
+    hard_lock_active_b: bool,
+    current_selected_capability_id: str,
+    max_arms_u32: int,
+) -> list[str]:
+    max_arms = int(max(1, int(max_arms_u32)))
+    selected_capability_id = str(current_selected_capability_id).strip()
+    if bool(hard_lock_active_b):
+        if not selected_capability_id:
+            fail("BANDIT_FAIL:HARD_LOCK_EMPTY")
+        return [selected_capability_id]
+
+    caps = registry.get("capabilities")
+    if not isinstance(caps, list):
+        fail("SCHEMA_FAIL")
+    heavy_lane = str(lane_kind).strip() == "FRONTIER_HEAVY"
+    out: list[str] = []
+    seen: set[str] = set()
+    scanned = 0
+    for row in sorted([entry for entry in caps if isinstance(entry, dict)], key=lambda entry: str(entry.get("capability_id", ""))):
+        scanned += 1
+        if scanned > int(max_arms):
+            fail("BANDIT_FAIL:ARM_LIMIT")
+        capability_id = str(row.get("capability_id", "")).strip()
+        if not capability_id or capability_id in seen:
+            continue
+        if not bool(row.get("enabled", False)):
+            continue
+        declared_class = _declared_class_for_capability_id(
+            utility_policy=utility_policy,
+            capability_id=capability_id,
+        )
+        is_heavy_capability = declared_class in _HEAVY_DECLARED_CLASSES
+        if heavy_lane and not is_heavy_capability:
+            continue
+        if (not heavy_lane) and is_heavy_capability:
+            continue
+        out.append(capability_id)
+        seen.add(capability_id)
+        if len(out) > int(max_arms):
+            fail("BANDIT_FAIL:ARM_LIMIT")
+    out = sorted(out)
+    if not out:
+        fail("BANDIT_FAIL:NO_ELIGIBLE_ARMS")
+    return out
 
 
 def _declared_class_for_capability_id(*, utility_policy: dict[str, Any] | None, capability_id: str) -> str:
@@ -2948,9 +3189,10 @@ def _build_dependency_routing_receipt(
     market_frozen_b: bool,
     market_used_for_selection_b: bool,
     reason_codes: list[str],
+    context_key: str | None = None,
 ) -> dict[str, Any]:
     selector_id = str(routing_selector_id).strip()
-    if selector_id not in _ROUTING_SELECTOR_IDS:
+    if selector_id not in _ROUTING_SELECTOR_IDS and not _is_sha256(selector_id):
         selector_id = "NON_MARKET"
     payload = {
         "schema_name": "dependency_routing_receipt_v1",
@@ -2970,6 +3212,11 @@ def _build_dependency_routing_receipt(
             else None
         ),
         "routing_selector_id": selector_id,
+        "context_key": (
+            str(context_key).strip()
+            if isinstance(context_key, str) and _is_sha256(str(context_key).strip())
+            else None
+        ),
         "market_frozen_b": bool(market_frozen_b),
         "market_used_for_selection_b": bool(market_used_for_selection_b),
         "reason_codes": [str(row) for row in reason_codes],
@@ -4802,6 +5049,8 @@ def tick_once(
         "long_run/debt",
         "long_run/anti_monopoly",
         "long_run/loop_breaker",
+        "orch_bandit/state",
+        "orch_bandit/updates",
     ]:
         (state_root / rel).mkdir(parents=True, exist_ok=True)
 
@@ -4956,6 +5205,25 @@ def tick_once(
             milestone_force_sh1_frontier_b
             and int(tick_u64) <= int(milestone_force_sh1_frontier_until_tick_u64)
         )
+
+        orch_bandit_config_payload: dict[str, Any] | None = None
+        orch_bandit_config_hash: str | None = None
+        orch_bandit_state_in: dict[str, Any] | None = None
+        orch_bandit_state_in_id: str = _SHA256_ZERO
+        orch_bandit_config_payload, orch_bandit_config_hash = _load_optional_orch_bandit_config(
+            config_dir=config_dir,
+            pack=pack,
+        )
+        if orch_bandit_config_payload is not None:
+            orch_bandit_ek_id = _sha256_or_zero(pack.get("long_run_eval_kernel_id"))
+            orch_bandit_kernel_ledger_id = _sha256_or_zero(
+                (long_run_eval_kernel_payload or {}).get("extensions_ledger_id")
+            )
+            orch_bandit_state_in, orch_bandit_state_in_id = _load_or_bootstrap_orch_bandit_state(
+                state_root=state_root,
+                ek_id=orch_bandit_ek_id,
+                kernel_ledger_id=orch_bandit_kernel_ledger_id,
+            )
 
         bid_market_cfg, bid_market_cfg_hash = load_optional_bid_market_config(config_dir)
         market_enabled = bid_market_enabled(bid_market_cfg)
@@ -5307,6 +5575,11 @@ def tick_once(
         utility_proof_hash: str | None = None
         dependency_routing_receipt_hash: str | None = None
         dependency_debt_snapshot_hash: str | None = None
+        orch_bandit_update_receipt_hash: str | None = None
+        orch_bandit_context_key: str | None = None
+        orch_bandit_context_lane_kind = "UNKNOWN"
+        orch_bandit_context_runaway_band_u32 = 0
+        orch_bandit_context_objective_kind = "UNKNOWN"
         anti_monopoly_state_hash: str | None = None
         policy_vm_trace_payload_for_proof: dict[str, Any] | None = None
         policy_vm_proof_program_id: str | None = None
@@ -6417,6 +6690,84 @@ def tick_once(
             # Persist dependency routing receipt after frontier-attempt evidence is known
             # so hard-lock transition outcomes are recorded in the same tick.
 
+        if (
+            orch_bandit_config_payload is not None
+            and isinstance(orch_bandit_state_in, dict)
+        ):
+            try:
+                action_kind_for_bandit = str(decision_plan.get("action_kind", "")).strip()
+                orch_bandit_context_lane_kind = _normalize_orch_bandit_lane_kind(lane_name=lane_name)
+                orch_bandit_context_runaway_band_u32 = int(
+                    max(0, min(int(decision_plan.get("runaway_escalation_level_u64", 0)), 5))
+                )
+                orch_bandit_context_objective_kind = str(action_kind_for_bandit).strip() or "UNKNOWN"
+                orch_bandit_context_key = orch_bandit_compute_context_key(
+                    lane_kind=orch_bandit_context_lane_kind,
+                    runaway_level_u32=orch_bandit_context_runaway_band_u32,
+                    objective_kind=orch_bandit_context_objective_kind,
+                )
+                orch_bandit_hard_lock_active_b = bool(
+                    bool(forced_frontier_attempt_b)
+                    or bool((prev_dependency_debt_state or {}).get("hard_lock_active_b", False))
+                    or action_kind_for_bandit == "RUN_GOAL_TASK"
+                )
+                eligible_capability_ids = _derive_orch_bandit_eligible_capability_ids(
+                    registry=registry,
+                    utility_policy=long_run_utility_policy_payload,
+                    lane_kind=orch_bandit_context_lane_kind,
+                    hard_lock_active_b=orch_bandit_hard_lock_active_b,
+                    current_selected_capability_id=selected_capability_id,
+                    max_arms_u32=int(orch_bandit_config_payload.get("max_arms_per_context_u32", 1)),
+                )
+                bandit_selected_capability_id = orch_bandit_select_capability_id(
+                    config=orch_bandit_config_payload,
+                    state=orch_bandit_state_in,
+                    context_key=str(orch_bandit_context_key),
+                    eligible_capability_ids=list(eligible_capability_ids),
+                )
+                if action_kind_for_bandit != "RUN_CAMPAIGN":
+                    selected_capability_id = str(bandit_selected_capability_id)
+                    selected_declared_class = _declared_class_for_capability_id(
+                        utility_policy=long_run_utility_policy_payload,
+                        capability_id=selected_capability_id,
+                    )
+                if (
+                    action_kind_for_bandit == "RUN_CAMPAIGN"
+                    and str(bandit_selected_capability_id) != str(selected_capability_id)
+                ):
+                    bandit_cap_row = _capability_id_to_campaign(
+                        registry=registry,
+                        capability_id=str(bandit_selected_capability_id),
+                        tick_u64=int(tick_u64),
+                        state=prev_state,
+                    )
+                    if bandit_cap_row is None and orch_bandit_hard_lock_active_b:
+                        bandit_cap_row = _capability_row_for_forced_frontier(
+                            registry=registry,
+                            capability_id=str(bandit_selected_capability_id),
+                        )
+                    if bandit_cap_row is None:
+                        fail("BANDIT_FAIL:NO_ELIGIBLE_ARMS")
+                    decision_plan, decision_hash = _rewrite_plan_for_frontier_capability_bias(
+                        decision_plan=decision_plan,
+                        cap_row=bandit_cap_row,
+                        capability_id=str(bandit_selected_capability_id),
+                        tie_break_reason=f"BANDIT_V1:{bandit_selected_capability_id}",
+                    )
+                    _, decision_plan, decision_hash = _write_payload(
+                        state_root / "decisions",
+                        "omega_decision_plan_v1.json",
+                        decision_plan,
+                    )
+                    selected_capability_id = _selected_capability_id_from_plan(decision_plan)
+                    selected_goal_id = _selected_goal_id_from_plan(decision_plan)
+                    selected_declared_class = _declared_class_for_capability_id(
+                        utility_policy=long_run_utility_policy_payload,
+                        capability_id=selected_capability_id,
+                    )
+            except OrchBanditError as exc:
+                fail(str(exc))
+
         run_seed_override_raw = str(os.environ.get("OMEGA_RUN_SEED_U64", "")).strip()
         if run_seed_override_raw:
             run_seed_u64 = int(run_seed_override_raw)
@@ -7233,6 +7584,9 @@ def tick_once(
                 forced_frontier_attempt_b=bool(forced_frontier_attempt_b),
                 market_selection_in_play_b=bool(market_selection_in_play_b),
             )
+            if orch_bandit_config_payload is not None and isinstance(orch_bandit_config_hash, str):
+                routing_selector_id = str(orch_bandit_config_hash)
+                market_used_for_selection_b = False
             dependency_routing_receipt = _build_dependency_routing_receipt(
                 tick_u64=tick_u64,
                 selected_capability_id=selected_capability_id,
@@ -7244,6 +7598,7 @@ def tick_once(
                 forced_frontier_attempt_b=bool(forced_frontier_attempt_b),
                 forced_frontier_debt_key=forced_frontier_debt_key,
                 routing_selector_id=routing_selector_id,
+                context_key=orch_bandit_context_key,
                 market_frozen_b=bool(market_frozen_b),
                 market_used_for_selection_b=bool(market_used_for_selection_b),
                 reason_codes=list(dependency_routing_reason_codes),
@@ -8124,6 +8479,80 @@ def tick_once(
             _emit("SAFE_HALT", snapshot_hash)
 
         tick_total_ns = _DETERMINISTIC_TICK_TOTAL_NS if deterministic_timing else (time.monotonic_ns() - tick_start_ns)
+
+        if (
+            orch_bandit_config_payload is not None
+            and isinstance(orch_bandit_state_in, dict)
+            and isinstance(orch_bandit_context_key, str)
+            and _is_sha256(orch_bandit_context_key)
+        ):
+            try:
+                wallclock_ms_u64 = int(max(0, int(tick_total_ns) // 1_000_000))
+                promotion_result_kind = _normalize_orch_promotion_result_kind(
+                    result_kind=(promotion_receipt or {}).get("result_kind"),
+                    status=((promotion_receipt or {}).get("result") or {}).get("status"),
+                    activation_kind=(activation_receipt or {}).get("activation_kind"),
+                )
+                toxic_fail_b = _is_toxic_reason_code(
+                    ((promotion_receipt or {}).get("result") or {}).get("reason_code")
+                )
+                observed_reward_q32 = _compute_orch_reward_q32(
+                    promotion_result_kind=promotion_result_kind,
+                    toxic_fail_b=bool(toxic_fail_b),
+                    lane_kind=str(orch_bandit_context_lane_kind),
+                    utility_receipt=utility_proof_receipt,
+                )
+                observed_cost_q32 = orch_bandit_compute_cost_norm_q32(
+                    wallclock_ms_u64=int(wallclock_ms_u64),
+                    cost_scale_ms_u64=int(orch_bandit_config_payload.get("cost_scale_ms_u64", 1)),
+                )
+                orch_bandit_state_out = orch_bandit_update_bandit_state(
+                    config=orch_bandit_config_payload,
+                    state_in=orch_bandit_state_in,
+                    state_in_id=orch_bandit_state_in_id,
+                    tick_u64=int(tick_u64),
+                    ek_id=_sha256_or_zero((orch_bandit_state_in or {}).get("ek_id")),
+                    kernel_ledger_id=_sha256_or_zero((orch_bandit_state_in or {}).get("kernel_ledger_id")),
+                    context_key=str(orch_bandit_context_key),
+                    lane_kind=str(orch_bandit_context_lane_kind),
+                    runaway_band_u32=int(orch_bandit_context_runaway_band_u32),
+                    objective_kind=str(orch_bandit_context_objective_kind),
+                    selected_capability_id=str(selected_capability_id),
+                    observed_reward_q32=int(observed_reward_q32),
+                    observed_cost_q32=int(observed_cost_q32),
+                )
+                validate_schema_v19(orch_bandit_state_out, "orch_bandit_state_v1")
+                _state_path, _state_obj, orch_bandit_state_out_id = _write_payload_atomic(
+                    _orch_bandit_state_dir(state_root=state_root),
+                    "orch_bandit_state_v1.json",
+                    orch_bandit_state_out,
+                )
+                _write_orch_bandit_pointer(
+                    state_dir=_orch_bandit_state_dir(state_root=state_root),
+                    state_hash=str(orch_bandit_state_out_id),
+                )
+                orch_bandit_update_receipt = {
+                    "schema_version": "orch_bandit_update_receipt_v1",
+                    "tick_u64": int(max(0, int(tick_u64))),
+                    "state_in_id": str(orch_bandit_state_in_id),
+                    "state_out_id": str(orch_bandit_state_out_id),
+                    "context_key": str(orch_bandit_context_key),
+                    "selected_capability_id": str(selected_capability_id),
+                    "observed_reward_q32": int(observed_reward_q32),
+                    "observed_cost_q32": int(observed_cost_q32),
+                    "status": "OK",
+                    "reason_code": "OK",
+                }
+                validate_schema_v19(orch_bandit_update_receipt, "orch_bandit_update_receipt_v1")
+                _update_path, _update_obj, orch_bandit_update_receipt_hash = _write_payload_atomic(
+                    state_root / "orch_bandit" / "updates",
+                    "orch_bandit_update_receipt_v1.json",
+                    orch_bandit_update_receipt,
+                )
+                _emit("ORCH_BANDIT_UPDATE", orch_bandit_update_receipt_hash)
+            except OrchBanditError as exc:
+                fail(str(exc))
+
         timings_line = " ".join(
             [
                 f"tick_u64={int(tick_u64)}",

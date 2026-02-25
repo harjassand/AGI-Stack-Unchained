@@ -50,6 +50,7 @@
     "long_run_eval_kernel_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
     "long_run_eval_suite_rel": {"type": "string"},
     "long_run_eval_suite_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "orch_bandit_config_rel": {"type": "string"},
     "policy_vm_mode": {"type": "string", "enum": ["DECISION_ONLY", "DUAL", "PROPOSAL_ONLY"]},
     "policy_branch_id": {"type": "string"},
     "policy_round_u32": {"type": "integer", "minimum": 0},

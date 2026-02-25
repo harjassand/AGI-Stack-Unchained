@@ -1,0 +1,36 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v19_0/orch_worldmodel_train_receipt_v1",
+  "title": "Orchestration world-model train receipt v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "status",
+    "reason_code",
+    "train_config_id",
+    "transition_dataset_manifest_id",
+    "policy_table_id",
+    "planner_kind",
+    "contexts_u32",
+    "actions_u32",
+    "rows_written_u32",
+    "output_paths"
+  ],
+  "properties": {
+    "schema_version": {"const": "orch_worldmodel_train_receipt_v1"},
+    "status": {"type": "string", "enum": ["OK", "FAIL"]},
+    "reason_code": {"type": "string"},
+    "train_config_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "transition_dataset_manifest_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "policy_table_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "planner_kind": {"type": "string", "enum": ["TABULAR_MPC_V1", "NEURAL_MPC_V1"]},
+    "contexts_u32": {"type": "integer", "minimum": 0},
+    "actions_u32": {"type": "integer", "minimum": 0},
+    "rows_written_u32": {"type": "integer", "minimum": 0},
+    "output_paths": {
+      "type": "array",
+      "items": {"type": "string"}
+    }
+  }
+}

@@ -1,0 +1,42 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v19_0/orch_policy_bundle_v1",
+  "title": "Orchestration policy bundle v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "bundle_id",
+    "ek_id",
+    "kernel_ledger_id",
+    "train_config_id",
+    "transition_dataset_manifest_id",
+    "policy_table_id",
+    "policy_table_relpath",
+    "artifacts",
+    "notes"
+  ],
+  "properties": {
+    "schema_version": {"const": "orch_policy_bundle_v1"},
+    "bundle_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "ek_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "kernel_ledger_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "train_config_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "transition_dataset_manifest_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "policy_table_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "policy_table_relpath": {"type": "string"},
+    "artifacts": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["relpath", "sha256"],
+        "properties": {
+          "relpath": {"type": "string"},
+          "sha256": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"}
+        }
+      }
+    },
+    "notes": {"type": "string"}
+  }
+}

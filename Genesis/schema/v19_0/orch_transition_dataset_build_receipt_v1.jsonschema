@@ -1,0 +1,37 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v19_0/orch_transition_dataset_build_receipt_v1",
+  "title": "Orchestration transition dataset build receipt v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "dataset_manifest_id",
+    "status",
+    "reason_code",
+    "runs_scanned_u64",
+    "runs_included_u64",
+    "events_included_u64",
+    "dropped_rows_u64",
+    "drop_reason_histogram",
+    "output_paths"
+  ],
+  "properties": {
+    "schema_version": {"const": "orch_transition_dataset_build_receipt_v1"},
+    "dataset_manifest_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "status": {"type": "string", "enum": ["OK", "FAIL"]},
+    "reason_code": {"type": "string"},
+    "runs_scanned_u64": {"type": "integer", "minimum": 0},
+    "runs_included_u64": {"type": "integer", "minimum": 0},
+    "events_included_u64": {"type": "integer", "minimum": 0},
+    "dropped_rows_u64": {"type": "integer", "minimum": 0},
+    "drop_reason_histogram": {
+      "type": "object",
+      "additionalProperties": {"type": "integer", "minimum": 0}
+    },
+    "output_paths": {
+      "type": "array",
+      "items": {"type": "string"}
+    }
+  }
+}

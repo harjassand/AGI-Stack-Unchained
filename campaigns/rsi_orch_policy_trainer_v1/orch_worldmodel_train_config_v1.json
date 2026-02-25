@@ -1,0 +1,9 @@
+{
+  "schema_version": "orch_worldmodel_train_config_v1",
+  "max_contexts_u32": 256,
+  "max_actions_u32": 64,
+  "horizon_u32": 3,
+  "discount_q32": 3865470566,
+  "planner_kind": "TABULAR_MPC_V1",
+  "seed_u64": 0
+}

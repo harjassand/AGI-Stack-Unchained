@@ -1,0 +1,26 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v19_0/proposer_model_train_receipt_v1",
+  "title": "Proposer model train receipt v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "status",
+    "reason_code",
+    "train_config_id",
+    "bundle_id",
+    "output_paths"
+  ],
+  "properties": {
+    "schema_version": {"const": "proposer_model_train_receipt_v1"},
+    "status": {"type": "string", "enum": ["OK", "FAIL"]},
+    "reason_code": {"type": "string", "minLength": 1},
+    "train_config_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "bundle_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "output_paths": {
+      "type": "array",
+      "items": {"type": "string", "minLength": 1}
+    }
+  }
+}

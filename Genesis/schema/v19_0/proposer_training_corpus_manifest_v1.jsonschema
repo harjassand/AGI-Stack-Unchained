@@ -1,0 +1,75 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v19_0/proposer_training_corpus_manifest_v1",
+  "title": "Proposer training corpus manifest v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "corpus_id",
+    "build_config_id",
+    "runs_root_rel",
+    "included_run_ids",
+    "ek_id",
+    "kernel_ledger_id",
+    "counts",
+    "splits",
+    "sft_examples_blob_id",
+    "dpo_pairs_blob_id",
+    "redaction_policy_id",
+    "hashes"
+  ],
+  "properties": {
+    "schema_version": {"const": "proposer_training_corpus_manifest_v1"},
+    "corpus_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "build_config_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "runs_root_rel": {"type": "string", "minLength": 1},
+    "included_run_ids": {
+      "type": "array",
+      "items": {"type": "string", "minLength": 1}
+    },
+    "ek_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "kernel_ledger_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "counts": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "sft_examples_u64",
+        "dpo_pairs_u64"
+      ],
+      "properties": {
+        "sft_examples_u64": {"type": "integer", "minimum": 0},
+        "dpo_pairs_u64": {"type": "integer", "minimum": 0}
+      }
+    },
+    "splits": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "train_fraction_q32",
+        "val_fraction_q32",
+        "test_fraction_q32"
+      ],
+      "properties": {
+        "train_fraction_q32": {"type": "integer", "minimum": 0},
+        "val_fraction_q32": {"type": "integer", "minimum": 0},
+        "test_fraction_q32": {"type": "integer", "minimum": 0}
+      }
+    },
+    "sft_examples_blob_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "dpo_pairs_blob_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "redaction_policy_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "hashes": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "sft_examples_sha256",
+        "dpo_pairs_sha256"
+      ],
+      "properties": {
+        "sft_examples_sha256": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+        "dpo_pairs_sha256": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"}
+      }
+    }
+  }
+}

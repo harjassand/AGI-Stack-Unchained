@@ -1,0 +1,25 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v19_0/orch_worldmodel_train_config_v1",
+  "title": "Orchestration world-model train config v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "max_contexts_u32",
+    "max_actions_u32",
+    "horizon_u32",
+    "discount_q32",
+    "planner_kind",
+    "seed_u64"
+  ],
+  "properties": {
+    "schema_version": {"const": "orch_worldmodel_train_config_v1"},
+    "max_contexts_u32": {"type": "integer", "minimum": 1, "maximum": 4096},
+    "max_actions_u32": {"type": "integer", "minimum": 1, "maximum": 4096},
+    "horizon_u32": {"type": "integer", "minimum": 1, "maximum": 32},
+    "discount_q32": {"type": "integer", "minimum": 0, "maximum": 4294967296},
+    "planner_kind": {"type": "string", "enum": ["TABULAR_MPC_V1", "NEURAL_MPC_V1"]},
+    "seed_u64": {"type": "integer", "minimum": 0}
+  }
+}

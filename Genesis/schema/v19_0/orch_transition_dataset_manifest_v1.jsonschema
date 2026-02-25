@@ -1,0 +1,68 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v19_0/orch_transition_dataset_manifest_v1",
+  "title": "Orchestration transition dataset manifest v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "dataset_manifest_id",
+    "ek_id",
+    "kernel_ledger_id",
+    "runs_root_rel",
+    "included_run_ids",
+    "transition_events_blob_id",
+    "transition_events_relpath",
+    "transition_events_sha256",
+    "counts",
+    "build_params",
+    "drop_reason_histogram",
+    "created_unix_s64"
+  ],
+  "properties": {
+    "schema_version": {"const": "orch_transition_dataset_manifest_v1"},
+    "dataset_manifest_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "ek_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "kernel_ledger_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "runs_root_rel": {"type": "string"},
+    "included_run_ids": {
+      "type": "array",
+      "items": {"type": "string"},
+      "uniqueItems": true
+    },
+    "transition_events_blob_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "transition_events_relpath": {"type": "string"},
+    "transition_events_sha256": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "counts": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "runs_scanned_u64",
+        "runs_included_u64",
+        "events_included_u64",
+        "dropped_rows_u64"
+      ],
+      "properties": {
+        "runs_scanned_u64": {"type": "integer", "minimum": 0},
+        "runs_included_u64": {"type": "integer", "minimum": 0},
+        "events_included_u64": {"type": "integer", "minimum": 0},
+        "dropped_rows_u64": {"type": "integer", "minimum": 0}
+      }
+    },
+    "build_params": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["max_runs_u64", "max_events_u64", "cost_scale_ms_u64"],
+      "properties": {
+        "max_runs_u64": {"type": "integer", "minimum": 0},
+        "max_events_u64": {"type": "integer", "minimum": 0},
+        "cost_scale_ms_u64": {"type": "integer", "minimum": 1}
+      }
+    },
+    "drop_reason_histogram": {
+      "type": "object",
+      "additionalProperties": {"type": "integer", "minimum": 0}
+    },
+    "created_unix_s64": {"type": "integer", "minimum": 0}
+  }
+}

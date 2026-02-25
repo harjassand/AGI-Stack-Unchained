@@ -1,0 +1,1 @@
+{"agents":[{"agent_id":"micdrop_template_v1","agent_kind":"PATCH_PROPOSER","enabled":true,"entry_module":"tools.arena.proposer_arena_v1"}],"schema_version":"proposer_arena_agent_registry_v1"}

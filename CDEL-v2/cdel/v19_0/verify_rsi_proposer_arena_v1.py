@@ -8,6 +8,7 @@ import re
 from pathlib import Path
 from typing import Any
 
+from ..v18_0.ccap_runtime_v1 import ccap_payload_id
 from ..v18_0.omega_common_v1 import OmegaV18Error, canon_hash_obj, load_canon_dict, validate_schema as validate_schema_v18
 from .common_v1 import validate_schema as validate_schema_v19
 
@@ -126,7 +127,7 @@ def _load_winner_payload_hashes(*, state_root: Path, winner_kind: str) -> dict[s
         ccap_payload = load_canon_dict(ccap_path)
         validate_schema_v18(ccap_payload, "ccap_v1")
         ccap_id = _ensure_sha256(bundle_payload.get("ccap_id"))
-        if canon_hash_obj(ccap_payload) != ccap_id:
+        if ccap_payload_id(ccap_payload) != ccap_id:
             _fail("NONDETERMINISTIC")
         patch_blob_id = _ensure_sha256((ccap_payload.get("payload") or {}).get("patch_blob_id"))
         if patch_blob_id != f"sha256:{__import__('hashlib').sha256(patch_path.read_bytes()).hexdigest()}":

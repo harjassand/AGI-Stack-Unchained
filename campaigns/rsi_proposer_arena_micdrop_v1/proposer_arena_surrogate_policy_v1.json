@@ -1,0 +1,1 @@
+{"anchor_public_fast_cmd":"python3 scripts/micdrop_eval_once_v1.py --series_prefix micdrop_surrogate --runs_root runs/micdrop_surrogate --ticks_u64 1 --seed_u64 7","anchor_public_fast_timeout_s":8,"enable_json_schema_check_b":true,"enable_py_compile_b":true,"risk_class_defaults":{"KERNEL_EXT_PROPOSAL":"HIGH","PATCH":"MED"},"schema_version":"proposer_arena_surrogate_policy_v1"}

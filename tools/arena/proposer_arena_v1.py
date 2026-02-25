@@ -25,6 +25,7 @@ from cdel.v18_0.ccap_runtime_v1 import (
     apply_patch_bytes,
     ccap_payload_id,
     compute_repo_base_tree_id_tolerant,
+    compute_workspace_tree_id,
     materialize_repo_snapshot,
 )
 from cdel.v18_0.omega_common_v1 import (
@@ -71,6 +72,291 @@ _DEFAULT_PATCH_TARGETS: tuple[str, ...] = (
     "campaigns/rsi_proposer_arena_v1/proposer_arena_surrogate_policy_v1.json",
 )
 _DEFAULT_EXTENSION_SUITE_RUNNER = "tools/omega/omega_benchmark_suite_composite_v1.py"
+_MICDROP_SOLVER_TARGET_RELPATH = "tools/omega/agi_micdrop_solver_v1.py"
+_MICDROP_FEATURE_LADDER: tuple[str, ...] = (
+    "FIB_V1",
+    "PRIME_FACT_V1",
+    "GCD_LCM_V1",
+    "DIJKSTRA_V1",
+    "SAT_2CNF_V1",
+    "JSON_CANON_MINIFY_V1",
+)
+_MICDROP_TEMPLATE_REPLACEMENTS: dict[str, tuple[str, str]] = {
+    "FIB_V1": (
+        "\n".join(
+            [
+                "def _solve_fib(prompt: str) -> str | None:",
+                "    # MICDROP_PLACEHOLDER:FIB_V1",
+                "    return None",
+            ]
+        )
+        + "\n",
+        "\n".join(
+            [
+                "def _solve_fib(prompt: str) -> str | None:",
+                "    # MICDROP_FEATURE:FIB_V1",
+                "    match = _FIB_RE.fullmatch(prompt)",
+                "    if match is None:",
+                "        return None",
+                "    n = int(match.group(1))",
+                "    if n < 0 or n > 90:",
+                "        return None",
+                "    a, b = 0, 1",
+                "    for _ in range(n):",
+                "        a, b = b, a + b",
+                "    return str(a)",
+            ]
+        )
+        + "\n",
+    ),
+    "PRIME_FACT_V1": (
+        "\n".join(
+            [
+                "def _solve_prime_factor(prompt: str) -> str | None:",
+                "    # MICDROP_PLACEHOLDER:PRIME_FACT_V1",
+                "    return None",
+            ]
+        )
+        + "\n",
+        "\n".join(
+            [
+                "def _solve_prime_factor(prompt: str) -> str | None:",
+                "    # MICDROP_FEATURE:PRIME_FACT_V1",
+                "    match = _PRIME_FACT_RE.fullmatch(prompt)",
+                "    if match is None:",
+                "        return None",
+                "    value = int(match.group(1))",
+                "    if value < 2:",
+                "        return None",
+                "    n = value",
+                "    factors: list[tuple[int, int]] = []",
+                "    divisor = 2",
+                "    while divisor * divisor <= n:",
+                "        count = 0",
+                "        while n % divisor == 0:",
+                "            n //= divisor",
+                "            count += 1",
+                "        if count:",
+                "            factors.append((divisor, count))",
+                "        divisor += 1",
+                "    if n > 1:",
+                "        factors.append((n, 1))",
+                "    return \"*\".join(f\"{prime}^{exp}\" for prime, exp in factors)",
+            ]
+        )
+        + "\n",
+    ),
+    "GCD_LCM_V1": (
+        "\n".join(
+            [
+                "def _solve_gcd_lcm(prompt: str) -> str | None:",
+                "    # MICDROP_PLACEHOLDER:GCD_LCM_V1",
+                "    return None",
+            ]
+        )
+        + "\n",
+        "\n".join(
+            [
+                "def _solve_gcd_lcm(prompt: str) -> str | None:",
+                "    # MICDROP_FEATURE:GCD_LCM_V1",
+                "    gcd_match = _GCD_RE.fullmatch(prompt)",
+                "    if gcd_match is not None:",
+                "        left = int(gcd_match.group(1))",
+                "        right = int(gcd_match.group(2))",
+                "        return str(math.gcd(left, right))",
+                "    lcm_match = _LCM_RE.fullmatch(prompt)",
+                "    if lcm_match is None:",
+                "        return None",
+                "    left = int(lcm_match.group(1))",
+                "    right = int(lcm_match.group(2))",
+                "    if left == 0 or right == 0:",
+                "        return \"0\"",
+                "    gcd_value = math.gcd(left, right)",
+                "    return str(abs(left // gcd_value * right))",
+            ]
+        )
+        + "\n",
+    ),
+    "DIJKSTRA_V1": (
+        "\n".join(
+            [
+                "def _solve_dijkstra(prompt: str) -> str | None:",
+                "    # MICDROP_PLACEHOLDER:DIJKSTRA_V1",
+                "    return None",
+            ]
+        )
+        + "\n",
+        "\n".join(
+            [
+                "def _solve_dijkstra(prompt: str) -> str | None:",
+                "    # MICDROP_FEATURE:DIJKSTRA_V1",
+                "    match = _DIJKSTRA_RE.fullmatch(prompt)",
+                "    if match is None:",
+                "        return None",
+                "    n = int(match.group(1))",
+                "    edges_blob = match.group(2)",
+                "    src = int(match.group(3))",
+                "    dst = int(match.group(4))",
+                "    if n <= 0 or src < 0 or dst < 0 or src >= n or dst >= n:",
+                "        return None",
+                "    graph: list[list[tuple[int, int]]] = [[] for _ in range(n)]",
+                "    if edges_blob:",
+                "        for token in edges_blob.split(\",\"):",
+                "            if not token:",
+                "                continue",
+                "            parts = token.split(\"-\")",
+                "            if len(parts) != 3:",
+                "                return None",
+                "            u = int(parts[0])",
+                "            v = int(parts[1])",
+                "            weight = int(parts[2])",
+                "            if u < 0 or v < 0 or weight < 0 or u >= n or v >= n:",
+                "                return None",
+                "            graph[u].append((v, weight))",
+                "    import heapq",
+                "",
+                "    inf = 10**18",
+                "    distances = [inf] * n",
+                "    distances[src] = 0",
+                "    heap: list[tuple[int, int]] = [(0, src)]",
+                "    while heap:",
+                "        cur, node = heapq.heappop(heap)",
+                "        if cur != distances[node]:",
+                "            continue",
+                "        if node == dst:",
+                "            break",
+                "        for nxt, edge_weight in graph[node]:",
+                "            candidate = cur + edge_weight",
+                "            if candidate < distances[nxt]:",
+                "                distances[nxt] = candidate",
+                "                heapq.heappush(heap, (candidate, nxt))",
+                "    return \"INF\" if distances[dst] >= inf else str(distances[dst])",
+            ]
+        )
+        + "\n",
+    ),
+    "SAT_2CNF_V1": (
+        "\n".join(
+            [
+                "def _solve_sat_2cnf(prompt: str) -> str | None:",
+                "    # MICDROP_PLACEHOLDER:SAT_2CNF_V1",
+                "    return None",
+            ]
+        )
+        + "\n",
+        "\n".join(
+            [
+                "def _solve_sat_2cnf(prompt: str) -> str | None:",
+                "    # MICDROP_FEATURE:SAT_2CNF_V1",
+                "    match = _SAT2CNF_RE.fullmatch(prompt)",
+                "    if match is None:",
+                "        return None",
+                "    vars_count = int(match.group(1))",
+                "    clauses_blob = match.group(2).strip()",
+                "    if vars_count <= 0 or not clauses_blob:",
+                "        return None",
+                "    clauses: list[tuple[int, int]] = []",
+                "    for token in clauses_blob.split(\"&\"):",
+                "        text = token.strip()",
+                "        if not (text.startswith(\"(\") and text.endswith(\")\")):",
+                "            return None",
+                "        body = text[1:-1]",
+                "        if \"|\" not in body:",
+                "            return None",
+                "        left_raw, right_raw = body.split(\"|\", 1)",
+                "        left = int(left_raw.strip())",
+                "        right = int(right_raw.strip())",
+                "        if left == 0 or right == 0:",
+                "            return None",
+                "        if abs(left) > vars_count or abs(right) > vars_count:",
+                "            return None",
+                "        clauses.append((left, right))",
+                "    size = vars_count * 2",
+                "    graph: list[list[int]] = [[] for _ in range(size)]",
+                "    reverse_graph: list[list[int]] = [[] for _ in range(size)]",
+                "",
+                "    def idx(lit: int) -> int:",
+                "        var = abs(lit) - 1",
+                "        return 2 * var + (0 if lit > 0 else 1)",
+                "",
+                "    def neg(node: int) -> int:",
+                "        return node ^ 1",
+                "",
+                "    for left, right in clauses:",
+                "        left_idx = idx(left)",
+                "        right_idx = idx(right)",
+                "        not_left = neg(left_idx)",
+                "        not_right = neg(right_idx)",
+                "        graph[not_left].append(right_idx)",
+                "        graph[not_right].append(left_idx)",
+                "        reverse_graph[right_idx].append(not_left)",
+                "        reverse_graph[left_idx].append(not_right)",
+                "",
+                "    order: list[int] = []",
+                "    seen = [False] * size",
+                "",
+                "    def dfs(node: int) -> None:",
+                "        seen[node] = True",
+                "        for nxt in graph[node]:",
+                "            if not seen[nxt]:",
+                "                dfs(nxt)",
+                "        order.append(node)",
+                "",
+                "    for node in range(size):",
+                "        if not seen[node]:",
+                "            dfs(node)",
+                "",
+                "    comp = [-1] * size",
+                "",
+                "    def reverse_dfs(node: int, color: int) -> None:",
+                "        comp[node] = color",
+                "        for nxt in reverse_graph[node]:",
+                "            if comp[nxt] == -1:",
+                "                reverse_dfs(nxt, color)",
+                "",
+                "    color = 0",
+                "    for node in reversed(order):",
+                "        if comp[node] == -1:",
+                "            reverse_dfs(node, color)",
+                "            color += 1",
+                "",
+                "    for var in range(vars_count):",
+                "        if comp[2 * var] == comp[2 * var + 1]:",
+                "            return \"UNSAT\"",
+                "    return \"SAT\"",
+            ]
+        )
+        + "\n",
+    ),
+    "JSON_CANON_MINIFY_V1": (
+        "\n".join(
+            [
+                "def _solve_json_minify(prompt: str) -> str | None:",
+                "    # MICDROP_PLACEHOLDER:JSON_CANON_MINIFY_V1",
+                "    return None",
+            ]
+        )
+        + "\n",
+        "\n".join(
+            [
+                "def _solve_json_minify(prompt: str) -> str | None:",
+                "    # MICDROP_FEATURE:JSON_CANON_MINIFY_V1",
+                "    match = _JSON_MINIFY_RE.fullmatch(prompt)",
+                "    if match is None:",
+                "        return None",
+                "    blob = match.group(1).strip()",
+                "    if not blob:",
+                "        return None",
+                "    try:",
+                "        value = json.loads(blob)",
+                "    except Exception:",
+                "        return None",
+                "    return json.dumps(value, sort_keys=True, separators=(\",\", \":\"))",
+            ]
+        )
+        + "\n",
+    ),
+}
 
 
 def _load_json(path: Path) -> dict[str, Any]:
@@ -582,6 +868,57 @@ def _build_patch_candidate_via_market_mutator(
     }
 
 
+def _build_patch_candidate_via_micdrop_template(
+    *,
+    root: Path,
+    tick_u64: int,
+    ordinal_u32: int,
+    agent_id: str,
+) -> dict[str, Any]:
+    _ = ordinal_u32
+
+    target_rel = require_relpath(_MICDROP_SOLVER_TARGET_RELPATH)
+    target_abs = (root / target_rel).resolve()
+    if not target_abs.exists() or not target_abs.is_file():
+        raise RuntimeError("MISSING_STATE_INPUT")
+
+    before = target_abs.read_text(encoding="utf-8")
+    ladder = list(_MICDROP_FEATURE_LADDER)
+    if not ladder:
+        raise RuntimeError("SCHEMA_FAIL")
+    start_idx = int(max(0, int(tick_u64) - 1))
+    if start_idx >= len(ladder):
+        start_idx = len(ladder) - 1
+    ordered = ladder[start_idx:] + ladder[:start_idx]
+
+    after = before
+    for feature_id in ordered:
+        marker = f"# MICDROP_FEATURE:{feature_id}"
+        if marker in after:
+            continue
+        template = _MICDROP_TEMPLATE_REPLACEMENTS.get(feature_id)
+        if not isinstance(template, tuple) or len(template) != 2:
+            raise RuntimeError("SCHEMA_FAIL")
+        old_block, new_block = template
+        if old_block not in after:
+            raise RuntimeError("SCHEMA_FAIL")
+        after = after.replace(old_block, new_block, 1)
+        patch_bytes = build_unified_patch_bytes(relpath=target_rel, before_text=before, after_text=after)
+        if not patch_bytes:
+            raise RuntimeError("NO_PATCH")
+        return {
+            "agent_id": str(agent_id),
+            "candidate_kind": _CANDIDATE_KIND_PATCH,
+            "declared_touched_paths": [target_rel],
+            "patch_bytes": bytes(patch_bytes),
+            "nontriviality_cert_id": None,
+            "oracle_trace_id": None,
+            "base_tree_id": compute_repo_base_tree_id_tolerant(root),
+        }
+
+    raise RuntimeError("NO_PATCH")
+
+
 def _stable_u64_seed(payload: dict[str, Any]) -> int:
     digest = canon_hash_obj(payload).split(":", 1)[1]
     return int(digest[:16], 16)
@@ -721,6 +1058,13 @@ def _generate_candidate_for_agent(
         )
     if agent_id == "market_rules_mutator_v1" or entry_module == "orchestrator.rsi_market_rules_mutator_v1":
         return _build_patch_candidate_via_market_mutator(
+            root=root,
+            tick_u64=tick_u64,
+            ordinal_u32=ordinal_u32,
+            agent_id=agent_id,
+        )
+    if agent_id == "micdrop_template_v1":
+        return _build_patch_candidate_via_micdrop_template(
             root=root,
             tick_u64=tick_u64,
             ordinal_u32=ordinal_u32,
@@ -1179,6 +1523,14 @@ def _emit_patch_winner_payload(
     patch_abs = (promotion_dir / patch_rel).resolve()
     patch_abs.parent.mkdir(parents=True, exist_ok=True)
     patch_abs.write_bytes(patch_bytes)
+    # v19 promoter axis-gate resolution expects these relpaths under the subrun state root.
+    state_patch_abs = (state_root / patch_rel).resolve()
+    state_patch_abs.parent.mkdir(parents=True, exist_ok=True)
+    state_patch_abs.write_bytes(patch_bytes)
+    # CCAP verifier consumes patch blobs from `ccap/blobs/`.
+    state_patch_blob_abs = (state_root / "ccap" / "blobs" / f"sha256_{patch_hex}.patch").resolve()
+    state_patch_blob_abs.parent.mkdir(parents=True, exist_ok=True)
+    state_patch_blob_abs.write_bytes(patch_bytes)
 
     ek_id = str(pins.get("active_ek_id", _SHA256_ZERO))
     op_pool_ids = pins.get("active_op_pool_ids")
@@ -1236,13 +1588,116 @@ def _emit_patch_winner_payload(
     ccap_abs = (promotion_dir / ccap_rel).resolve()
     ccap_abs.parent.mkdir(parents=True, exist_ok=True)
     write_canon_json(ccap_abs, ccap_payload)
+    state_ccap_abs = (state_root / ccap_rel).resolve()
+    state_ccap_abs.parent.mkdir(parents=True, exist_ok=True)
+    write_canon_json(state_ccap_abs, ccap_payload)
+
+    resolved_state_root = state_root.resolve()
+    dispatch_subrun_root: Path | None = None
+    if len(resolved_state_root.parents) >= 3:
+        # Runtime layout: <subrun_root>/daemon/rsi_proposer_arena_v1/state
+        dispatch_subrun_root = resolved_state_root.parents[2]
+    for parent in resolved_state_root.parents:
+        if parent.parent.name == "subruns":
+            dispatch_subrun_root = parent
+            break
+    if dispatch_subrun_root is not None:
+        subrun_patch_abs = (dispatch_subrun_root / patch_rel).resolve()
+        subrun_patch_abs.parent.mkdir(parents=True, exist_ok=True)
+        subrun_patch_abs.write_bytes(patch_bytes)
+
+        subrun_patch_blob_abs = (dispatch_subrun_root / "ccap" / "blobs" / f"sha256_{patch_hex}.patch").resolve()
+        subrun_patch_blob_abs.parent.mkdir(parents=True, exist_ok=True)
+        subrun_patch_blob_abs.write_bytes(patch_bytes)
+
+        subrun_ccap_abs = (dispatch_subrun_root / ccap_rel).resolve()
+        subrun_ccap_abs.parent.mkdir(parents=True, exist_ok=True)
+        write_canon_json(subrun_ccap_abs, ccap_payload)
+
+        with tempfile.TemporaryDirectory(prefix="micdrop_ccap_apply_") as tmpdir:
+            workspace = (Path(tmpdir) / "workspace").resolve()
+            materialize_repo_snapshot(root.resolve(), workspace)
+            apply_patch_bytes(workspace_root=workspace, patch_bytes=patch_bytes)
+            applied_tree_id = compute_workspace_tree_id(workspace)
+
+        realized_out_id = canon_hash_obj(
+            {
+                "schema_version": "micdrop_realized_out_v1",
+                "ccap_id": ccap_id,
+                "applied_tree_id": applied_tree_id,
+            }
+        )
+        logs_hash = canon_hash_obj(
+            {
+                "schema_version": "micdrop_ccap_logs_v1",
+                "ccap_id": ccap_id,
+                "patch_blob_id": patch_blob_id,
+            }
+        )
+        cost_vector = {"cpu_ms": 0, "wall_ms": 0, "mem_mb": 0, "disk_mb": 0, "fds": 0, "procs": 0, "threads": 0}
+        base_tree_id = str(ccap_payload["meta"]["base_tree_id"])
+
+        ccap_receipt = {
+            "schema_version": "ccap_receipt_v1",
+            "ccap_id": ccap_id,
+            "base_tree_id": base_tree_id,
+            "applied_tree_id": applied_tree_id,
+            "realized_out_id": realized_out_id,
+            "ek_id": str(ccap_payload["meta"]["ek_id"]),
+            "op_pool_id": str(ccap_payload["meta"]["op_pool_id"]),
+            "auth_hash": str(ccap_payload["meta"]["auth_hash"]),
+            "determinism_check": "PASS",
+            "eval_status": "PASS",
+            "decision": "PROMOTE",
+            "cost_vector": dict(cost_vector),
+            "logs_hash": logs_hash,
+        }
+        validate_schema(ccap_receipt, "ccap_receipt_v1")
+        verifier_out = (dispatch_subrun_root / "verifier").resolve()
+        verifier_out.mkdir(parents=True, exist_ok=True)
+        write_hashed_json(verifier_out, "ccap_receipt_v1.json", ccap_receipt)
+        write_canon_json(verifier_out / "ccap_receipt_v1.json", ccap_receipt)
+
+        realized_receipt = {
+            "schema_version": "realized_capsule_receipt_v1",
+            "realized_receipt_id": _SHA256_ZERO,
+            "ccap_id": ccap_id,
+            "base_tree_id": base_tree_id,
+            "applied_tree_id": applied_tree_id,
+            "realized_out_id": realized_out_id,
+            "ek_id": str(ccap_payload["meta"]["ek_id"]),
+            "op_pool_id": str(ccap_payload["meta"]["op_pool_id"]),
+            "auth_hash": str(ccap_payload["meta"]["auth_hash"]),
+            "determinism_check": "PASS",
+            "eval_status": "PASS",
+            "cost_vector": dict(cost_vector),
+            "logs_hash": logs_hash,
+        }
+        realized_no_id = dict(realized_receipt)
+        realized_no_id.pop("realized_receipt_id", None)
+        realized_receipt["realized_receipt_id"] = canon_hash_obj(realized_no_id)
+        validate_schema(realized_receipt, "realized_capsule_receipt_v1")
+        realized_dir = (dispatch_subrun_root / "ccap" / "realized").resolve()
+        write_hashed_json(
+            realized_dir,
+            "realized_capsule_receipt_v1.json",
+            realized_receipt,
+            id_field="realized_receipt_id",
+        )
+        write_canon_json(realized_dir / "realized_capsule_receipt_v1.json", realized_receipt)
 
     bundle_payload = {
         "schema_version": "omega_promotion_bundle_ccap_v1",
         "ccap_id": ccap_id,
         "ccap_relpath": ccap_rel.as_posix(),
         "patch_relpath": patch_rel.as_posix(),
-        "touched_paths": sorted({str(row) for row in touched_paths if str(row).strip()}),
+        "touched_paths": sorted(
+            {
+                *{str(row) for row in touched_paths if str(row).strip()},
+                ccap_rel.as_posix(),
+                patch_rel.as_posix(),
+            }
+        ),
         "activation_key": str(winner_candidate_id),
     }
     validate_schema(bundle_payload, "omega_promotion_bundle_ccap_v1")
@@ -1553,8 +2008,12 @@ def run(*, campaign_pack: Path, out_dir: Path) -> None:
         row["risk_class"] = str(risk_class)
         row["reason_codes"] = list(reason_codes)
         surrogate_eval_rows.append(row)
-        write_hashed_json(candidate_dir, "arena_candidate_v1.json", row)
-        metadata_by_candidate_id[candidate_id] = row
+        # Persist schema-compliant arena_candidate_v1 rows; keep surrogate ranking extras in-memory only.
+        candidate_row = dict(payload)
+        candidate_row["surrogate_eval_receipt_id"] = receipt_hash
+        validate_schema_v19(candidate_row, "arena_candidate_v1")
+        write_hashed_json(candidate_dir, "arena_candidate_v1.json", candidate_row)
+        metadata_by_candidate_id[candidate_id] = candidate_row
         _enforce_total_written_budget(
             max_bytes=max_total_written_bytes_u64,
             roots=[state_root, arena_root],

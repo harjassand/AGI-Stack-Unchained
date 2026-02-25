@@ -1,0 +1,63 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v19_0/orch_bandit_state_v1",
+  "title": "Orchestration bandit state v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "tick_u64",
+    "parent_state_hash",
+    "ek_id",
+    "kernel_ledger_id",
+    "contexts"
+  ],
+  "properties": {
+    "schema_version": {"const": "orch_bandit_state_v1"},
+    "tick_u64": {"type": "integer", "minimum": 0},
+    "parent_state_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "ek_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "kernel_ledger_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "contexts": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "context_key",
+          "lane_kind",
+          "runaway_band_u32",
+          "objective_kind",
+          "arms"
+        ],
+        "properties": {
+          "context_key": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+          "lane_kind": {"type": "string", "enum": ["BASELINE", "FRONTIER_HEAVY", "UNKNOWN"]},
+          "runaway_band_u32": {"type": "integer", "minimum": 0},
+          "objective_kind": {"type": "string"},
+          "arms": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "capability_id",
+                "n_u64",
+                "reward_ewma_q32",
+                "cost_ewma_q32",
+                "last_update_tick_u64"
+              ],
+              "properties": {
+                "capability_id": {"type": "string"},
+                "n_u64": {"type": "integer", "minimum": 0},
+                "reward_ewma_q32": {"type": "integer"},
+                "cost_ewma_q32": {"type": "integer", "minimum": 0},
+                "last_update_tick_u64": {"type": "integer", "minimum": 0}
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

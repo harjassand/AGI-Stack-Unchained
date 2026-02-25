@@ -1,0 +1,60 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v19_0/proposer_model_bundle_v1",
+  "title": "Proposer model bundle v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "bundle_id",
+    "role",
+    "base_model_ref",
+    "tokenizer_ref",
+    "method",
+    "dataset_manifest_id",
+    "train_config_id",
+    "adapter_files",
+    "quantization",
+    "train_metrics"
+  ],
+  "properties": {
+    "schema_version": {"const": "proposer_model_bundle_v1"},
+    "bundle_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "role": {"type": "string", "enum": ["PATCH_DRAFTER_V1", "PATCH_CRITIC_V1"]},
+    "base_model_ref": {"type": "string", "minLength": 1},
+    "tokenizer_ref": {"type": "string", "minLength": 1},
+    "method": {"type": "string", "enum": ["SFT_LORA", "DPO_QLORA"]},
+    "dataset_manifest_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "train_config_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "adapter_files": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["relpath", "sha256"],
+        "properties": {
+          "relpath": {"type": "string", "minLength": 1},
+          "sha256": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"}
+        }
+      }
+    },
+    "quantization": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "bnb_compute_dtype"],
+      "properties": {
+        "kind": {"type": "string", "enum": ["NONE", "QLORA_4BIT_NF4"]},
+        "bnb_compute_dtype": {"type": "string", "enum": ["bf16", "fp16"]}
+      }
+    },
+    "train_metrics": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["final_loss_q32", "steps_u64"],
+      "properties": {
+        "final_loss_q32": {"type": "integer", "minimum": 0},
+        "steps_u64": {"type": "integer", "minimum": 0}
+      }
+    }
+  }
+}

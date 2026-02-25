@@ -1,0 +1,31 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v19_0/orch_bandit_update_receipt_v1",
+  "title": "Orchestration bandit update receipt v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "tick_u64",
+    "state_in_id",
+    "state_out_id",
+    "context_key",
+    "selected_capability_id",
+    "observed_reward_q32",
+    "observed_cost_q32",
+    "status",
+    "reason_code"
+  ],
+  "properties": {
+    "schema_version": {"const": "orch_bandit_update_receipt_v1"},
+    "tick_u64": {"type": "integer", "minimum": 0},
+    "state_in_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "state_out_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "context_key": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "selected_capability_id": {"type": "string"},
+    "observed_reward_q32": {"type": "integer"},
+    "observed_cost_q32": {"type": "integer", "minimum": 0},
+    "status": {"type": "string", "enum": ["OK", "FAIL"]},
+    "reason_code": {"type": "string"}
+  }
+}

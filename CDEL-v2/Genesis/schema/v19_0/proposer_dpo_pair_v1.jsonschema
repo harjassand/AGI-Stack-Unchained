@@ -1,0 +1,35 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v19_0/proposer_dpo_pair_v1",
+  "title": "Proposer DPO pair v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "pair_id",
+    "role",
+    "ek_id",
+    "kernel_ledger_id",
+    "group_key",
+    "prompt_text",
+    "chosen_response_text",
+    "rejected_response_text",
+    "pair_weight_q32",
+    "chosen_example_id",
+    "rejected_example_id"
+  ],
+  "properties": {
+    "schema_version": {"const": "proposer_dpo_pair_v1"},
+    "pair_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "role": {"type": "string", "enum": ["PATCH_DRAFTER_V1", "PATCH_CRITIC_V1"]},
+    "ek_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "kernel_ledger_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "group_key": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "prompt_text": {"type": "string"},
+    "chosen_response_text": {"type": "string"},
+    "rejected_response_text": {"type": "string"},
+    "pair_weight_q32": {"type": "integer", "minimum": 0},
+    "chosen_example_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "rejected_example_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"}
+  }
+}

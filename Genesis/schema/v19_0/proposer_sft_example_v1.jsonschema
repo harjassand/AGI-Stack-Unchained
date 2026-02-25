@@ -1,0 +1,69 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v19_0/proposer_sft_example_v1",
+  "title": "Proposer SFT example v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "example_id",
+    "role",
+    "inputs_descriptor_id",
+    "agent_id",
+    "candidate_id",
+    "ek_id",
+    "kernel_ledger_id",
+    "prompt_text",
+    "response_text",
+    "label",
+    "metadata"
+  ],
+  "properties": {
+    "schema_version": {"const": "proposer_sft_example_v1"},
+    "example_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "role": {"type": "string", "enum": ["PATCH_DRAFTER_V1", "PATCH_CRITIC_V1"]},
+    "inputs_descriptor_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "agent_id": {"type": "string", "minLength": 1},
+    "candidate_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "ek_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "kernel_ledger_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "prompt_text": {"type": "string"},
+    "response_text": {"type": "string"},
+    "label": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "official_outcome",
+        "official_reason_code",
+        "utility_class",
+        "weight_q32"
+      ],
+      "properties": {
+        "official_outcome": {"type": "string", "enum": ["PROMOTED", "REJECTED"]},
+        "official_reason_code": {"type": "string", "minLength": 1},
+        "utility_class": {"type": "string", "enum": ["BASELINE", "FRONTIER_HEAVY", "UNKNOWN"]},
+        "weight_q32": {"type": "integer", "minimum": 0}
+      }
+    },
+    "metadata": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "candidate_kind",
+        "declared_touched_paths",
+        "derived_touched_paths"
+      ],
+      "properties": {
+        "candidate_kind": {"type": "string", "enum": ["PATCH", "EXT"]},
+        "declared_touched_paths": {
+          "type": "array",
+          "items": {"type": "string", "minLength": 1}
+        },
+        "derived_touched_paths": {
+          "type": "array",
+          "items": {"type": "string", "minLength": 1}
+        }
+      }
+    }
+  }
+}

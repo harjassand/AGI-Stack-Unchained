@@ -18,7 +18,10 @@
           "agent_id": {"type": "string", "minLength": 1},
           "agent_kind": {"type": "string", "minLength": 1},
           "entry_module": {"type": "string", "minLength": 1},
-          "enabled": {"type": "boolean"}
+          "enabled": {"type": "boolean"},
+          "agent_method": {"type": "string", "minLength": 1},
+          "model_role": {"type": "string", "enum": ["PATCH_DRAFTER_V1", "PATCH_CRITIC_V1"]},
+          "max_new_tokens_u32": {"type": "integer", "minimum": 1}
         }
       }
     }

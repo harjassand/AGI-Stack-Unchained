@@ -33,6 +33,7 @@ from .verify_policy_market_selection_v1 import verify_policy_market_selection
 from .verify_policy_vm_stark_proof_v1 import verify_policy_vm_stark_proof
 from .verify_policy_trace_proposal_v1 import verify_policy_trace_proposal
 from .verify_policy_vm_trace_v1 import verify_policy_vm_trace
+from .orch_bandit.verify_orch_bandit_v1 import verify_orch_bandit_v1
 from .epistemic.action_market_v1 import build_default_action_market_profile, verify_action_market_replay
 from .epistemic.compaction_v1 import verify_compaction_bundle
 from .epistemic.verify_epistemic_certs_v1 import verify_certs_bundle
@@ -2397,7 +2398,13 @@ def _verify_candidate_precheck_for_dispatch(*, state_root: Path, dispatch_payloa
                 fail_v18("NONDETERMINISTIC")
 
 
-def _verify_hardening_bindings(*, state_root: Path, config_dir: Path, snapshot: dict[str, Any]) -> None:
+def _verify_hardening_bindings(
+    *,
+    state_root: Path,
+    config_dir: Path,
+    snapshot: dict[str, Any],
+    bandit_enabled_b: bool = False,
+) -> None:
     utility_policy = _load_optional_utility_policy(config_dir=config_dir)
     _verify_runtime_stats_derivation(state_root=state_root, utility_policy=utility_policy)
 
@@ -2567,14 +2574,18 @@ def _verify_hardening_bindings(*, state_root: Path, config_dir: Path, snapshot: 
         reason_codes = routing_payload.get("reason_codes")
         if not isinstance(reason_codes, list):
             fail_v18("SCHEMA_FAIL")
-        expected_selector_id = _expected_routing_selector_id(
-            forced_frontier_attempt_b=bool(routing_payload.get("forced_frontier_attempt_b", False)),
-            reason_codes=[str(row) for row in reason_codes],
-            market_selection_in_play_b=market_selection_in_play_b,
-        )
         observed_selector_id = str(routing_payload.get("routing_selector_id", "")).strip()
-        if observed_selector_id != expected_selector_id:
-            fail_v18("NONDETERMINISTIC")
+        if bool(bandit_enabled_b):
+            if not _is_sha256(observed_selector_id):
+                fail_v18("NONDETERMINISTIC")
+        else:
+            expected_selector_id = _expected_routing_selector_id(
+                forced_frontier_attempt_b=bool(routing_payload.get("forced_frontier_attempt_b", False)),
+                reason_codes=[str(row) for row in reason_codes],
+                market_selection_in_play_b=market_selection_in_play_b,
+            )
+            if observed_selector_id != expected_selector_id:
+                fail_v18("NONDETERMINISTIC")
         observed_market_used_for_selection_b = bool(routing_payload.get("market_used_for_selection_b", False))
         if observed_market_used_for_selection_b != (observed_selector_id == "MARKET"):
             fail_v18("NONDETERMINISTIC")
@@ -2655,6 +2666,8 @@ def verify(state_dir: Path, *, mode: str = "full") -> str:
     config_dir = next((path for path in config_candidates if path.exists() and path.is_dir()), None)
     if config_dir is None:
         fail_v18("MISSING_STATE_INPUT")
+    pack_payload = _load_pack(config_dir)
+    bandit_enabled_b = bool(str(pack_payload.get("orch_bandit_config_rel", "")).strip())
     _verify_shadow_path(state_root=state_root, config_dir=config_dir, snapshot=snapshot)
     _verify_epistemic_path(state_root, snapshot)
 
@@ -2672,7 +2685,20 @@ def verify(state_dir: Path, *, mode: str = "full") -> str:
     )
     if long_run_enabled_b:
         _verify_long_run_ledger_bindings(state_root)
-        _verify_hardening_bindings(state_root=state_root, config_dir=config_dir, snapshot=snapshot)
+        _verify_hardening_bindings(
+            state_root=state_root,
+            config_dir=config_dir,
+            snapshot=snapshot,
+            bandit_enabled_b=bandit_enabled_b,
+        )
+
+    if bandit_enabled_b:
+        verify_orch_bandit_v1(
+            state_root=state_root,
+            config_dir=config_dir,
+            snapshot=snapshot,
+            pack_payload=pack_payload,
+        )
 
     promo_hash = snapshot.get("promotion_receipt_hash")
     if promo_hash is None:

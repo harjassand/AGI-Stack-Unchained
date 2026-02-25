@@ -1,0 +1,28 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v19_0/proposer_corpus_build_receipt_v1",
+  "title": "Proposer corpus build receipt v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "corpus_id",
+    "status",
+    "reason_code",
+    "dropped_rows_u64",
+    "drop_reason_histogram",
+    "forbidden_path_hits_u64"
+  ],
+  "properties": {
+    "schema_version": {"const": "proposer_corpus_build_receipt_v1"},
+    "corpus_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "status": {"type": "string", "enum": ["OK", "FAIL"]},
+    "reason_code": {"type": "string", "minLength": 1},
+    "dropped_rows_u64": {"type": "integer", "minimum": 0},
+    "drop_reason_histogram": {
+      "type": "object",
+      "additionalProperties": {"type": "integer", "minimum": 0}
+    },
+    "forbidden_path_hits_u64": {"type": "integer", "minimum": 0}
+  }
+}

@@ -1,0 +1,52 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v19_0/proposer_model_train_config_v1",
+  "title": "Proposer model train config v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "role",
+    "base_model_ref",
+    "tokenizer_ref",
+    "method",
+    "hyperparams",
+    "seed_u64",
+    "dataset_manifest_id",
+    "output_store_root_rel"
+  ],
+  "properties": {
+    "schema_version": {"const": "proposer_model_train_config_v1"},
+    "role": {"type": "string", "enum": ["PATCH_DRAFTER_V1", "PATCH_CRITIC_V1"]},
+    "base_model_ref": {"type": "string", "minLength": 1},
+    "tokenizer_ref": {"type": "string", "minLength": 1},
+    "method": {"type": "string", "enum": ["SFT_LORA", "DPO_QLORA"]},
+    "hyperparams": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "lora_r_u32",
+        "lora_alpha_u32",
+        "lora_dropout_q32",
+        "learning_rate_q32",
+        "batch_size_u32",
+        "grad_accum_u32",
+        "epochs_u32",
+        "dpo_beta_q32"
+      ],
+      "properties": {
+        "lora_r_u32": {"type": "integer", "minimum": 0},
+        "lora_alpha_u32": {"type": "integer", "minimum": 0},
+        "lora_dropout_q32": {"type": "integer", "minimum": 0},
+        "learning_rate_q32": {"type": "integer", "minimum": 0},
+        "batch_size_u32": {"type": "integer", "minimum": 0},
+        "grad_accum_u32": {"type": "integer", "minimum": 0},
+        "epochs_u32": {"type": "integer", "minimum": 0},
+        "dpo_beta_q32": {"type": "integer", "minimum": 0}
+      }
+    },
+    "seed_u64": {"type": "integer", "minimum": 0},
+    "dataset_manifest_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "output_store_root_rel": {"type": "string", "minLength": 1}
+  }
+}

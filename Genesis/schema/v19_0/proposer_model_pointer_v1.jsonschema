@@ -1,0 +1,14 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v19_0/proposer_model_pointer_v1",
+  "title": "Proposer model pointer v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "role", "active_bundle_id", "updated_tick_u64"],
+  "properties": {
+    "schema_version": {"const": "proposer_model_pointer_v1"},
+    "role": {"type": "string", "enum": ["PATCH_DRAFTER_V1", "PATCH_CRITIC_V1"]},
+    "active_bundle_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "updated_tick_u64": {"type": "integer", "minimum": 0}
+  }
+}

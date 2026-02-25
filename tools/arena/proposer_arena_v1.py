@@ -53,6 +53,7 @@ _DROP_NONTRIVIALITY = "ARENA_DROP:NONTRIVIALITY_CERT_REQUIRED"
 _DROP_OVERSIZE = "ARENA_DROP:OVERSIZE_PATCH"
 _DROP_INVALID_SCHEMA_EDIT = "ARENA_DROP:INVALID_SCHEMA_EDIT"
 _DROP_AGENT_QUARANTINED = "ARENA_DROP:AGENT_QUARANTINED"
+_DROP_FT_MODEL_UNAVAILABLE = "ARENA_DROP:FT_MODEL_UNAVAILABLE"
 
 _SELECT_WINNER_FROM_BACKLOG = "ARENA_SELECT:WINNER_FROM_BACKLOG"
 _SELECT_TIEBREAK_CANDIDATE_ID = "ARENA_SELECT:TIEBREAK_BY_CANDIDATE_ID"
@@ -581,6 +582,97 @@ def _build_patch_candidate_via_market_mutator(
     }
 
 
+def _stable_u64_seed(payload: dict[str, Any]) -> int:
+    digest = canon_hash_obj(payload).split(":", 1)[1]
+    return int(digest[:16], 16)
+
+
+def _build_ft_patch_prompt(*, tick_u64: int, ordinal_u32: int, agent_id: str, task_distribution: dict[str, Any]) -> str:
+    targets = _patch_targets(task_distribution)
+    target_rel = targets[int(ordinal_u32) % len(targets)]
+    return (
+        "role: PATCH_DRAFTER_V1\n"
+        f"tick_u64: {int(tick_u64)}\n"
+        f"agent_id: {str(agent_id)}\n"
+        "constraints:\n"
+        "- Output only one unified diff patch.\n"
+        "- Touch only allowlisted files.\n"
+        "- Avoid trivial no-op edits.\n"
+        f"target_file: {target_rel}\n"
+        "recent_reason_codes: []\n"
+    )
+
+
+def _build_patch_candidate_via_ft_patch_drafter_v1(
+    *,
+    root: Path,
+    tick_u64: int,
+    ordinal_u32: int,
+    agent_id: str,
+    task_distribution: dict[str, Any],
+    agent_def: dict[str, Any] | None,
+) -> dict[str, Any]:
+    from tools.proposer_models import pointers_v1, runtime_v1
+
+    model_role = str((agent_def or {}).get("model_role", "")).strip()
+    if model_role != "PATCH_DRAFTER_V1":
+        raise RuntimeError(_DROP_FT_MODEL_UNAVAILABLE)
+
+    active_root = (root / "daemon" / "proposer_models" / "active").resolve()
+    try:
+        pointer = pointers_v1.load_active_pointer(active_root=active_root, role=model_role)
+    except Exception:
+        raise RuntimeError(_DROP_FT_MODEL_UNAVAILABLE)
+    if not isinstance(pointer, dict):
+        raise RuntimeError(_DROP_FT_MODEL_UNAVAILABLE)
+
+    active_bundle_id = str(pointer.get("active_bundle_id", "")).strip()
+    if not _is_sha256(active_bundle_id):
+        raise RuntimeError(_DROP_FT_MODEL_UNAVAILABLE)
+
+    max_new_tokens = int(max(1, int((agent_def or {}).get("max_new_tokens_u32", 1024))))
+    seed_u64 = _stable_u64_seed(
+        {
+            "schema_version": "apa_ft_patch_seed_v1",
+            "tick_u64": int(tick_u64),
+            "ordinal_u32": int(ordinal_u32),
+            "agent_id": str(agent_id),
+            "bundle_id": active_bundle_id,
+        }
+    )
+    prompt_text = _build_ft_patch_prompt(
+        tick_u64=tick_u64,
+        ordinal_u32=ordinal_u32,
+        agent_id=agent_id,
+        task_distribution=task_distribution,
+    )
+
+    try:
+        patch_text = runtime_v1.generate_patch_deterministic(
+            role=model_role,
+            prompt_text=prompt_text,
+            model_bundle_id=active_bundle_id,
+            seed_u64=seed_u64,
+            max_new_tokens_u32=max_new_tokens,
+        )
+    except Exception:
+        raise RuntimeError(_DROP_FT_MODEL_UNAVAILABLE)
+
+    patch_bytes = str(patch_text).encode("utf-8")
+    touched = _parse_patch_touched_paths(patch_bytes)
+    targets = _patch_targets(task_distribution)
+    fallback_target = targets[int(ordinal_u32) % len(targets)]
+    return {
+        "agent_id": str(agent_id),
+        "candidate_kind": _CANDIDATE_KIND_PATCH,
+        "declared_touched_paths": (touched if touched else [fallback_target]),
+        "patch_bytes": bytes(patch_bytes),
+        "nontriviality_cert_id": None,
+        "oracle_trace_id": None,
+        "base_tree_id": compute_repo_base_tree_id_tolerant(root),
+    }
+
+
 def _generate_candidate_for_agent(
     *,
     root: Path,
@@ -601,6 +693,17 @@ def _generate_candidate_for_agent(
         )
 
     entry_module = str((agent_def or {}).get("entry_module", "")).strip()
+    agent_method = str((agent_def or {}).get("agent_method", "")).strip()
+    model_role = str((agent_def or {}).get("model_role", "")).strip()
+    if agent_method == "ft_patch_drafter_v1" or model_role == "PATCH_DRAFTER_V1":
+        return _build_patch_candidate_via_ft_patch_drafter_v1(
+            root=root,
+            tick_u64=tick_u64,
+            ordinal_u32=ordinal_u32,
+            agent_id=agent_id,
+            task_distribution=task_distribution,
+            agent_def=agent_def,
+        )
     if agent_id == "sh1_v0_3" or entry_module == "tools.genesis_engine.ge_symbiotic_optimizer_v0_3":
         return _build_patch_candidate_via_sh1(
             root=root,
@@ -1313,7 +1416,10 @@ def run(*, campaign_pack: Path, out_dir: Path) -> None:
                     agent_def=agent_def,
                 )
                 generated.append(candidate)
-            except Exception:
+            except Exception as exc:
+                reason_code = str(exc).strip()
+                if not reason_code.startswith("ARENA_DROP:"):
+                    reason_code = _DROP_INVALID_SCHEMA_EDIT
                 generated.append(
                     {
                         "agent_id": agent_id,
@@ -1323,6 +1429,7 @@ def run(*, campaign_pack: Path, out_dir: Path) -> None:
                         "nontriviality_cert_id": None,
                         "oracle_trace_id": None,
                         "generation_error_b": True,
+                        "generation_error_code": reason_code,
                     }
                 )
     if not generated:
@@ -1364,7 +1471,7 @@ def run(*, campaign_pack: Path, out_dir: Path) -> None:
             decision_code = _DROP_AGENT_QUARANTINED
         elif bool(candidate.get("generation_error_b", False)):
             admitted_b = False
-            decision_code = _DROP_INVALID_SCHEMA_EDIT
+            decision_code = str(candidate.get("generation_error_code", _DROP_INVALID_SCHEMA_EDIT))
         else:
             admitted_b, decision_code, derived_touched_paths, payload_hashes = _admission_allowlist_and_preflight(
                 root=root,

@@ -42,6 +42,7 @@ from .federation.check_treaty_v1 import T_AXIS_MORPHISM_TYPE, check_treaty
 from .federation.ok_ican_v1 import DEFAULT_ICAN_PROFILE, ican_id
 from .nontriviality_cert_v1 import build_nontriviality_cert_v1 as build_shared_nontriviality_cert_v1
 from .shadow_j_eval_v1 import build_ccap_receipt_metric_index_for_state_root
+from .verify_orch_policy_bundle_v1 import verify_orch_policy_bundle_v1
 from .verify_kernel_extension_proposal_v1 import verify_extension_proposal_dir
 from .world.check_world_snapshot_v1 import W_AXIS_MORPHISM_TYPE, check_world_snapshot
 
@@ -72,9 +73,12 @@ _HARD_TASK_METRIC_IDS: tuple[str, ...] = (
 _PROPOSER_ARENA_CAPABILITY_ID = "RSI_PROPOSER_ARENA_V1"
 _PROMOTION_RESULT_KIND_COMMIT = "PROMOTED_COMMIT"
 _PROMOTION_RESULT_KIND_EXT = "PROMOTED_EXT_QUEUED"
+_PROMOTION_RESULT_KIND_POLICY = "PROMOTED_POLICY_UPDATE"
 _PROMOTION_RESULT_KIND_REJECTED = "REJECTED"
+_ACTIVATION_KIND_ORCH_POLICY_UPDATE = "ACTIVATION_KIND_ORCH_POLICY_UPDATE"
 _CANDIDATE_KIND_PATCH = "PATCH"
 _CANDIDATE_KIND_EXT = "KERNEL_EXT_PROPOSAL"
+_ORCH_POLICY_TRAINER_CAMPAIGN_ID = "rsi_orch_policy_trainer_v1"
 
 
 def _map_arena_patch_reject_reason(*, promotion_status: str, reason_code: str | None) -> str:
@@ -1597,6 +1601,8 @@ def _write_promotion_receipt_v19(
     effect_class: str,
     result_kind: str | None = None,
     replay_binding_v1: dict[str, Any] | None = None,
+    orch_policy_eval_receipt_id: str | None = None,
+    activation_binding_kind: str | None = None,
 ) -> tuple[dict[str, Any], str]:
     out_dir = Path(dispatch_ctx["dispatch_dir"]) / "promotion"
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -1623,6 +1629,7 @@ def _write_promotion_receipt_v19(
     if isinstance(result_kind, str) and result_kind in {
         _PROMOTION_RESULT_KIND_COMMIT,
         _PROMOTION_RESULT_KIND_EXT,
+        _PROMOTION_RESULT_KIND_POLICY,
         _PROMOTION_RESULT_KIND_REJECTED,
     }:
         payload["result_kind"] = str(result_kind)
@@ -1633,6 +1640,10 @@ def _write_promotion_receipt_v19(
         )
     if isinstance(replay_binding_v1, dict):
         payload["replay_binding_v1"] = dict(replay_binding_v1)
+    if isinstance(orch_policy_eval_receipt_id, str) and _is_sha256(orch_policy_eval_receipt_id):
+        payload["orch_policy_eval_receipt_id"] = str(orch_policy_eval_receipt_id)
+    if isinstance(activation_binding_kind, str) and activation_binding_kind == _ACTIVATION_KIND_ORCH_POLICY_UPDATE:
+        payload["activation_binding_kind"] = str(activation_binding_kind)
     require_no_absolute_paths(payload)
     _, receipt, digest = write_hashed_json(out_dir, "omega_promotion_receipt_v1.json", payload, id_field="receipt_id")
     validate_v18_schema(receipt, "omega_promotion_receipt_v1")
@@ -1664,6 +1675,7 @@ def _augment_promotion_receipt_with_effect(
     if str(payload.get("result_kind", "")).strip() not in {
         _PROMOTION_RESULT_KIND_COMMIT,
         _PROMOTION_RESULT_KIND_EXT,
+        _PROMOTION_RESULT_KIND_POLICY,
         _PROMOTION_RESULT_KIND_REJECTED,
     }:
         payload["result_kind"] = (
@@ -1858,6 +1870,98 @@ def run_promotion(
             declared_class=declared_class,
             effect_class="EFFECT_REJECTED",
             replay_binding_v1=replay_binding_v1,
+        )
+
+    campaign_id = str(((dispatch_ctx.get("campaign_entry") or {}).get("campaign_id", ""))).strip()
+    if campaign_id == _ORCH_POLICY_TRAINER_CAMPAIGN_ID:
+        bundle_path, _bundle_hash = v18_promoter._find_promotion_bundle(dispatch_ctx)  # type: ignore[attr-defined]
+        if bundle_path is None:
+            return _write_promotion_receipt_v19(
+                tick_u64=tick_u64,
+                dispatch_ctx=dispatch_ctx,
+                promotion_bundle_hash=_SHA256_ZERO,
+                status="REJECTED",
+                reason="NO_PROMOTION_BUNDLE",
+                route="NONE",
+                active_manifest_hash_after=None,
+                utility_proof_hash=None,
+                declared_class=declared_class,
+                effect_class="EFFECT_REJECTED",
+                result_kind=_PROMOTION_RESULT_KIND_REJECTED,
+                replay_binding_v1=replay_binding_v1,
+            )
+        eval_receipt: dict[str, Any] | None = None
+        eval_receipt_id: str | None = None
+        try:
+            eval_receipt, eval_receipt_id = verify_orch_policy_bundle_v1(
+                tick_u64=int(tick_u64),
+                dispatch_ctx=dispatch_ctx,
+                candidate_bundle_path=bundle_path,
+            )
+        except Exception as exc:  # noqa: BLE001
+            reason_text = str(exc).strip()
+            reason_upper = reason_text.upper()
+            if reason_upper.startswith("INVALID:"):
+                reason_upper = reason_upper.split("INVALID:", 1)[1].strip()
+            if "PIN_HASH_MISMATCH" in reason_upper:
+                reason_code = "EVAL_FAIL:PIN_MISMATCH"
+            elif "MISSING_STATE_INPUT" in reason_upper:
+                reason_code = "EVAL_FAIL:MISSING_STATE_INPUT"
+            else:
+                reason_code = "EVAL_FAIL:SCHEMA_ERROR"
+            return _write_promotion_receipt_v19(
+                tick_u64=tick_u64,
+                dispatch_ctx=dispatch_ctx,
+                promotion_bundle_hash=_SHA256_ZERO,
+                status="REJECTED",
+                reason=reason_code,
+                route="NONE",
+                active_manifest_hash_after=None,
+                utility_proof_hash=None,
+                declared_class=declared_class,
+                effect_class="EFFECT_REJECTED",
+                result_kind=_PROMOTION_RESULT_KIND_REJECTED,
+                replay_binding_v1=replay_binding_v1,
+            )
+
+        eval_status = str((eval_receipt or {}).get("status", "")).strip().upper()
+        eval_reason = str((eval_receipt or {}).get("reason_code", "")).strip() or "EVAL_FAIL:SCHEMA_ERROR"
+        policy_bundle_id = str((eval_receipt or {}).get("candidate_policy_bundle_id", "")).strip()
+        if eval_status != "PASS":
+            return _write_promotion_receipt_v19(
+                tick_u64=tick_u64,
+                dispatch_ctx=dispatch_ctx,
+                promotion_bundle_hash=(policy_bundle_id if _is_sha256(policy_bundle_id) else _SHA256_ZERO),
+                status="REJECTED",
+                reason=eval_reason,
+                route="NONE",
+                active_manifest_hash_after=None,
+                utility_proof_hash=None,
+                declared_class=declared_class,
+                effect_class="EFFECT_REJECTED",
+                result_kind=_PROMOTION_RESULT_KIND_REJECTED,
+                replay_binding_v1=replay_binding_v1,
+                orch_policy_eval_receipt_id=eval_receipt_id,
+            )
+        return _write_promotion_receipt_v19(
+            tick_u64=tick_u64,
+            dispatch_ctx=dispatch_ctx,
+            promotion_bundle_hash=(policy_bundle_id if _is_sha256(policy_bundle_id) else _SHA256_ZERO),
+            status="PROMOTED",
+            reason=None,
+            route="ACTIVE",
+            active_manifest_hash_after=None,
+            utility_proof_hash=None,
+            declared_class=declared_class,
+            effect_class=_compute_effect_class(
+                declared_class=declared_class,
+                correctness_ok_b=True,
+                utility_ok_b=True,
+            ),
+            result_kind=_PROMOTION_RESULT_KIND_POLICY,
+            replay_binding_v1=replay_binding_v1,
+            orch_policy_eval_receipt_id=eval_receipt_id,
+            activation_binding_kind=_ACTIVATION_KIND_ORCH_POLICY_UPDATE,
         )
 
     arena_winner_kind: str | None = None

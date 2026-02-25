@@ -50,7 +50,12 @@ venv/
 .DS_Store
 Thumbs.db
 # Runtime churn
-daemon/
+daemon/*
+!daemon/orch_policy/
+daemon/orch_policy/*
+!daemon/orch_policy/eval_cache/
+daemon/orch_policy/eval_cache/*
+!daemon/orch_policy/eval_cache/.gitkeep
 .omega_v18_exec_workspace/
 # Python/tool caches
 .ruff_cache/

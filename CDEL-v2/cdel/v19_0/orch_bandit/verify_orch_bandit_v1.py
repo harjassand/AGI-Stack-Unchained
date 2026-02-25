@@ -12,6 +12,7 @@ from orchestrator.omega_v19_0.orch_bandit.bandit_v1 import (
     compute_context_key,
     compute_cost_norm_q32,
     select_capability_id,
+    select_capability_id_with_bonus,
     update_bandit_state,
 )
 
@@ -20,6 +21,7 @@ _HEAVY_DECLARED_CLASSES = {"FRONTIER_HEAVY", "CANARY_HEAVY"}
 _PROMOTION_RESULT_KINDS = {
     "PROMOTED_COMMIT",
     "PROMOTED_EXT_QUEUED",
+    "PROMOTED_POLICY_UPDATE",
     "REJECTED",
 }
 _TOXIC_REASON_PREFIXES = (
@@ -37,11 +39,19 @@ _ORCH_REWARD_COMMIT_Q32 = _Q32_ONE
 _ORCH_REWARD_EXT_Q32 = _Q32_ONE // 2
 _ORCH_REWARD_TOXIC_Q32 = -(_Q32_ONE // 2)
 _ORCH_REWARD_HEAVY_UTILITY_BONUS_Q32 = _Q32_ONE // 4
+_ORCH_POLICY_BONUS_ABS_Q32 = _Q32_ONE // 4
 
 
 def _is_sha256(value: Any) -> bool:
     raw = str(value).strip()
     return raw.startswith("sha256:") and len(raw) == 71 and all(ch in "0123456789abcdef" for ch in raw.split(":", 1)[1])
+
+
+def _require_sha256(value: Any, *, reason: str = "SCHEMA_FAIL") -> str:
+    raw = str(value).strip()
+    if not _is_sha256(raw):
+        fail_v18(reason)
+    return raw
 
 
 def _load_canon_json(path: Path) -> dict[str, Any]:
@@ -148,6 +158,94 @@ def _load_optional_utility_policy(*, config_dir: Path) -> dict[str, Any] | None:
     return payload
 
 
+def _orch_policy_root(*, state_root: Path) -> Path:
+    try:
+        daemon_root = state_root.parents[1]
+    except Exception:
+        fail_v18("MISSING_STATE_INPUT")
+    return daemon_root / "orch_policy"
+
+
+def _clamp_orch_policy_bonus_q32(value_q32: int) -> int:
+    if int(value_q32) < -int(_ORCH_POLICY_BONUS_ABS_Q32):
+        return -int(_ORCH_POLICY_BONUS_ABS_Q32)
+    if int(value_q32) > int(_ORCH_POLICY_BONUS_ABS_Q32):
+        return int(_ORCH_POLICY_BONUS_ABS_Q32)
+    return int(value_q32)
+
+
+def _policy_lookup_from_bundle(bundle_payload: dict[str, Any]) -> dict[str, dict[str, int]]:
+    validate_schema_v19(bundle_payload, "orch_policy_bundle_v1")
+    bundle_id = _require_sha256(bundle_payload.get("policy_bundle_id"), reason="SCHEMA_FAIL")
+    bundle_no_id = dict(bundle_payload)
+    bundle_no_id.pop("policy_bundle_id", None)
+    if canon_hash_obj(bundle_no_id) != bundle_id:
+        fail_v18("NONDETERMINISTIC")
+
+    table_raw = bundle_payload.get("policy_table")
+    if not isinstance(table_raw, dict):
+        fail_v18("SCHEMA_FAIL")
+    table_payload = dict(table_raw)
+    validate_schema_v19(table_payload, "orch_policy_table_v1")
+    declared_table_id = _require_sha256(bundle_payload.get("policy_table_id"), reason="SCHEMA_FAIL")
+    observed_table_id = _require_sha256(table_payload.get("policy_table_id"), reason="SCHEMA_FAIL")
+    if observed_table_id != declared_table_id:
+        fail_v18("NONDETERMINISTIC")
+    table_no_id = dict(table_payload)
+    table_no_id.pop("policy_table_id", None)
+    if canon_hash_obj(table_no_id) != observed_table_id:
+        fail_v18("NONDETERMINISTIC")
+
+    rows_raw = table_payload.get("rows")
+    if not isinstance(rows_raw, list):
+        fail_v18("SCHEMA_FAIL")
+    out: dict[str, dict[str, int]] = {}
+    for row in rows_raw:
+        if not isinstance(row, dict):
+            fail_v18("SCHEMA_FAIL")
+        context_key = _require_sha256(row.get("context_key"), reason="SCHEMA_FAIL")
+        ranked_raw = row.get("ranked_capabilities")
+        if not isinstance(ranked_raw, list):
+            fail_v18("SCHEMA_FAIL")
+        scores: dict[str, int] = {}
+        for ranked in ranked_raw:
+            if not isinstance(ranked, dict):
+                fail_v18("SCHEMA_FAIL")
+            capability_id = str(ranked.get("capability_id", "")).strip()
+            if not capability_id:
+                fail_v18("SCHEMA_FAIL")
+            score_q32 = ranked.get("score_q32")
+            if not isinstance(score_q32, int):
+                fail_v18("SCHEMA_FAIL")
+            if capability_id in scores:
+                continue
+            scores[capability_id] = int(score_q32)
+        if not scores:
+            fail_v18("SCHEMA_FAIL")
+        if context_key in out:
+            fail_v18("NONDETERMINISTIC")
+        out[context_key] = scores
+    return out
+
+
+def _load_active_orch_policy_lookup(*, state_root: Path) -> tuple[str | None, dict[str, dict[str, int]] | None]:
+    pointer_path = _orch_policy_root(state_root=state_root) / "active" / "ORCH_POLICY_V1.json"
+    if not pointer_path.exists() or not pointer_path.is_file():
+        return None, None
+    pointer_payload = _load_canon_json(pointer_path)
+    validate_schema_v19(pointer_payload, "orch_policy_pointer_v1")
+    bundle_id = _require_sha256(pointer_payload.get("active_policy_bundle_id"), reason="SCHEMA_FAIL")
+    bundle_path = _orch_policy_root(state_root=state_root) / "store" / f"sha256_{bundle_id.split(':', 1)[1]}.orch_policy_bundle_v1.json"
+    if not bundle_path.exists() or not bundle_path.is_file():
+        fail_v18("MISSING_STATE_INPUT")
+    bundle_payload = _load_canon_json(bundle_path)
+    observed_bundle_id = _require_sha256(bundle_payload.get("policy_bundle_id"), reason="SCHEMA_FAIL")
+    if observed_bundle_id != bundle_id:
+        fail_v18("NONDETERMINISTIC")
+    lookup = _policy_lookup_from_bundle(bundle_payload)
+    return bundle_id, lookup
+
+
 def _declared_class_for_capability_id(*, utility_policy: dict[str, Any] | None, capability_id: str) -> str:
     if not isinstance(utility_policy, dict):
         return "UNCLASSIFIED"
@@ -220,6 +318,8 @@ def _normalize_promotion_result_kind(*, result_kind: Any, status: Any, activatio
         normalized_activation_kind = str(activation_kind).strip()
         if normalized_activation_kind == "ACTIVATION_KIND_EXT_QUEUED":
             return "PROMOTED_EXT_QUEUED"
+        if normalized_activation_kind == "ACTIVATION_KIND_ORCH_POLICY_UPDATE":
+            return "PROMOTED_POLICY_UPDATE"
         return "PROMOTED_COMMIT"
     return "REJECTED"
 
@@ -255,7 +355,7 @@ def _compute_reward_q32(
     lane_kind: str,
     utility_receipt: dict[str, Any] | None,
 ) -> int:
-    if promotion_result_kind == "PROMOTED_COMMIT":
+    if promotion_result_kind in {"PROMOTED_COMMIT", "PROMOTED_POLICY_UPDATE"}:
         r_commit_q32 = int(_ORCH_REWARD_COMMIT_Q32)
         r_ext_q32 = 0
     elif promotion_result_kind == "PROMOTED_EXT_QUEUED":
@@ -418,10 +518,78 @@ def verify_orch_bandit_v1(
     except OrchBanditError as exc:
         fail_v18(str(exc))
 
-    if str(expected_selected) != str(routing_payload.get("selected_capability_id", "")):
+    observed_selected_routing = str(routing_payload.get("selected_capability_id", "")).strip()
+    observed_selected_update = str(update_receipt.get("selected_capability_id", "")).strip()
+    if observed_selected_routing != observed_selected_update:
         fail_v18("NONDETERMINISTIC")
-    if str(expected_selected) != str(update_receipt.get("selected_capability_id", "")):
-        fail_v18("NONDETERMINISTIC")
+
+    orch_policy_use_b = bool(pack_payload.get("orch_policy_use_b", False))
+    if orch_policy_use_b:
+        if str(pack_payload.get("orch_policy_mode", "")).strip().upper() != "ADD_BONUS_V1":
+            fail_v18("SCHEMA_FAIL")
+        observed_bundle_id_raw = routing_payload.get("orch_policy_bundle_id_used")
+        observed_bundle_id: str | None
+        if observed_bundle_id_raw is None:
+            observed_bundle_id = None
+        else:
+            text = str(observed_bundle_id_raw).strip()
+            observed_bundle_id = _require_sha256(text, reason="SCHEMA_FAIL") if text else None
+        observed_row_hit_b = bool(routing_payload.get("orch_policy_row_hit_b", False))
+        observed_bonus_q32 = int(routing_payload.get("orch_policy_selected_bonus_q32", 0))
+
+        active_bundle_id, policy_lookup = _load_active_orch_policy_lookup(state_root=state_root)
+        if active_bundle_id is None:
+            if observed_bundle_id is not None or observed_row_hit_b or observed_bonus_q32 != 0:
+                fail_v18("NONDETERMINISTIC")
+            expected_selected_with_bonus = str(expected_selected)
+            expected_row_hit_b = False
+            expected_bonus_q32 = 0
+        else:
+            if observed_bundle_id != str(active_bundle_id):
+                fail_v18("NONDETERMINISTIC")
+            context_scores = (policy_lookup or {}).get(str(expected_context_key)) if isinstance(policy_lookup, dict) else None
+            if isinstance(context_scores, dict):
+                expected_row_hit_b = True
+                bonus_by_capability_q32: dict[str, int] = {}
+                for capability_id in eligible_capability_ids:
+                    score_q32 = int(context_scores.get(str(capability_id), 0))
+                    bonus_by_capability_q32[str(capability_id)] = _clamp_orch_policy_bonus_q32(score_q32)
+                try:
+                    expected_selected_with_bonus = select_capability_id_with_bonus(
+                        config=config_payload,
+                        state=state_in,
+                        context_key=expected_context_key,
+                        eligible_capability_ids=list(eligible_capability_ids),
+                        bonus_by_capability_q32=bonus_by_capability_q32,
+                    )
+                except OrchBanditError as exc:
+                    fail_v18(str(exc))
+                expected_bonus_q32 = int(bonus_by_capability_q32.get(str(expected_selected_with_bonus), 0))
+            else:
+                expected_selected_with_bonus = str(expected_selected)
+                expected_row_hit_b = False
+                expected_bonus_q32 = 0
+        if observed_row_hit_b != bool(expected_row_hit_b):
+            fail_v18("NONDETERMINISTIC")
+        if int(observed_bonus_q32) != int(expected_bonus_q32):
+            fail_v18("NONDETERMINISTIC")
+        if str(observed_selected_routing) != str(expected_selected_with_bonus):
+            fail_v18("NONDETERMINISTIC")
+        selected_for_update = observed_selected_update
+        if not selected_for_update:
+            fail_v18("SCHEMA_FAIL")
+        if selected_for_update not in set(eligible_capability_ids):
+            fail_v18("NONDETERMINISTIC")
+    else:
+        if routing_payload.get("orch_policy_bundle_id_used") is not None:
+            fail_v18("NONDETERMINISTIC")
+        if bool(routing_payload.get("orch_policy_row_hit_b", False)):
+            fail_v18("NONDETERMINISTIC")
+        if int(routing_payload.get("orch_policy_selected_bonus_q32", 0)) != 0:
+            fail_v18("NONDETERMINISTIC")
+        if str(expected_selected) != observed_selected_routing:
+            fail_v18("NONDETERMINISTIC")
+        selected_for_update = str(expected_selected)
 
     promotion_receipt: dict[str, Any] | None = None
     utility_receipt: dict[str, Any] | None = None
@@ -485,7 +653,7 @@ def verify_orch_bandit_v1(
             lane_kind=lane_kind,
             runaway_band_u32=int(min(runaway_level_u32, 5)),
             objective_kind=objective_kind,
-            selected_capability_id=str(expected_selected),
+            selected_capability_id=str(selected_for_update),
             observed_reward_q32=int(expected_reward_q32),
             observed_cost_q32=int(expected_cost_q32),
         )

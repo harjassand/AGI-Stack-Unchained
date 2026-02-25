@@ -69,6 +69,7 @@ _PACK_V2_OPTIONAL_PINNED = [
 ]
 _PACK_V2_OPTIONAL_COPY_ONLY = [
     "orch_bandit_config_rel",
+    "orch_policy_eval_config_rel",
     "shadow_regime_proposal_rel",
     "shadow_evaluation_tiers_rel",
     "shadow_protected_roots_profile_rel",

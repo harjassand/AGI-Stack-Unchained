@@ -25,8 +25,14 @@
     "after_active_manifest_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
     "healthcheck_suite_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
     "healthcheck_result": {"type": "string", "enum": ["PASS", "FAIL"]},
-    "activation_method": {"type": "string", "enum": ["ATOMIC_POINTER_SWAP", "ACTIVATION_KIND_EXT_QUEUED"]},
-    "activation_kind": {"type": "string", "enum": ["ATOMIC_POINTER_SWAP", "ACTIVATION_KIND_EXT_QUEUED"]},
+    "activation_method": {
+      "type": "string",
+      "enum": ["ATOMIC_POINTER_SWAP", "ACTIVATION_KIND_EXT_QUEUED", "ACTIVATION_KIND_ORCH_POLICY_UPDATE"]
+    },
+    "activation_kind": {
+      "type": "string",
+      "enum": ["ATOMIC_POINTER_SWAP", "ACTIVATION_KIND_EXT_QUEUED", "ACTIVATION_KIND_ORCH_POLICY_UPDATE"]
+    },
     "activation_success": {"type": "boolean"},
     "pass": {"type": "boolean"},
     "extension_queued_receipt_hash": {
@@ -46,6 +52,18 @@
             "ACT_EXT_QUEUED:HASH_MISMATCH"
           ]
         }
+      ]
+    },
+    "orch_policy_activation_receipt_hash": {
+      "anyOf": [
+        {"type": "null"},
+        {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"}
+      ]
+    },
+    "orch_policy_pointer_path": {
+      "anyOf": [
+        {"type": "null"},
+        {"type": "string", "minLength": 1}
       ]
     },
     "native_runtime_contract_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
@@ -118,7 +136,9 @@
           "EXTENSION_QUEUED",
           "ACT_EXT_QUEUED:OK",
           "ACT_EXT_QUEUED:WRITE_FAIL",
-          "ACT_EXT_QUEUED:HASH_MISMATCH"
+          "ACT_EXT_QUEUED:HASH_MISMATCH",
+          "ORCH_POLICY_POINTER_UPDATED",
+          "ORCH_POLICY_POINTER_UPDATE_FAILED"
         ]
       }
     }

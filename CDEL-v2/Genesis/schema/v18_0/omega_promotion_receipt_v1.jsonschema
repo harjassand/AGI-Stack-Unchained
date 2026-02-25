@@ -76,7 +76,7 @@
     },
     "result_kind": {
       "type": "string",
-      "enum": ["PROMOTED_COMMIT", "PROMOTED_EXT_QUEUED", "REJECTED"]
+      "enum": ["PROMOTED_COMMIT", "PROMOTED_EXT_QUEUED", "PROMOTED_POLICY_UPDATE", "REJECTED"]
     },
     "result": {
       "type": "object",
@@ -117,12 +117,19 @@
                     "ARENA_REJECT:SANDBOX_NOT_ENFORCED",
                     "ARENA_REJECT:EXT_PUBLIC_ONLY_VIOLATION",
                     "ARENA_REJECT:EXT_LEDGER_CONFLICT",
-                    "ARENA_REJECT:EXT_SCHEMA_INVALID"
+                    "ARENA_REJECT:EXT_SCHEMA_INVALID",
+                    "EVAL_FAIL:LOW_COVERAGE",
+                    "EVAL_FAIL:NO_IMPROVEMENT",
+                    "EVAL_FAIL:TOXIC_INCREASE",
+                    "EVAL_FAIL:PIN_MISMATCH",
+                    "EVAL_FAIL:SCHEMA_ERROR",
+                    "EVAL_FAIL:MISSING_STATE_INPUT"
                   ]
                 },
                 {"type": "string", "pattern": "^ARENA_REJECT:CCAP_REJECTED:[A-Z0-9_:-]+$"},
                 {"type": "string", "pattern": "^ARENA_REJECT:EK_FAIL:[A-Z0-9_:-]+$"},
-                {"type": "string", "pattern": "^ARENA_REJECT:UTILITY_FAIL:[A-Z0-9_:-]+$"}
+                {"type": "string", "pattern": "^ARENA_REJECT:UTILITY_FAIL:[A-Z0-9_:-]+$"},
+                {"type": "string", "pattern": "^EVAL_FAIL:[A-Z0-9_:-]+$"}
               ]
             }
           ]
@@ -171,6 +178,18 @@
         "dispatch_id": {"type": "string", "minLength": 1},
         "dispatch_receipt_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"}
       }
+    },
+    "orch_policy_eval_receipt_id": {
+      "anyOf": [
+        {"type": "null"},
+        {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"}
+      ]
+    },
+    "activation_binding_kind": {
+      "anyOf": [
+        {"type": "null"},
+        {"type": "string", "enum": ["ACTIVATION_KIND_ORCH_POLICY_UPDATE"]}
+      ]
     },
     "active_manifest_hash_after": {
       "anyOf": [

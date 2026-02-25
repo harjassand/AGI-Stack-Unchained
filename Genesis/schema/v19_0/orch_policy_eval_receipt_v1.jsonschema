@@ -1,0 +1,44 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v19_0/orch_policy_eval_receipt_v1",
+  "title": "Orch policy eval receipt v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "candidate_policy_bundle_id",
+    "baseline_kind",
+    "status",
+    "reason_code",
+    "metrics"
+  ],
+  "properties": {
+    "schema_version": {"const": "orch_policy_eval_receipt_v1"},
+    "candidate_policy_bundle_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "baseline_kind": {"type": "string", "enum": ["ACTIVE_POLICY", "CURRENT_BANDIT_STATE"]},
+    "status": {"type": "string", "enum": ["PASS", "FAIL"]},
+    "reason_code": {"type": "string"},
+    "metrics": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "candidate_value_q32",
+        "baseline_value_q32",
+        "delta_q32",
+        "coverage_q32",
+        "candidate_toxic_rate_q32",
+        "baseline_toxic_rate_q32",
+        "toxic_delta_q32"
+      ],
+      "properties": {
+        "candidate_value_q32": {"type": "integer"},
+        "baseline_value_q32": {"type": "integer"},
+        "delta_q32": {"type": "integer"},
+        "coverage_q32": {"type": "integer", "minimum": 0, "maximum": 4294967296},
+        "candidate_toxic_rate_q32": {"type": "integer", "minimum": 0, "maximum": 4294967296},
+        "baseline_toxic_rate_q32": {"type": "integer", "minimum": 0, "maximum": 4294967296},
+        "toxic_delta_q32": {"type": "integer"}
+      }
+    }
+  }
+}

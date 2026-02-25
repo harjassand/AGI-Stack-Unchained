@@ -2,54 +2,96 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://genesis.engine/specs/v19_0/orch_policy_table_v1",
   "title": "Orchestration policy table v1",
-  "type": "object",
-  "additionalProperties": false,
-  "required": [
-    "schema_version",
-    "policy_id",
-    "ek_id",
-    "kernel_ledger_id",
-    "mode",
-    "context_rows",
-    "defaults"
-  ],
-  "properties": {
-    "schema_version": {"const": "orch_policy_table_v1"},
-    "policy_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
-    "ek_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
-    "kernel_ledger_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
-    "mode": {"const": "ADD_BONUS_V1"},
-    "context_rows": {
-      "type": "array",
-      "items": {
-        "type": "object",
-        "additionalProperties": false,
-        "required": ["context_key", "ranked_actions"],
-        "properties": {
-          "context_key": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
-          "ranked_actions": {
-            "type": "array",
-            "items": {
-              "type": "object",
-              "additionalProperties": false,
-              "required": ["capability_id", "score_q32"],
-              "properties": {
-                "capability_id": {"type": "string"},
-                "score_q32": {"type": "integer"}
+  "oneOf": [
+    {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema_version",
+        "policy_table_id",
+        "rows"
+      ],
+      "properties": {
+        "schema_version": {"const": "orch_policy_table_v1"},
+        "policy_table_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+        "rows": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["context_key", "ranked_capabilities"],
+            "properties": {
+              "context_key": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+              "ranked_capabilities": {
+                "type": "array",
+                "minItems": 1,
+                "items": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": ["capability_id", "score_q32"],
+                  "properties": {
+                    "capability_id": {"type": "string", "minLength": 1},
+                    "score_q32": {"type": "integer"}
+                  }
+                }
               }
             }
           }
         }
       }
     },
-    "defaults": {
+    {
       "type": "object",
       "additionalProperties": false,
-      "required": ["unknown_context_bonus_q32", "max_ranked_actions_u32"],
+      "required": [
+        "schema_version",
+        "policy_id",
+        "ek_id",
+        "kernel_ledger_id",
+        "mode",
+        "context_rows",
+        "defaults"
+      ],
       "properties": {
-        "unknown_context_bonus_q32": {"type": "integer"},
-        "max_ranked_actions_u32": {"const": 16}
+        "schema_version": {"const": "orch_policy_table_v1"},
+        "policy_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+        "ek_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+        "kernel_ledger_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+        "mode": {"const": "ADD_BONUS_V1"},
+        "context_rows": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["context_key", "ranked_actions"],
+            "properties": {
+              "context_key": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+              "ranked_actions": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": ["capability_id", "score_q32"],
+                  "properties": {
+                    "capability_id": {"type": "string", "minLength": 1},
+                    "score_q32": {"type": "integer"}
+                  }
+                }
+              }
+            }
+          }
+        },
+        "defaults": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["unknown_context_bonus_q32", "max_ranked_actions_u32"],
+          "properties": {
+            "unknown_context_bonus_q32": {"type": "integer"},
+            "max_ranked_actions_u32": {"const": 16}
+          }
+        }
       }
     }
-  }
+  ]
 }

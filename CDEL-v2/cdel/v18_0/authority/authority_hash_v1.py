@@ -32,7 +32,11 @@ _OPTIONAL_V2_KEYS = {
     "holdout_policy_id",
     "holdout_store_root_id",
 }
-_ALLOWED_KEYS = _REQUIRED_KEYS | _OPTIONAL_V2_KEYS
+_OPTIONAL_STEP5_KEYS = {
+    "orch_policy_eval_holdout_dataset_id",
+    "orch_policy_eval_config_id",
+}
+_ALLOWED_KEYS = _REQUIRED_KEYS | _OPTIONAL_V2_KEYS | _OPTIONAL_STEP5_KEYS
 
 _CANON_KEYS = {"ccap_can_v", "ir_can_v", "op_can_v", "obs_can_v"}
 
@@ -54,6 +58,16 @@ def _require_sha256_list(value: Any) -> list[str]:
 
 def _repo_root_from_module() -> Path:
     return Path(__file__).resolve().parents[4]
+
+
+def _step5_orch_policy_enabled(*, pins: dict[str, Any]) -> bool:
+    raw = str(os.environ.get("OMEGA_STEP5_ORCH_POLICY_ENABLE_B", "0")).strip().lower()
+    if raw in {"1", "true", "yes", "on"}:
+        return True
+    return bool(
+        str(pins.get("orch_policy_eval_holdout_dataset_id", "")).strip()
+        or str(pins.get("orch_policy_eval_config_id", "")).strip()
+    )
 
 
 def _active_ek_schema_version(*, pins: dict[str, Any], repo_root_path: Path) -> str:
@@ -119,11 +133,21 @@ def _normalize_authority_pins(pins: dict[str, Any], *, repo_root_path: Path | No
     holdout_store_root_id = pins.get("holdout_store_root_id")
     if holdout_store_root_id is not None:
         normalized["holdout_store_root_id"] = _require_sha256(holdout_store_root_id)
+    orch_policy_eval_holdout_dataset_id = pins.get("orch_policy_eval_holdout_dataset_id")
+    if orch_policy_eval_holdout_dataset_id is not None:
+        normalized["orch_policy_eval_holdout_dataset_id"] = _require_sha256(orch_policy_eval_holdout_dataset_id)
+    orch_policy_eval_config_id = pins.get("orch_policy_eval_config_id")
+    if orch_policy_eval_config_id is not None:
+        normalized["orch_policy_eval_config_id"] = _require_sha256(orch_policy_eval_config_id)
 
     resolved_repo_root = Path(repo_root_path).resolve() if repo_root_path is not None else _repo_root_from_module()
     active_schema_version = _active_ek_schema_version(pins=normalized, repo_root_path=resolved_repo_root)
     if active_schema_version == "evaluation_kernel_v2":
         missing = [key for key in sorted(_OPTIONAL_V2_KEYS) if key not in normalized]
+        if missing:
+            fail("SCHEMA_FAIL")
+    if _step5_orch_policy_enabled(pins=normalized):
+        missing = [key for key in sorted(_OPTIONAL_STEP5_KEYS) if key not in normalized]
         if missing:
             fail("SCHEMA_FAIL")
     return normalized

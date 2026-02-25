@@ -12,6 +12,7 @@ from pathlib import Path
 from typing import Any
 
 from orchestrator.common.run_invoker_v1 import run_command
+from ..v1_7r.canon import write_canon_json
 
 from .omega_common_v1 import (
     canon_hash_obj,
@@ -24,6 +25,7 @@ from .omega_common_v1 import (
 from ..v19_0.common_v1 import validate_schema as validate_schema_v19
 
 _HEX64_RE = re.compile(r"^[0-9a-f]{64}$")
+_ZERO_SHA256 = "sha256:" + ("0" * 64)
 
 
 def _meta_core_root() -> Path:
@@ -798,6 +800,199 @@ def _run_activation_ext_queued(
     return activation_receipt, activation_hash, None, None, after_hash
 
 
+def _write_canon_atomic(path: Path, payload: dict[str, Any]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = path.with_suffix(path.suffix + ".tmp")
+    write_canon_json(tmp, payload)
+    os.replace(tmp, path)
+
+
+def _verify_orch_policy_bundle_payload(bundle_payload: dict[str, Any]) -> tuple[str, dict[str, Any], str]:
+    validate_schema_v19(bundle_payload, "orch_policy_bundle_v1")
+    policy_bundle_id = _require_sha256_prefixed(bundle_payload.get("policy_bundle_id"), field="policy_bundle_id")
+    bundle_no_id = dict(bundle_payload)
+    bundle_no_id.pop("policy_bundle_id", None)
+    if canon_hash_obj(bundle_no_id) != policy_bundle_id:
+        raise RuntimeError("NONDETERMINISTIC")
+
+    table_raw = bundle_payload.get("policy_table")
+    if not isinstance(table_raw, dict):
+        raise RuntimeError("SCHEMA_FAIL")
+    table_payload = dict(table_raw)
+    validate_schema_v19(table_payload, "orch_policy_table_v1")
+    declared_table_id = _require_sha256_prefixed(bundle_payload.get("policy_table_id"), field="policy_table_id")
+    table_id = _require_sha256_prefixed(table_payload.get("policy_table_id"), field="policy_table.policy_table_id")
+    if table_id != declared_table_id:
+        raise RuntimeError("NONDETERMINISTIC")
+    table_no_id = dict(table_payload)
+    table_no_id.pop("policy_table_id", None)
+    if canon_hash_obj(table_no_id) != table_id:
+        raise RuntimeError("NONDETERMINISTIC")
+    return policy_bundle_id, table_payload, table_id
+
+
+def _locate_orch_policy_bundle_artifact(*, dispatch_ctx: dict[str, Any], policy_bundle_id: str) -> Path:
+    bundle_hex = policy_bundle_id.split(":", 1)[1]
+    target = f"sha256_{bundle_hex}.orch_policy_bundle_v1.json"
+    dispatch_dir = Path(dispatch_ctx["dispatch_dir"]).resolve()
+    direct = dispatch_dir / "promotion" / target
+    if direct.exists() and direct.is_file():
+        return direct
+    subrun_root_raw = dispatch_ctx.get("subrun_root_abs")
+    if isinstance(subrun_root_raw, (str, Path)):
+        subrun_root = Path(subrun_root_raw).resolve()
+        matches = sorted(subrun_root.glob(f"**/{target}"), key=lambda row: row.as_posix())
+        if matches:
+            return matches[0]
+    raise RuntimeError("MISSING_STATE_INPUT")
+
+
+def _run_activation_orch_policy_update(
+    *,
+    tick_u64: int,
+    dispatch_ctx: dict[str, Any],
+    promotion_receipt: dict[str, Any],
+    healthcheck_suitepack: dict[str, Any],
+    healthcheck_suite_hash: str,
+    active_manifest_hash_before: str,
+) -> tuple[
+    dict[str, Any] | None,
+    str | None,
+    dict[str, Any] | None,
+    str | None,
+    str,
+]:
+    out_dir = Path(dispatch_ctx["dispatch_dir"]) / "activation"
+    state_root = Path(dispatch_ctx["dispatch_dir"]).parents[1]
+    before_hash = (
+        str(active_manifest_hash_before)
+        if _is_sha256_prefixed(str(active_manifest_hash_before))
+        else _active_manifest_hash(_meta_core_root())
+    )
+    after_hash = before_hash
+    pointer_rel = "orch_policy/active/ORCH_POLICY_V1.json"
+    try:
+        daemon_root = state_root.parents[1]
+    except Exception as exc:  # noqa: BLE001
+        raise RuntimeError("MISSING_STATE_INPUT") from exc
+    pointer_path = daemon_root / pointer_rel
+
+    policy_bundle_id = str(promotion_receipt.get("promotion_bundle_hash", "")).strip()
+    if not _is_sha256_prefixed(policy_bundle_id):
+        policy_bundle_id = _ZERO_SHA256
+
+    binding_kind = str(promotion_receipt.get("activation_binding_kind", "")).strip()
+    binding_kind_invalid_b = bool(binding_kind and binding_kind != "ACTIVATION_KIND_ORCH_POLICY_UPDATE")
+
+    health_ok, health_reasons = _healthcheck(state_root, healthcheck_suitepack)
+    activation_ok = False
+    orch_policy_reason_code = "ACT_ORCH_POLICY:SCHEMA_FAIL"
+    if binding_kind_invalid_b:
+        health_ok = False
+        health_reasons.append("HEALTHCHECK_FAIL")
+        orch_policy_reason_code = "ACT_ORCH_POLICY:SCHEMA_FAIL"
+
+    if health_ok:
+        try:
+            if policy_bundle_id == _ZERO_SHA256:
+                raise RuntimeError("SCHEMA_FAIL")
+            bundle_path = _locate_orch_policy_bundle_artifact(
+                dispatch_ctx=dispatch_ctx,
+                policy_bundle_id=policy_bundle_id,
+            )
+            bundle_payload = load_canon_dict(bundle_path)
+            observed_bundle_id, table_payload, table_id = _verify_orch_policy_bundle_payload(bundle_payload)
+            if observed_bundle_id != policy_bundle_id:
+                raise RuntimeError("NONDETERMINISTIC")
+
+            orch_root = daemon_root / "orch_policy"
+            store_dir = orch_root / "store"
+            bundle_store_path = store_dir / f"sha256_{policy_bundle_id.split(':', 1)[1]}.orch_policy_bundle_v1.json"
+            table_store_path = store_dir / f"sha256_{table_id.split(':', 1)[1]}.orch_policy_table_v1.json"
+            if bundle_store_path.exists() and canon_hash_obj(load_canon_dict(bundle_store_path)) != canon_hash_obj(bundle_payload):
+                raise RuntimeError("NONDETERMINISTIC")
+            if table_store_path.exists() and canon_hash_obj(load_canon_dict(table_store_path)) != canon_hash_obj(table_payload):
+                raise RuntimeError("NONDETERMINISTIC")
+            _write_canon_atomic(bundle_store_path, bundle_payload)
+            _write_canon_atomic(table_store_path, table_payload)
+
+            pointer_payload = {
+                "schema_version": "orch_policy_pointer_v1",
+                "active_policy_bundle_id": str(policy_bundle_id),
+                "updated_tick_u64": int(max(0, int(tick_u64))),
+            }
+            validate_schema_v19(pointer_payload, "orch_policy_pointer_v1")
+            _write_canon_atomic(pointer_path, pointer_payload)
+            activation_ok = True
+            orch_policy_reason_code = "OK"
+        except Exception as exc:  # noqa: BLE001
+            reason_text = str(exc).strip().upper()
+            if reason_text.startswith("MISSING_STATE_INPUT"):
+                orch_policy_reason_code = "ACT_ORCH_POLICY:MISSING_STATE_INPUT"
+            elif reason_text.startswith("NONDETERMINISTIC"):
+                orch_policy_reason_code = "ACT_ORCH_POLICY:HASH_MISMATCH"
+            elif reason_text.startswith("SCHEMA_FAIL"):
+                orch_policy_reason_code = "ACT_ORCH_POLICY:SCHEMA_FAIL"
+            else:
+                orch_policy_reason_code = "ACT_ORCH_POLICY:SCHEMA_FAIL"
+            activation_ok = False
+    else:
+        if not binding_kind_invalid_b:
+            orch_policy_reason_code = "ACT_ORCH_POLICY:HEALTHCHECK_FAIL"
+
+    orch_policy_activation_payload = {
+        "schema_version": "orch_policy_activation_receipt_v1",
+        "status": "OK" if activation_ok else "FAIL",
+        "reason_code": str(orch_policy_reason_code),
+        "policy_bundle_id": str(policy_bundle_id),
+        "pointer_path": pointer_rel,
+    }
+    validate_schema_v19(orch_policy_activation_payload, "orch_policy_activation_receipt_v1")
+    _, orch_policy_activation_receipt, orch_policy_activation_hash = write_hashed_json(
+        out_dir,
+        "orch_policy_activation_receipt_v1.json",
+        orch_policy_activation_payload,
+    )
+    validate_schema_v19(orch_policy_activation_receipt, "orch_policy_activation_receipt_v1")
+
+    reasons: list[str] = []
+    if health_reasons:
+        reasons.extend(str(row) for row in health_reasons)
+    if not health_reasons:
+        reasons.append("HEALTHCHECK_PASS" if health_ok else "HEALTHCHECK_FAIL")
+    reasons.append("ORCH_POLICY_POINTER_UPDATED" if activation_ok else "ORCH_POLICY_POINTER_UPDATE_FAILED")
+    reasons = sorted(set(str(row) for row in reasons))
+
+    activation_payload = {
+        "schema_version": "omega_activation_receipt_v1",
+        "receipt_id": "sha256:" + "0" * 64,
+        "tick_u64": int(tick_u64),
+        "before_active_manifest_hash": before_hash,
+        "after_active_manifest_hash": after_hash,
+        "healthcheck_suite_hash": healthcheck_suite_hash,
+        "healthcheck_result": "PASS" if health_ok else "FAIL",
+        "activation_method": "ACTIVATION_KIND_ORCH_POLICY_UPDATE",
+        "activation_kind": "ACTIVATION_KIND_ORCH_POLICY_UPDATE",
+        "activation_success": bool(activation_ok and health_ok),
+        "pass": bool(activation_ok and health_ok),
+        "native_module": None,
+        "native_activation_gate_result": None,
+        "native_gate_reason": None,
+        "orch_policy_activation_receipt_hash": orch_policy_activation_hash,
+        "orch_policy_pointer_path": pointer_rel,
+        "reasons": reasons,
+    }
+    require_no_absolute_paths(activation_payload)
+    _, activation_receipt, activation_hash = write_hashed_json(
+        out_dir,
+        "omega_activation_receipt_v1.json",
+        activation_payload,
+        id_field="receipt_id",
+    )
+    validate_schema(activation_receipt, "omega_activation_receipt_v1")
+    return activation_receipt, activation_hash, None, None, before_hash
+
+
 def run_activation(
     *,
     tick_u64: int,
@@ -820,6 +1015,15 @@ def run_activation(
         return None, None, None, None, active_manifest_hash_before
 
     result_kind = str(promotion_receipt.get("result_kind", "")).strip().upper()
+    if result_kind == "PROMOTED_POLICY_UPDATE":
+        return _run_activation_orch_policy_update(
+            tick_u64=tick_u64,
+            dispatch_ctx=dispatch_ctx,
+            promotion_receipt=promotion_receipt,
+            healthcheck_suitepack=healthcheck_suitepack,
+            healthcheck_suite_hash=healthcheck_suite_hash,
+            active_manifest_hash_before=active_manifest_hash_before,
+        )
     if result_kind == "PROMOTED_EXT_QUEUED":
         return _run_activation_ext_queued(
             tick_u64=tick_u64,

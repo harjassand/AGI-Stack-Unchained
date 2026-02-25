@@ -101,22 +101,21 @@ def compute_cost_norm_q32(*, wallclock_ms_u64: int, cost_scale_ms_u64: int) -> i
     return int(min(Q32_ONE, int(value)))
 
 
-def select_capability_id(
-    *,
-    config: Mapping[str, Any],
-    state: Mapping[str, Any],
-    context_key: str,
-    eligible_capability_ids: list[str],
-) -> str:
-    max_contexts_u32, max_arms_u32 = _state_limits(config)
-    contexts = _context_rows_with_bounds(state=state, max_contexts_u32=max_contexts_u32, max_arms_u32=max_arms_u32)
-
+def _eligible_capability_ids_with_bounds(*, eligible_capability_ids: list[str], max_arms_u32: int) -> list[str]:
     eligible_sorted = sorted({str(row).strip() for row in eligible_capability_ids if str(row).strip()})
     if not eligible_sorted:
         _bandit_fail("BANDIT_FAIL:NO_ELIGIBLE_ARMS")
     if len(eligible_sorted) > int(max_arms_u32):
         _bandit_fail("BANDIT_FAIL:ARM_LIMIT")
+    return eligible_sorted
 
+
+def _arms_by_capability_for_context(
+    *,
+    contexts: list[dict[str, Any]],
+    context_key: str,
+    max_arms_u32: int,
+) -> dict[str, dict[str, Any]]:
     context_row: dict[str, Any] | None = None
     for row in contexts:
         if str(row.get("context_key", "")).strip() == str(context_key).strip():
@@ -124,30 +123,51 @@ def select_capability_id(
             break
 
     arms_by_capability: dict[str, dict[str, Any]] = {}
-    if isinstance(context_row, dict):
-        arms_raw = context_row.get("arms")
-        if not isinstance(arms_raw, list):
+    if not isinstance(context_row, dict):
+        return arms_by_capability
+    arms_raw = context_row.get("arms")
+    if not isinstance(arms_raw, list):
+        _bandit_fail("BANDIT_FAIL:ARM_LIMIT")
+    if len(arms_raw) > int(max_arms_u32):
+        _bandit_fail("BANDIT_FAIL:ARM_LIMIT")
+    scanned = 0
+    for arm in arms_raw:
+        scanned += 1
+        if scanned > int(max_arms_u32):
             _bandit_fail("BANDIT_FAIL:ARM_LIMIT")
-        if len(arms_raw) > int(max_arms_u32):
+        if not isinstance(arm, dict):
             _bandit_fail("BANDIT_FAIL:ARM_LIMIT")
-        scanned = 0
-        for arm in arms_raw:
-            scanned += 1
-            if scanned > int(max_arms_u32):
-                _bandit_fail("BANDIT_FAIL:ARM_LIMIT")
-            if not isinstance(arm, dict):
-                _bandit_fail("BANDIT_FAIL:ARM_LIMIT")
-            capability_id = str(arm.get("capability_id", "")).strip()
-            if not capability_id:
-                continue
-            arms_by_capability[capability_id] = dict(arm)
+        capability_id = str(arm.get("capability_id", "")).strip()
+        if not capability_id:
+            continue
+        arms_by_capability[capability_id] = dict(arm)
+    return arms_by_capability
+
+
+def compute_arm_scores_q32(
+    *,
+    config: Mapping[str, Any],
+    state: Mapping[str, Any],
+    context_key: str,
+    eligible_capability_ids: list[str],
+) -> dict[str, int]:
+    max_contexts_u32, max_arms_u32 = _state_limits(config)
+    contexts = _context_rows_with_bounds(state=state, max_contexts_u32=max_contexts_u32, max_arms_u32=max_arms_u32)
+    eligible_sorted = _eligible_capability_ids_with_bounds(
+        eligible_capability_ids=list(eligible_capability_ids),
+        max_arms_u32=max_arms_u32,
+    )
+    arms_by_capability = _arms_by_capability_for_context(
+        contexts=contexts,
+        context_key=context_key,
+        max_arms_u32=max_arms_u32,
+    )
 
     min_trials_before_exploit_u32 = _as_nonneg_int(config.get("min_trials_before_exploit_u32", 0))
     explore_weight_q32 = int(config.get("explore_weight_q32", 0))
     cost_weight_q32 = int(config.get("cost_weight_q32", 0))
 
-    selected: str | None = None
-    best_score_q32: int | None = None
+    scores_by_capability: dict[str, int] = {}
     for capability_id in eligible_sorted:
         arm_row = arms_by_capability.get(str(capability_id), {})
         n_u64 = _as_nonneg_int(arm_row.get("n_u64", 0))
@@ -160,14 +180,58 @@ def select_capability_id(
             explore_bonus_q32 = int(explore_weight_q32 // (n_u64 + 1))
 
         score_q32 = int(reward_ewma_q32) - int(_q32_mul(int(cost_weight_q32), int(cost_ewma_q32))) + int(explore_bonus_q32)
+        scores_by_capability[str(capability_id)] = int(score_q32)
+    return scores_by_capability
 
+
+def _select_from_scores(*, scores_by_capability: Mapping[str, int]) -> str:
+    selected: str | None = None
+    best_score_q32: int | None = None
+    for capability_id in sorted(str(key) for key in scores_by_capability.keys()):
+        score_q32 = int(scores_by_capability.get(capability_id, 0))
         if best_score_q32 is None or score_q32 > int(best_score_q32):
             best_score_q32 = int(score_q32)
             selected = str(capability_id)
-
     if not isinstance(selected, str) or not selected:
         _bandit_fail("BANDIT_FAIL:NO_ELIGIBLE_ARMS")
     return selected
+
+
+def select_capability_id(
+    *,
+    config: Mapping[str, Any],
+    state: Mapping[str, Any],
+    context_key: str,
+    eligible_capability_ids: list[str],
+) -> str:
+    scores_by_capability = compute_arm_scores_q32(
+        config=config,
+        state=state,
+        context_key=context_key,
+        eligible_capability_ids=list(eligible_capability_ids),
+    )
+    return _select_from_scores(scores_by_capability=scores_by_capability)
+
+
+def select_capability_id_with_bonus(
+    *,
+    config: Mapping[str, Any],
+    state: Mapping[str, Any],
+    context_key: str,
+    eligible_capability_ids: list[str],
+    bonus_by_capability_q32: Mapping[str, int],
+) -> str:
+    scores_by_capability = compute_arm_scores_q32(
+        config=config,
+        state=state,
+        context_key=context_key,
+        eligible_capability_ids=list(eligible_capability_ids),
+    )
+    adjusted_scores: dict[str, int] = {}
+    for capability_id, score_q32 in sorted(scores_by_capability.items(), key=lambda row: str(row[0])):
+        bonus_q32 = int(bonus_by_capability_q32.get(str(capability_id), 0))
+        adjusted_scores[str(capability_id)] = int(score_q32) + int(bonus_q32)
+    return _select_from_scores(scores_by_capability=adjusted_scores)
 
 
 def update_bandit_state(
@@ -308,8 +372,10 @@ def update_bandit_state(
 __all__ = [
     "BanditError",
     "Q32_ONE",
+    "compute_arm_scores_q32",
     "compute_context_key",
     "compute_cost_norm_q32",
     "select_capability_id",
+    "select_capability_id_with_bonus",
     "update_bandit_state",
 ]

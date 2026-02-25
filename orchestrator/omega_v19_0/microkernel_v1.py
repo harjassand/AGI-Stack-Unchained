@@ -42,6 +42,7 @@ from cdel.v18_0.omega_common_v1 import (
     write_hashed_json,
 )
 from cdel.v18_0.ccap_runtime_v1 import compute_repo_base_tree_id_tolerant
+from cdel.v18_0.authority.authority_hash_v1 import load_authority_pins
 from cdel.v1_7r.canon import canon_bytes
 from cdel.v19_0.common_v1 import validate_schema as validate_schema_v19
 from cdel.v19_0.conservatism_v1 import evaluate_reject_conservatism
@@ -129,6 +130,7 @@ from .orch_bandit.bandit_v1 import (
     compute_context_key as orch_bandit_compute_context_key,
     compute_cost_norm_q32 as orch_bandit_compute_cost_norm_q32,
     select_capability_id as orch_bandit_select_capability_id,
+    select_capability_id_with_bonus as orch_bandit_select_capability_id_with_bonus,
     update_bandit_state as orch_bandit_update_bandit_state,
 )
 from orchestrator.native.runtime_stats_v1 import (
@@ -231,6 +233,7 @@ _HARD_TASK_METRIC_IDS: tuple[str, ...] = (
 _ORCH_PROMOTION_RESULT_KINDS = {
     "PROMOTED_COMMIT",
     "PROMOTED_EXT_QUEUED",
+    "PROMOTED_POLICY_UPDATE",
     "REJECTED",
 }
 _ORCH_TOXIC_REASON_PREFIXES = (
@@ -247,6 +250,8 @@ _ORCH_REWARD_COMMIT_Q32 = _Q32_ONE
 _ORCH_REWARD_EXT_Q32 = _Q32_ONE // 2
 _ORCH_REWARD_TOXIC_Q32 = -(_Q32_ONE // 2)
 _ORCH_REWARD_HEAVY_UTILITY_BONUS_Q32 = _Q32_ONE // 4
+_ORCH_POLICY_BONUS_ABS_Q32 = _Q32_ONE // 4
+_ACTIVE_ORCH_POLICY_POINTER_REL = "orch_policy/active/ORCH_POLICY_V1.json"
 _ACTIVE_ORCH_BANDIT_STATE_POINTER = "ACTIVE_ORCH_BANDIT_STATE"
 
 
@@ -1564,6 +1569,132 @@ def _load_optional_orch_bandit_config(
     return payload, canon_hash_obj(payload)
 
 
+def _load_optional_orch_policy_eval_config(
+    *,
+    config_dir: Path,
+    pack: dict[str, Any],
+) -> tuple[dict[str, Any] | None, str | None, bool, str | None]:
+    use_b = bool(pack.get("orch_policy_use_b", False))
+    mode_raw = str(pack.get("orch_policy_mode", "")).strip().upper()
+    rel_raw = str(pack.get("orch_policy_eval_config_rel", "")).strip()
+    if not use_b and not mode_raw and not rel_raw:
+        return None, None, False, None
+    if not use_b:
+        fail("SCHEMA_FAIL")
+    if mode_raw != "ADD_BONUS_V1":
+        fail("SCHEMA_FAIL")
+    if not rel_raw:
+        fail("SCHEMA_FAIL")
+    rel = _require_safe_relpath(rel_raw)
+    path = config_dir / rel
+    if not path.exists() or not path.is_file():
+        fail("MISSING_STATE_INPUT")
+    payload = load_canon_dict(path)
+    validate_schema_v19(payload, "orch_policy_eval_config_v1")
+    config_id = canon_hash_obj(payload)
+
+    pins = load_authority_pins(repo_root())
+    pinned_config_id = ensure_sha256(pins.get("orch_policy_eval_config_id"), reason="PIN_HASH_MISMATCH")
+    pinned_holdout_id = ensure_sha256(pins.get("orch_policy_eval_holdout_dataset_id"), reason="PIN_HASH_MISMATCH")
+    if config_id != pinned_config_id:
+        fail("PIN_HASH_MISMATCH")
+    holdout_dataset_id = ensure_sha256(payload.get("holdout_dataset_id"), reason="PIN_HASH_MISMATCH")
+    if holdout_dataset_id != pinned_holdout_id:
+        fail("PIN_HASH_MISMATCH")
+    return payload, config_id, True, "ADD_BONUS_V1"
+
+
+def _orch_policy_root(*, state_root: Path) -> Path:
+    try:
+        daemon_root = state_root.parents[1]
+    except Exception:
+        fail("MISSING_STATE_INPUT")
+    return daemon_root / "orch_policy"
+
+
+def _clamp_orch_policy_bonus_q32(value_q32: int) -> int:
+    if int(value_q32) < -int(_ORCH_POLICY_BONUS_ABS_Q32):
+        return -int(_ORCH_POLICY_BONUS_ABS_Q32)
+    if int(value_q32) > int(_ORCH_POLICY_BONUS_ABS_Q32):
+        return int(_ORCH_POLICY_BONUS_ABS_Q32)
+    return int(value_q32)
+
+
+def _orch_policy_lookup_from_bundle(bundle_payload: dict[str, Any]) -> dict[str, dict[str, int]]:
+    validate_schema_v19(bundle_payload, "orch_policy_bundle_v1")
+    bundle_id = ensure_sha256(bundle_payload.get("policy_bundle_id"), reason="SCHEMA_FAIL")
+    bundle_no_id = dict(bundle_payload)
+    bundle_no_id.pop("policy_bundle_id", None)
+    if canon_hash_obj(bundle_no_id) != bundle_id:
+        fail("NONDETERMINISTIC")
+
+    table_raw = bundle_payload.get("policy_table")
+    if not isinstance(table_raw, dict):
+        fail("SCHEMA_FAIL")
+    table_payload = dict(table_raw)
+    validate_schema_v19(table_payload, "orch_policy_table_v1")
+    table_id = ensure_sha256(table_payload.get("policy_table_id"), reason="SCHEMA_FAIL")
+    declared_table_id = ensure_sha256(bundle_payload.get("policy_table_id"), reason="SCHEMA_FAIL")
+    if table_id != declared_table_id:
+        fail("NONDETERMINISTIC")
+    table_no_id = dict(table_payload)
+    table_no_id.pop("policy_table_id", None)
+    if canon_hash_obj(table_no_id) != table_id:
+        fail("NONDETERMINISTIC")
+
+    rows_raw = table_payload.get("rows")
+    if not isinstance(rows_raw, list):
+        fail("SCHEMA_FAIL")
+    out: dict[str, dict[str, int]] = {}
+    for row in rows_raw:
+        if not isinstance(row, dict):
+            fail("SCHEMA_FAIL")
+        context_key = ensure_sha256(row.get("context_key"), reason="SCHEMA_FAIL")
+        ranked_raw = row.get("ranked_capabilities")
+        if not isinstance(ranked_raw, list):
+            fail("SCHEMA_FAIL")
+        by_capability: dict[str, int] = {}
+        for ranked in ranked_raw:
+            if not isinstance(ranked, dict):
+                fail("SCHEMA_FAIL")
+            capability_id = str(ranked.get("capability_id", "")).strip()
+            if not capability_id:
+                fail("SCHEMA_FAIL")
+            score_q32 = ranked.get("score_q32")
+            if not isinstance(score_q32, int):
+                fail("SCHEMA_FAIL")
+            if capability_id in by_capability:
+                continue
+            by_capability[capability_id] = int(score_q32)
+        if not by_capability:
+            fail("SCHEMA_FAIL")
+        if context_key in out:
+            fail("NONDETERMINISTIC")
+        out[context_key] = by_capability
+    return out
+
+
+def _load_active_orch_policy_lookup(*, state_root: Path) -> tuple[str | None, dict[str, dict[str, int]] | None]:
+    pointer_path = _orch_policy_root(state_root=state_root) / "active" / "ORCH_POLICY_V1.json"
+    if not pointer_path.exists() or not pointer_path.is_file():
+        return None, None
+    pointer_payload = load_canon_dict(pointer_path)
+    validate_schema_v19(pointer_payload, "orch_policy_pointer_v1")
+    bundle_id = ensure_sha256(pointer_payload.get("active_policy_bundle_id"), reason="SCHEMA_FAIL")
+    bundle_path = (
+        _orch_policy_root(state_root=state_root)
+        / "store"
+        / f"sha256_{bundle_id.split(':', 1)[1]}.orch_policy_bundle_v1.json"
+    )
+    if not bundle_path.exists() or not bundle_path.is_file():
+        fail("MISSING_STATE_INPUT")
+    bundle_payload = load_canon_dict(bundle_path)
+    lookup = _orch_policy_lookup_from_bundle(bundle_payload)
+    if ensure_sha256(bundle_payload.get("policy_bundle_id"), reason="SCHEMA_FAIL") != bundle_id:
+        fail("NONDETERMINISTIC")
+    return bundle_id, lookup
+
+
 def _normalize_orch_bandit_lane_kind(*, lane_name: str | None) -> str:
     lane = str(lane_name or "").strip().upper()
     if lane == "FRONTIER":
@@ -1622,7 +1753,7 @@ def _compute_orch_reward_q32(
     lane_kind: str,
     utility_receipt: dict[str, Any] | None,
 ) -> int:
-    if str(promotion_result_kind) == "PROMOTED_COMMIT":
+    if str(promotion_result_kind) in {"PROMOTED_COMMIT", "PROMOTED_POLICY_UPDATE"}:
         r_commit_q32 = int(_ORCH_REWARD_COMMIT_Q32)
         r_ext_q32 = 0
     elif str(promotion_result_kind) == "PROMOTED_EXT_QUEUED":
@@ -3190,6 +3321,9 @@ def _build_dependency_routing_receipt(
     market_used_for_selection_b: bool,
     reason_codes: list[str],
     context_key: str | None = None,
+    orch_policy_bundle_id_used: str | None = None,
+    orch_policy_row_hit_b: bool = False,
+    orch_policy_selected_bonus_q32: int = 0,
 ) -> dict[str, Any]:
     selector_id = str(routing_selector_id).strip()
     if selector_id not in _ROUTING_SELECTOR_IDS and not _is_sha256(selector_id):
@@ -3217,6 +3351,13 @@ def _build_dependency_routing_receipt(
             if isinstance(context_key, str) and _is_sha256(str(context_key).strip())
             else None
         ),
+        "orch_policy_bundle_id_used": (
+            str(orch_policy_bundle_id_used).strip()
+            if isinstance(orch_policy_bundle_id_used, str) and _is_sha256(str(orch_policy_bundle_id_used).strip())
+            else None
+        ),
+        "orch_policy_row_hit_b": bool(orch_policy_row_hit_b),
+        "orch_policy_selected_bonus_q32": int(orch_policy_selected_bonus_q32),
         "market_frozen_b": bool(market_frozen_b),
         "market_used_for_selection_b": bool(market_used_for_selection_b),
         "reason_codes": [str(row) for row in reason_codes],
@@ -5210,10 +5351,25 @@ def tick_once(
         orch_bandit_config_hash: str | None = None
         orch_bandit_state_in: dict[str, Any] | None = None
         orch_bandit_state_in_id: str = _SHA256_ZERO
+        orch_policy_eval_config_payload: dict[str, Any] | None = None
+        orch_policy_eval_config_hash: str | None = None
+        orch_policy_use_b = False
+        orch_policy_mode: str | None = None
         orch_bandit_config_payload, orch_bandit_config_hash = _load_optional_orch_bandit_config(
             config_dir=config_dir,
             pack=pack,
         )
+        (
+            orch_policy_eval_config_payload,
+            orch_policy_eval_config_hash,
+            orch_policy_use_b,
+            orch_policy_mode,
+        ) = _load_optional_orch_policy_eval_config(
+            config_dir=config_dir,
+            pack=pack,
+        )
+        if orch_policy_use_b and orch_bandit_config_payload is None:
+            fail("SCHEMA_FAIL")
         if orch_bandit_config_payload is not None:
             orch_bandit_ek_id = _sha256_or_zero(pack.get("long_run_eval_kernel_id"))
             orch_bandit_kernel_ledger_id = _sha256_or_zero(
@@ -5580,6 +5736,9 @@ def tick_once(
         orch_bandit_context_lane_kind = "UNKNOWN"
         orch_bandit_context_runaway_band_u32 = 0
         orch_bandit_context_objective_kind = "UNKNOWN"
+        orch_policy_bundle_id_used: str | None = None
+        orch_policy_row_hit_b = False
+        orch_policy_selected_bonus_q32 = 0
         anti_monopoly_state_hash: str | None = None
         policy_vm_trace_payload_for_proof: dict[str, Any] | None = None
         policy_vm_proof_program_id: str | None = None
@@ -6725,6 +6884,39 @@ def tick_once(
                     context_key=str(orch_bandit_context_key),
                     eligible_capability_ids=list(eligible_capability_ids),
                 )
+                orch_policy_bundle_id_used = None
+                orch_policy_row_hit_b = False
+                orch_policy_selected_bonus_q32 = 0
+                if orch_policy_use_b:
+                    if orch_policy_mode != "ADD_BONUS_V1":
+                        fail("SCHEMA_FAIL")
+                    active_policy_bundle_id, orch_policy_lookup = _load_active_orch_policy_lookup(
+                        state_root=state_root
+                    )
+                    orch_policy_bundle_id_used = active_policy_bundle_id
+                    if (
+                        isinstance(active_policy_bundle_id, str)
+                        and isinstance(orch_policy_lookup, dict)
+                    ):
+                        row_scores = orch_policy_lookup.get(str(orch_bandit_context_key))
+                        if isinstance(row_scores, dict):
+                            orch_policy_row_hit_b = True
+                            bonus_by_capability_q32: dict[str, int] = {}
+                            for capability_id in eligible_capability_ids:
+                                score_q32 = int(row_scores.get(str(capability_id), 0))
+                                bonus_by_capability_q32[str(capability_id)] = _clamp_orch_policy_bonus_q32(
+                                    score_q32
+                                )
+                            bandit_selected_capability_id = orch_bandit_select_capability_id_with_bonus(
+                                config=orch_bandit_config_payload,
+                                state=orch_bandit_state_in,
+                                context_key=str(orch_bandit_context_key),
+                                eligible_capability_ids=list(eligible_capability_ids),
+                                bonus_by_capability_q32=bonus_by_capability_q32,
+                            )
+                            orch_policy_selected_bonus_q32 = int(
+                                bonus_by_capability_q32.get(str(bandit_selected_capability_id), 0)
+                            )
                 if action_kind_for_bandit != "RUN_CAMPAIGN":
                     selected_capability_id = str(bandit_selected_capability_id)
                     selected_declared_class = _declared_class_for_capability_id(
@@ -7599,6 +7791,9 @@ def tick_once(
                 forced_frontier_debt_key=forced_frontier_debt_key,
                 routing_selector_id=routing_selector_id,
                 context_key=orch_bandit_context_key,
+                orch_policy_bundle_id_used=orch_policy_bundle_id_used,
+                orch_policy_row_hit_b=bool(orch_policy_row_hit_b),
+                orch_policy_selected_bonus_q32=int(orch_policy_selected_bonus_q32),
                 market_frozen_b=bool(market_frozen_b),
                 market_used_for_selection_b=bool(market_used_for_selection_b),
                 reason_codes=list(dependency_routing_reason_codes),
@@ -8286,6 +8481,11 @@ def tick_once(
         extension_queued_hash = str((activation_receipt or {}).get("extension_queued_receipt_hash", "")).strip()
         if _is_sha256(extension_queued_hash):
             _emit("EXTENSION_QUEUED", extension_queued_hash)
+        orch_policy_activation_receipt_hash = str(
+            (activation_receipt or {}).get("orch_policy_activation_receipt_hash", "")
+        ).strip()
+        if _is_sha256(orch_policy_activation_receipt_hash):
+            _emit("ORCH_POLICY_UPDATE", orch_policy_activation_receipt_hash)
         if rollback_hash is not None:
             _emit("ROLLBACK", rollback_hash)
         if dependency_routing_receipt_hash is not None:

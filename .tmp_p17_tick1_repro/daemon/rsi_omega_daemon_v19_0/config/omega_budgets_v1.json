@@ -1,0 +1,1 @@
+{"max_activation_attempts_per_tick":1,"max_build_cost_q32_per_day":{"q":4398046511104},"max_cpu_cost_q32_per_day":{"q":4398046511104},"max_disk_bytes_per_day":536870912,"max_rollbacks_per_day":2,"max_ticks_per_day":120,"max_ticks_total":200000,"max_verifier_cost_q32_per_day":{"q":4398046511104},"max_wallclock_per_tick_s":900,"schema_version":"omega_budgets_v1"}

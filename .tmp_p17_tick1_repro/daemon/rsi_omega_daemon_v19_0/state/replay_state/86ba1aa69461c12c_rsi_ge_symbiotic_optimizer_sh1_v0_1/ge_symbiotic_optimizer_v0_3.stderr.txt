@@ -1,0 +1,6 @@
+{"allowed_templates":["COMMENT_APPEND","JSON_TWEAK_BUDGET_HINT","JSON_TWEAK_COOLDOWN"],"event":"GE_SH1_STARTUP_CONTEXT_V1","forced_debt_key_present_b":0,"forced_heavy_b":0,"wiring_locus_relpath":null}
+
+Fetching 10 files:   0%|          | 0/10 [00:00<?, ?it/s]
+Fetching 10 files: 100%|██████████| 10/10 [00:00<00:00, 35971.73it/s]
+/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/multiprocessing/resource_tracker.py:277: UserWarning: resource_tracker: There appear to be 1 leaked semaphore objects to clean up at shutdown: {'/mp-0bysoi84'}
+  warnings.warn(

@@ -1,0 +1,35 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v19_0/orch_transition_event_v1",
+  "title": "Orchestration transition event v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "event_id",
+    "run_id",
+    "tick_u64",
+    "context_key",
+    "lane_kind",
+    "objective_kind",
+    "action_capability_id",
+    "reward_q32",
+    "cost_norm_q32",
+    "toxic_fail_b",
+    "next_context_key"
+  ],
+  "properties": {
+    "schema_version": {"const": "orch_transition_event_v1"},
+    "event_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "run_id": {"type": "string"},
+    "tick_u64": {"type": "integer", "minimum": 0},
+    "context_key": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "lane_kind": {"type": "string", "enum": ["BASELINE", "FRONTIER_HEAVY", "UNKNOWN"]},
+    "objective_kind": {"type": "string"},
+    "action_capability_id": {"type": "string"},
+    "reward_q32": {"type": "integer"},
+    "cost_norm_q32": {"type": "integer", "minimum": 0, "maximum": 4294967296},
+    "toxic_fail_b": {"type": "boolean"},
+    "next_context_key": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"}
+  }
+}

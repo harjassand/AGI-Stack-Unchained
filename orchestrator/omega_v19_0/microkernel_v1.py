@@ -7422,14 +7422,20 @@ def tick_once(
                 )
                 governance_hard_lock_active_b = bool((governance_route_decision or {}).get("hard_lock_active_b", False))
                 governance_hard_lock_keys = _governance_debt_keys((governance_route_decision or {}).get("hard_lock_keys"))
+                forced_heavy_reason_raw = (governance_route_decision or {}).get("forced_heavy_reason_code")
                 governance_forced_heavy_reason_code = (
-                    str((governance_route_decision or {}).get("forced_heavy_reason_code", "")).strip() or None
+                    str(forced_heavy_reason_raw).strip()
+                    if isinstance(forced_heavy_reason_raw, str) and str(forced_heavy_reason_raw).strip()
+                    else None
                 )
                 governance_anti_monopoly_gate_applied_b = bool(
                     (governance_route_decision or {}).get("anti_monopoly_gate_applied_b", False)
                 )
+                anti_monopoly_reason_raw = (governance_route_decision or {}).get("anti_monopoly_reason_code")
                 governance_anti_monopoly_reason_code = (
-                    str((governance_route_decision or {}).get("anti_monopoly_reason_code", "")).strip() or None
+                    str(anti_monopoly_reason_raw).strip()
+                    if isinstance(anti_monopoly_reason_raw, str) and str(anti_monopoly_reason_raw).strip()
+                    else None
                 )
                 governance_blocked_candidates = [
                     dict(row)

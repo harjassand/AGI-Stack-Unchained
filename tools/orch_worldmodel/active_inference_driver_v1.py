@@ -193,11 +193,55 @@ def _write_utility_proof_receipt(
     )
     stress_out = canon_hash_obj({"utility_ok_b": utility_ok_b, "reason_code": reason_code})
 
+    tick = int(max(0, int(tick_u64)))
+    targeted_debt_keys = ["KDL", "EDL", "UTILITY_FAIL"]
+    debt_before_by_key = {
+        "KDL": int(max(0, int(utility_metrics.get("uncertainty_sum_q32", 0)))),
+        "EDL": int(max(0, int(utility_metrics.get("uncertainty_sum_q32", 0) // 2))),
+        "UTILITY_FAIL": int(0 if utility_ok_b else 1),
+    }
+    debt_after_by_key = {
+        "KDL": int(max(0, debt_before_by_key["KDL"] - int(max(0, int(utility_metrics.get("inferred_kdl_reduction_q32", 0)))))),
+        "EDL": int(max(0, debt_before_by_key["EDL"] - int(max(0, int(utility_metrics.get("inferred_edl_reduction_q32", 0)))))),
+        "UTILITY_FAIL": int(0 if utility_ok_b else 1),
+    }
+    debt_delta_by_key = {
+        key: int(debt_after_by_key[key] - debt_before_by_key[key])
+        for key in targeted_debt_keys
+    }
+    proof_evidence = [
+        {
+            "evidence_kind": "UTILITY_METRICS",
+            "artifact_hash": str(candidate_bundle_hash),
+            "summary": "Utility metrics derived from uncertainty + ingestion signals.",
+        },
+        {
+            "evidence_kind": "BASELINE_REF",
+            "artifact_hash": str(baseline_ref_hash),
+            "summary": "Baseline transition-manifest reference.",
+        },
+    ]
+    producer_run_id = _sha256_prefixed(
+        _canon_bytes(
+            {
+                "tick_u64": tick,
+                "candidate_bundle_hash": str(candidate_bundle_hash),
+                "baseline_ref_hash": str(baseline_ref_hash),
+                "runtime_stats_hash": str(runtime_stats_hash),
+            }
+        )
+    )
+
     payload = {
+        "schema_id": "utility_proof_receipt_v1",
+        "id": "sha256:" + ("0" * 64),
         "schema_name": "utility_proof_receipt_v1",
         "schema_version": "v19_0",
         "receipt_id": "sha256:" + ("0" * 64),
-        "tick_u64": int(max(0, int(tick_u64))),
+        "tick_u64": tick,
+        "producer_run_id": producer_run_id,
+        "utility_action_id": "ACTIVE_INFERENCE_UTILITY_REDUCE_V1",
+        "utility_class": "HEAVY",
         "capability_id": "RSI_ACTIVE_INFERENCE_DRIVER_V1",
         "candidate_bundle_hash": str(candidate_bundle_hash),
         "baseline_ref_hash": str(baseline_ref_hash),
@@ -218,7 +262,15 @@ def _write_utility_proof_receipt(
         "effect_class": "EFFECT_HEAVY_OK" if utility_ok_b else "EFFECT_HEAVY_NO_UTILITY",
         "primary_probe": {"input_hash": primary_in, "output_hash": primary_out},
         "stress_probe": {"input_hash": stress_in, "output_hash": stress_out},
+        "targeted_debt_keys": targeted_debt_keys,
+        "debt_before_by_key": debt_before_by_key,
+        "debt_after_by_key": debt_after_by_key,
+        "debt_delta_by_key": debt_delta_by_key,
+        "proof_evidence": proof_evidence,
+        "reduced_specific_trigger_keys_b": bool(utility_ok_b),
+        "created_at_utc": _utc_now_rfc3339(),
     }
+    payload["id"] = canon_hash_obj({k: v for k, v in payload.items() if k != "id"})
     validate_schema(payload, "utility_proof_receipt_v1")
     path, obj, digest = write_hashed_json(out_dir, "utility_proof_receipt_v1.json", payload, id_field="receipt_id")
     validate_schema(obj, "utility_proof_receipt_v1")

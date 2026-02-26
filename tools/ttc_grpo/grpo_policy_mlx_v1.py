@@ -73,7 +73,7 @@ class PolicyLike(Protocol):
         raise NotImplementedError
 
 
-@dataclass(slots=True)
+@dataclass
 class PolicyMlxV1:
     model_id: str
     model_path: str

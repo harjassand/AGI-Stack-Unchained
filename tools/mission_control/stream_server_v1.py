@@ -167,12 +167,21 @@ async def api_mission(request: MissionRequest) -> Any:
         return _nlpmc_not_available_response()
 
     try:
-        result = compile_func(human_intent_str=request.human_intent_str)
-    except TypeError:
-        result = compile_func(request.human_intent_str)
+        try:
+            result = compile_func(human_intent_str=request.human_intent_str)
+        except TypeError:
+            result = compile_func(request.human_intent_str)
 
-    if inspect.isawaitable(result):
-        result = await result
+        if inspect.isawaitable(result):
+            result = await result
+    except Exception as exc:  # noqa: BLE001
+        return JSONResponse(
+            status_code=200,
+            content={
+                "ok": False,
+                "error": str(exc) if str(exc) else exc.__class__.__name__,
+            },
+        )
 
     mission_id = None
     staged_path = STAGED_PATH

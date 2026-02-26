@@ -115,16 +115,95 @@ def _strict_json_object(raw: str) -> dict[str, Any]:
     src = str(raw).strip()
     if not src:
         raise RuntimeError("NLPMC_JSON_PARSE_FAILED: empty response")
-    decoder = json.JSONDecoder()
-    try:
-        value, end_index = decoder.raw_decode(src)
-    except Exception as exc:  # noqa: BLE001
-        raise RuntimeError(f"NLPMC_JSON_PARSE_FAILED: {exc}") from exc
-    if end_index != len(src):
-        raise RuntimeError("NLPMC_JSON_PARSE_FAILED: trailing text present")
-    if not isinstance(value, dict):
-        raise RuntimeError("NLPMC_JSON_PARSE_FAILED: response must be a json object")
-    return value
+
+    parse_errors: list[str] = []
+    for candidate in _json_parse_candidates(src):
+        decoder = json.JSONDecoder()
+        try:
+            value, end_index = decoder.raw_decode(candidate)
+        except Exception as exc:  # noqa: BLE001
+            parse_errors.append(str(exc))
+            continue
+        if end_index != len(candidate):
+            parse_errors.append("trailing text present")
+            continue
+        if not isinstance(value, dict):
+            parse_errors.append("response must be a json object")
+            continue
+        return value
+
+    tail_error = parse_errors[-1] if parse_errors else "unable to decode model output"
+    raise RuntimeError(f"NLPMC_JSON_PARSE_FAILED: {tail_error}")
+
+
+def _json_parse_candidates(src: str) -> list[str]:
+    candidates: list[str] = [src]
+
+    stripped_fence = _strip_code_fence(src)
+    if stripped_fence:
+        candidates.append(stripped_fence)
+
+    extracted_object = _extract_first_json_object(src)
+    if extracted_object:
+        candidates.append(extracted_object)
+
+    unique: list[str] = []
+    seen: set[str] = set()
+    for candidate in candidates:
+        trimmed = candidate.strip()
+        if not trimmed or trimmed in seen:
+            continue
+        seen.add(trimmed)
+        unique.append(trimmed)
+    return unique
+
+
+def _strip_code_fence(src: str) -> str | None:
+    if not src.startswith("```"):
+        return None
+    lines = src.splitlines()
+    if len(lines) < 3:
+        return None
+    if lines[-1].strip() != "```":
+        return None
+    body = "\n".join(lines[1:-1]).strip()
+    return body or None
+
+
+def _extract_first_json_object(src: str) -> str | None:
+    start_index: int | None = None
+    depth = 0
+    in_string = False
+    escape = False
+
+    for index, char in enumerate(src):
+        if in_string:
+            if escape:
+                escape = False
+            elif char == "\\":
+                escape = True
+            elif char == '"':
+                in_string = False
+            continue
+
+        if char == '"':
+            in_string = True
+            continue
+
+        if char == "{":
+            if depth == 0:
+                start_index = index
+            depth += 1
+            continue
+
+        if char == "}":
+            if depth == 0:
+                continue
+            depth -= 1
+            if depth == 0 and start_index is not None:
+                return src[start_index : index + 1]
+
+    return None
 
 
 def _enforce_schema_consts(*, payload: dict[str, Any], schema: dict[str, Any]) -> None:
@@ -395,4 +474,3 @@ def _read_seed_u64() -> int:
         except Exception:  # noqa: BLE001
             continue
     return 0
-

@@ -8034,3 +8034,305 @@ The 2026-02-25 to 2026-02-26 window is not a minor patch cycle. It is a concentr
 The day’s dominant pattern is constructive: most new behavior arrived with schema and test surfaces, preserving the repo’s evidence-first and fail-closed verification philosophy while materially increasing operational scope.
 
 *End Appendix AA.*
+
+# Appendix AB: Last 24h Delta (2026-02-25 to 2026-02-26)
+
+This appendix updates the repository source of truth for the most recent 24-hour work window, including both committed history and active local (uncommitted) deltas.
+
+Evidence capture time for this appendix: **2026-02-26 21:18:28 +1000**.
+
+## AB.1 Evidence Basis and Capture Method
+
+This section was reconstructed directly from repository state using the following evidence commands:
+
+- `git log --since='24 hours ago' --oneline`
+- `git log --since='24 hours ago' --no-merges --pretty=format:'%H|%cd|%s' --date=iso`
+- `git show --name-status <commit>` and `git show --shortstat --pretty='' <commit>` for each non-merge commit
+- `git status --short` and `git status --porcelain`
+- `git diff --stat` and `git diff --numstat` for tracked local deltas
+- file counts via `find authority/...` for micdrop v2 generated artifacts
+
+All quantitative claims below are grounded in those command outputs.
+
+## AB.2 Window Boundaries and Commit Ledger
+
+Rolling 24-hour window at capture time includes commits from:
+
+- earliest in-window commit: `bc3f764c` at **2026-02-25 22:21:57 +1000**
+- latest in-window commit: `1342f3ac` at **2026-02-26 17:36:29 +1000**
+
+Commit chain in the window (newest -> oldest):
+
+1. `1342f3ac` merge PR #11 (governance-lock line)
+2. `548ec9e3` chore marker commit (PR backfill marker)
+3. `12419a21` merge PR #10 (macro-active-metal line)
+4. `1fd82329` macro-active-metal feature drop
+5. `7a045e98` merge PR #9 (ttc-grpo line)
+6. `d1831930` ttc-grpo feature drop
+7. `47387bf7` checkpoint of dirty local main changes
+8. `ae0d31c0` deterministic governance lock + preflight gates
+9. `11bdc3b5` abstraction ladder/oracle ladder stack
+10. `a100821b` `.tmp_p17_tick1_repro` artifact capture
+11. `6d519bcd` micdrop v2 scale-up
+12. `bc3f764c` micdrop holdout evidence pipeline baseline
+
+## AB.3 Quantitative Delta Summary (Committed)
+
+Counts for this 24-hour window:
+
+- **12 total commits**
+- **3 merge commits** (`1342f3ac`, `12419a21`, `7a045e98`)
+- **9 non-merge commits**
+- **1 metadata-only non-merge commit** with no file delta (`548ec9e3`)
+- **8 non-merge commits with material file changes**
+
+Aggregate change volume from the 9 non-merge commits:
+
+- **468 files changed**
+- **22,109 insertions**
+- **1,137 deletions**
+
+Path-level surface (unique paths touched by non-merge commits):
+
+- **417 unique paths**
+- **64 unique schema paths** under `Genesis/schema/` and `CDEL-v2/Genesis/schema/`
+- **8 unique test paths** matching test file naming patterns
+
+Top-level concentration by unique path count:
+
+- `authority`: 163
+- `.tmp_p17_tick1_repro`: 67
+- `CDEL-v2`: 46
+- `tools`: 44
+- `campaigns`: 37
+- `Genesis`: 33
+- `scripts`: 13
+- `orchestrator`: 12
+- `SOURCE_OF_TRUTH.md`: 1
+- `.gitignore`: 1
+
+## AB.4 Workstream A: Micdrop Baseline to Micdrop v2 Scale (`bc3f764c` + `6d519bcd`)
+
+Evidence from commit stats and file lists:
+
+- `bc3f764c`: **43 files changed** (`+1649/-4`)
+- `6d519bcd`: **174 files changed** (`+2351/-309`)
+
+Material additions and updates in this window:
+
+- Authority governance/policy surfaces:
+  - `authority/authority_pins_micdrop_v1.json`
+  - `authority/ccap_patch_allowlists_micdrop_v1.json` (later updated)
+  - `authority/holdout_policies/holdout_policy_micdrop_v1.json` (later updated)
+  - `authority/eval_kernel_ledgers/kernel_extension_ledger_micdrop_v1.json`
+- Holdout corpus growth:
+  - baseline commit adds initial micdrop holdout packs
+  - v2 commit adds a large second wave of holdout packs
+- Campaign and operational pathing:
+  - `campaigns/rsi_omega_daemon_v19_0_micdrop_v1/*`
+  - `campaigns/rsi_proposer_arena_micdrop_v1/*`
+  - v2 scripts: `micdrop_eval_once_v2.py`, `micdrop_build_novelty_suites_v1.py`, `micdrop_simulate_ticks_v1.py`, `micdrop_package_multiseed_report_v2.py`
+  - v2 tooling: `tools/omega/micdrop_novelty_packgen_v1.py`, `tools/omega/micdrop_devset_v2.json`, `tools/omega/test_micdrop_devset_v2.py`
+
+Source-of-truth implication:
+
+This 24h slice confirms micdrop is now operating as a scaled, novelty-driven, multiseed governance flow rather than a single curated pass.
+
+## AB.5 Workstream B: Repro/Forensics Artifact Freeze (`a100821b`)
+
+Evidence from commit stats and file lists:
+
+- `a100821b`: **67 files changed** (`+96/-0`)
+- all files under `.tmp_p17_tick1_repro/daemon/rsi_omega_daemon_v19_0/...`
+
+Committed artifact classes include:
+
+- daemon config snapshots (`omega_policy_ir`, capability registry, budgets/objectives/runaway config)
+- promotion/dispatch/subverifier receipts
+- market action and settlement receipts
+- long-run debt + anti-monopoly state artifacts
+- eval/health/perf/snapshot/state/runaway traces
+- subrun/replay stdout/stderr traces
+
+Source-of-truth implication:
+
+The repo now contains a concrete diagnostic replay bundle tied to a specific tick path. This is evidentiary and forensic, not normative campaign configuration.
+
+## AB.6 Workstream C: Oracle Ladder Abstraction Stack (`11bdc3b5`)
+
+Evidence from commit stats and file lists:
+
+- `11bdc3b5`: **38 files changed** (`+3826/-0`)
+
+Major additions:
+
+- New oracle contract schemas (mirrored in both schema roots):
+  - `oracle_hidden_tests_pack_v1`
+  - `oracle_operator_bank_v1`
+  - `oracle_program_ast_v1`
+  - `oracle_task_inputs_pack_v1`
+- New authority/campaign surfaces for oracle ladder mode:
+  - `authority/ccap_patch_allowlists_oracle_ladder_v1.json`
+  - `campaigns/rsi_omega_daemon_v19_0_oracle_ladder_v1/*`
+  - `campaigns/rsi_proposer_arena_oracle_ladder_v1/*`
+- Operational entrypoints:
+  - `scripts/oracle_eval_once_v1.py`
+  - `scripts/oracle_ladder_setup_run_v1.py`
+  - `scripts/oracle_materialize_promotions_v1.py`
+  - `scripts/oracle_multiseed_report_v1.py`
+  - `scripts/oracle_run_ticks_v1.sh`
+  - `tools/omega/omega_benchmark_suite_oracle_v1.py`
+
+Source-of-truth implication:
+
+A second explicit evaluation/program synthesis lane (oracle ladder) is now first-class and schema-bound.
+
+## AB.7 Workstream D: Governance Hard Lock + Preflight Contracting (`ae0d31c0`)
+
+Evidence from commit stats and file lists:
+
+- `ae0d31c0`: **28 files changed** (`+3886/-739`)
+
+Key governance additions:
+
+- new/updated v19 contracts:
+  - `anti_monopoly_state_v1`
+  - `dependency_debt_state_v1`
+  - `dependency_routing_receipt_v1`
+  - `utility_policy_v1`
+  - `utility_proof_receipt_v1`
+  - `long_run_preflight_summary_v1`
+- orchestrator governance runtime path:
+  - `orchestrator/omega_v19_0/governance/anti_monopoly_gate_v1.py`
+  - `orchestrator/omega_v19_0/governance/frontier_lock_v1.py`
+  - `orchestrator/omega_v19_0/governance/routing_receipts_v1.py`
+  - updates in `microkernel_v1.py` and `orch_bandit/bandit_v1.py`
+- verification/tests:
+  - `test_frontier_hard_lock_v1.py`
+  - `test_long_run_preflight_summary_v1.py`
+  - updates to orch-bandit/orch-policy/orch-worldmodel tests
+
+Source-of-truth implication:
+
+Governance lock behavior, anti-monopoly gating, and long-run preflight outcomes are now explicit contract artifacts instead of implicit runtime side effects.
+
+## AB.8 Workstream E: SIDC Checkpoint + Trainer Wiring (`47387bf7`)
+
+Evidence from commit stats and file lists:
+
+- `47387bf7`: **35 files changed** (`+2236/-37`)
+
+Key changes:
+
+- new SIDC campaign surface: `campaigns/rsi_omega_daemon_v19_0_superintelligence_demo_v1/*`
+- trainer orchestration modules:
+  - `orchestrator/rsi_orch_policy_trainer_v1.py`
+  - `orchestrator/verify_rsi_orch_policy_trainer_v1.py`
+- packaging/demo scripts:
+  - `scripts/sidc_package_superintelligence_evidence_v1.py`
+  - `scripts/sidc_v1_demo_run.sh`
+- updates to solver/arena/router/runner/training tooling and microkernel wiring
+
+Source-of-truth implication:
+
+This checkpoint materially stages a superintelligence-demo lane and policy-trainer integration path in mainline runtime surfaces.
+
+## AB.9 Workstream F: TTC-GRPO + Macro/Active-Metal Expansion (`d1831930` + `1fd82329` + PR merges)
+
+Evidence from commit stats and file lists:
+
+- `d1831930`: **28 files changed** (`+3444/-0`)
+- `1fd82329`: **55 files changed** (`+4621/-48`)
+- merged via `7a045e98`, `12419a21`, `1342f3ac`
+- plus marker commit `548ec9e3` (no file delta)
+
+TTC-GRPO additions:
+
+- full GRPO schema family (run config, run receipt, log rows, candidate eval/index, LoRA adapter state)
+- verifiers and training tests (`verify_ttc_grpo_*`, `test_ttc_grpo_runner_v1.py`)
+- campaign pack and tooling under `tools/ttc_grpo/*`
+
+Macro-active-metal additions:
+
+- metal/native schema family (`native_metal_*`, `toolchain_manifest_metal_v1`, `oracle_operator_*`, `orch_active_inference_receipt_v1`, uncertainty report)
+- runtime/tooling additions:
+  - `orchestrator/native/metal_runner_v1.py`
+  - `tools/macro_miner/*`
+  - `tools/orch_worldmodel/active_inference_driver_v1.py`
+  - `tools/orch_worldmodel/uncertainty_report_v1.py`
+  - `tools/polymath/metal_codegen_v1.py`
+  - `tools/polymath/metal_toolchain_v1.py`
+
+Source-of-truth implication:
+
+Training/evaluation governance (TTC-GRPO) and native/metal execution capability (macro-active-metal) were both moved into schema-backed, verifier-addressable mainline surfaces in the same integration window.
+
+## AB.10 Active Local Delta (Uncommitted at Capture Time)
+
+`git status --porcelain` evidence at capture time shows:
+
+- **148 total delta entries**
+- **4 tracked modified files**
+- **144 untracked files**
+
+Untracked concentration:
+
+- `authority/holdouts/packs`: 90 files (all untracked)
+- `authority/benchmark_suites`: 45 files (all untracked)
+- `authority/benchmark_suite_sets`: 9 files (all untracked)
+
+Observed seed IDs in untracked suite-set filenames:
+
+- `123456789`
+- `984867351327594791`
+- `1688823821546474032`
+- `2715516532031033669`
+- `3569026858923859108`
+- `4745939283740187265`
+- `5901508405925831357`
+- `7024844331149586631`
+- `8193481205644552703`
+
+Current corpus inventory (filesystem count evidence):
+
+- `authority/holdouts/packs/sha256_*.json`: **282** total files
+- of those, **90** are currently untracked
+
+Tracked modified files and observed functional deltas:
+
+1. `LONG_RUN_PREFLIGHT_SUMMARY_v1.json`
+   - replaced prior run-specific long report blob with compact preflight summary envelope containing environment, governance/schema checks, git head, and schema ID.
+
+2. `orchestrator/omega_v19_0/microkernel_v1.py`
+   - reason-code extraction for governance fields hardened to accept only non-empty string values (`forced_heavy_reason_code`, `anti_monopoly_reason_code`), preventing accidental coercion of non-string payloads.
+
+3. `tools/orch_worldmodel/active_inference_driver_v1.py`
+   - `utility_proof_receipt_v1` payload expanded with explicit identity and evidence fields (`schema_id`, `id`, `producer_run_id`, `utility_action_id`, `utility_class`, debt before/after/delta maps, evidence list, timestamp).
+   - receipt `id` now canon-hashed after payload assembly.
+
+4. `tools/ttc_grpo/grpo_policy_mlx_v1.py`
+   - dataclass definition changed from `@dataclass(slots=True)` to `@dataclass`, relaxing slot constraints for policy object instances.
+
+Source-of-truth implication:
+
+The local (not-yet-committed) delta is operationally meaningful: it extends micdrop v2 artifact generation and tightens runtime/receipt semantics in governance and active inference paths.
+
+## AB.11 Net Source-of-Truth Interpretation for This 24h Cycle
+
+The repository now reflects a three-part reality:
+
+1. **Scale expansion in evaluation corpora** (micdrop and multiseed holdout growth),
+2. **Control-plane formalization** (governance locks, anti-monopoly/debt/utility contracts, preflight schema),
+3. **Capability-plane expansion** (oracle ladder, TTC-GRPO, macro-active-metal runtime/toolchain).
+
+This is not a narrow feature patch. It is a high-density governance + capability expansion window, with strong schema and verifier coupling and a significant active local artifact staging layer still pending commit.
+
+## AB.12 Required Continuity Checks for Next Appendix
+
+1. Commit and hash-bind the current 144-file untracked authority batch (or document explicit discard rationale).
+2. Re-run schema mirror parity checks (`Genesis/schema` vs `CDEL-v2/Genesis/schema`) after local edits to active inference and microkernel governance logic.
+3. Verify that `utility_proof_receipt_v1` producer/evidence field expansion is consumed consistently by downstream verifiers and long-run report generators.
+4. Confirm that dataclass slot removal in TTC-GRPO policy objects does not introduce serialization or memory regression in longer runs.
+5. Keep `.tmp_*` diagnostic artifacts explicitly non-authoritative in campaign loaders and automation.
+
+*End Appendix AB.*

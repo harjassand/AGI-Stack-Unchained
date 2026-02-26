@@ -1,0 +1,1 @@
+{"alpha_q32":2147483648,"cost_scale_ms_u64":60000,"cost_weight_q32":1073741824,"explore_weight_q32":2147483648,"max_arms_per_context_u32":64,"max_contexts_u32":256,"min_trials_before_exploit_u32":2,"schema_version":"orch_bandit_config_v1","selector_kind":"BANDIT_V1"}

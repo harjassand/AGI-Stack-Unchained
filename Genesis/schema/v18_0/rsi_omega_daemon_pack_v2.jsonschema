@@ -51,6 +51,9 @@
     "long_run_eval_suite_rel": {"type": "string"},
     "long_run_eval_suite_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
     "orch_bandit_config_rel": {"type": "string"},
+    "orch_policy_eval_config_rel": {"type": "string"},
+    "orch_policy_use_b": {"type": "boolean"},
+    "orch_policy_mode": {"type": "string", "enum": ["ADD_BONUS_V1"]},
     "policy_vm_mode": {"type": "string", "enum": ["DECISION_ONLY", "DUAL", "PROPOSAL_ONLY"]},
     "policy_branch_id": {"type": "string"},
     "policy_round_u32": {"type": "integer", "minimum": 0},
@@ -146,6 +149,19 @@
     {
       "if": {"required": ["long_run_eval_suite_id"]},
       "then": {"required": ["long_run_eval_suite_rel"]}
+    },
+    {
+      "if": {
+        "properties": {"orch_policy_use_b": {"const": true}},
+        "required": ["orch_policy_use_b"]
+      },
+      "then": {
+        "required": ["orch_bandit_config_rel", "orch_policy_eval_config_rel", "orch_policy_mode"]
+      }
+    },
+    {
+      "if": {"required": ["orch_policy_mode"]},
+      "then": {"required": ["orch_policy_use_b"]}
     },
     {
       "if": {"required": ["policy_budget_spec_rel"]},

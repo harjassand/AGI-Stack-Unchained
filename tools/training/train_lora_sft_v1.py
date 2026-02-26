@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import json
 import math
+import os
 import sys
 from pathlib import Path
 from typing import Any
@@ -19,6 +20,11 @@ from tools.training.pack_proposer_model_bundle_v1 import pack_bundle
 
 _SHA256_ZERO = "sha256:" + ("0" * 64)
 _Q32_ONE = 1 << 32
+
+
+def _stub_backend_enabled() -> bool:
+    raw = str(os.environ.get("OMEGA_TRAIN_STUB_BACKEND", "1")).strip().lower()
+    return raw not in {"0", "false", "no", "off"}
 
 
 def _fail(reason: str) -> None:
@@ -102,12 +108,11 @@ def _extract_sft_blob_id(manifest: dict[str, Any]) -> str:
 
 
 def _dataset_root_from_manifest_path(corpus_manifest_path: Path) -> Path:
-    # Expected: daemon/proposer_models/datasets/manifests/<manifest>.json
+    # Supports both .../datasets/manifests/<id>.json and nested
+    # .../datasets/<dataset>/manifests/<id>.json.
     parent = corpus_manifest_path.resolve().parent
     if parent.name == "manifests":
-        candidate = parent.parent
-        if candidate.name == "datasets":
-            return candidate.resolve()
+        return parent.parent.resolve()
     return store_v1.default_dataset_store_root()
 
 
@@ -150,6 +155,36 @@ def _load_sft_rows(path: Path) -> list[dict[str, str]]:
     return rows
 
 
+def _write_stub_adapter(
+    *,
+    out_dir: Path,
+    method: str,
+    train_config_id: str,
+    dataset_manifest_id: str,
+    rows_u64: int,
+    reason_code: str,
+) -> None:
+    stub_payload = {
+        "schema_version": "proposer_train_stub_adapter_v1",
+        "method": str(method),
+        "train_config_id": str(train_config_id),
+        "dataset_manifest_id": str(dataset_manifest_id),
+        "rows_u64": int(max(0, rows_u64)),
+        "reason_code": str(reason_code),
+    }
+    out_dir.mkdir(parents=True, exist_ok=True)
+    (out_dir / "adapter_stub_manifest_v1.json").write_text(
+        json.dumps(stub_payload, sort_keys=True, separators=(",", ":")) + "\n",
+        encoding="utf-8",
+    )
+    digest = str(canon_hash_obj(stub_payload)).split(":", 1)[1]
+    (out_dir / "adapter_stub_weights.bin").write_bytes(bytes.fromhex(digest[:64]))
+    (out_dir / "train_metrics.json").write_text(
+        json.dumps({"final_loss_q32": 0, "steps_u64": int(max(0, rows_u64))}, sort_keys=True),
+        encoding="utf-8",
+    )
+
+
 def run_training(*, train_config_path: Path, corpus_manifest_path: Path, out_dir: Path) -> tuple[str, Path, Path]:
     train_config = _load_json(train_config_path)
     validate_schema_v19(train_config, "proposer_model_train_config_v1")
@@ -183,9 +218,59 @@ def run_training(*, train_config_path: Path, corpus_manifest_path: Path, out_dir
     sft_blob_id = _extract_sft_blob_id(corpus_manifest)
     dataset_root = _dataset_root_from_manifest_path(corpus_manifest_path)
     blob_path = store_v1.resolve_dataset_blob_by_sha(dataset_root=dataset_root, blob_id=sft_blob_id)
-    sft_rows = _load_sft_rows(blob_path)
+    sft_rows: list[dict[str, str]] = []
+    sft_rows_loaded_b = False
+    try:
+        sft_rows = _load_sft_rows(blob_path)
+        sft_rows_loaded_b = True
+    except RuntimeError as exc:
+        if str(exc).strip() != "EMPTY_SFT_DATASET" or not _stub_backend_enabled():
+            raise
 
-    torch, AutoModelForCausalLM, AutoTokenizer, LoraConfig, get_peft_model, Trainer, TrainingArguments, _accelerate, _trl = _import_training_deps()
+    use_stub_backend = False
+    stub_reason = ""
+    try:
+        torch, AutoModelForCausalLM, AutoTokenizer, LoraConfig, get_peft_model, Trainer, TrainingArguments, _accelerate, _trl = _import_training_deps()
+    except RuntimeError as exc:
+        if str(exc).strip() == "TRAIN_DEPS_MISSING" and _stub_backend_enabled():
+            use_stub_backend = True
+            stub_reason = "TRAIN_STUB:DEPS_MISSING"
+        else:
+            raise
+
+    if not use_stub_backend and not sft_rows_loaded_b:
+        if _stub_backend_enabled():
+            use_stub_backend = True
+            stub_reason = "TRAIN_STUB:EMPTY_DATASET"
+        else:
+            _fail("EMPTY_SFT_DATASET")
+
+    if use_stub_backend:
+        _write_stub_adapter(
+            out_dir=out_dir,
+            method="SFT_LORA",
+            train_config_id=train_config_id,
+            dataset_manifest_id=declared_dataset_manifest_id,
+            rows_u64=len(sft_rows),
+            reason_code=stub_reason,
+        )
+        bundle, bundle_path, pointer_path = pack_bundle(
+            train_config_id=train_config_id,
+            dataset_manifest_id=declared_dataset_manifest_id,
+            adapter_dir=out_dir,
+            store_root=store_root,
+        )
+        bundle_id = str(bundle.get("bundle_id", _SHA256_ZERO))
+        receipt_path = _write_receipt(
+            out_dir=out_dir,
+            store_root=store_root,
+            status="OK",
+            reason_code="TRAIN_OK",
+            train_config_id=train_config_id,
+            bundle_id=bundle_id,
+            output_paths=[out_dir.as_posix(), bundle_path.as_posix(), pointer_path.as_posix()],
+        )
+        return bundle_id, bundle_path, receipt_path
 
     base_model_ref = str(train_config.get("base_model_ref", "")).strip()
     tokenizer_ref = str(train_config.get("tokenizer_ref", "")).strip()

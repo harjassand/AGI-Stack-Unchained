@@ -3859,8 +3859,18 @@ def _bundle_path_by_hash(*, state_root: Path, bundle_hash: str) -> Path | None:
     # Multiple paths with the same canonical hash are acceptable and deterministic.
     path = rows[-1]
     payload = load_canon_dict(path)
-    if canon_hash_obj(payload) != bundle_hash:
-        fail("NONDETERMINISTIC")
+    payload_hash = canon_hash_obj(payload)
+    if payload_hash == bundle_hash:
+        return path
+
+    # Orchestration policy bundles are content-addressed by `policy_bundle_id`
+    # (hash of payload without id field), so canonical object hash differs.
+    if str(payload.get("schema_version", "")).strip() == "orch_policy_bundle_v1":
+        policy_bundle_id = str(payload.get("policy_bundle_id", "")).strip()
+        if _is_sha256(policy_bundle_id) and policy_bundle_id == bundle_hash:
+            return path
+
+    fail("NONDETERMINISTIC")
     return path
 
 

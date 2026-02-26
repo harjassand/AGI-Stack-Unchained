@@ -1,14 +1,1 @@
-{
-  "schema_version": "rsi_orch_policy_trainer_pack_v1",
-  "runs_root_rel": "runs",
-  "train_config_rel": "campaigns/rsi_orch_policy_trainer_v1/orch_worldmodel_train_config_v1.json",
-  "output_dir_rel": "orch_policy_trainer_v1",
-  "ek_id": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
-  "kernel_ledger_id": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
-  "max_runs_u64": 5000,
-  "max_events_u64": 200000,
-  "cost_scale_ms_u64": 60000,
-  "max_wallclock_s": 600,
-  "max_bytes_written_u64": 209715200,
-  "notes": "Step5A world-model campaign pack"
-}
+{"cost_scale_ms_u64":60000,"ek_id":"sha256:0000000000000000000000000000000000000000000000000000000000000000","kernel_ledger_id":"sha256:0000000000000000000000000000000000000000000000000000000000000000","max_bytes_written_u64":209715200,"max_events_u64":200000,"max_runs_u64":5000,"max_wallclock_s":600,"notes":"Step5A world-model campaign pack","output_dir_rel":"orch_policy_trainer_v1","runs_root_rel":"runs","schema_version":"rsi_orch_policy_trainer_pack_v1","train_config_rel":"campaigns/rsi_orch_policy_trainer_v1/orch_worldmodel_train_config_v1.json"}

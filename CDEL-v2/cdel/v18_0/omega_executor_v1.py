@@ -344,6 +344,7 @@ def dispatch_campaign(
         cwd=omega_repo_root,
         output_dir=dispatch_dir,
         extra_env={
+            "OMEGA_DAEMON_STATE_ROOT": str(state_root),
             "OMEGA_TICK_U64": str(int(tick_u64)),
             "OMEGA_RUN_SEED_U64": str(run_seed_u64),
             "PYTHONPATH": _pinned_pythonpath(omega_repo_root),

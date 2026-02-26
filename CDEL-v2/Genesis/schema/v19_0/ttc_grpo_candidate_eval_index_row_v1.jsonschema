@@ -1,0 +1,13 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v19_0/ttc_grpo_candidate_eval_index_row_v1",
+  "title": "TTC GRPO candidate eval index row v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_id", "candidate_index_u64", "candidate_eval_hash"],
+  "properties": {
+    "schema_id": {"const": "ttc_grpo_candidate_eval_index_row_v1"},
+    "candidate_index_u64": {"type": "integer", "minimum": 0, "maximum": 18446744073709551615},
+    "candidate_eval_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"}
+  }
+}

@@ -1,0 +1,13 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v19_0/ttc_grpo_log_row_v1",
+  "title": "TTC GRPO run log row v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_id", "event", "payload"],
+  "properties": {
+    "schema_id": {"const": "ttc_grpo_log_row_v1"},
+    "event": {"type": "string", "minLength": 1},
+    "payload": {"type": "object"}
+  }
+}

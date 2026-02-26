@@ -39,6 +39,8 @@ def _write_minimal_fixture(*, tmp_path: Path, state_in_payload: dict, state_out_
         "selected_capability_id": "cap_a",
         "observed_reward_q32": 0,
         "observed_cost_q32": 0,
+        "exploration_allowed_b": True,
+        "exploration_reason_code": "EXPLORATION_ALLOWED",
         "status": "OK",
         "reason_code": "OK",
     }

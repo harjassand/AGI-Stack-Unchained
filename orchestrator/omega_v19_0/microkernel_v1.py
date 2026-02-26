@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from contextlib import contextmanager
+from datetime import datetime, timezone
 import hashlib
 import json
 import os
@@ -125,6 +126,19 @@ from orchestrator.omega_v18_0.observer_v1 import observe, read_meta_core_active_
 from orchestrator.omega_bid_market_v2 import select_policy_proposal
 from .policy_vm_v1 import run_policy_vm_v1
 from .promoter_v1 import run_promotion, run_subverifier
+from .governance.anti_monopoly_gate_v1 import apply_anti_monopoly_gate_v1
+from .governance.frontier_lock_v1 import (
+    DEBT_KEYS as GOVERNANCE_DEBT_KEYS,
+    append_unlock_reason_codes_v1 as governance_append_unlock_reason_codes_v1,
+    choose_forced_heavy_route_v1,
+    compute_debt_pressure_v1 as compute_governance_debt_pressure_v1,
+    compute_hard_lock_v1 as compute_governance_hard_lock_v1,
+    debt_counters_by_key_v1 as governance_debt_counters_by_key_v1,
+    enforce_unlock_contract_v1 as enforce_governance_unlock_contract_v1,
+    recompute_lock_fields_from_counters_v1 as recompute_governance_lock_fields_from_counters_v1,
+    ticks_without_frontier_attempt_by_key_v1 as governance_ticks_without_frontier_attempt_by_key_v1,
+)
+from .governance.routing_receipts_v1 import make_dependency_routing_receipt_v1
 from .orch_bandit.bandit_v1 import (
     BanditError as OrchBanditError,
     compute_context_key as orch_bandit_compute_context_key,
@@ -170,7 +184,15 @@ _FAILURE_KEY_RE = re.compile(r"[^a-z0-9_]+")
 _LANE_NAMES = {"BASELINE", "CANARY", "FRONTIER"}
 _HEAVY_DECLARED_CLASSES = {"FRONTIER_HEAVY", "CANARY_HEAVY"}
 _DECLARED_CLASSES = {"FRONTIER_HEAVY", "CANARY_HEAVY", "BASELINE_CORE", "MAINTENANCE"}
-_ROUTING_SELECTOR_IDS = {"MARKET", "NON_MARKET", "SCAFFOLD_OVERRIDE", "HARD_LOCK_OVERRIDE"}
+_ROUTING_SELECTOR_IDS = {
+    "MARKET",
+    "NON_MARKET",
+    "SCAFFOLD_OVERRIDE",
+    "HARD_LOCK_OVERRIDE",
+    "FORCED_HEAVY_LOCK_V1",
+    "BANDIT_V1",
+    "DETERMINISTIC_FALLBACK_V1",
+}
 _EFFECT_CLASSES = {
     "EFFECT_HEAVY_OK",
     "EFFECT_HEAVY_NO_UTILITY",
@@ -2642,22 +2664,29 @@ def _next_health_window(
 
 
 def _default_dependency_debt_state(*, tick_u64: int) -> dict[str, Any]:
+    updated_at_utc = _utc_now_rfc3339()
     payload = {
+        "schema_id": "dependency_debt_state_v1",
+        "id": _SHA256_ZERO,
         "schema_name": "dependency_debt_state_v1",
         "schema_version": "v19_0",
         "state_id": _SHA256_ZERO,
         "tick_u64": int(max(0, int(tick_u64))),
+        "debt_counters_by_key": {str(key): 0 for key in GOVERNANCE_DEBT_KEYS},
         "debt_by_key": {},
         "ticks_without_frontier_attempt_by_key": {},
+        "last_frontier_attempt_tick_by_key": {str(key): 0 for key in GOVERNANCE_DEBT_KEYS},
         "first_debt_tick_by_key": {},
         "debt_by_goal_id": {},
         "ticks_without_frontier_attempt_by_goal_id": {},
         "first_debt_tick_by_goal_id": {},
+        "pending_frontier_goal_ids": [],
         "maintenance_since_last_frontier_attempt_u64": 0,
         "last_frontier_attempt_tick_u64": 0,
         "last_frontier_attempt_debt_key": None,
         "last_frontier_attempt_goal_id": None,
         "hard_lock_active_b": False,
+        "hard_lock_keys": [],
         "hard_lock_debt_key": None,
         "hard_lock_goal_id": None,
         "scaffold_inflight_ccap_id": None,
@@ -2668,11 +2697,25 @@ def _default_dependency_debt_state(*, tick_u64: int) -> dict[str, Any]:
         "heavy_no_utility_count_by_capability": {},
         "maintenance_count_u64": 0,
         "frontier_attempts_u64": 0,
+        "failed_patch_ban_by_patch_hash": {},
+        "failed_nontriviality_shape_ban_by_shape_hash": {},
         "failed_patch_ban_by_debt_key_target": {},
         "failed_shape_ban_by_debt_key_target": {},
         "last_failure_nontriviality_cert_by_debt_key": {},
         "last_failure_failed_threshold_by_debt_key": {},
+        "updated_at_utc": updated_at_utc,
     }
+    payload = recompute_governance_lock_fields_from_counters_v1(
+        debt_state=payload,
+        utility_policy=None,
+        tick_u64=int(max(0, int(tick_u64))),
+    )
+    payload_no_ids = dict(payload)
+    payload_no_ids.pop("id", None)
+    payload_no_ids.pop("state_id", None)
+    digest = canon_hash_obj(payload_no_ids)
+    payload["id"] = digest
+    payload["state_id"] = digest
     validate_schema_v19(payload, "dependency_debt_state_v1")
     return payload
 
@@ -2687,22 +2730,43 @@ def _load_prev_dependency_debt_state(*, prev_state_dir: Path | None) -> dict[str
     if not rows:
         return _default_dependency_debt_state(tick_u64=0)
     payload = dict(load_canon_dict(rows[-1]))
+    payload.setdefault("schema_id", "dependency_debt_state_v1")
+    payload.setdefault("id", _SHA256_ZERO)
     payload.setdefault("debt_by_key", {})
+    payload.setdefault("debt_counters_by_key", {})
     payload.setdefault("ticks_without_frontier_attempt_by_key", {})
+    payload.setdefault("last_frontier_attempt_tick_by_key", {})
     payload.setdefault("first_debt_tick_by_key", {})
+    payload.setdefault("pending_frontier_goal_ids", [])
     payload.setdefault("last_frontier_attempt_debt_key", None)
+    payload.setdefault("hard_lock_keys", [])
     payload.setdefault("hard_lock_debt_key", None)
     payload.setdefault("scaffold_inflight_ccap_id", None)
     payload.setdefault("scaffold_inflight_started_tick_u64", None)
     payload.setdefault("max_inflight_ccap_ids_u32", 1)
+    payload.setdefault("failed_patch_ban_by_patch_hash", {})
+    payload.setdefault("failed_nontriviality_shape_ban_by_shape_hash", {})
     payload.setdefault("failed_patch_ban_by_debt_key_target", {})
     payload.setdefault("failed_shape_ban_by_debt_key_target", {})
     payload.setdefault("last_failure_nontriviality_cert_by_debt_key", {})
     payload.setdefault("last_failure_failed_threshold_by_debt_key", {})
+    payload.setdefault("updated_at_utc", _utc_now_rfc3339())
     if not isinstance(payload.get("debt_by_key"), dict):
         payload["debt_by_key"] = {}
+    if not isinstance(payload.get("debt_counters_by_key"), dict):
+        payload["debt_counters_by_key"] = {}
     if not isinstance(payload.get("ticks_without_frontier_attempt_by_key"), dict):
         payload["ticks_without_frontier_attempt_by_key"] = {}
+    if not isinstance(payload.get("last_frontier_attempt_tick_by_key"), dict):
+        payload["last_frontier_attempt_tick_by_key"] = {}
+    if not isinstance(payload.get("pending_frontier_goal_ids"), list):
+        payload["pending_frontier_goal_ids"] = []
+    if not isinstance(payload.get("hard_lock_keys"), list):
+        payload["hard_lock_keys"] = []
+    if not isinstance(payload.get("failed_patch_ban_by_patch_hash"), dict):
+        payload["failed_patch_ban_by_patch_hash"] = {}
+    if not isinstance(payload.get("failed_nontriviality_shape_ban_by_shape_hash"), dict):
+        payload["failed_nontriviality_shape_ban_by_shape_hash"] = {}
     if not isinstance(payload.get("first_debt_tick_by_key"), dict):
         payload["first_debt_tick_by_key"] = {}
     if not isinstance(payload.get("failed_patch_ban_by_debt_key_target"), dict):
@@ -2713,16 +2777,39 @@ def _load_prev_dependency_debt_state(*, prev_state_dir: Path | None) -> dict[str
         payload["last_failure_nontriviality_cert_by_debt_key"] = {}
     if not isinstance(payload.get("last_failure_failed_threshold_by_debt_key"), dict):
         payload["last_failure_failed_threshold_by_debt_key"] = {}
+    payload["debt_counters_by_key"] = governance_debt_counters_by_key_v1(payload)
+    payload["ticks_without_frontier_attempt_by_key"] = governance_ticks_without_frontier_attempt_by_key_v1(payload)
+    payload = recompute_governance_lock_fields_from_counters_v1(
+        debt_state=payload,
+        utility_policy=None,
+        tick_u64=int(max(0, int(payload.get("tick_u64", 0)))),
+    )
+    payload_no_ids = dict(payload)
+    payload_no_ids.pop("id", None)
+    payload_no_ids.pop("state_id", None)
+    digest = canon_hash_obj(payload_no_ids)
+    payload["id"] = digest
+    payload["state_id"] = digest
     validate_schema_v19(payload, "dependency_debt_state_v1")
     return payload
 
 
 def _default_anti_monopoly_state(*, tick_u64: int) -> dict[str, Any]:
+    updated_at_utc = _utc_now_rfc3339()
     payload = {
+        "schema_id": "anti_monopoly_state_v1",
+        "id": _SHA256_ZERO,
         "schema_name": "anti_monopoly_state_v1",
         "schema_version": "v19_0",
         "state_id": _SHA256_ZERO,
         "tick_u64": int(max(0, int(tick_u64))),
+        "window_u64": int(_DEFAULT_ANTI_MONOPOLY_WINDOW_U64),
+        "max_share_q32": int(_Q32_ONE),
+        "counts_by_lane_id": {},
+        "counts_by_campaign_id": {},
+        "last_selected_lane_id": "BASELINE",
+        "last_selected_campaign_id": "NONE",
+        "updated_at_utc": updated_at_utc,
         "window_ticks_u64": int(_DEFAULT_ANTI_MONOPOLY_WINDOW_U64),
         "consecutive_no_output_limit_u64": int(_DEFAULT_ANTI_MONOPOLY_CONSECUTIVE_LIMIT_U64),
         "low_diversity_campaign_limit_u64": int(_DEFAULT_ANTI_MONOPOLY_DIVERSITY_K_U64),
@@ -2731,6 +2818,12 @@ def _default_anti_monopoly_state(*, tick_u64: int) -> dict[str, Any]:
         "history_rows": [],
         "last_reason_code": "N/A",
     }
+    payload_no_ids = dict(payload)
+    payload_no_ids.pop("id", None)
+    payload_no_ids.pop("state_id", None)
+    digest = canon_hash_obj(payload_no_ids)
+    payload["id"] = digest
+    payload["state_id"] = digest
     validate_schema_v19(payload, "anti_monopoly_state_v1")
     return payload
 
@@ -2744,7 +2837,26 @@ def _load_prev_anti_monopoly_state(*, prev_state_dir: Path | None) -> dict[str, 
     rows = sorted(anti_dir.glob("sha256_*.anti_monopoly_state_v1.json"), key=lambda p: p.as_posix())
     if not rows:
         return _default_anti_monopoly_state(tick_u64=0)
-    payload = load_canon_dict(rows[-1])
+    payload = dict(load_canon_dict(rows[-1]))
+    payload.setdefault("schema_id", "anti_monopoly_state_v1")
+    payload.setdefault("id", _SHA256_ZERO)
+    payload.setdefault("window_u64", int(max(1, int(payload.get("window_ticks_u64", _DEFAULT_ANTI_MONOPOLY_WINDOW_U64)))))
+    payload.setdefault("max_share_q32", int(_Q32_ONE))
+    payload.setdefault("counts_by_lane_id", {})
+    payload.setdefault("counts_by_campaign_id", {})
+    payload.setdefault("last_selected_lane_id", "BASELINE")
+    payload.setdefault("last_selected_campaign_id", "NONE")
+    payload.setdefault("updated_at_utc", _utc_now_rfc3339())
+    if not isinstance(payload.get("counts_by_lane_id"), dict):
+        payload["counts_by_lane_id"] = {}
+    if not isinstance(payload.get("counts_by_campaign_id"), dict):
+        payload["counts_by_campaign_id"] = {}
+    payload_no_ids = dict(payload)
+    payload_no_ids.pop("id", None)
+    payload_no_ids.pop("state_id", None)
+    digest = canon_hash_obj(payload_no_ids)
+    payload["id"] = digest
+    payload["state_id"] = digest
     validate_schema_v19(payload, "anti_monopoly_state_v1")
     return payload
 
@@ -3305,6 +3417,35 @@ def _forced_frontier_debt_key(
     return str(candidates[0][1])
 
 
+def _utc_now_rfc3339() -> str:
+    return datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
+
+
+def _governance_debt_key(value: Any) -> str | None:
+    key = str(value).strip()
+    if key in set(GOVERNANCE_DEBT_KEYS):
+        return key
+    if key.startswith("frontier:"):
+        return "FRONTIER_STALL"
+    if key:
+        return "UTILITY_FAIL"
+    return None
+
+
+def _governance_debt_keys(values: Any) -> list[str]:
+    out: list[str] = []
+    seen: set[str] = set()
+    if isinstance(values, list):
+        for row in values:
+            norm = _governance_debt_key(row)
+            if norm is None or norm in seen:
+                continue
+            seen.add(norm)
+            out.append(norm)
+    out.sort()
+    return out
+
+
 def _build_dependency_routing_receipt(
     *,
     tick_u64: int,
@@ -3324,49 +3465,275 @@ def _build_dependency_routing_receipt(
     orch_policy_bundle_id_used: str | None = None,
     orch_policy_row_hit_b: bool = False,
     orch_policy_selected_bonus_q32: int = 0,
+    hard_lock_active_b: bool | None = None,
+    hard_lock_keys: list[str] | None = None,
+    forced_heavy_b: bool | None = None,
+    forced_heavy_reason_code: str | None = None,
+    forced_heavy_target_debt_keys: list[str] | None = None,
+    anti_monopoly_gate_applied_b: bool = False,
+    anti_monopoly_reason_code: str | None = None,
+    selected_route: dict[str, Any] | None = None,
+    blocked_candidates: list[dict[str, str]] | None = None,
+    created_at_utc: str | None = None,
 ) -> dict[str, Any]:
     selector_id = str(routing_selector_id).strip()
     if selector_id not in _ROUTING_SELECTOR_IDS and not _is_sha256(selector_id):
         selector_id = "NON_MARKET"
-    payload = {
-        "schema_name": "dependency_routing_receipt_v1",
-        "schema_version": "v19_0",
-        "receipt_id": _SHA256_ZERO,
-        "tick_u64": int(max(0, int(tick_u64))),
-        "selected_capability_id": str(selected_capability_id),
-        "selected_declared_class": str(selected_declared_class if selected_declared_class in _DECLARED_CLASSES else "UNCLASSIFIED"),
-        "frontier_goals_pending_b": bool(frontier_goals_pending_b),
-        "blocks_goal_id": (str(blocks_goal_id) if isinstance(blocks_goal_id, str) and blocks_goal_id.strip() else None),
-        "blocks_debt_key": (str(blocks_debt_key) if isinstance(blocks_debt_key, str) and blocks_debt_key.strip() else None),
-        "dependency_debt_delta_i64": int(dependency_debt_delta_i64),
-        "forced_frontier_attempt_b": bool(forced_frontier_attempt_b),
-        "forced_frontier_debt_key": (
+    governance_hard_lock_keys = _governance_debt_keys(hard_lock_keys)
+    if not governance_hard_lock_keys and isinstance(forced_frontier_debt_key, str) and forced_frontier_debt_key.strip():
+        forced_lock_key = _governance_debt_key(forced_frontier_debt_key)
+        if forced_lock_key is not None:
+            governance_hard_lock_keys = [forced_lock_key]
+    if hard_lock_active_b is None:
+        hard_lock_active_b = bool(forced_frontier_attempt_b or governance_hard_lock_keys)
+    governance_forced_heavy_b = bool(forced_heavy_b) if forced_heavy_b is not None else bool(forced_frontier_attempt_b)
+    governance_forced_heavy_reason_code = (
+        str(forced_heavy_reason_code).strip()
+        if isinstance(forced_heavy_reason_code, str) and str(forced_heavy_reason_code).strip()
+        else None
+    )
+    if governance_forced_heavy_b and governance_forced_heavy_reason_code is None:
+        governance_forced_heavy_reason_code = "HARD_LOCK_ACTIVE"
+    governance_target_keys = _governance_debt_keys(forced_heavy_target_debt_keys)
+    if not governance_target_keys:
+        governance_target_keys = list(governance_hard_lock_keys)
+
+    route = dict(selected_route) if isinstance(selected_route, dict) else {}
+    if not route:
+        route = {
+            "campaign_id": str(selected_capability_id or "NONE"),
+            "capability_id": str(selected_capability_id or "NONE"),
+            "lane_id": "FRONTIER" if str(selected_declared_class).strip().upper() in _HEAVY_DECLARED_CLASSES else "BASELINE",
+        }
+    route["campaign_id"] = str(route.get("campaign_id", "") or selected_capability_id or "NONE")
+    route["capability_id"] = str(route.get("capability_id", "") or selected_capability_id or "NONE")
+    route["lane_id"] = str(route.get("lane_id", "") or "BASELINE")
+
+    payload = make_dependency_routing_receipt_v1(
+        tick_u64=int(max(0, int(tick_u64))),
+        routing_selector_id=selector_id,
+        hard_lock_active_b=bool(hard_lock_active_b),
+        hard_lock_keys=list(governance_hard_lock_keys),
+        forced_heavy_b=bool(governance_forced_heavy_b),
+        forced_heavy_reason_code=governance_forced_heavy_reason_code,
+        forced_heavy_target_debt_keys=list(governance_target_keys),
+        anti_monopoly_gate_applied_b=bool(anti_monopoly_gate_applied_b),
+        anti_monopoly_reason_code=(
+            str(anti_monopoly_reason_code)
+            if isinstance(anti_monopoly_reason_code, str) and anti_monopoly_reason_code.strip()
+            else None
+        ),
+        selected_route=route,
+        blocked_candidates=[dict(row) for row in (blocked_candidates or []) if isinstance(row, dict)],
+        selected_declared_class=str(
+            selected_declared_class if selected_declared_class in _DECLARED_CLASSES else "UNCLASSIFIED"
+        ),
+        reason_codes=[str(row) for row in reason_codes],
+        frontier_goals_pending_b=bool(frontier_goals_pending_b),
+        blocks_goal_id=(str(blocks_goal_id) if isinstance(blocks_goal_id, str) and blocks_goal_id.strip() else None),
+        blocks_debt_key=(str(blocks_debt_key) if isinstance(blocks_debt_key, str) and blocks_debt_key.strip() else None),
+        dependency_debt_delta_i64=int(dependency_debt_delta_i64),
+        forced_frontier_attempt_b=bool(forced_frontier_attempt_b),
+        forced_frontier_debt_key=(
             str(forced_frontier_debt_key)
             if isinstance(forced_frontier_debt_key, str) and forced_frontier_debt_key.strip()
             else None
         ),
-        "routing_selector_id": selector_id,
-        "context_key": (
+        context_key=(
             str(context_key).strip()
             if isinstance(context_key, str) and _is_sha256(str(context_key).strip())
             else None
         ),
-        "orch_policy_bundle_id_used": (
+        orch_policy_bundle_id_used=(
             str(orch_policy_bundle_id_used).strip()
             if isinstance(orch_policy_bundle_id_used, str) and _is_sha256(str(orch_policy_bundle_id_used).strip())
             else None
         ),
-        "orch_policy_row_hit_b": bool(orch_policy_row_hit_b),
-        "orch_policy_selected_bonus_q32": int(orch_policy_selected_bonus_q32),
-        "market_frozen_b": bool(market_frozen_b),
-        "market_used_for_selection_b": bool(market_used_for_selection_b),
-        "reason_codes": [str(row) for row in reason_codes],
-    }
-    no_id = dict(payload)
-    no_id.pop("receipt_id", None)
-    payload["receipt_id"] = canon_hash_obj(no_id)
+        orch_policy_row_hit_b=bool(orch_policy_row_hit_b),
+        orch_policy_selected_bonus_q32=int(orch_policy_selected_bonus_q32),
+        market_frozen_b=bool(market_frozen_b),
+        market_used_for_selection_b=bool(market_used_for_selection_b),
+        created_at_utc=str(created_at_utc or _utc_now_rfc3339()),
+    )
     validate_schema_v19(payload, "dependency_routing_receipt_v1")
     return payload
+
+
+def microkernel_select_route_v1(
+    *,
+    tick_u64: int,
+    bandit_state: dict[str, Any] | None,
+    bandit_config: dict[str, Any] | None,
+    debt_state: dict[str, Any],
+    anti_monopoly_state: dict[str, Any],
+    utility_policy: dict[str, Any] | None,
+    candidate_routes: list[dict[str, Any]],
+) -> tuple[dict[str, Any], dict[str, Any]]:
+    lock_active, lock_keys, lock_reason = compute_governance_hard_lock_v1(
+        debt_state=debt_state,
+        utility_policy=utility_policy,
+        tick_u64=int(tick_u64),
+    )
+    gated_routes, anti_applied, anti_reason, blocked = apply_anti_monopoly_gate_v1(
+        candidate_routes=list(candidate_routes),
+        anti_monopoly_state=dict(anti_monopoly_state),
+        tick_u64=int(tick_u64),
+    )
+
+    if lock_active:
+        forced = choose_forced_heavy_route_v1(
+            gated_routes=gated_routes,
+            utility_policy=utility_policy,
+            required_debt_keys=list(lock_keys),
+            tick_u64=int(tick_u64),
+        )
+        if forced is None:
+            fail("NO_FORCED_HEAVY_ROUTE_FOR_LOCK_KEYS")
+        selected_route = {
+            "campaign_id": str(forced.get("campaign_id", "")),
+            "capability_id": str(forced.get("capability_id", "")),
+            "lane_id": str(forced.get("lane_id", "")),
+        }
+        decision = {
+            "selected": selected_route,
+            "forced_heavy_b": True,
+            "forced_heavy_target_debt_keys": list(lock_keys),
+            "routing_selector_id": "FORCED_HEAVY_LOCK_V1",
+            "hard_lock_active_b": True,
+            "hard_lock_keys": list(lock_keys),
+            "forced_heavy_reason_code": str(lock_reason),
+            "anti_monopoly_gate_applied_b": bool(anti_applied),
+            "anti_monopoly_reason_code": anti_reason,
+            "blocked_candidates": blocked,
+        }
+        receipt = _build_dependency_routing_receipt(
+            tick_u64=int(tick_u64),
+            selected_capability_id=str(selected_route["capability_id"]),
+            selected_declared_class=str(forced.get("declared_class", "UNCLASSIFIED")),
+            frontier_goals_pending_b=bool(lock_keys),
+            blocks_goal_id=None,
+            blocks_debt_key=(str(lock_keys[0]) if lock_keys else None),
+            dependency_debt_delta_i64=0,
+            forced_frontier_attempt_b=True,
+            forced_frontier_debt_key=(str(lock_keys[0]) if lock_keys else None),
+            routing_selector_id="FORCED_HEAVY_LOCK_V1",
+            market_frozen_b=True,
+            market_used_for_selection_b=False,
+            reason_codes=["FORCED_HEAVY_LOCK_V1", str(lock_reason)],
+            hard_lock_active_b=True,
+            hard_lock_keys=list(lock_keys),
+            forced_heavy_b=True,
+            forced_heavy_reason_code=str(lock_reason),
+            forced_heavy_target_debt_keys=list(lock_keys),
+            anti_monopoly_gate_applied_b=bool(anti_applied),
+            anti_monopoly_reason_code=anti_reason,
+            selected_route=selected_route,
+            blocked_candidates=blocked,
+            created_at_utc=_utc_now_rfc3339(),
+        )
+        return decision, receipt
+
+    if not gated_routes:
+        fail("NO_ROUTE_CANDIDATES_AFTER_ANTI_MONOPOLY")
+
+    debt_pressure_b = compute_governance_debt_pressure_v1(
+        debt_state=debt_state,
+        utility_policy=utility_policy,
+        tick_u64=int(tick_u64),
+    )
+    selected_row = dict(gated_routes[0])
+    selector_id = "DETERMINISTIC_FALLBACK_V1"
+    if isinstance(bandit_config, dict) and isinstance(bandit_state, dict):
+        eligible_capability_ids = sorted(
+            {
+                str(row.get("capability_id", "")).strip()
+                for row in gated_routes
+                if isinstance(row, dict) and str(row.get("capability_id", "")).strip()
+            }
+        )
+        lane_id = str(selected_row.get("lane_id", "UNKNOWN")).strip().upper() or "UNKNOWN"
+        lane_kind = _normalize_orch_bandit_lane_kind(lane_name=lane_id)
+        context_key = orch_bandit_compute_context_key(
+            lane_kind=lane_kind,
+            runaway_level_u32=0,
+            objective_kind="RUN_CAMPAIGN",
+        )
+        selected_capability_id = orch_bandit_select_capability_id(
+            config=bandit_config,
+            state=bandit_state,
+            context_key=str(context_key),
+            eligible_capability_ids=list(eligible_capability_ids),
+            exploration_allowed_b=(not bool(debt_pressure_b)),
+            exploration_reason_code=("DEBT_PRESSURE_ACTIVE" if debt_pressure_b else "EXPLORATION_ALLOWED"),
+        )
+        for row in gated_routes:
+            if str(row.get("capability_id", "")).strip() == str(selected_capability_id):
+                selected_row = dict(row)
+                break
+        selector_id = "BANDIT_V1"
+
+    selected_route = {
+        "campaign_id": str(selected_row.get("campaign_id", "")),
+        "capability_id": str(selected_row.get("capability_id", "")),
+        "lane_id": str(selected_row.get("lane_id", "")),
+    }
+    decision = {
+        "selected": selected_route,
+        "forced_heavy_b": False,
+        "forced_heavy_target_debt_keys": [],
+        "routing_selector_id": selector_id,
+        "hard_lock_active_b": False,
+        "hard_lock_keys": [],
+        "forced_heavy_reason_code": None,
+        "anti_monopoly_gate_applied_b": bool(anti_applied),
+        "anti_monopoly_reason_code": anti_reason,
+        "blocked_candidates": blocked,
+    }
+    receipt = _build_dependency_routing_receipt(
+        tick_u64=int(tick_u64),
+        selected_capability_id=str(selected_route["capability_id"]),
+        selected_declared_class=str(selected_row.get("declared_class", "UNCLASSIFIED")),
+        frontier_goals_pending_b=False,
+        blocks_goal_id=None,
+        blocks_debt_key=None,
+        dependency_debt_delta_i64=0,
+        forced_frontier_attempt_b=False,
+        forced_frontier_debt_key=None,
+        routing_selector_id=selector_id,
+        market_frozen_b=False,
+        market_used_for_selection_b=False,
+        reason_codes=(["DEBT_PRESSURE_EXPLORATION_DISABLED"] if debt_pressure_b else []),
+        hard_lock_active_b=False,
+        hard_lock_keys=[],
+        forced_heavy_b=False,
+        forced_heavy_reason_code=None,
+        forced_heavy_target_debt_keys=[],
+        anti_monopoly_gate_applied_b=bool(anti_applied),
+        anti_monopoly_reason_code=anti_reason,
+        selected_route=selected_route,
+        blocked_candidates=blocked,
+        created_at_utc=_utc_now_rfc3339(),
+    )
+    return decision, receipt
+
+
+def enforce_unlock_contract_v1(
+    *,
+    tick_u64: int,
+    debt_state_before: dict[str, Any],
+    debt_state_after: dict[str, Any],
+    routing_receipt: dict[str, Any],
+    utility_proof_receipt: dict[str, Any] | None,
+    utility_policy: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    return enforce_governance_unlock_contract_v1(
+        tick_u64=int(tick_u64),
+        debt_state_before=dict(debt_state_before),
+        debt_state_after=dict(debt_state_after),
+        routing_receipt=dict(routing_receipt),
+        utility_proof_receipt=(dict(utility_proof_receipt) if isinstance(utility_proof_receipt, dict) else None),
+        utility_policy=(dict(utility_policy) if isinstance(utility_policy, dict) else None),
+    )
 
 
 def _with_hard_lock_override_reason(
@@ -5771,6 +6138,16 @@ def tick_once(
         blocks_goal_id: str | None = None
         dependency_debt_delta_i64 = 0
         dependency_routing_reason_codes: list[str] = ["NO_DEPENDENCY_ROUTING"]
+        governance_route_decision: dict[str, Any] | None = None
+        governance_route_receipt: dict[str, Any] | None = None
+        governance_hard_lock_active_b = False
+        governance_hard_lock_keys: list[str] = []
+        governance_forced_heavy_reason_code: str | None = None
+        governance_anti_monopoly_gate_applied_b = False
+        governance_anti_monopoly_reason_code: str | None = None
+        governance_blocked_candidates: list[dict[str, str]] = []
+        orch_bandit_exploration_allowed_b: bool | None = None
+        orch_bandit_exploration_reason_code: str | None = None
         probe_gate_drop_reason_code: str | None = None
         probe_gate_drop_detail: dict[str, Any] = {
             "required_probe_ids_v1": [],
@@ -6870,6 +7247,18 @@ def tick_once(
                     or bool((prev_dependency_debt_state or {}).get("hard_lock_active_b", False))
                     or action_kind_for_bandit == "RUN_GOAL_TASK"
                 )
+                debt_pressure_for_bandit_b = compute_governance_debt_pressure_v1(
+                    debt_state=dict(prev_dependency_debt_state or {}),
+                    utility_policy=long_run_utility_policy_payload,
+                    tick_u64=int(tick_u64),
+                )
+                orch_bandit_exploration_allowed_b = bool((not orch_bandit_hard_lock_active_b) and (not debt_pressure_for_bandit_b))
+                if orch_bandit_hard_lock_active_b:
+                    orch_bandit_exploration_reason_code = "HARD_LOCK_ACTIVE"
+                elif debt_pressure_for_bandit_b:
+                    orch_bandit_exploration_reason_code = "DEBT_PRESSURE_ACTIVE"
+                else:
+                    orch_bandit_exploration_reason_code = "EXPLORATION_ALLOWED"
                 eligible_capability_ids = _derive_orch_bandit_eligible_capability_ids(
                     registry=registry,
                     utility_policy=long_run_utility_policy_payload,
@@ -6883,6 +7272,8 @@ def tick_once(
                     state=orch_bandit_state_in,
                     context_key=str(orch_bandit_context_key),
                     eligible_capability_ids=list(eligible_capability_ids),
+                    exploration_allowed_b=bool(orch_bandit_exploration_allowed_b),
+                    exploration_reason_code=str(orch_bandit_exploration_reason_code or "EXPLORATION_ALLOWED"),
                 )
                 orch_policy_bundle_id_used = None
                 orch_policy_row_hit_b = False
@@ -6913,6 +7304,8 @@ def tick_once(
                                 context_key=str(orch_bandit_context_key),
                                 eligible_capability_ids=list(eligible_capability_ids),
                                 bonus_by_capability_q32=bonus_by_capability_q32,
+                                exploration_allowed_b=bool(orch_bandit_exploration_allowed_b),
+                                exploration_reason_code=str(orch_bandit_exploration_reason_code or "EXPLORATION_ALLOWED"),
                             )
                             orch_policy_selected_bonus_q32 = int(
                                 bonus_by_capability_q32.get(str(bandit_selected_capability_id), 0)
@@ -6959,6 +7352,134 @@ def tick_once(
                     )
             except OrchBanditError as exc:
                 fail(str(exc))
+
+        if long_run_profile is not None:
+            candidate_capability_ids = sorted(
+                {
+                    str(capability_id).strip()
+                    for capability_id in [*lane_allowed_capability_ids, str(selected_capability_id)]
+                    if str(capability_id).strip()
+                }
+            )
+            candidate_routes_for_governance: list[dict[str, Any]] = []
+            for capability_id in candidate_capability_ids:
+                cap_row = _capability_id_to_campaign(
+                    registry=registry,
+                    capability_id=str(capability_id),
+                    tick_u64=int(tick_u64),
+                    state=prev_state,
+                )
+                if cap_row is None:
+                    cap_row = _capability_row_for_forced_frontier(
+                        registry=registry,
+                        capability_id=str(capability_id),
+                    )
+                if cap_row is None:
+                    continue
+                campaign_id = str(cap_row.get("campaign_id", "")).strip()
+                if not campaign_id:
+                    continue
+                target_debt_keys = sorted(
+                    {
+                        str(_governance_debt_key(row.get("debt_key")) or "")
+                        for row in pending_frontier_goals
+                        if isinstance(row, dict) and str(row.get("capability_id", "")).strip() == str(capability_id)
+                    }
+                )
+                target_debt_keys = [row for row in target_debt_keys if row]
+                candidate_routes_for_governance.append(
+                    {
+                        "campaign_id": campaign_id,
+                        "capability_id": str(capability_id),
+                        "lane_id": str(lane_name),
+                        "declared_class": _declared_class_for_capability_id(
+                            utility_policy=long_run_utility_policy_payload,
+                            capability_id=str(capability_id),
+                        ),
+                        "target_debt_keys": target_debt_keys,
+                    }
+                )
+
+            if candidate_routes_for_governance:
+                governance_route_decision, governance_route_receipt = microkernel_select_route_v1(
+                    tick_u64=int(tick_u64),
+                    bandit_state=(dict(orch_bandit_state_in) if isinstance(orch_bandit_state_in, dict) else None),
+                    bandit_config=(dict(orch_bandit_config_payload) if isinstance(orch_bandit_config_payload, dict) else None),
+                    debt_state=dict(prev_dependency_debt_state or {}),
+                    anti_monopoly_state=dict(prev_anti_monopoly_state or {}),
+                    utility_policy=long_run_utility_policy_payload,
+                    candidate_routes=list(candidate_routes_for_governance),
+                )
+                governance_hard_lock_active_b = bool((governance_route_decision or {}).get("hard_lock_active_b", False))
+                governance_hard_lock_keys = _governance_debt_keys((governance_route_decision or {}).get("hard_lock_keys"))
+                governance_forced_heavy_reason_code = (
+                    str((governance_route_decision or {}).get("forced_heavy_reason_code", "")).strip() or None
+                )
+                governance_anti_monopoly_gate_applied_b = bool(
+                    (governance_route_decision or {}).get("anti_monopoly_gate_applied_b", False)
+                )
+                governance_anti_monopoly_reason_code = (
+                    str((governance_route_decision or {}).get("anti_monopoly_reason_code", "")).strip() or None
+                )
+                governance_blocked_candidates = [
+                    dict(row)
+                    for row in ((governance_route_decision or {}).get("blocked_candidates") or [])
+                    if isinstance(row, dict)
+                ]
+                selected_route = (
+                    dict((governance_route_decision or {}).get("selected"))
+                    if isinstance((governance_route_decision or {}).get("selected"), dict)
+                    else {}
+                )
+                selected_capability_id_governance = str(selected_route.get("capability_id", "")).strip()
+                if selected_capability_id_governance:
+                    current_selected_capability_id = _selected_capability_id_from_plan(decision_plan)
+                    if str(current_selected_capability_id) != str(selected_capability_id_governance):
+                        selected_cap_row = _capability_id_to_campaign(
+                            registry=registry,
+                            capability_id=str(selected_capability_id_governance),
+                            tick_u64=int(tick_u64),
+                            state=prev_state,
+                        )
+                        if selected_cap_row is None:
+                            selected_cap_row = _capability_row_for_forced_frontier(
+                                registry=registry,
+                                capability_id=str(selected_capability_id_governance),
+                            )
+                        if selected_cap_row is None:
+                            fail("NO_FORCED_HEAVY_ROUTE_FOR_LOCK_KEYS")
+                        decision_plan, decision_hash = _rewrite_plan_for_frontier_capability_bias(
+                            decision_plan=decision_plan,
+                            cap_row=selected_cap_row,
+                            capability_id=str(selected_capability_id_governance),
+                            tie_break_reason=f"MICROKERNEL_SELECT_ROUTE_V1:{selected_capability_id_governance}",
+                        )
+                        _, decision_plan, decision_hash = _write_payload(
+                            state_root / "decisions",
+                            "omega_decision_plan_v1.json",
+                            decision_plan,
+                        )
+                    selected_capability_id = _selected_capability_id_from_plan(decision_plan)
+                    selected_goal_id = _selected_goal_id_from_plan(decision_plan)
+                    selected_declared_class = _declared_class_for_capability_id(
+                        utility_policy=long_run_utility_policy_payload,
+                        capability_id=selected_capability_id,
+                    )
+                if bool((governance_route_decision or {}).get("forced_heavy_b", False)):
+                    forced_frontier_attempt_b = True
+                    if governance_hard_lock_keys:
+                        forced_frontier_debt_key = str(governance_hard_lock_keys[0])
+                        forced_frontier_goal_id = _goal_id_for_debt_key(
+                            pending_frontier_goals=pending_frontier_goals,
+                            debt_key=str(forced_frontier_debt_key),
+                        )
+                if governance_forced_heavy_reason_code:
+                    dependency_routing_reason_codes.append(str(governance_forced_heavy_reason_code))
+                if governance_anti_monopoly_reason_code:
+                    dependency_routing_reason_codes.append(str(governance_anti_monopoly_reason_code))
+                if bool(governance_anti_monopoly_gate_applied_b):
+                    dependency_routing_reason_codes.append("ANTI_MONOPOLY_GATE_APPLIED")
+                dependency_routing_reason_codes = sorted({str(row) for row in dependency_routing_reason_codes if str(row).strip()})
 
         run_seed_override_raw = str(os.environ.get("OMEGA_RUN_SEED_U64", "")).strip()
         if run_seed_override_raw:
@@ -7776,9 +8297,46 @@ def tick_once(
                 forced_frontier_attempt_b=bool(forced_frontier_attempt_b),
                 market_selection_in_play_b=bool(market_selection_in_play_b),
             )
+            if isinstance(governance_route_receipt, dict):
+                governance_selector_id = str(governance_route_receipt.get("routing_selector_id", "")).strip()
+                if governance_selector_id:
+                    routing_selector_id = governance_selector_id
+                    market_used_for_selection_b = False
             if orch_bandit_config_payload is not None and isinstance(orch_bandit_config_hash, str):
                 routing_selector_id = str(orch_bandit_config_hash)
                 market_used_for_selection_b = False
+            selected_route_for_receipt = (
+                dict((governance_route_receipt or {}).get("selected_route"))
+                if isinstance((governance_route_receipt or {}).get("selected_route"), dict)
+                else {}
+            )
+            if not selected_route_for_receipt:
+                selected_route_for_receipt = {
+                    "campaign_id": str(decision_plan.get("campaign_id", "")),
+                    "capability_id": str(selected_capability_id),
+                    "lane_id": str(lane_name),
+                }
+            governance_hard_lock_active_effective_b = bool(
+                governance_hard_lock_active_b
+                or bool(forced_frontier_attempt_b)
+                or bool(next_hard_lock_active_b)
+            )
+            governance_hard_lock_keys_effective = _governance_debt_keys(governance_hard_lock_keys)
+            if not governance_hard_lock_keys_effective and hard_lock_debt_key_for_tick:
+                mapped_hard_lock_key = _governance_debt_key(hard_lock_debt_key_for_tick)
+                if mapped_hard_lock_key is not None:
+                    governance_hard_lock_keys_effective = [mapped_hard_lock_key]
+            governance_forced_heavy_target_keys = list(governance_hard_lock_keys_effective)
+            dependency_routing_reason_codes = governance_append_unlock_reason_codes_v1(
+                reason_codes=list(dependency_routing_reason_codes),
+                hard_lock_keys=list(governance_hard_lock_keys_effective),
+                utility_proof_receipt=(dict(utility_proof_receipt) if isinstance(utility_proof_receipt, dict) else None),
+            )
+            governance_forced_heavy_reason = (
+                str(governance_forced_heavy_reason_code)
+                if isinstance(governance_forced_heavy_reason_code, str) and governance_forced_heavy_reason_code.strip()
+                else ("HARD_LOCK_ACTIVE" if governance_hard_lock_active_effective_b else None)
+            )
             dependency_routing_receipt = _build_dependency_routing_receipt(
                 tick_u64=tick_u64,
                 selected_capability_id=selected_capability_id,
@@ -7797,6 +8355,16 @@ def tick_once(
                 market_frozen_b=bool(market_frozen_b),
                 market_used_for_selection_b=bool(market_used_for_selection_b),
                 reason_codes=list(dependency_routing_reason_codes),
+                hard_lock_active_b=bool(governance_hard_lock_active_effective_b),
+                hard_lock_keys=list(governance_hard_lock_keys_effective),
+                forced_heavy_b=bool(forced_frontier_attempt_b or governance_hard_lock_active_effective_b),
+                forced_heavy_reason_code=governance_forced_heavy_reason,
+                forced_heavy_target_debt_keys=list(governance_forced_heavy_target_keys),
+                anti_monopoly_gate_applied_b=bool(governance_anti_monopoly_gate_applied_b),
+                anti_monopoly_reason_code=governance_anti_monopoly_reason_code,
+                selected_route=selected_route_for_receipt,
+                blocked_candidates=list(governance_blocked_candidates),
+                created_at_utc=_utc_now_rfc3339(),
             )
             _, _dependency_routing_obj, dependency_routing_receipt_hash = _write_payload_atomic(
                 state_root / "long_run" / "debt",
@@ -7852,15 +8420,91 @@ def tick_once(
             else:
                 scaffold_inflight_started_tick_u64 = int(tick_u64)
 
+            governance_debt_counters_by_key = governance_debt_counters_by_key_v1(
+                {
+                    "debt_counters_by_key": (prev_dependency_debt_state or {}).get("debt_counters_by_key"),
+                    "debt_by_key": next_debt_by_key,
+                }
+            )
+            governance_ticks_without_by_key = governance_ticks_without_frontier_attempt_by_key_v1(
+                {"ticks_without_frontier_attempt_by_key": next_ticks_by_key}
+            )
+            governance_pending_frontier_goal_ids = sorted(
+                {
+                    str(row.get("goal_id", "")).strip()
+                    for row in pending_frontier_goals
+                    if isinstance(row, dict) and str(row.get("goal_id", "")).strip()
+                }
+            )
+            governance_last_frontier_attempt_tick_by_key = {
+                str(key): int(max(0, int(value)))
+                for key, value in sorted(
+                    dict((prev_dependency_debt_state or {}).get("last_frontier_attempt_tick_by_key") or {}).items(),
+                    key=lambda kv: str(kv[0]),
+                )
+                if _governance_debt_key(key) is not None
+            }
+            if frontier_attempt_counted_b and isinstance(frontier_attempt_debt_key, str) and frontier_attempt_debt_key.strip():
+                mapped_tick_key = _governance_debt_key(frontier_attempt_debt_key)
+                if mapped_tick_key is not None:
+                    governance_last_frontier_attempt_tick_by_key[mapped_tick_key] = int(tick_u64)
+            for debt_key in GOVERNANCE_DEBT_KEYS:
+                governance_last_frontier_attempt_tick_by_key.setdefault(str(debt_key), 0)
+
+            failed_patch_ban_by_patch_hash: dict[str, int] = {}
+            for rows in failed_patch_ban_by_debt_key_target.values():
+                if not isinstance(rows, list):
+                    continue
+                for row in rows:
+                    if not isinstance(row, dict):
+                        continue
+                    patch_sha256 = _normalize_patch_sha256(row.get("patch_sha256"))
+                    if patch_sha256 is None:
+                        continue
+                    expires_tick_u64 = int(max(0, int(row.get("expires_tick_u64", 0))))
+                    failed_patch_ban_by_patch_hash[patch_sha256] = int(
+                        max(int(failed_patch_ban_by_patch_hash.get(patch_sha256, 0)), expires_tick_u64)
+                    )
+            failed_nontriviality_shape_ban_by_shape_hash: dict[str, int] = {}
+            for rows in failed_shape_ban_by_debt_key_target.values():
+                if not isinstance(rows, list):
+                    continue
+                for row in rows:
+                    if not isinstance(row, dict):
+                        continue
+                    shape_id = _normalize_sha256(row.get("shape_id"))
+                    if shape_id is None:
+                        continue
+                    expires_tick_u64 = int(max(0, int(row.get("expires_tick_u64", 0))))
+                    failed_nontriviality_shape_ban_by_shape_hash[shape_id] = int(
+                        max(int(failed_nontriviality_shape_ban_by_shape_hash.get(shape_id, 0)), expires_tick_u64)
+                    )
+            governance_hard_lock_keys_for_payload = _governance_debt_keys(governance_hard_lock_keys)
+            if not governance_hard_lock_keys_for_payload and hard_lock_debt_key_for_tick:
+                mapped_hard_lock_key = _governance_debt_key(hard_lock_debt_key_for_tick)
+                if mapped_hard_lock_key is not None:
+                    governance_hard_lock_keys_for_payload = [mapped_hard_lock_key]
+
             dependency_debt_state_payload = {
+                "schema_id": "dependency_debt_state_v1",
+                "id": _SHA256_ZERO,
                 "schema_name": "dependency_debt_state_v1",
                 "schema_version": "v19_0",
                 "state_id": _SHA256_ZERO,
                 "tick_u64": int(tick_u64),
+                "debt_counters_by_key": {
+                    str(k): int(max(0, int(v)))
+                    for k, v in sorted(governance_debt_counters_by_key.items(), key=lambda kv: str(kv[0]))
+                },
                 "debt_by_key": {str(k): int(v) for k, v in sorted(next_debt_by_key.items(), key=lambda kv: str(kv[0]))},
                 "ticks_without_frontier_attempt_by_key": {
                     str(k): int(v) for k, v in sorted(next_ticks_by_key.items(), key=lambda kv: str(kv[0]))
                 },
+                "last_frontier_attempt_tick_by_key": {
+                    str(k): int(v)
+                    for k, v in sorted(governance_last_frontier_attempt_tick_by_key.items(), key=lambda kv: str(kv[0]))
+                },
+                "pending_frontier_goal_ids": [str(row) for row in governance_pending_frontier_goal_ids],
                 "first_debt_tick_by_key": {str(k): int(v) for k, v in sorted(next_first_by_key.items(), key=lambda kv: str(kv[0]))},
                 "debt_by_goal_id": {str(k): int(v) for k, v in sorted(compat_debt_by_goal.items(), key=lambda kv: str(kv[0]))},
                 "ticks_without_frontier_attempt_by_goal_id": {
@@ -7879,7 +8523,8 @@ def tick_once(
                     if isinstance(last_frontier_attempt_goal_id, str) and last_frontier_attempt_goal_id.strip()
                     else None
                 ),
-                "hard_lock_active_b": bool(next_hard_lock_active_b),
+                "hard_lock_active_b": bool(next_hard_lock_active_b or governance_hard_lock_active_b),
+                "hard_lock_keys": list(governance_hard_lock_keys_for_payload),
                 "hard_lock_debt_key": (
                     str(hard_lock_debt_key_for_tick)
                     if isinstance(hard_lock_debt_key_for_tick, str) and hard_lock_debt_key_for_tick.strip()
@@ -7902,6 +8547,13 @@ def tick_once(
                 },
                 "maintenance_count_u64": int(max(0, int(maintenance_count_u64))),
                 "frontier_attempts_u64": int(max(0, int(frontier_attempts_u64))),
+                "failed_patch_ban_by_patch_hash": {
+                    str(k): int(v) for k, v in sorted(failed_patch_ban_by_patch_hash.items(), key=lambda kv: str(kv[0]))
+                },
+                "failed_nontriviality_shape_ban_by_shape_hash": {
+                    str(k): int(v)
+                    for k, v in sorted(failed_nontriviality_shape_ban_by_shape_hash.items(), key=lambda kv: str(kv[0]))
+                },
                 "failed_patch_ban_by_debt_key_target": {
                     str(k): list(v)
                     for k, v in sorted(failed_patch_ban_by_debt_key_target.items(), key=lambda kv: str(kv[0]))
@@ -7918,7 +8570,32 @@ def tick_once(
                     str(k): str(v)
                     for k, v in sorted(last_failure_failed_threshold_by_debt_key.items(), key=lambda kv: str(kv[0]))
                 },
+                "updated_at_utc": _utc_now_rfc3339(),
             }
+            dependency_debt_state_payload = enforce_unlock_contract_v1(
+                tick_u64=int(tick_u64),
+                debt_state_before=dict(prev_dependency_debt_state or {}),
+                debt_state_after=dict(dependency_debt_state_payload),
+                routing_receipt=dict(dependency_routing_receipt),
+                utility_proof_receipt=(dict(utility_proof_receipt) if isinstance(utility_proof_receipt, dict) else None),
+                utility_policy=long_run_utility_policy_payload,
+            )
+            dependency_debt_state_payload["debt_counters_by_key"] = governance_debt_counters_by_key_v1(
+                dependency_debt_state_payload
+            )
+            dependency_debt_state_payload["hard_lock_keys"] = _governance_debt_keys(
+                dependency_debt_state_payload.get("hard_lock_keys")
+            )
+            dependency_debt_state_payload["hard_lock_active_b"] = bool(
+                dependency_debt_state_payload.get("hard_lock_active_b", False)
+            )
+            dependency_debt_state_payload["updated_at_utc"] = _utc_now_rfc3339()
+            debt_payload_no_ids = dict(dependency_debt_state_payload)
+            debt_payload_no_ids.pop("id", None)
+            debt_payload_no_ids.pop("state_id", None)
+            debt_digest = canon_hash_obj(debt_payload_no_ids)
+            dependency_debt_state_payload["id"] = debt_digest
+            dependency_debt_state_payload["state_id"] = debt_digest
             validate_schema_v19(dependency_debt_state_payload, "dependency_debt_state_v1")
             _, _dependency_debt_obj, dependency_debt_snapshot_hash = _write_payload_atomic(
                 state_root / "long_run" / "debt",
@@ -7989,11 +8666,59 @@ def tick_once(
                                 "reason_code": "ANTI_MONOPOLY_LOW_DIVERSITY_NO_EFFECT",
                             }
                             anti_reason_code = "ANTI_MONOPOLY_LOW_DIVERSITY_NO_EFFECT"
+            prev_counts_by_lane_id = {
+                str(k): int(max(0, int(v)))
+                for k, v in dict((prev_anti_monopoly_state or {}).get("counts_by_lane_id") or {}).items()
+                if str(k).strip()
+            }
+            prev_counts_by_campaign_id = {
+                str(k): int(max(0, int(v)))
+                for k, v in dict((prev_anti_monopoly_state or {}).get("counts_by_campaign_id") or {}).items()
+                if str(k).strip()
+            }
+            counts_by_lane_id = dict(prev_counts_by_lane_id)
+            counts_by_campaign_id = dict(prev_counts_by_campaign_id)
+            selected_lane_id_for_anti = str(lane_name).strip() or str((prev_anti_monopoly_state or {}).get("last_selected_lane_id", "BASELINE"))
+            selected_campaign_id_for_anti = (
+                str(outcome_campaign_id).strip()
+                or str((prev_anti_monopoly_state or {}).get("last_selected_campaign_id", "NONE")).strip()
+                or "NONE"
+            )
+            counts_by_lane_id[selected_lane_id_for_anti] = int(counts_by_lane_id.get(selected_lane_id_for_anti, 0) + 1)
+            if selected_campaign_id_for_anti and selected_campaign_id_for_anti != "NONE":
+                counts_by_campaign_id[selected_campaign_id_for_anti] = int(
+                    counts_by_campaign_id.get(selected_campaign_id_for_anti, 0) + 1
+                )
+            max_share_q32 = int(
+                max(
+                    0,
+                    min(
+                        _Q32_ONE,
+                        int(
+                            (prev_anti_monopoly_state or {}).get(
+                                "max_share_q32",
+                                ((long_run_utility_policy_payload or {}).get("anti_monopoly_max_share_q32", _Q32_ONE)),
+                            )
+                        ),
+                    ),
+                )
+            )
             anti_monopoly_state_payload = {
+                "schema_id": "anti_monopoly_state_v1",
+                "id": _SHA256_ZERO,
                 "schema_name": "anti_monopoly_state_v1",
                 "schema_version": "v19_0",
                 "state_id": _SHA256_ZERO,
                 "tick_u64": int(tick_u64),
+                "window_u64": int(max(1, int(anti_monopoly_window_u64))),
+                "max_share_q32": int(max_share_q32),
+                "counts_by_lane_id": {str(k): int(v) for k, v in sorted(counts_by_lane_id.items(), key=lambda kv: str(kv[0]))},
+                "counts_by_campaign_id": {
+                    str(k): int(v) for k, v in sorted(counts_by_campaign_id.items(), key=lambda kv: str(kv[0]))
+                },
+                "last_selected_lane_id": str(selected_lane_id_for_anti),
+                "last_selected_campaign_id": str(selected_campaign_id_for_anti),
+                "updated_at_utc": _utc_now_rfc3339(),
                 "window_ticks_u64": int(max(1, int(anti_monopoly_window_u64))),
                 "consecutive_no_output_limit_u64": int(max(1, int(anti_monopoly_consecutive_limit_u64))),
                 "low_diversity_campaign_limit_u64": int(max(1, int(anti_monopoly_diversity_k_u64))),
@@ -8002,6 +8727,12 @@ def tick_once(
                 "history_rows": history_rows,
                 "last_reason_code": str(anti_reason_code),
             }
+            anti_payload_no_ids = dict(anti_monopoly_state_payload)
+            anti_payload_no_ids.pop("id", None)
+            anti_payload_no_ids.pop("state_id", None)
+            anti_digest = canon_hash_obj(anti_payload_no_ids)
+            anti_monopoly_state_payload["id"] = anti_digest
+            anti_monopoly_state_payload["state_id"] = anti_digest
             validate_schema_v19(anti_monopoly_state_payload, "anti_monopoly_state_v1")
             _, _anti_monopoly_obj, anti_monopoly_state_hash = _write_payload_atomic(
                 state_root / "long_run" / "anti_monopoly",
@@ -8740,6 +9471,16 @@ def tick_once(
                     "selected_capability_id": str(selected_capability_id),
                     "observed_reward_q32": int(observed_reward_q32),
                     "observed_cost_q32": int(observed_cost_q32),
+                    "exploration_allowed_b": (
+                        bool(orch_bandit_exploration_allowed_b)
+                        if isinstance(orch_bandit_exploration_allowed_b, bool)
+                        else True
+                    ),
+                    "exploration_reason_code": (
+                        str(orch_bandit_exploration_reason_code)
+                        if isinstance(orch_bandit_exploration_reason_code, str) and orch_bandit_exploration_reason_code.strip()
+                        else "EXPLORATION_ALLOWED"
+                    ),
                     "status": "OK",
                     "reason_code": "OK",
                 }

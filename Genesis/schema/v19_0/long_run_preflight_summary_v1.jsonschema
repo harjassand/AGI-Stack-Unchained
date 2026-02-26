@@ -1,0 +1,82 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v19_0/long_run_preflight_summary_v1",
+  "title": "Long run preflight summary v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_id",
+    "id",
+    "created_at_utc",
+    "git",
+    "env",
+    "schema_checks",
+    "governance_checks"
+  ],
+  "properties": {
+    "schema_id": {"const": "long_run_preflight_summary_v1"},
+    "id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "created_at_utc": {"type": "string", "format": "date-time"},
+    "git": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["head_commit", "branch", "dirty_tree_b", "dirty_tree_allowed_b"],
+      "properties": {
+        "head_commit": {
+          "anyOf": [
+            {"type": "string", "pattern": "^[0-9a-f]{40}$"},
+            {"const": "UNKNOWN"}
+          ]
+        },
+        "branch": {"type": "string", "minLength": 1},
+        "dirty_tree_b": {"type": "boolean"},
+        "dirty_tree_allowed_b": {"type": "boolean"}
+      }
+    },
+    "env": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "OMEGA_META_CORE_ACTIVATION_MODE",
+        "OMEGA_V19_DETERMINISTIC_TIMING",
+        "ORCH_LLM_BACKEND"
+      ],
+      "properties": {
+        "OMEGA_META_CORE_ACTIVATION_MODE": {"type": "string", "enum": ["simulate", "live"]},
+        "OMEGA_V19_DETERMINISTIC_TIMING": {"type": "string", "enum": ["0", "1"]},
+        "ORCH_LLM_BACKEND": {"type": "string", "minLength": 1}
+      }
+    },
+    "schema_checks": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["missing_schemas", "mirror_mismatches"],
+      "properties": {
+        "missing_schemas": {
+          "type": "array",
+          "items": {"type": "string", "minLength": 1}
+        },
+        "mirror_mismatches": {
+          "type": "array",
+          "items": {"type": "string", "minLength": 1}
+        }
+      }
+    },
+    "governance_checks": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "utility_policy_ok_b",
+        "debt_state_schema_ok_b",
+        "anti_monopoly_schema_ok_b",
+        "hard_lock_unlock_contract_ok_b"
+      ],
+      "properties": {
+        "utility_policy_ok_b": {"type": "boolean"},
+        "debt_state_schema_ok_b": {"type": "boolean"},
+        "anti_monopoly_schema_ok_b": {"type": "boolean"},
+        "hard_lock_unlock_contract_ok_b": {"type": "boolean"}
+      }
+    }
+  }
+}

@@ -36,6 +36,8 @@ STOP_RECEIPT_NAME = "LONG_RUN_STOP_RECEIPT_v1.json"
 LANE_RECEIPT_FINAL_NAME = "lane_receipt_final.long_run_lane_v1.json"
 ORPHAN_EK_RUNS_NOTE_NAME = "CLEANUP_ORPHAN_EK_RUNS_V1.json"
 ORPHAN_EK_RUNS_LOG_NAME = "long_run_orphan_ek_runs_cleanup_v1.jsonl"
+PREFLIGHT_SUMMARY_NAME = "LONG_RUN_PREFLIGHT_SUMMARY_v1.json"
+PREFLIGHT_SCHEMA_ID = "long_run_preflight_summary_v1"
 
 DEFAULT_PACK = "campaigns/rsi_omega_daemon_v19_0_long_run_v1/rsi_omega_daemon_pack_v1.json"
 DEFAULT_RUN_ROOT = "runs/long_disciplined_v1"
@@ -920,6 +922,81 @@ def _repo_relpath(path: Path) -> str:
         return resolved.relative_to(REPO_ROOT.resolve()).as_posix()
     except ValueError:
         return resolved.as_posix()
+
+
+def _validate_preflight_summary_payload(payload: dict[str, Any]) -> dict[str, Any]:
+    if not isinstance(payload, dict):
+        raise RuntimeError("PRECHECK_FAIL:LONG_RUN_PREFLIGHT_SUMMARY_INVALID")
+    try:
+        validate_schema_v19(payload, PREFLIGHT_SCHEMA_ID)
+    except Exception as exc:  # noqa: BLE001
+        raise RuntimeError("PRECHECK_FAIL:LONG_RUN_PREFLIGHT_SCHEMA") from exc
+    required_top = {"schema_id", "id", "created_at_utc", "git", "env", "schema_checks", "governance_checks"}
+    if not required_top.issubset(set(payload.keys())):
+        raise RuntimeError("PRECHECK_FAIL:LONG_RUN_PREFLIGHT_SUMMARY_MISSING_FIELD")
+    if str(payload.get("schema_id", "")).strip() != PREFLIGHT_SCHEMA_ID:
+        raise RuntimeError("PRECHECK_FAIL:LONG_RUN_PREFLIGHT_SCHEMA_ID")
+    observed_id = str(payload.get("id", "")).strip()
+    if not _is_sha256(observed_id):
+        raise RuntimeError("PRECHECK_FAIL:LONG_RUN_PREFLIGHT_ID_INVALID")
+    no_id = dict(payload)
+    no_id.pop("id", None)
+    if canon_hash_obj(no_id) != observed_id:
+        raise RuntimeError("PRECHECK_FAIL:LONG_RUN_PREFLIGHT_ID_MISMATCH")
+
+    git_block = payload.get("git")
+    env_block = payload.get("env")
+    schema_checks = payload.get("schema_checks")
+    governance_checks = payload.get("governance_checks")
+    if not isinstance(git_block, dict) or not isinstance(env_block, dict):
+        raise RuntimeError("PRECHECK_FAIL:LONG_RUN_PREFLIGHT_SHAPE")
+    if not isinstance(schema_checks, dict) or not isinstance(governance_checks, dict):
+        raise RuntimeError("PRECHECK_FAIL:LONG_RUN_PREFLIGHT_SHAPE")
+
+    if bool(git_block.get("dirty_tree_b", False)) and not bool(git_block.get("dirty_tree_allowed_b", False)):
+        raise RuntimeError("PRECHECK_FAIL:LONG_RUN_PREFLIGHT_DIRTY_TREE")
+    missing_schemas = schema_checks.get("missing_schemas")
+    mirror_mismatches = schema_checks.get("mirror_mismatches")
+    if not isinstance(missing_schemas, list) or not isinstance(mirror_mismatches, list):
+        raise RuntimeError("PRECHECK_FAIL:LONG_RUN_PREFLIGHT_SCHEMA_CHECKS")
+    if missing_schemas or mirror_mismatches:
+        raise RuntimeError("PRECHECK_FAIL:LONG_RUN_PREFLIGHT_SCHEMA_GUARD")
+    if not all(bool(value) for value in governance_checks.values()):
+        raise RuntimeError("PRECHECK_FAIL:LONG_RUN_PREFLIGHT_GOVERNANCE_GUARD")
+    return dict(payload)
+
+
+def _ensure_preflight_summary_before_tick_one(
+    *,
+    campaign_pack: Path,
+    run_root: Path,
+    start_tick_u64: int,
+) -> dict[str, Any]:
+    summary_path = REPO_ROOT / PREFLIGHT_SUMMARY_NAME
+    if int(start_tick_u64) <= 1:
+        cmd = [
+            sys.executable,
+            str(REPO_ROOT / "scripts" / "preflight_long_run_v1.py"),
+            "--campaign_pack",
+            _repo_relpath(campaign_pack),
+            "--run_root",
+            _repo_relpath(run_root),
+            "--summary_path",
+            PREFLIGHT_SUMMARY_NAME,
+        ]
+        proc = subprocess.run(
+            cmd,
+            cwd=str(REPO_ROOT),
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        if proc.returncode != 0:
+            raise RuntimeError("PRECHECK_FAIL:LONG_RUN_PREFLIGHT")
+    if not summary_path.exists() or not summary_path.is_file():
+        raise RuntimeError("PRECHECK_FAIL:LONG_RUN_PREFLIGHT_MISSING")
+    payload = load_canon_dict(summary_path)
+    return _validate_preflight_summary_payload(dict(payload))
 
 
 def _write_hashed_payload(
@@ -1864,6 +1941,12 @@ def run_loop(
     soak_after_first_heavy_promoted_ticks_u64: int,
     stop_after_heavy_promoted_total_u64: int,
 ) -> None:
+    preflight_summary = _ensure_preflight_summary_before_tick_one(
+        campaign_pack=campaign_pack,
+        run_root=run_root,
+        start_tick_u64=int(start_tick_u64),
+    )
+    print(f"preflight_summary_id={preflight_summary.get('id')}")
     run_root.mkdir(parents=True, exist_ok=True)
     index_dir = run_root / "index"
     index_dir.mkdir(parents=True, exist_ok=True)

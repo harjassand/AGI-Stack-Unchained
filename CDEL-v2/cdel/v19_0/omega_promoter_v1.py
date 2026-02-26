@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import os
 import re
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -64,6 +65,19 @@ _DECLARED_CLASSES = {"FRONTIER_HEAVY", "CANARY_HEAVY", "BASELINE_CORE", "MAINTEN
 _COMMENT_LINE_RE = re.compile(r"^(#|//|/\*|\*|\*/)")
 _SH1_CAPABILITY_ID = "RSI_GE_SH1_OPTIMIZER"
 _FORCED_HEAVY_ENV_KEY = "OMEGA_SH1_FORCED_HEAVY_B"
+_FORCED_DEBT_KEY_ENV_KEY = "OMEGA_SH1_FORCED_DEBT_KEY"
+_GOVERNANCE_DEBT_KEYS: tuple[str, ...] = (
+    "TDL",
+    "KDL",
+    "EDL",
+    "CDL",
+    "CoDL",
+    "IDL",
+    "FRONTIER_STALL",
+    "UTILITY_FAIL",
+    "DIVERSITY_VIOLATION",
+)
+_GOVERNANCE_DEBT_KEY_SET = set(_GOVERNANCE_DEBT_KEYS)
 _HARD_TASK_METRIC_IDS: tuple[str, ...] = (
     "hard_task_code_correctness_q32",
     "hard_task_performance_q32",
@@ -1519,6 +1533,43 @@ def _write_utility_proof_receipt(
     utility_metrics: dict[str, Any],
     utility_thresholds: dict[str, Any],
 ) -> tuple[dict[str, Any], str]:
+    def _now_utc_rfc3339() -> str:
+        return datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
+
+    def _utility_class_for_declared_class(value: str) -> str:
+        cls = str(value).strip().upper()
+        if cls in _HEAVY_DECLARED_CLASSES:
+            return "HEAVY"
+        if cls == "BASELINE_CORE":
+            return "BASELINE"
+        if cls == "MAINTENANCE":
+            return "MAINTENANCE"
+        return "UNKNOWN"
+
+    def _normalize_debt_key(value: Any) -> str | None:
+        raw = str(value).strip()
+        if not raw:
+            return None
+        if raw in _GOVERNANCE_DEBT_KEY_SET:
+            return raw
+        if raw.startswith("frontier:"):
+            return "FRONTIER_STALL"
+        return None
+
+    def _targeted_debt_keys() -> list[str]:
+        utility_class = _utility_class_for_declared_class(declared_class)
+        if utility_class != "HEAVY":
+            return []
+        out: list[str] = []
+        overrides = dispatch_ctx.get("invocation_env_overrides")
+        if isinstance(overrides, dict):
+            forced = _normalize_debt_key(overrides.get(_FORCED_DEBT_KEY_ENV_KEY))
+            if isinstance(forced, str):
+                out.append(forced)
+        if not out:
+            out.append("FRONTIER_STALL")
+        return sorted(set(out))
+
     out_dir = Path(dispatch_ctx["dispatch_dir"]) / "promotion"
     out_dir.mkdir(parents=True, exist_ok=True)
     primary_probe_input_hash = canon_hash_obj_v19(
@@ -1549,11 +1600,56 @@ def _write_utility_proof_receipt(
             "reason_code": reason_code,
         }
     )
+    utility_class = _utility_class_for_declared_class(declared_class)
+    targeted_debt_keys = _targeted_debt_keys()
+    reduced_specific_trigger_keys_b = bool(
+        utility_class == "HEAVY"
+        and targeted_debt_keys
+        and bool(utility_ok_b)
+        and bool(signal_a_ok_b)
+        and bool(signal_b_ok_b)
+    )
+    debt_before_by_key = {str(key): 1 for key in targeted_debt_keys}
+    debt_delta_by_key = {
+        str(key): (-1 if reduced_specific_trigger_keys_b else 0)
+        for key in targeted_debt_keys
+    }
+    debt_after_by_key = {
+        str(key): int(max(0, int(debt_before_by_key.get(str(key), 0)) + int(debt_delta_by_key.get(str(key), 0))))
+        for key in targeted_debt_keys
+    }
+    producer_run_id = (
+        str(candidate_bundle_hash)
+        if _is_sha256(candidate_bundle_hash)
+        else (_SHA256_ZERO if not _is_sha256(baseline_ref_hash) else str(baseline_ref_hash))
+    )
+    proof_evidence = [
+        {
+            "evidence_kind": "SIP_INGESTION_L0",
+            "artifact_hash": (
+                str(runtime_stats_hash)
+                if isinstance(runtime_stats_hash, str) and _is_sha256(runtime_stats_hash)
+                else _SHA256_ZERO
+            ),
+            "summary": f"runtime_stats_source_id={runtime_stats_source_id}",
+        },
+        {
+            "evidence_kind": "ORCH_POLICY_EVAL",
+            "artifact_hash": str(candidate_bundle_hash) if _is_sha256(candidate_bundle_hash) else _SHA256_ZERO,
+            "summary": f"reason_code={reason_code}",
+        },
+    ]
+    created_at_utc = _now_utc_rfc3339()
     payload = {
+        "schema_id": "utility_proof_receipt_v1",
+        "id": _SHA256_ZERO,
         "schema_name": "utility_proof_receipt_v1",
         "schema_version": "v19_0",
         "receipt_id": _SHA256_ZERO,
         "tick_u64": int(tick_u64),
+        "producer_run_id": str(producer_run_id),
+        "utility_action_id": str(capability_id),
+        "utility_class": str(utility_class),
         "capability_id": str(capability_id),
         "candidate_bundle_hash": candidate_bundle_hash,
         "baseline_ref_hash": baseline_ref_hash,
@@ -1580,9 +1676,27 @@ def _write_utility_proof_receipt(
             "input_hash": stress_probe_input_hash,
             "output_hash": stress_probe_output_hash,
         },
+        "targeted_debt_keys": list(targeted_debt_keys),
+        "debt_before_by_key": dict(debt_before_by_key),
+        "debt_after_by_key": dict(debt_after_by_key),
+        "debt_delta_by_key": dict(debt_delta_by_key),
+        "proof_evidence": list(proof_evidence),
+        "reduced_specific_trigger_keys_b": bool(reduced_specific_trigger_keys_b),
+        "created_at_utc": str(created_at_utc),
     }
+    payload_no_id = dict(payload)
+    payload_no_id.pop("id", None)
+    payload_no_id.pop("receipt_id", None)
+    payload["id"] = canon_hash_obj_v19(payload_no_id)
     validate_schema(payload, "utility_proof_receipt_v1")
     _, receipt, digest = write_hashed_json(out_dir, "utility_proof_receipt_v1.json", payload, id_field="receipt_id")
+    receipt_no_id = dict(receipt)
+    receipt_no_id.pop("id", None)
+    receipt_no_id.pop("receipt_id", None)
+    recomputed_id = canon_hash_obj_v19(receipt_no_id)
+    if str(receipt.get("id", "")).strip() != str(recomputed_id):
+        receipt["id"] = str(recomputed_id)
+        _, receipt, digest = write_hashed_json(out_dir, "utility_proof_receipt_v1.json", receipt, id_field="receipt_id")
     validate_schema(receipt, "utility_proof_receipt_v1")
     return receipt, digest
 

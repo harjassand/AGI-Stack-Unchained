@@ -13,6 +13,8 @@
     "selected_capability_id",
     "observed_reward_q32",
     "observed_cost_q32",
+    "exploration_allowed_b",
+    "exploration_reason_code",
     "status",
     "reason_code"
   ],
@@ -25,6 +27,11 @@
     "selected_capability_id": {"type": "string"},
     "observed_reward_q32": {"type": "integer"},
     "observed_cost_q32": {"type": "integer", "minimum": 0},
+    "exploration_allowed_b": {"type": "boolean"},
+    "exploration_reason_code": {
+      "type": "string",
+      "enum": ["EXPLORATION_ALLOWED", "DEBT_PRESSURE_ACTIVE", "HARD_LOCK_ACTIVE"]
+    },
     "status": {"type": "string", "enum": ["OK", "FAIL"]},
     "reason_code": {"type": "string"}
   }

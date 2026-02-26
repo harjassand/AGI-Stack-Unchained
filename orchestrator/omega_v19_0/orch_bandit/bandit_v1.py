@@ -150,6 +150,7 @@ def compute_arm_scores_q32(
     state: Mapping[str, Any],
     context_key: str,
     eligible_capability_ids: list[str],
+    exploration_allowed_b: bool = True,
 ) -> dict[str, int]:
     max_contexts_u32, max_arms_u32 = _state_limits(config)
     contexts = _context_rows_with_bounds(state=state, max_contexts_u32=max_contexts_u32, max_arms_u32=max_arms_u32)
@@ -165,6 +166,8 @@ def compute_arm_scores_q32(
 
     min_trials_before_exploit_u32 = _as_nonneg_int(config.get("min_trials_before_exploit_u32", 0))
     explore_weight_q32 = int(config.get("explore_weight_q32", 0))
+    if not bool(exploration_allowed_b):
+        explore_weight_q32 = 0
     cost_weight_q32 = int(config.get("cost_weight_q32", 0))
 
     scores_by_capability: dict[str, int] = {}
@@ -174,7 +177,9 @@ def compute_arm_scores_q32(
         reward_ewma_q32 = int(arm_row.get("reward_ewma_q32", 0))
         cost_ewma_q32 = _as_nonneg_int(arm_row.get("cost_ewma_q32", 0))
 
-        if n_u64 < int(min_trials_before_exploit_u32):
+        if not bool(exploration_allowed_b):
+            explore_bonus_q32 = 0
+        elif n_u64 < int(min_trials_before_exploit_u32):
             explore_bonus_q32 = int(Q32_ONE)
         else:
             explore_bonus_q32 = int(explore_weight_q32 // (n_u64 + 1))
@@ -203,12 +208,16 @@ def select_capability_id(
     state: Mapping[str, Any],
     context_key: str,
     eligible_capability_ids: list[str],
+    exploration_allowed_b: bool = True,
+    exploration_reason_code: str | None = None,
 ) -> str:
+    del exploration_reason_code
     scores_by_capability = compute_arm_scores_q32(
         config=config,
         state=state,
         context_key=context_key,
         eligible_capability_ids=list(eligible_capability_ids),
+        exploration_allowed_b=bool(exploration_allowed_b),
     )
     return _select_from_scores(scores_by_capability=scores_by_capability)
 
@@ -220,12 +229,16 @@ def select_capability_id_with_bonus(
     context_key: str,
     eligible_capability_ids: list[str],
     bonus_by_capability_q32: Mapping[str, int],
+    exploration_allowed_b: bool = True,
+    exploration_reason_code: str | None = None,
 ) -> str:
+    del exploration_reason_code
     scores_by_capability = compute_arm_scores_q32(
         config=config,
         state=state,
         context_key=context_key,
         eligible_capability_ids=list(eligible_capability_ids),
+        exploration_allowed_b=bool(exploration_allowed_b),
     )
     adjusted_scores: dict[str, int] = {}
     for capability_id, score_q32 in sorted(scores_by_capability.items(), key=lambda row: str(row[0])):

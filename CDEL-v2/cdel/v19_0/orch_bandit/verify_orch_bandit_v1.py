@@ -7,6 +7,9 @@ from typing import Any
 
 from ...v18_0.omega_common_v1 import canon_hash_obj, fail as fail_v18, load_canon_dict
 from ..common_v1 import validate_schema as validate_schema_v19
+from orchestrator.omega_v19_0.governance.frontier_lock_v1 import (
+    compute_debt_pressure_v1 as compute_governance_debt_pressure_v1,
+)
 from orchestrator.omega_v19_0.orch_bandit.bandit_v1 import (
     BanditError as OrchBanditError,
     compute_context_key,
@@ -485,9 +488,16 @@ def verify_orch_bandit_v1(
         fail_v18("NONDETERMINISTIC")
 
     debt_hash = snapshot.get("dependency_debt_snapshot_hash")
-    hard_lock_active_b = bool(routing_payload.get("forced_frontier_attempt_b", False))
+    hard_lock_active_b = bool(
+        routing_payload.get(
+            "hard_lock_active_b",
+            routing_payload.get("forced_frontier_attempt_b", False),
+        )
+    )
     if objective_kind == "RUN_GOAL_TASK":
         hard_lock_active_b = True
+    debt_payload: dict[str, Any] | None = None
+    debt_pressure_b = False
     if _is_sha256(debt_hash):
         debt_payload = _load_hash_bound_payload(
             dir_path=state_root / "long_run" / "debt",
@@ -496,6 +506,23 @@ def verify_orch_bandit_v1(
             schema_name="dependency_debt_state_v1",
         )
         hard_lock_active_b = bool(hard_lock_active_b or bool(debt_payload.get("hard_lock_active_b", False)))
+        debt_pressure_b = compute_governance_debt_pressure_v1(
+            debt_state=dict(debt_payload),
+            utility_policy=_load_optional_utility_policy(config_dir=config_dir),
+            tick_u64=int(tick_u64),
+        )
+
+    expected_exploration_allowed_b = bool((not hard_lock_active_b) and (not debt_pressure_b))
+    if hard_lock_active_b:
+        expected_exploration_reason_code = "HARD_LOCK_ACTIVE"
+    elif debt_pressure_b:
+        expected_exploration_reason_code = "DEBT_PRESSURE_ACTIVE"
+    else:
+        expected_exploration_reason_code = "EXPLORATION_ALLOWED"
+    if bool(update_receipt.get("exploration_allowed_b", False)) != bool(expected_exploration_allowed_b):
+        fail_v18("NONDETERMINISTIC")
+    if str(update_receipt.get("exploration_reason_code", "")).strip() != str(expected_exploration_reason_code):
+        fail_v18("NONDETERMINISTIC")
 
     registry_payload = _load_canon_json(config_dir / "omega_capability_registry_v2.json")
     utility_policy = _load_optional_utility_policy(config_dir=config_dir)
@@ -514,6 +541,8 @@ def verify_orch_bandit_v1(
             state=state_in,
             context_key=expected_context_key,
             eligible_capability_ids=list(eligible_capability_ids),
+            exploration_allowed_b=bool(expected_exploration_allowed_b),
+            exploration_reason_code=str(expected_exploration_reason_code),
         )
     except OrchBanditError as exc:
         fail_v18(str(exc))
@@ -561,6 +590,8 @@ def verify_orch_bandit_v1(
                         context_key=expected_context_key,
                         eligible_capability_ids=list(eligible_capability_ids),
                         bonus_by_capability_q32=bonus_by_capability_q32,
+                        exploration_allowed_b=bool(expected_exploration_allowed_b),
+                        exploration_reason_code=str(expected_exploration_reason_code),
                     )
                 except OrchBanditError as exc:
                     fail_v18(str(exc))

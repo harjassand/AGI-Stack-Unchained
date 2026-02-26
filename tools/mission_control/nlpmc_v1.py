@@ -63,9 +63,12 @@ def compile_and_stage_mission(
             backend.close()
 
         try:
-            payload = _strict_json_object(raw)
+            raw_payload = _strict_json_object(raw)
+            payload = _build_schema_skeleton(schema=schema)
+            _merge_allowed_schema_keys(payload=payload, candidate=raw_payload, schema=schema)
             _enforce_schema_consts(payload=payload, schema=schema)
             _enforce_human_intent_echo_if_requested(payload=payload, schema=schema, human_intent_str=human_intent)
+            _ensure_anyof_selector(payload=payload)
 
             no_id = dict(payload)
             no_id.pop("mission_id", None)
@@ -223,6 +226,49 @@ def _enforce_human_intent_echo_if_requested(*, payload: dict[str, Any], schema: 
     props = schema.get("properties")
     if isinstance(props, dict) and "human_intent_str" in props:
         payload["human_intent_str"] = human_intent_str
+
+
+def _build_schema_skeleton(*, schema: dict[str, Any]) -> dict[str, Any]:
+    payload: dict[str, Any] = {}
+    props = schema.get("properties")
+    if not isinstance(props, dict):
+        return payload
+
+    for key, row in props.items():
+        if isinstance(row, dict) and "const" in row:
+            payload[key] = row["const"]
+    return payload
+
+
+def _merge_allowed_schema_keys(*, payload: dict[str, Any], candidate: dict[str, Any], schema: dict[str, Any]) -> None:
+    props = schema.get("properties")
+    allowed_keys = set(props.keys()) if isinstance(props, dict) else set()
+    for key, value in candidate.items():
+        if key in allowed_keys:
+            payload[key] = value
+
+
+def _ensure_anyof_selector(*, payload: dict[str, Any]) -> None:
+    objective_tags = payload.get("objective_tags")
+    if objective_tags is not None and not isinstance(objective_tags, list):
+        payload.pop("objective_tags", None)
+
+    allowed_caps = payload.get("allowed_capability_ids")
+    if allowed_caps is not None and not isinstance(allowed_caps, list):
+        payload.pop("allowed_capability_ids", None)
+
+    domain = payload.get("domain")
+    if domain is not None:
+        if isinstance(domain, str) and domain.strip():
+            payload["domain"] = domain.strip()
+        else:
+            payload.pop("domain", None)
+
+    has_objective_tags = "objective_tags" in payload
+    has_domain = "domain" in payload
+    has_allowed_caps = "allowed_capability_ids" in payload
+    if not has_objective_tags and not has_domain and not has_allowed_caps:
+        payload["domain"] = "general"
 
 
 def _schema_allows_field(*, schema: dict[str, Any], field: str) -> bool:

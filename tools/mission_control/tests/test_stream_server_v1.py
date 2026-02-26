@@ -48,3 +48,43 @@ def test_api_mission_supports_positional_compiler(monkeypatch) -> None:
         "mission_id": "sha256:test",
         "staged_path": ".omega_cache/mission_staging/pending_mission.json",
     }
+
+
+def test_api_chat_returns_direct_answer_for_arithmetic() -> None:
+    client = TestClient(stream_server_v1.app)
+    response = client.post("/api/chat", json={"message": "whats 12+3", "mode": "customer"})
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "ok": True,
+        "kind": "DIRECT_ANSWER",
+        "assistant_message": "15",
+        "confidence": "HIGH",
+    }
+
+
+def test_api_chat_stages_mission_for_non_arithmetic(monkeypatch) -> None:
+    def positional_compiler(human_intent_str: str):
+        return {
+            "mission_id": "sha256:test",
+            "staged_path": ".omega_cache/mission_staging/pending_mission.json",
+            "payload": {"schema_name": "mission_request_v1", "schema_version": "v19_0", "domain": "general"},
+        }
+
+    monkeypatch.setattr(stream_server_v1, "_resolve_nlpmc_compiler", lambda: positional_compiler)
+
+    client = TestClient(stream_server_v1.app)
+    response = client.post("/api/chat", json={"message": "solve dark matter", "mode": "customer"})
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "ok": True,
+        "kind": "MISSION",
+        "assistant_message": "Queued. Streaming progress and verified artifacts as they arrive.",
+        "mission_staged_path": ".omega_cache/mission_staging/pending_mission.json",
+        "mission_request_preview": {
+            "schema_name": "mission_request_v1",
+            "schema_version": "v19_0",
+            "domain": "general",
+        },
+    }

@@ -1,0 +1,87 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v19_0/ttc_grpo_candidate_eval_v1",
+  "title": "TTC GRPO candidate eval v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_id",
+    "id",
+    "tick_u64",
+    "candidate_index_u64",
+    "candidate_ir_hash",
+    "dmpl_plan_result_hash",
+    "cac_hash",
+    "reward_q32",
+    "valid_ir_b",
+    "parse_error",
+    "gen"
+  ],
+  "properties": {
+    "schema_id": {"const": "ttc_grpo_candidate_eval_v1"},
+    "id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "tick_u64": {"type": "integer", "minimum": 0, "maximum": 18446744073709551615},
+    "candidate_index_u64": {"type": "integer", "minimum": 0, "maximum": 18446744073709551615},
+    "candidate_ir_hash": {
+      "anyOf": [
+        {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+        {"type": "null"}
+      ]
+    },
+    "dmpl_plan_result_hash": {
+      "anyOf": [
+        {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+        {"type": "null"}
+      ]
+    },
+    "cac_hash": {
+      "anyOf": [
+        {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+        {"type": "null"}
+      ]
+    },
+    "reward_q32": {"type": "integer", "minimum": -9223372036854775808, "maximum": 9223372036854775807},
+    "valid_ir_b": {"type": "boolean"},
+    "parse_error": {
+      "anyOf": [
+        {"type": "string"},
+        {"type": "null"}
+      ]
+    },
+    "gen": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["seed_u64", "temperature_q16", "top_p_q16"],
+      "properties": {
+        "seed_u64": {"type": "integer", "minimum": 0, "maximum": 18446744073709551615},
+        "temperature_q16": {"type": "integer", "minimum": 0, "maximum": 131072},
+        "top_p_q16": {"type": "integer", "minimum": 0, "maximum": 65535}
+      }
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {"valid_ir_b": {"const": true}},
+        "required": ["valid_ir_b"]
+      },
+      "then": {
+        "properties": {
+          "candidate_ir_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"}
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {"valid_ir_b": {"const": false}},
+        "required": ["valid_ir_b"]
+      },
+      "then": {
+        "properties": {
+          "dmpl_plan_result_hash": {"type": "null"},
+          "cac_hash": {"type": "null"}
+        }
+      }
+    }
+  ]
+}

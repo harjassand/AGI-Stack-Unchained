@@ -1,0 +1,63 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v19_0/ttc_grpo_run_receipt_v1",
+  "title": "TTC GRPO run receipt v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_id",
+    "id",
+    "tick_u64",
+    "producer_run_id",
+    "config_hash",
+    "num_candidates_u64",
+    "num_valid_u64",
+    "num_evaluated_u64",
+    "best",
+    "reward_stats",
+    "artifacts",
+    "created_at_utc"
+  ],
+  "properties": {
+    "schema_id": {"const": "ttc_grpo_run_receipt_v1"},
+    "id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "tick_u64": {"type": "integer", "minimum": 0, "maximum": 18446744073709551615},
+    "producer_run_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "config_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "num_candidates_u64": {"type": "integer", "minimum": 0, "maximum": 18446744073709551615},
+    "num_valid_u64": {"type": "integer", "minimum": 0, "maximum": 18446744073709551615},
+    "num_evaluated_u64": {"type": "integer", "minimum": 0, "maximum": 18446744073709551615},
+    "best": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["candidate_index_u64", "candidate_ir_hash", "cac_hash", "reward_q32"],
+      "properties": {
+        "candidate_index_u64": {"type": "integer", "minimum": 0, "maximum": 18446744073709551615},
+        "candidate_ir_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+        "cac_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+        "reward_q32": {"type": "integer", "minimum": -9223372036854775808, "maximum": 9223372036854775807}
+      }
+    },
+    "reward_stats": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["mean_q32", "p50_q32", "p90_q32", "max_q32"],
+      "properties": {
+        "mean_q32": {"type": "integer", "minimum": -9223372036854775808, "maximum": 9223372036854775807},
+        "p50_q32": {"type": "integer", "minimum": -9223372036854775808, "maximum": 9223372036854775807},
+        "p90_q32": {"type": "integer", "minimum": -9223372036854775808, "maximum": 9223372036854775807},
+        "max_q32": {"type": "integer", "minimum": -9223372036854775808, "maximum": 9223372036854775807}
+      }
+    },
+    "artifacts": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["candidate_eval_index_jsonl_hash", "logs_hash"],
+      "properties": {
+        "candidate_eval_index_jsonl_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+        "logs_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"}
+      }
+    },
+    "created_at_utc": {"type": "string", "format": "date-time"}
+  }
+}

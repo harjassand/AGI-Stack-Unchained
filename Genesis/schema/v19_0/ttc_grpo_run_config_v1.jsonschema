@@ -1,0 +1,108 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v19_0/ttc_grpo_run_config_v1",
+  "title": "TTC GRPO run config v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_id",
+    "id",
+    "base_model",
+    "lora",
+    "sampling",
+    "optimization",
+    "dmpl_eval",
+    "seed"
+  ],
+  "properties": {
+    "schema_id": {"const": "ttc_grpo_run_config_v1"},
+    "id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "base_model": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["backend", "model_id", "model_path"],
+      "properties": {
+        "backend": {"const": "mlx"},
+        "model_id": {"type": "string", "minLength": 1},
+        "model_path": {"type": "string"}
+      }
+    },
+    "lora": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["enabled_b", "rank_u64", "alpha_u64", "target_modules"],
+      "properties": {
+        "enabled_b": {"type": "boolean"},
+        "rank_u64": {"type": "integer", "minimum": 0, "maximum": 18446744073709551615},
+        "alpha_u64": {"type": "integer", "minimum": 0, "maximum": 18446744073709551615},
+        "target_modules": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {"type": "string", "minLength": 1}
+        }
+      }
+    },
+    "sampling": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "num_candidates_u64",
+        "group_size_u64",
+        "temperature_q16",
+        "top_p_q16",
+        "max_new_tokens_u64"
+      ],
+      "properties": {
+        "num_candidates_u64": {"type": "integer", "minimum": 1, "maximum": 18446744073709551615},
+        "group_size_u64": {"type": "integer", "minimum": 1, "maximum": 18446744073709551615},
+        "temperature_q16": {"type": "integer", "minimum": 0, "maximum": 131072},
+        "top_p_q16": {"type": "integer", "minimum": 0, "maximum": 65535},
+        "max_new_tokens_u64": {"type": "integer", "minimum": 1, "maximum": 18446744073709551615}
+      }
+    },
+    "optimization": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "num_outer_iters_u64",
+        "learning_rate_q16",
+        "kl_beta_q16",
+        "clip_range_q16"
+      ],
+      "properties": {
+        "num_outer_iters_u64": {"type": "integer", "minimum": 1, "maximum": 18446744073709551615},
+        "learning_rate_q16": {"type": "integer", "minimum": 0, "maximum": 65535},
+        "kl_beta_q16": {"type": "integer", "minimum": 0, "maximum": 65535},
+        "clip_range_q16": {"type": "integer", "minimum": 0, "maximum": 65535}
+      }
+    },
+    "dmpl_eval": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["campaign_id", "budget", "reward_from_cac_field"],
+      "properties": {
+        "campaign_id": {"type": "string", "minLength": 1},
+        "budget": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["beam_width_u64", "max_nodes_u64"],
+          "properties": {
+            "beam_width_u64": {"type": "integer", "minimum": 1, "maximum": 18446744073709551615},
+            "max_nodes_u64": {"type": "integer", "minimum": 1, "maximum": 18446744073709551615}
+          }
+        },
+        "reward_from_cac_field": {"type": "string", "minLength": 1}
+      }
+    },
+    "seed": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["run_seed_u64", "tick_u64"],
+      "properties": {
+        "run_seed_u64": {"type": "integer", "minimum": 0, "maximum": 18446744073709551615},
+        "tick_u64": {"type": "integer", "minimum": 0, "maximum": 18446744073709551615}
+      }
+    }
+  }
+}

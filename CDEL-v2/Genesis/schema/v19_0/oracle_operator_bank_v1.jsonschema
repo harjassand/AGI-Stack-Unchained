@@ -1,0 +1,86 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v19_0/oracle_operator_bank_v1",
+  "title": "Oracle operator bank v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "bank_id", "operators"],
+  "properties": {
+    "schema_version": {
+      "const": "oracle_operator_bank_v1"
+    },
+    "bank_id": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "operators": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/operator"
+      }
+    }
+  },
+  "$defs": {
+    "operator": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["op_name", "ast", "added_from_task_id", "usage_count_u64"],
+      "properties": {
+        "op_name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "ast": {
+          "$ref": "#/$defs/ast_node"
+        },
+        "added_from_task_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "usage_count_u64": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    },
+    "ast_node": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["v", "op", "a"],
+      "properties": {
+        "v": {
+          "const": 1
+        },
+        "op": {
+          "type": "string",
+          "minLength": 1
+        },
+        "a": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ast_arg"
+          }
+        }
+      }
+    },
+    "ast_arg": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/ast_node"
+        },
+        {
+          "type": "integer"
+        },
+        {
+          "type": "string"
+        },
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    }
+  }
+}

@@ -1,0 +1,69 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v19_0/oracle_program_ast_v1",
+  "title": "Oracle program AST v1",
+  "$ref": "#/$defs/node",
+  "$defs": {
+    "node": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["v", "op", "a"],
+      "properties": {
+        "v": {
+          "const": 1
+        },
+        "op": {
+          "type": "string",
+          "enum": [
+            "INT",
+            "STR",
+            "IN",
+            "LEN",
+            "REV_LIST",
+            "SORT_LIST",
+            "UNIQ_LIST",
+            "MAP_ADD",
+            "MAP_MUL",
+            "FILTER_MOD_EQ",
+            "SUM",
+            "PREFIX_SUM",
+            "TAKE",
+            "DROP",
+            "CONCAT_LIST",
+            "SUBSTR",
+            "CONCAT_STR",
+            "REPLACE_STR",
+            "FIND_STR",
+            "IF_EQ",
+            "IF_LT"
+          ]
+        },
+        "a": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/arg"
+          }
+        }
+      }
+    },
+    "arg": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/node"
+        },
+        {
+          "type": "integer"
+        },
+        {
+          "type": "string"
+        },
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    }
+  }
+}

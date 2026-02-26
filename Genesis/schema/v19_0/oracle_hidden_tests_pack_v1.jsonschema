@@ -1,0 +1,88 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v19_0/oracle_hidden_tests_pack_v1",
+  "title": "Oracle hidden tests pack v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "pack_id", "tasks"],
+  "properties": {
+    "schema_version": {
+      "const": "oracle_hidden_tests_pack_v1"
+    },
+    "pack_id": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "tasks": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/task"
+      }
+    }
+  },
+  "$defs": {
+    "task": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "hidden_examples"],
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "hidden_examples": {
+          "type": "array",
+          "minItems": 32,
+          "maxItems": 32,
+          "items": {
+            "$ref": "#/$defs/example"
+          }
+        }
+      }
+    },
+    "example": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["in", "out"],
+      "properties": {
+        "in": {
+          "$ref": "#/$defs/json_value"
+        },
+        "out": {
+          "$ref": "#/$defs/json_value"
+        }
+      }
+    },
+    "json_value": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "integer"
+        },
+        {
+          "type": "number"
+        },
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "null"
+        },
+        {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/json_value"
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/$defs/json_value"
+          }
+        }
+      ]
+    }
+  }
+}

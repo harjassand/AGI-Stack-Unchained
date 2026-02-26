@@ -7681,3 +7681,356 @@ As-of `2026-02-22`, the working tree contains changes that materially alter how 
 This section intentionally diverges from the architectural “static” appendices by tracking **operational state**: what is currently staged or changed in this workspace, including transitional activation artifacts and policy updates that are still under active iteration. Use `git status` for exact path-level truth; this section is the human-readable index.
 
 *End Appendix Z.*
+
+---
+
+# Appendix AA: Last 24h Delta (2026-02-25 to 2026-02-26)
+
+This appendix captures the most recent development window from **2026-02-25 10:37:33 +1000** through **2026-02-26 09:50:01 +1000** (as recorded by `git log --since='24 hours ago'` at update time).  
+The objective is to preserve a high-fidelity map of what changed, why it matters, and which runtime/governance surfaces were altered.
+
+## AA.1 Window Summary and Quantitative Impact
+
+Within this 24-hour window:
+
+- **11 commits** were recorded on the branch tip.
+- **7 commits** contained direct file deltas.
+- **4 commits** were merge/reconciliation commits with no additional diff payload of their own.
+- Delta-bearing commits changed **418 file instances** total.
+- Net textual movement was **16,611 insertions** and **381 deletions**.
+- Unique path count touched in the window: **360 files**.
+
+Top-level file-touch concentration (commit-local count) was:
+
+- `authority/`: 183
+- `.tmp_p17_tick1_repro/`: 67
+- `CDEL-v2/`: 46
+- `Genesis/`: 25
+- `campaigns/`: 18
+- `tools/`: 17
+- `scripts/`: 9
+- `orchestrator/`: 8
+- `daemon/`: 4
+- `.gitignore`: 2
+
+The practical interpretation is clear: this day was dominated by two arcs:
+
+1. **Orchestrator policy stack formalization (Step3 → Step5)** across schemas, verifiers, trainers, and tests.
+2. **Micdrop holdout/evidence scaling**, including a large expansion of holdout packs and new run/eval automation scripts.
+
+## AA.2 Commit Timeline (Exact Sequence)
+
+Chronological sequence:
+
+1. `3a88c781` (2026-02-25 10:37:33 +1000)  
+   `Add proposer corpus v1 schemas and tooling`
+
+2. `7d31f32e` (2026-02-25 12:24:52 +1000)  
+   `WIP: add step4b orch bandit selector changes`
+
+3. `0c564403` (2026-02-25 12:25:02 +1000)  
+   Merge: `codex/feat/step4b-orch-bandit-selector-v1`
+
+4. `8d5277e4` (2026-02-25 14:13:02 +1000)  
+   `feat(step5b): add orch policy eval, activation pointer swap, and deterministic policy bonus`
+
+5. `09dec60e` (2026-02-25 14:13:18 +1000)  
+   `Add Step 5A orch world-model trainer, policy compiler, schemas, and tests`
+
+6. `7194c3ef` (2026-02-25 14:13:59 +1000)  
+   Merge PR #7 (`step5a`)
+
+7. `11a8e3a9` (2026-02-25 14:16:11 +1000)  
+   Merge/reconcile Step5A + Step5B policy schemas
+
+8. `861aa1ce` (2026-02-25 14:16:29 +1000)  
+   Merge PR #6 (`step5b`)
+
+9. `bc3f764c` (2026-02-25 22:21:57 +1000)  
+   `Add micdrop holdout evidence pipeline and autonomous patch flow (#8)`
+
+10. `6d519bcd` (2026-02-26 03:20:20 +1000)  
+    `v2 micdrop`
+
+11. `a100821b` (2026-02-26 09:50:01 +1000)  
+    `changees` (repro/evidence artifact commit under `.tmp_p17_tick1_repro/`)
+
+## AA.3 Workstream A: Step3 Proposer Corpus + Model Tooling Foundation (`3a88c781`)
+
+Scope summary:
+
+- **39 files changed** (`+4933/-4`)
+- New surfaces in `CDEL-v2/`, `Genesis/`, `tools/`.
+
+Core additions:
+
+- New proposer training/corpus schema contracts:
+  - `proposer_corpus_build_receipt_v1`
+  - `proposer_sft_example_v1`
+  - `proposer_dpo_pair_v1`
+  - `proposer_training_corpus_manifest_v1`
+  - `proposer_model_train_*`, `proposer_model_bundle_v1`, `proposer_model_pointer_v1`
+- Runtime/model utility layer:
+  - `tools/proposer_models/pointers_v1.py`
+  - `tools/proposer_models/runtime_v1.py`
+  - `tools/proposer_models/store_v1.py`
+- Training pipeline tooling:
+  - `tools/training/proposer_corpus_builder_v1.py`
+  - `tools/training/proposer_corpus_indexer_v1.py`
+  - `tools/training/proposer_redaction_v1.py`
+  - `tools/training/train_lora_sft_v1.py`
+  - `tools/training/train_qlora_dpo_v1.py`
+  - bundle packager and training requirements file.
+- Verification and tests:
+  - corpus determinism/hash-binding/no-holdout-leak tests
+  - model bundle integrity, pointer atomicity, runtime fail-closed tests
+  - arena fine-tune dispatch smoke test.
+
+Source-of-truth implication:
+
+This commit establishes an explicit **proposer learning data plane** with deterministic and anti-leak test pressure, replacing ad hoc corpus assumptions with typed manifests and auditable training receipts.
+
+## AA.4 Workstream B: Step4B Orchestrator Bandit Selector (`7d31f32e` + merge `0c564403`)
+
+Scope summary:
+
+- **22 files changed** (`+2024/-12`)
+- Dominant surfaces: `CDEL-v2/`, `Genesis/`, `orchestrator/`.
+
+Core additions:
+
+- Bandit schemas:
+  - `orch_bandit_config_v1`
+  - `orch_bandit_state_v1`
+  - `orch_bandit_update_receipt_v1`
+- Runtime bandit implementation:
+  - `orchestrator/omega_v19_0/orch_bandit/bandit_v1.py`
+- Verification path:
+  - `CDEL-v2/cdel/v19_0/orch_bandit/verify_orch_bandit_v1.py`
+- Regression tests:
+  - bounds enforcement
+  - deterministic selection
+  - EWMA update behavior
+  - microkernel integration smoke.
+
+Source-of-truth implication:
+
+Step4B converted selector logic from implicit behavior into explicit state + receipt contracts, which enables replay-based checking of routing policy adaptation rather than trusting runtime heuristics.
+
+## AA.5 Workstream C: Step5B Policy Eval + Pointer Activation (`8d5277e4`)
+
+Scope summary:
+
+- **42 files changed** (`+2722/-52`)
+- Cross-layer update spanning `CDEL-v2/`, `Genesis/`, `authority/`, `orchestrator/`, `daemon/`.
+
+Core additions/updates:
+
+- New policy-eval and activation schemas:
+  - `orch_policy_eval_config_v1`
+  - `orch_policy_eval_receipt_v1`
+  - `orch_policy_pointer_v1`
+  - `orch_policy_activation_receipt_v1`
+  - plus policy bundle/table schemas.
+- Verifier and activation enforcement:
+  - `CDEL-v2/cdel/v19_0/verify_orch_policy_bundle_v1.py`
+  - updates in `omega_promoter_v1.py`, `verify_rsi_omega_daemon_v1.py`, `orch_bandit/verify_orch_bandit_v1.py`
+  - v18 activator/authority hash updates for adoption path compatibility.
+- Holdout/eval assets and cache roots:
+  - `authority/holdouts/orch_policy_eval/*`
+  - `daemon/orch_policy/eval_cache/.gitkeep`
+
+Added targeted policy tests:
+
+- deterministic policy bonus behavior
+- activation pointer atomicity
+- policy eval gate checks
+- verifier recomputation guardrails
+- refutation leak guard.
+
+Source-of-truth implication:
+
+Step5B introduces a formally schema-bound **policy activation pointer lifecycle** and explicit evaluator receipts, tightening the adopt/swap path so policy adoption is an auditable transition rather than a side effect.
+
+## AA.6 Workstream D: Step5A World-Model Trainer + Policy Compiler (`09dec60e`)
+
+Scope summary:
+
+- **31 files changed** (`+2836/-0`)
+- Additions across `CDEL-v2/`, `Genesis/`, `tools/orch_worldmodel/`, `campaigns/`, `daemon/`.
+
+Core additions:
+
+- Dataset and training schemas:
+  - `orch_transition_event_v1`
+  - `orch_transition_dataset_manifest_v1`
+  - `orch_transition_dataset_build_receipt_v1`
+  - `orch_worldmodel_train_config_v1`
+  - `orch_worldmodel_train_receipt_v1`
+  - policy table/bundle schemas aligned for trainer output.
+- Tooling stack:
+  - transition dataset builder
+  - Q32 worldmodel math module
+  - worldmodel trainer
+  - policy bundle packager
+  - campaign launcher script
+  - `README_STEP5.md`.
+- Test suite:
+  - policy table determinism + bounds
+  - bundle hash binding
+  - transition dataset determinism.
+- Runtime storage roots:
+  - `daemon/orch_policy/active/.gitkeep`
+  - `daemon/orch_policy/store/.../.gitkeep`
+
+Source-of-truth implication:
+
+Step5A closes the training pipeline gap by making world-model training and policy-table generation reproducible artifacts with deterministic contracts and dedicated verification tests.
+
+## AA.7 Integration Sequence: Step5A/Step5B Merges (`7194c3ef`, `11a8e3a9`, `861aa1ce`)
+
+These commits primarily integrate branch lines and reconcile overlapping schema/policy surfaces.
+
+Key practical effect:
+
+- Step5A trainer outputs and Step5B evaluator/adoption pathways now coexist on mainline.
+- Policy table/bundle schema duplication and version coordination moved from branch-local assumptions into merged trunk state.
+- The merge sequence establishes a single lineage for subsequent micdrop and run-time policy updates.
+
+## AA.8 Workstream E: Micdrop Holdout Evidence Pipeline (`bc3f764c`)
+
+Scope summary:
+
+- **43 files changed** (`+1649/-4`)
+- Surfaces: `authority/`, `campaigns/`, `scripts/`, `tools/omega/`, `CDEL-v2` verifier linkage.
+
+Core additions:
+
+- Authority and benchmark governance:
+  - `authority/authority_pins_micdrop_v1.json`
+  - `authority/ccap_patch_allowlists_micdrop_v1.json`
+  - `authority/holdout_policies/holdout_policy_micdrop_v1.json`
+  - benchmark suite-set and multiple benchmark suites (logic/math/planning/algo)
+  - micdrop kernel extension ledger.
+- Holdout packs (initial batch) under `authority/holdouts/packs/`.
+- Campaign packs:
+  - `campaigns/rsi_omega_daemon_v19_0_micdrop_v1/*`
+  - `campaigns/rsi_proposer_arena_micdrop_v1/*`
+- Operational scripts:
+  - `micdrop_preflight_v1.py`
+  - `micdrop_eval_once_v1.py`
+  - `micdrop_materialize_promotions_v1.py`
+  - `micdrop_package_evidence_v1.py`
+  - `micdrop_run_ticks_v1.sh`
+- Runtime execution tools:
+  - `tools/omega/agi_micdrop_candidate_runner_v1.py`
+  - `tools/omega/agi_micdrop_solver_v1.py`
+  - launcher script for 30-minute run windows.
+
+Source-of-truth implication:
+
+Micdrop moved from concept to a concrete governed campaign path, with dedicated allowlists, holdout policy, benchmark suites, evidence packaging scripts, and proposer/daemon pack wiring.
+
+## AA.9 Workstream F: Micdrop v2 Scale-Up (`6d519bcd`)
+
+Scope summary:
+
+- **174 files changed** (`+2351/-309`)
+- Dominant concentration in `authority/` with major holdout expansion.
+
+Notable changes:
+
+- Massive holdout expansion:
+  - **162 authority files touched** in this commit.
+  - The window now includes **168 unique holdout pack files** under `authority/holdouts/packs/`.
+- Micdrop v2 orchestration:
+  - `scripts/micdrop_eval_once_v2.py`
+  - `scripts/micdrop_package_multiseed_report_v2.py`
+  - `scripts/micdrop_simulate_ticks_v1.py`
+  - `scripts/micdrop_build_novelty_suites_v1.py`
+- Tools for novelty/pack generation and promotion materialization:
+  - `tools/omega/micdrop_novelty_packgen_v1.py`
+  - `tools/omega/micdrop_materialize_promotions_v1.py`
+  - `tools/omega/launch_micdrop_novelty_v2.sh`
+  - `tools/omega/micdrop_devset_v2.json`
+  - `tools/omega/test_micdrop_devset_v2.py`
+- Updates to existing micdrop solver/runner and related policy files.
+
+Source-of-truth implication:
+
+Micdrop v2 shifts from single-pass evidence flow to a **multi-seed, novelty-aware, scaled holdout regime** with stronger scripted generation/evaluation loops and broader holdout corpus coverage.
+
+## AA.10 Latest Commit: Repro Artifact Capture (`a100821b`)
+
+Scope summary:
+
+- **67 files changed** (`+96/-0`)
+- All changes under `.tmp_p17_tick1_repro/daemon/rsi_omega_daemon_v19_0/`.
+
+Artifact classes committed:
+
+- daemon config snapshots (goals, policy IR, objective/capability configs),
+- dispatch/subverifier/promotion receipts,
+- market action and settlement receipts,
+- issue bundles, observation and perf reports,
+- replay/subrun stdout+stderr snapshots,
+- runaway/state/tick snapshot artifacts.
+
+Source-of-truth implication:
+
+This commit records a concrete reproducibility fixture for a specific tick path (`p17 tick1`) and preserves evidence artifacts for forensic replay.  
+Because the path is under `.tmp_*`, it should be treated as **diagnostic evidence**, not normative campaign configuration.
+
+## AA.11 Cross-Layer Contract Surface Added in This Window
+
+This 24h cycle materially expanded policy/training governance through new contract families:
+
+1. Proposer corpus/model contracts (Step3)
+2. Bandit state/update contracts (Step4B)
+3. Orch policy eval/pointer/activation contracts (Step5B)
+4. Worldmodel transition/training contracts (Step5A)
+5. Micdrop holdout + benchmark governance assets
+
+Net schema activity in this window included:
+
+- **37 unique schema files** touched across `Genesis/schema/` and `CDEL-v2/Genesis/schema/`.
+- New verifier tests spanning orch bandit, orch policy, orch worldmodel, and micdrop devset validation.
+
+This is a high-density governance day: feature growth happened in lockstep with schemas and tests, rather than feature-only additions.
+
+## AA.12 Operational Risks and Hygiene Notes After the Delta
+
+1. Policy stack integration complexity risk  
+   Step5A and Step5B landed in the same hour and were then reconciled through merges. Future edits should preserve explicit compatibility checks between policy trainer output formats and policy evaluator/pointer activation expectations.
+
+2. Holdout corpus drift risk  
+   With 168 new holdout packs in one day, policy-set drift and accidental pack-level inconsistencies become more likely unless suite generation and lockfiles remain deterministic and reviewed.
+
+3. Temporary artifact contamination risk  
+   `.tmp_p17_tick1_repro/` is useful forensic evidence but not a canonical production surface; downstream automation should avoid silently consuming `.tmp_*` directories as authoritative campaign inputs.
+
+4. Test coverage is broad but pathway-coupled  
+   New tests strongly cover introduced surfaces. The failure mode to watch next is integration-level mismatches across Step3/4B/5A/5B and micdrop workflows, not missing unit tests for new modules.
+
+## AA.13 Update Checklist for the Next 24h Appendix
+
+For continuity, the next daily update should include:
+
+1. Any schema compatibility changes between policy trainer outputs and policy activation/eval inputs.
+2. Any changes to micdrop holdout generation criteria (seeding, novelty rules, benchmark suite composition).
+3. Any migration of `.tmp_p17_tick1_repro` evidence into stable run/evidence directories (or explicit archival/deletion rationale).
+4. Any new reason-code or gate-state additions in orch policy, bandit, or micdrop evaluator scripts.
+
+## AA.14 Closing Statement
+
+The 2026-02-25 to 2026-02-26 window is not a minor patch cycle. It is a concentrated **control-plane expansion**:
+
+- proposer training data contracts,
+- bandit selector state contracts,
+- policy eval and activation pointer contracts,
+- worldmodel training toolchain contracts,
+- and large-scale micdrop holdout/evidence orchestration.
+
+The day’s dominant pattern is constructive: most new behavior arrived with schema and test surfaces, preserving the repo’s evidence-first and fail-closed verification philosophy while materially increasing operational scope.
+
+*End Appendix AA.*

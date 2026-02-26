@@ -62,3 +62,8 @@ daemon/orch_policy/eval_cache/*
 # OS junk
 authority/benchmark_suites/micdrop_novelty_*
 authority/benchmark_suite_sets/micdrop_novelty_*
+authority/tmp_oracle_runs/**
+authority/benchmark_suites/oracle_ladder_*
+authority/benchmark_suite_sets/oracle_ladder_*
+authority/holdouts/packs/*.oracle_task_inputs_pack_v1.json
+authority/holdouts/packs/*.oracle_hidden_tests_pack_v1.json

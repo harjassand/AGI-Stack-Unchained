@@ -14,6 +14,7 @@ from pathlib import Path
 from typing import Any
 
 from .omega_common_v1 import canon_hash_obj, fail, hash_file, load_canon_dict, repo_root, validate_schema
+from ..v19_0.common_v1 import validate_schema as validate_schema_v19
 
 
 _SHA256_RE = re.compile(r"^sha256:[0-9a-f]{64}$")
@@ -49,6 +50,20 @@ def _read_single_by_hash(*, root: Path, suffix: str, expected_sha256: str, schem
         fail("MISSING_STATE_INPUT")
     obj = load_canon_dict(path)
     validate_schema(obj, schema_name)
+    if canon_hash_obj(obj) != expected_sha256:
+        fail("NONDETERMINISTIC")
+    if _hash_filename(path) != expected_sha256:
+        fail("NONDETERMINISTIC")
+    return path, obj
+
+
+def _read_single_by_hash_v19(*, root: Path, suffix: str, expected_sha256: str, schema_name: str) -> tuple[Path, dict[str, Any]]:
+    hex64 = expected_sha256.split(":", 1)[1]
+    path = root / f"sha256_{hex64}.{suffix}"
+    if not path.exists() or not path.is_file():
+        fail("MISSING_STATE_INPUT")
+    obj = load_canon_dict(path)
+    validate_schema_v19(obj, schema_name)
     if canon_hash_obj(obj) != expected_sha256:
         fail("NONDETERMINISTIC")
     if _hash_filename(path) != expected_sha256:
@@ -399,6 +414,97 @@ def verify(state_dir: Path, *, mode: str = "full") -> str:
         fail("NONDETERMINISTIC")
     if str(native_module.get("bench_report_hash", "")) != vectors_hash:
         fail("NONDETERMINISTIC")
+
+    metal_field_names = (
+        "metal_src_merkle_hash",
+        "metal_build_proof_hash",
+        "metal_healthcheck_vectors_hash",
+        "metal_healthcheck_receipt_hash",
+        "metal_binary_hash",
+        "metal_toolchain_manifest_hash",
+    )
+    present_fields = [name for name in metal_field_names if bundle.get(name) is not None]
+    if present_fields and len(present_fields) != len(metal_field_names):
+        fail("SCHEMA_FAIL")
+    if present_fields:
+        metal_src_hash = _require_sha(bundle.get("metal_src_merkle_hash"))
+        metal_build_hash = _require_sha(bundle.get("metal_build_proof_hash"))
+        metal_vectors_hash = _require_sha(bundle.get("metal_healthcheck_vectors_hash"))
+        metal_health_hash = _require_sha(bundle.get("metal_healthcheck_receipt_hash"))
+        metal_binary_hash = _require_sha(bundle.get("metal_binary_hash"))
+        metal_toolchain_hash = _require_sha(bundle.get("metal_toolchain_manifest_hash"))
+
+        _, metal_src_obj = _read_single_by_hash_v19(
+            root=state_dir / "native" / "metal_src",
+            suffix="native_metal_src_merkle_v1.json",
+            expected_sha256=metal_src_hash,
+            schema_name="native_metal_src_merkle_v1",
+        )
+        _, metal_build_obj = _read_single_by_hash_v19(
+            root=state_dir / "native" / "metal_build",
+            suffix="native_metal_build_proof_v1.json",
+            expected_sha256=metal_build_hash,
+            schema_name="native_metal_build_proof_v1",
+        )
+        _, metal_vectors_obj = _read_single_by_hash_v19(
+            root=state_dir / "native" / "metal_vectors",
+            suffix="native_metal_healthcheck_vectors_v1.json",
+            expected_sha256=metal_vectors_hash,
+            schema_name="native_metal_healthcheck_vectors_v1",
+        )
+        _, metal_health_obj = _read_single_by_hash_v19(
+            root=state_dir / "native" / "metal_health",
+            suffix="native_metal_healthcheck_receipt_v1.json",
+            expected_sha256=metal_health_hash,
+            schema_name="native_metal_healthcheck_receipt_v1",
+        )
+        _, toolchain_obj = _read_single_by_hash(
+            root=state_dir / "native" / "metal_toolchain",
+            suffix="toolchain_manifest_metal_v1.json",
+            expected_sha256=metal_toolchain_hash,
+            schema_name="toolchain_manifest_metal_v1",
+        )
+
+        metal_hex = metal_binary_hash.split(":", 1)[1]
+        metal_lib_path = state_dir / "native" / "bin" / f"sha256_{metal_hex}.metallib"
+        if not metal_lib_path.exists() or not metal_lib_path.is_file():
+            fail("MISSING_STATE_INPUT")
+        if hash_file(metal_lib_path) != metal_binary_hash:
+            fail("NONDETERMINISTIC")
+
+        if str(metal_src_obj.get("restricted_ir_hash", "")) != ir_hash:
+            fail("NONDETERMINISTIC")
+        if str(metal_vectors_obj.get("restricted_ir_hash", "")) != ir_hash:
+            fail("NONDETERMINISTIC")
+        if str(metal_health_obj.get("restricted_ir_hash", "")) != ir_hash:
+            fail("NONDETERMINISTIC")
+        if str(metal_build_obj.get("metal_src_merkle_hash", "")) != metal_src_hash:
+            fail("NONDETERMINISTIC")
+        if str(metal_build_obj.get("toolchain_manifest_hash", "")) != metal_toolchain_hash:
+            fail("NONDETERMINISTIC")
+        if str(metal_build_obj.get("output_metallib_hash", "")) != metal_binary_hash:
+            fail("NONDETERMINISTIC")
+        if bool(metal_build_obj.get("build_twice_repro_b")) is not True:
+            fail("NONDETERMINISTIC")
+        if str(metal_health_obj.get("vectors_hash", "")) != metal_vectors_hash:
+            fail("NONDETERMINISTIC")
+        if str(metal_health_obj.get("metal_binary_sha256", "")) != metal_binary_hash:
+            fail("NONDETERMINISTIC")
+        if str(metal_health_obj.get("result", "")) != "PASS":
+            fail("VERIFY_ERROR")
+
+        if str(toolchain_obj.get("schema_version", "")) != "toolchain_manifest_metal_v1":
+            fail("SCHEMA_FAIL")
+        for exe_field, hash_field in (
+            ("xcrun_executable", "xcrun_sha256"),
+            ("metal_executable", "metal_sha256"),
+            ("metallib_executable", "metallib_sha256"),
+        ):
+            exe = Path(str(toolchain_obj.get(exe_field, "")))
+            if not exe.exists() or not exe.is_file():
+                fail("MISSING_STATE_INPUT")
+            if hash_file(exe) != _require_sha(toolchain_obj.get(hash_field)):
+                fail("TOOLCHAIN_MISMATCH")
 
     # Ensure IR object hash itself matches the declared ir_id.
     expected_ir_id = canon_hash_obj({k: v for k, v in ir_obj.items() if k != "ir_id"})

@@ -12,12 +12,15 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable
 
+from .metal_runner_v1 import invoke_bloblist_v1 as metal_invoke_bloblist_v1
 from .runtime_stats_v1 import derive_work_units_from_row
 
 
 _ABI_VERSION = 1
 _ENV_DAEMON_STATE_ROOT = "OMEGA_DAEMON_STATE_ROOT"
 _ENV_TICK_U64 = "OMEGA_TICK_U64"
+_ENV_NATIVE_CANON_BYTES = "OMEGA_NATIVE_CANON_BYTES"
+_NATIVE_CANON_OP_ID = "omega_kernel_canon_bytes_v1"
 
 
 def _repo_root() -> Path:
@@ -286,6 +289,18 @@ def _tick_u64_from_env() -> int:
     return value if value >= 0 else 0
 
 
+def _native_canon_hotpath_enabled(op_id: str) -> bool:
+    if str(op_id).strip() != _NATIVE_CANON_OP_ID:
+        return False
+    return str(os.environ.get(_ENV_NATIVE_CANON_BYTES, "")).strip() == "1"
+
+
+def _should_hard_disable_on_invoke_fail(op_id: str) -> bool:
+    # Canon-bytes acceleration is opportunistic; input-specific parse limits must
+    # fail open to Python fallback instead of globally disabling the binary.
+    return not _native_canon_hotpath_enabled(op_id)
+
+
 def _load_active_shadow_registry_payload(state_root: Path) -> tuple[Path, str, dict[str, Any]]:
     shadow_dir = state_root / "native" / "shadow"
     pointer_path = shadow_dir / "ACTIVE_SHADOW_REGISTRY"
@@ -335,6 +350,24 @@ def _shadow_entry_index(modules: Any, *, op_id: str, binary_sha256: str) -> int 
         if row_op == op_id and row_bin == binary_sha256:
             return idx
     return None
+
+
+def _shadow_registry_row(op_id: str, binary_sha256: str) -> dict[str, Any] | None:
+    state_root = _state_root_from_env()
+    if state_root is None:
+        return None
+    try:
+        _, _, payload = _load_active_shadow_registry_payload(state_root)
+    except Exception:
+        return None
+    modules = payload.get("modules")
+    idx = _shadow_entry_index(modules, op_id=op_id, binary_sha256=binary_sha256)
+    if idx is None or not isinstance(modules, list):
+        return None
+    row = modules[idx]
+    if not isinstance(row, dict):
+        return None
+    return dict(row)
 
 
 def _is_shadow_route_disabled(op_id: str, binary_sha256: str) -> bool:
@@ -554,6 +587,8 @@ def route(op_id: str, *args: bytes | bytearray | memoryview) -> bytes:
     argv = [bytes(a) for a in args]
     bloblist = _encode_bloblist_v1(argv)
     mode = str(policy.get("verification_mode", "VECTORS")).strip().upper()
+    if mode == "SHADOW" and _native_canon_hotpath_enabled(op_id):
+        mode = "VECTORS"
 
     if mode == "SHADOW":
         py_out = bytes(py_impl(*args))
@@ -566,8 +601,95 @@ def route(op_id: str, *args: bytes | bytearray | memoryview) -> bytes:
                 bytes_out=len(py_out),
             )
             return py_out
+        shadow_row = _shadow_registry_row(op_id, active_bin)
+        metal_binary_sha256 = str((shadow_row or {}).get("metal_binary_sha256", "")).strip()
+        restricted_ir_hash = str((shadow_row or {}).get("restricted_ir_hash", "")).strip()
+        has_metal_shadow = _is_sha256_prefixed(metal_binary_sha256) and _is_sha256_prefixed(restricted_ir_hash)
+
         shadow_calls = int(policy.get("shadow_calls_u32", 100) or 0)
         do_shadow = _shadow_should_dual_run(op_id, active_bin, shadow_calls)
+
+        if has_metal_shadow:
+            try:
+                handle = _ctypes_load_module(op_id, active_bin)
+            except Exception:
+                _disable(op_id, active_bin, reason="load_fail")
+                _disable_shadow_route(op_id, active_bin, reason="load_fail")
+                _record_stats(
+                    op_id=op_id,
+                    active_bin=active_bin,
+                    returned_native=False,
+                    bytes_in=bytes_in,
+                    bytes_out=len(py_out),
+                    load_fail=True,
+                )
+                return py_out
+            try:
+                wasm_out = _invoke_bloblist(handle, bloblist)
+            except Exception:
+                if _should_hard_disable_on_invoke_fail(op_id):
+                    _disable(op_id, active_bin, reason="invoke_fail")
+                _disable_shadow_route(op_id, active_bin, reason="invoke_fail")
+                _record_stats(
+                    op_id=op_id,
+                    active_bin=active_bin,
+                    returned_native=False,
+                    bytes_in=bytes_in,
+                    bytes_out=len(py_out),
+                    invoke_fail=True,
+                )
+                return py_out
+
+            if do_shadow:
+                try:
+                    metal_out = metal_invoke_bloblist_v1(
+                        op_id=op_id,
+                        metal_binary_sha256=metal_binary_sha256,
+                        bloblist=bloblist,
+                        restricted_ir_hash=restricted_ir_hash,
+                    )
+                except Exception:
+                    transition = _disable_shadow_route(op_id, active_bin, reason="metal_invoke_fail")
+                    _record_stats(
+                        op_id=op_id,
+                        active_bin=active_bin,
+                        returned_native=True,
+                        bytes_in=bytes_in,
+                        bytes_out=len(wasm_out),
+                        shadow_mismatch=bool(transition),
+                    )
+                    return wasm_out
+
+                if metal_out != wasm_out:
+                    transition = _disable_shadow_route(op_id, active_bin, reason="metal_shadow_mismatch")
+                    _write_mismatch_report(
+                        op_id,
+                        active_bin,
+                        argv=argv,
+                        py_out=wasm_out,
+                        native_out=metal_out,
+                        route_disable_transition_b=transition,
+                        route_disable_reason="metal_shadow_mismatch",
+                    )
+                    _record_stats(
+                        op_id=op_id,
+                        active_bin=active_bin,
+                        returned_native=True,
+                        bytes_in=bytes_in,
+                        bytes_out=len(wasm_out),
+                        shadow_mismatch=True,
+                    )
+                    return wasm_out
+
+            _record_stats(
+                op_id=op_id,
+                active_bin=active_bin,
+                returned_native=True,
+                bytes_in=bytes_in,
+                bytes_out=len(wasm_out),
+            )
+            return wasm_out
+
         if do_shadow:
             try:
                 handle = _ctypes_load_module(op_id, active_bin)
@@ -586,7 +708,8 @@ def route(op_id: str, *args: bytes | bytearray | memoryview) -> bytes:
             try:
                 native_out = _invoke_bloblist(handle, bloblist)
             except Exception:
-                _disable(op_id, active_bin, reason="invoke_fail")
+                if _should_hard_disable_on_invoke_fail(op_id):
+                    _disable(op_id, active_bin, reason="invoke_fail")
                 _disable_shadow_route(op_id, active_bin, reason="invoke_fail")
                 _record_stats(
                     op_id=op_id,
@@ -640,7 +763,8 @@ def route(op_id: str, *args: bytes | bytearray | memoryview) -> bytes:
         _record_stats(op_id=op_id, active_bin=active_bin, returned_native=True, bytes_in=bytes_in, bytes_out=len(native_out))
         return native_out
     except Exception:
-        _disable(op_id, active_bin, reason="invoke_fail")
+        if _should_hard_disable_on_invoke_fail(op_id):
+            _disable(op_id, active_bin, reason="invoke_fail")
         out = bytes(py_impl(*args))
         _record_stats(
             op_id=op_id,

@@ -1,0 +1,49 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v19_0/orch_worldmodel_uncertainty_report_v1",
+  "title": "Orchestration worldmodel uncertainty report v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_id",
+    "id",
+    "tick_u64",
+    "worldmodel_bundle_hash",
+    "transition_dataset_manifest_hash",
+    "top_k_u64",
+    "uncertain_features",
+    "created_at_utc"
+  ],
+  "properties": {
+    "schema_id": {"const": "orch_worldmodel_uncertainty_report_v1"},
+    "id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "tick_u64": {"type": "integer", "minimum": 0},
+    "worldmodel_bundle_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "transition_dataset_manifest_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "top_k_u64": {"type": "integer", "minimum": 1},
+    "uncertain_features": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["feature_id", "metric_kind", "uncertainty_q32", "evidence"],
+        "properties": {
+          "feature_id": {"type": "string", "minLength": 1},
+          "metric_kind": {"const": "HOLDOUT_RESIDUAL_Q32"},
+          "uncertainty_q32": {"type": "integer"},
+          "evidence": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["mean_abs_error_q32", "p90_abs_error_q32", "n_u64"],
+            "properties": {
+              "mean_abs_error_q32": {"type": "integer"},
+              "p90_abs_error_q32": {"type": "integer"},
+              "n_u64": {"type": "integer", "minimum": 0}
+            }
+          }
+        }
+      }
+    },
+    "created_at_utc": {"type": "string", "format": "date-time"}
+  }
+}

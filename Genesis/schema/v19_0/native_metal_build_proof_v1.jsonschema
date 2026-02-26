@@ -1,0 +1,27 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v19_0/native_metal_build_proof_v1",
+  "title": "Native metal build proof v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_id",
+    "id",
+    "toolchain_manifest_hash",
+    "metal_src_merkle_hash",
+    "output_metallib_hash",
+    "build_twice_repro_b",
+    "created_at_utc"
+  ],
+  "properties": {
+    "schema_id": {"const": "native_metal_build_proof_v1"},
+    "id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "toolchain_manifest_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "metal_src_merkle_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "output_metallib_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "build_twice_repro_b": {"type": "boolean"},
+    "created_at_utc": {"type": "string", "format": "date-time"},
+    "build1_metallib_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "build2_metallib_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"}
+  }
+}

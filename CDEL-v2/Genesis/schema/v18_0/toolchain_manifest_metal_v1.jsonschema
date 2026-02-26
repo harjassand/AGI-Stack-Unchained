@@ -1,0 +1,35 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v18_0/toolchain_manifest_metal_v1",
+  "title": "Toolchain manifest metal v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "toolchain_id",
+    "checker_name",
+    "xcrun_executable",
+    "xcrun_sha256",
+    "metal_executable",
+    "metal_sha256",
+    "metallib_executable",
+    "metallib_sha256",
+    "host_triple",
+    "compile_invocation_template",
+    "link_invocation_template"
+  ],
+  "properties": {
+    "schema_version": {"const": "toolchain_manifest_metal_v1"},
+    "toolchain_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "checker_name": {"const": "metal_toolchain_v1"},
+    "xcrun_executable": {"type": "string", "minLength": 1},
+    "xcrun_sha256": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "metal_executable": {"type": "string", "minLength": 1},
+    "metal_sha256": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "metallib_executable": {"type": "string", "minLength": 1},
+    "metallib_sha256": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "host_triple": {"type": "string", "minLength": 1},
+    "compile_invocation_template": {"type": "array", "items": {"type": "string"}, "minItems": 1},
+    "link_invocation_template": {"type": "array", "items": {"type": "string"}, "minItems": 1}
+  }
+}

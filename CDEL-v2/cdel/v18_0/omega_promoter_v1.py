@@ -1734,6 +1734,18 @@ def run_promotion(
                     binding_without_id["native_restricted_ir_hash"] = restricted_ir_hash
                     binding_without_id["native_src_merkle_hash"] = source_merkle_hash
                     binding_without_id["native_build_proof_hash"] = build_proof_hash
+                    for bundle_field, binding_field in (
+                        ("metal_src_merkle_hash", "native_metal_src_merkle_hash"),
+                        ("metal_build_proof_hash", "native_metal_build_proof_hash"),
+                        ("metal_healthcheck_vectors_hash", "native_metal_healthcheck_vectors_hash"),
+                        ("metal_healthcheck_receipt_hash", "native_metal_healthcheck_receipt_hash"),
+                        ("metal_binary_hash", "native_metal_binary_hash"),
+                        ("metal_toolchain_manifest_hash", "native_metal_toolchain_manifest_hash"),
+                    ):
+                        value = bundle_obj.get(bundle_field)
+                        if value is None:
+                            continue
+                        binding_without_id[binding_field] = _require_sha256_hash(value, field=bundle_field)
                     native_runtime_contract_hash_for_receipt = runtime_contract_hash
                     native_healthcheck_vectors_hash_for_receipt = healthcheck_vectors_hash
                 binding_payload = dict(binding_without_id)

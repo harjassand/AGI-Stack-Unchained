@@ -1233,10 +1233,31 @@ def run_tick(
         except Exception:
             native_ops = []
         if native_ops:
+            try:
+                from orchestrator.native.runtime_stats_v1 import (
+                    RUNTIME_STATS_SOURCE_ID,
+                    WORK_UNITS_FORMULA_ID,
+                    derive_total_work_units,
+                )
+            except Exception:
+                RUNTIME_STATS_SOURCE_ID = "omega_native_router_kernel_counter_v1"
+                WORK_UNITS_FORMULA_ID = "omega_native_router_work_units_formula_v1"
+
+                def derive_total_work_units(rows: list[dict[str, Any]]) -> int:
+                    total = 0
+                    for row in rows:
+                        if not isinstance(row, dict):
+                            continue
+                        total += max(0, int(row.get("work_units_u64", 0)))
+                    return int(total)
+
             stats_payload = {
                 "schema_version": "omega_native_runtime_stats_v1",
                 "stats_id": "sha256:" + ("0" * 64),
                 "tick_u64": int(tick_u64),
+                "runtime_stats_source_id": str(RUNTIME_STATS_SOURCE_ID),
+                "work_units_formula_id": str(WORK_UNITS_FORMULA_ID),
+                "total_work_units_u64": int(derive_total_work_units(native_ops)),
                 "ops": native_ops,
             }
             validate_schema(stats_payload, "omega_native_runtime_stats_v1")

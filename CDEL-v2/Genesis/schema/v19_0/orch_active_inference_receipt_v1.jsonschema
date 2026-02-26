@@ -1,0 +1,53 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v19_0/orch_active_inference_receipt_v1",
+  "title": "Orchestration active inference receipt v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_id",
+    "id",
+    "tick_u64",
+    "producer_run_id",
+    "uncertainty_report_hash",
+    "queries",
+    "sip_ingestion",
+    "epistemic_reduce",
+    "created_at_utc"
+  ],
+  "properties": {
+    "schema_id": {"const": "orch_active_inference_receipt_v1"},
+    "id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "tick_u64": {"type": "integer", "minimum": 0},
+    "producer_run_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "uncertainty_report_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "queries": {
+      "type": "array",
+      "items": {"type": "string", "minLength": 1}
+    },
+    "sip_ingestion": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["campaign_id", "sip_receipt_hash", "ingested_content_ids"],
+      "properties": {
+        "campaign_id": {"const": "rsi_polymath_sip_ingestion_l0_v1"},
+        "sip_receipt_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+        "ingested_content_ids": {
+          "type": "array",
+          "items": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"}
+        }
+      }
+    },
+    "epistemic_reduce": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["campaign_id", "reduce_receipt_hash", "utility_policy_hash"],
+      "properties": {
+        "campaign_id": {"const": "rsi_epistemic_reduce_v1"},
+        "reduce_receipt_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+        "utility_policy_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"}
+      }
+    },
+    "created_at_utc": {"type": "string", "format": "date-time"}
+  }
+}

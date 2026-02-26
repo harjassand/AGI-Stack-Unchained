@@ -1,0 +1,22 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v19_0/oracle_operator_bank_pointer_v1",
+  "title": "Oracle operator bank pointer v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_id",
+    "id",
+    "bank_hash",
+    "bank_relpath",
+    "created_at_utc"
+  ],
+  "properties": {
+    "schema_id": {"const": "oracle_operator_bank_pointer_v1"},
+    "id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "bank_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "bank_relpath": {"type": "string", "minLength": 1},
+    "created_at_utc": {"type": "string", "format": "date-time"},
+    "bank_version_u64": {"type": "integer", "minimum": 1}
+  }
+}

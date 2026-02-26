@@ -16,6 +16,10 @@
     "receipt_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
     "tick_u64": {"type": "integer", "minimum": 0},
     "registry_hash": {"anyOf": [{"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"}, {"type": "null"}]},
+    "shadow_impl_kind": {"type": "string", "enum": ["WASM", "METAL"]},
+    "num_cases_u64": {"type": "integer", "minimum": 0},
+    "num_mismatch_u64": {"type": "integer", "minimum": 0},
+    "first_mismatch_case_u64": {"type": ["integer", "null"], "minimum": 0},
     "rows": {
       "type": "array",
       "items": {
@@ -37,6 +41,7 @@
           "binary_sha256": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
           "disabled_key": {"type": "string", "pattern": "^[^|]+\\|sha256:[0-9a-f]{64}$"},
           "portability_status": {"type": "string", "enum": ["RUNNABLE", "PORTABILITY_SKIP_RUN"]},
+          "shadow_impl_kind": {"type": "string", "enum": ["WASM", "METAL"]},
           "shadow_route_disabled_b": {"type": "boolean"},
           "shadow_route_disable_reason": {"type": ["string", "null"]},
           "shadow_route_disable_tick_u64": {"type": ["integer", "null"], "minimum": 0},

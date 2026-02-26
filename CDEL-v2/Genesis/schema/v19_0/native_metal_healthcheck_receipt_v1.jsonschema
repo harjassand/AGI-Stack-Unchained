@@ -1,0 +1,48 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v19_0/native_metal_healthcheck_receipt_v1",
+  "title": "Native metal healthcheck receipt v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_id",
+    "id",
+    "op_id",
+    "metal_binary_sha256",
+    "restricted_ir_hash",
+    "vectors_hash",
+    "result",
+    "rows"
+  ],
+  "properties": {
+    "schema_id": {"const": "native_metal_healthcheck_receipt_v1"},
+    "id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "op_id": {"type": "string", "minLength": 1},
+    "metal_binary_sha256": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "restricted_ir_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "vectors_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "result": {"type": "string", "enum": ["PASS", "FAIL"]},
+    "rows": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "case_index_u64",
+          "vector_id",
+          "expected_output_sha256",
+          "actual_output_sha256",
+          "match_b"
+        ],
+        "properties": {
+          "case_index_u64": {"type": "integer", "minimum": 0},
+          "vector_id": {"type": "string", "minLength": 1},
+          "expected_output_sha256": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+          "actual_output_sha256": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+          "match_b": {"type": "boolean"}
+        }
+      }
+    }
+  }
+}

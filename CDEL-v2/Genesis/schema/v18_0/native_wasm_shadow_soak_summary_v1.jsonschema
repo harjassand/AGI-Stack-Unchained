@@ -26,7 +26,11 @@
     "readiness_gate_result": {"type": "string", "enum": ["PASS", "FAIL"]},
     "readiness_reasons": {"type": "array", "items": {"type": "string", "minLength": 1}},
     "module_count_u64": {"type": "integer", "minimum": 0},
-    "route_disabled_modules_u64": {"type": "integer", "minimum": 0}
+    "route_disabled_modules_u64": {"type": "integer", "minimum": 0},
+    "shadow_impl_kind": {"type": "string", "enum": ["WASM", "METAL"]},
+    "metal_shadow_ready_b": {"type": "boolean"},
+    "metal_checked_modules_u64": {"type": "integer", "minimum": 0},
+    "metal_mismatch_modules_u64": {"type": "integer", "minimum": 0}
   },
   "allOf": [
     {

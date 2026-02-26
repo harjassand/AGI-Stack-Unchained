@@ -1,0 +1,36 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v19_0/native_metal_src_merkle_v1",
+  "title": "Native metal source merkle v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_id",
+    "id",
+    "op_id",
+    "restricted_ir_hash",
+    "files",
+    "source_merkle_root"
+  ],
+  "properties": {
+    "schema_id": {"const": "native_metal_src_merkle_v1"},
+    "id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "op_id": {"type": "string", "minLength": 1},
+    "restricted_ir_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "files": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["path_rel", "sha256", "bytes_u64"],
+        "properties": {
+          "path_rel": {"type": "string", "minLength": 1},
+          "sha256": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+          "bytes_u64": {"type": "integer", "minimum": 0}
+        }
+      }
+    },
+    "source_merkle_root": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"}
+  }
+}

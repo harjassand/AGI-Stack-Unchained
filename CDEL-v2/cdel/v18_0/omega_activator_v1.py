@@ -127,6 +127,14 @@ def _verify_hashed_json(path: Path, *, expected_hash: str, schema_name: str) -> 
     return payload
 
 
+def _verify_hashed_json_v19(path: Path, *, expected_hash: str, schema_name: str) -> dict[str, Any]:
+    payload = load_canon_dict(path)
+    validate_schema_v19(payload, schema_name)
+    if canon_hash_obj(payload) != expected_hash:
+        raise RuntimeError("NONDETERMINISTIC")
+    return payload
+
+
 def _resolve_hashed_artifact_path(*, root: Path, suffix: str, digest: str) -> Path:
     hex64 = digest.split(":", 1)[1]
     target = f"sha256_{hex64}.{suffix}"
@@ -151,6 +159,18 @@ def _resolve_wasm_blob_path(*, root: Path, binary_sha256: str) -> Path:
     return matches[0].resolve()
 
 
+def _resolve_metallib_blob_path(*, root: Path, binary_sha256: str) -> Path:
+    hex64 = binary_sha256.split(":", 1)[1]
+    target = f"sha256_{hex64}.metallib"
+    direct = root / "daemon" / "rsi_knowledge_transpiler_v1" / "state" / "native" / "bin" / target
+    if direct.exists() and direct.is_file():
+        return direct.resolve()
+    matches = sorted(root.rglob(target), key=lambda p: p.as_posix())
+    if len(matches) != 1:
+        raise RuntimeError("MISSING_STATE_INPUT")
+    return matches[0].resolve()
+
+
 def _shadow_state_root(dispatch_ctx: dict[str, Any]) -> Path:
     state_root_raw = dispatch_ctx.get("state_root")
     if not isinstance(state_root_raw, (str, Path)):
@@ -163,6 +183,7 @@ def _normalize_shadow_module_row(row: dict[str, Any]) -> dict[str, Any]:
     op_id = str(row.get("op_id", "")).strip()
     binary_sha256 = str(row.get("binary_sha256", "")).strip()
     runtime_contract_hash = str(row.get("runtime_contract_hash", "")).strip()
+    restricted_ir_hash = str(row.get("restricted_ir_hash", "")).strip()
     campaign_id = str(row.get("campaign_id", "")).strip() or "rsi_knowledge_transpiler_v1"
     status = "STATUS_SHADOW"
     disabled_key = str(row.get("disabled_key", "")).strip()
@@ -185,18 +206,37 @@ def _normalize_shadow_module_row(row: dict[str, Any]) -> dict[str, Any]:
         shadow_route_disable_reason = None
         shadow_route_disable_tick_u64 = None
 
-    return {
+    shadow_impl_kind = str(row.get("shadow_impl_kind", "")).strip().upper()
+    if shadow_impl_kind not in {"WASM", "METAL"}:
+        shadow_impl_kind = "WASM"
+
+    normalized = {
         "op_id": op_id,
         "binary_sha256": binary_sha256,
         "runtime_contract_hash": runtime_contract_hash,
         "status": status,
         "campaign_id": campaign_id,
         "portability_status": portability_status,
+        "shadow_impl_kind": shadow_impl_kind,
         "shadow_route_disabled_b": bool(shadow_route_disabled_b),
         "shadow_route_disable_reason": shadow_route_disable_reason,
         "shadow_route_disable_tick_u64": shadow_route_disable_tick_u64,
         "disabled_key": disabled_key,
     }
+    if _is_sha256_prefixed(restricted_ir_hash):
+        normalized["restricted_ir_hash"] = restricted_ir_hash
+    for key in (
+        "metal_binary_sha256",
+        "metal_src_merkle_hash",
+        "metal_build_proof_hash",
+        "metal_healthcheck_vectors_hash",
+        "metal_healthcheck_receipt_hash",
+        "metal_toolchain_manifest_hash",
+    ):
+        value = str(row.get(key, "")).strip()
+        if _is_sha256_prefixed(value):
+            normalized[key] = value
+    return normalized
 
 
 def _current_host_triple() -> str:
@@ -304,22 +344,38 @@ def _install_native_shadow_registry(
         binding_payload.get("native_runtime_contract_hash"),
         field="native_runtime_contract_hash",
     )
-    _require_sha256_prefixed(
+    vectors_hash = _require_sha256_prefixed(
         binding_payload.get("native_healthcheck_vectors_hash"),
         field="native_healthcheck_vectors_hash",
     )
-    _require_sha256_prefixed(
+    restricted_ir_hash = _require_sha256_prefixed(
         binding_payload.get("native_restricted_ir_hash"),
         field="native_restricted_ir_hash",
     )
-    _require_sha256_prefixed(
+    _native_src_merkle_hash = _require_sha256_prefixed(
         binding_payload.get("native_src_merkle_hash"),
         field="native_src_merkle_hash",
     )
-    _require_sha256_prefixed(
+    _native_build_proof_hash = _require_sha256_prefixed(
         binding_payload.get("native_build_proof_hash"),
         field="native_build_proof_hash",
     )
+    optional_metal_binding: dict[str, str] = {}
+    for field in (
+        "native_metal_src_merkle_hash",
+        "native_metal_build_proof_hash",
+        "native_metal_healthcheck_vectors_hash",
+        "native_metal_healthcheck_receipt_hash",
+        "native_metal_binary_hash",
+        "native_metal_toolchain_manifest_hash",
+    ):
+        raw = binding_payload.get(field)
+        if raw is None:
+            continue
+        optional_metal_binding[field] = _require_sha256_prefixed(raw, field=field)
+    has_partial_metal = bool(optional_metal_binding) and len(optional_metal_binding) != 6
+    if has_partial_metal:
+        raise RuntimeError("SCHEMA_FAIL")
 
     subrun_root_raw = dispatch_ctx.get("subrun_root_abs")
     if not isinstance(subrun_root_raw, (str, Path)) or not str(subrun_root_raw):
@@ -340,10 +396,6 @@ def _install_native_shadow_registry(
         expected_hash=runtime_contract_hash,
         schema_name="native_wasm_runtime_contract_v1",
     )
-    vectors_hash = _require_sha256_prefixed(
-        binding_payload.get("native_healthcheck_vectors_hash"),
-        field="native_healthcheck_vectors_hash",
-    )
     _verify_hashed_json(
         _resolve_hashed_artifact_path(
             root=subrun_root,
@@ -359,6 +411,89 @@ def _install_native_shadow_registry(
     _atomic_copy(wasm_path, cache_blob)
     if _hash_file_bytes(cache_blob) != binary_sha256:
         raise RuntimeError("NONDETERMINISTIC")
+
+    metal_shadow_row: dict[str, Any] = {}
+    if optional_metal_binding:
+        metal_binary_sha256 = optional_metal_binding["native_metal_binary_hash"]
+        metal_src_merkle_hash = optional_metal_binding["native_metal_src_merkle_hash"]
+        metal_build_proof_hash = optional_metal_binding["native_metal_build_proof_hash"]
+        metal_vectors_hash = optional_metal_binding["native_metal_healthcheck_vectors_hash"]
+        metal_health_hash = optional_metal_binding["native_metal_healthcheck_receipt_hash"]
+        metal_toolchain_hash = optional_metal_binding["native_metal_toolchain_manifest_hash"]
+
+        metal_path = _resolve_metallib_blob_path(root=subrun_root, binary_sha256=metal_binary_sha256)
+        if _hash_file_bytes(metal_path) != metal_binary_sha256:
+            raise RuntimeError("NONDETERMINISTIC")
+        _verify_hashed_json_v19(
+            _resolve_hashed_artifact_path(
+                root=subrun_root,
+                suffix="native_metal_src_merkle_v1.json",
+                digest=metal_src_merkle_hash,
+            ),
+            expected_hash=metal_src_merkle_hash,
+            schema_name="native_metal_src_merkle_v1",
+        )
+        metal_build_payload = _verify_hashed_json_v19(
+            _resolve_hashed_artifact_path(
+                root=subrun_root,
+                suffix="native_metal_build_proof_v1.json",
+                digest=metal_build_proof_hash,
+            ),
+            expected_hash=metal_build_proof_hash,
+            schema_name="native_metal_build_proof_v1",
+        )
+        _verify_hashed_json_v19(
+            _resolve_hashed_artifact_path(
+                root=subrun_root,
+                suffix="native_metal_healthcheck_vectors_v1.json",
+                digest=metal_vectors_hash,
+            ),
+            expected_hash=metal_vectors_hash,
+            schema_name="native_metal_healthcheck_vectors_v1",
+        )
+        metal_health_payload = _verify_hashed_json_v19(
+            _resolve_hashed_artifact_path(
+                root=subrun_root,
+                suffix="native_metal_healthcheck_receipt_v1.json",
+                digest=metal_health_hash,
+            ),
+            expected_hash=metal_health_hash,
+            schema_name="native_metal_healthcheck_receipt_v1",
+        )
+        toolchain_payload = _verify_hashed_json(
+            _resolve_hashed_artifact_path(
+                root=subrun_root,
+                suffix="toolchain_manifest_metal_v1.json",
+                digest=metal_toolchain_hash,
+            ),
+            expected_hash=metal_toolchain_hash,
+            schema_name="toolchain_manifest_metal_v1",
+        )
+        if str(metal_build_payload.get("output_metallib_hash", "")) != metal_binary_sha256:
+            raise RuntimeError("NONDETERMINISTIC")
+        if str(metal_build_payload.get("toolchain_manifest_hash", "")) != metal_toolchain_hash:
+            raise RuntimeError("NONDETERMINISTIC")
+        if str(metal_health_payload.get("metal_binary_sha256", "")) != metal_binary_sha256:
+            raise RuntimeError("NONDETERMINISTIC")
+        if str(metal_health_payload.get("result", "")) != "PASS":
+            raise RuntimeError("VERIFY_ERROR")
+        if str(toolchain_payload.get("schema_version", "")) != "toolchain_manifest_metal_v1":
+            raise RuntimeError("SCHEMA_FAIL")
+
+        cache_metal_blob = _omega_cache_root() / "native_blobs" / f"sha256_{metal_binary_sha256.split(':', 1)[1]}.metallib"
+        _atomic_copy(metal_path, cache_metal_blob)
+        if _hash_file_bytes(cache_metal_blob) != metal_binary_sha256:
+            raise RuntimeError("NONDETERMINISTIC")
+
+        metal_shadow_row = {
+            "shadow_impl_kind": "METAL",
+            "metal_binary_sha256": metal_binary_sha256,
+            "metal_src_merkle_hash": metal_src_merkle_hash,
+            "metal_build_proof_hash": metal_build_proof_hash,
+            "metal_healthcheck_vectors_hash": metal_vectors_hash,
+            "metal_healthcheck_receipt_hash": metal_health_hash,
+            "metal_toolchain_manifest_hash": metal_toolchain_hash,
+        }
 
     shadow_dir = _shadow_state_root(dispatch_ctx)
     existing_modules = _read_active_shadow_registry_modules(shadow_dir)
@@ -389,14 +524,17 @@ def _install_native_shadow_registry(
         "op_id": op_id,
         "binary_sha256": binary_sha256,
         "runtime_contract_hash": runtime_contract_hash,
+        "restricted_ir_hash": restricted_ir_hash,
         "status": "STATUS_SHADOW",
         "campaign_id": campaign_id,
         "portability_status": _compute_portability_status(runtime_contract_payload),
+        "shadow_impl_kind": "METAL" if bool(metal_shadow_row) else "WASM",
         "shadow_route_disabled_b": bool(preserved_disabled),
         "shadow_route_disable_reason": preserved_reason,
         "shadow_route_disable_tick_u64": preserved_tick,
         "disabled_key": disabled_key,
     }
+    merged[op_id].update(metal_shadow_row)
 
     state_root = Path(dispatch_ctx["state_root"]).resolve()
     daemon_id = state_root.parent.name if state_root.parent.name else "rsi_omega_daemon_v19_0"
@@ -1056,6 +1194,12 @@ def run_activation(
     native_restricted_ir_hash: str | None = None
     native_src_merkle_hash: str | None = None
     native_build_proof_hash: str | None = None
+    native_metal_src_merkle_hash: str | None = None
+    native_metal_build_proof_hash: str | None = None
+    native_metal_healthcheck_vectors_hash: str | None = None
+    native_metal_healthcheck_receipt_hash: str | None = None
+    native_metal_binary_hash: str | None = None
+    native_metal_toolchain_manifest_hash: str | None = None
     native_shadow_registry_hash: str | None = None
 
     live_mode = mode == "live"
@@ -1132,6 +1276,28 @@ def run_activation(
                         binding_payload.get("native_build_proof_hash"),
                         field="native_build_proof_hash",
                     )
+                    optional_metal_binding: dict[str, str] = {}
+                    for field in (
+                        "native_metal_src_merkle_hash",
+                        "native_metal_build_proof_hash",
+                        "native_metal_healthcheck_vectors_hash",
+                        "native_metal_healthcheck_receipt_hash",
+                        "native_metal_binary_hash",
+                        "native_metal_toolchain_manifest_hash",
+                    ):
+                        value = binding_payload.get(field)
+                        if value is None:
+                            continue
+                        optional_metal_binding[field] = _require_sha256_prefixed(value, field=field)
+                    if optional_metal_binding and len(optional_metal_binding) != 6:
+                        raise RuntimeError("SCHEMA_FAIL")
+                    if optional_metal_binding:
+                        native_metal_src_merkle_hash = optional_metal_binding["native_metal_src_merkle_hash"]
+                        native_metal_build_proof_hash = optional_metal_binding["native_metal_build_proof_hash"]
+                        native_metal_healthcheck_vectors_hash = optional_metal_binding["native_metal_healthcheck_vectors_hash"]
+                        native_metal_healthcheck_receipt_hash = optional_metal_binding["native_metal_healthcheck_receipt_hash"]
+                        native_metal_binary_hash = optional_metal_binding["native_metal_binary_hash"]
+                        native_metal_toolchain_manifest_hash = optional_metal_binding["native_metal_toolchain_manifest_hash"]
                     native_shadow_registry_hash = _install_native_shadow_registry(
                         dispatch_ctx=dispatch_ctx,
                         tick_u64=int(tick_u64),
@@ -1198,6 +1364,18 @@ def run_activation(
         activation_payload["native_src_merkle_hash"] = native_src_merkle_hash
     if native_build_proof_hash is not None:
         activation_payload["native_build_proof_hash"] = native_build_proof_hash
+    if native_metal_src_merkle_hash is not None:
+        activation_payload["native_metal_src_merkle_hash"] = native_metal_src_merkle_hash
+    if native_metal_build_proof_hash is not None:
+        activation_payload["native_metal_build_proof_hash"] = native_metal_build_proof_hash
+    if native_metal_healthcheck_vectors_hash is not None:
+        activation_payload["native_metal_healthcheck_vectors_hash"] = native_metal_healthcheck_vectors_hash
+    if native_metal_healthcheck_receipt_hash is not None:
+        activation_payload["native_metal_healthcheck_receipt_hash"] = native_metal_healthcheck_receipt_hash
+    if native_metal_binary_hash is not None:
+        activation_payload["native_metal_binary_hash"] = native_metal_binary_hash
+    if native_metal_toolchain_manifest_hash is not None:
+        activation_payload["native_metal_toolchain_manifest_hash"] = native_metal_toolchain_manifest_hash
     if native_shadow_registry_hash is not None:
         activation_payload["native_shadow_registry_hash"] = native_shadow_registry_hash
     require_no_absolute_paths(activation_payload)

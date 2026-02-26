@@ -1,0 +1,33 @@
+{
+  "schema_version": "query_router_rules_v1",
+  "rules": [
+    {
+      "match_prefix": "THERMO_",
+      "topic_id": "SCIENCE_THERMO",
+      "query_templates": [
+        "thermodynamics {feature}",
+        "free energy gradient {feature}"
+      ]
+    },
+    {
+      "match_prefix": "POLICY_",
+      "topic_id": "POLICY_SYSTEMS",
+      "query_templates": [
+        "governance mechanism {feature}",
+        "policy control loop {feature}"
+      ]
+    },
+    {
+      "match_prefix": "RSI_",
+      "topic_id": "CAPABILITY_RESEARCH",
+      "query_templates": [
+        "capability robustness {feature}",
+        "deterministic optimization {feature}"
+      ]
+    }
+  ],
+  "default_topic_id": "GENERAL",
+  "default_query_templates": [
+    "research summary {feature}"
+  ]
+}

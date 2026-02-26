@@ -9,10 +9,26 @@ import re
 import shutil
 import struct
 import subprocess
+import sys
 import tempfile
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+_REPO_ROOT = Path(__file__).resolve().parents[2]
+for _entry in (_REPO_ROOT, _REPO_ROOT / "CDEL-v2"):
+    _value = str(_entry)
+    if _value not in sys.path:
+        sys.path.insert(0, _value)
+
+from orchestrator.native.metal_runner_v1 import invoke_bloblist_v1 as metal_invoke_bloblist_v1
+from tools.polymath.metal_codegen_v1 import generate_msl_source
+from tools.polymath.metal_toolchain_v1 import (
+    MetalToolchainError,
+    NonReproMetalBuildError,
+    build_toolchain_manifest,
+    build_twice_repro as build_metal_twice_repro,
+)
 
 _SHA256_RE = re.compile(r"^sha256:[0-9a-f]{64}$")
 _INT_RE = re.compile(r"^-?[0-9]+$")
@@ -43,6 +59,18 @@ def _hash_bytes(data: bytes) -> str:
 
 def _hash_file(path: Path) -> str:
     return _hash_bytes(path.read_bytes())
+
+
+def _encode_bloblist_v1(argv: list[bytes]) -> bytes:
+    if len(argv) > 0xFFFFFFFF:
+        raise TranspileError("SCHEMA_FAIL:argc")
+    header = struct.pack("<I", len(argv))
+    lens = b"".join(struct.pack("<I", len(b)) for b in argv)
+    return header + lens + b"".join(argv)
+
+
+def _utc_now_rfc3339() -> str:
+    return datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
 
 
 def _ensure_sha256(value: Any, *, field: str) -> str:
@@ -618,6 +646,106 @@ def _build_healthcheck_vectors(
     return payload, eval_rows
 
 
+def _build_metal_src_merkle_payload(*, op_id: str, restricted_ir_hash: str, src_files: list[dict[str, Any]], source_merkle_root: str) -> dict[str, Any]:
+    payload = {
+        "schema_id": "native_metal_src_merkle_v1",
+        "id": "sha256:" + ("0" * 64),
+        "op_id": op_id,
+        "restricted_ir_hash": restricted_ir_hash,
+        "files": src_files,
+        "source_merkle_root": source_merkle_root,
+    }
+    payload["id"] = _canon_hash_obj({k: v for k, v in payload.items() if k != "id"})
+    return payload
+
+
+def _build_metal_vectors_payload(
+    *,
+    op_id: str,
+    restricted_ir_hash: str,
+    eval_rows: list[tuple[int, int, str]],
+) -> dict[str, Any]:
+    vectors = [
+        {
+            "vector_id": f"vec_{idx:04d}",
+            "argv_hex": [struct.pack("<q", int(x_q32)).hex(), struct.pack("<q", int(y_q32)).hex()],
+            "expected_output_sha256": str(expected_hash),
+        }
+        for idx, (x_q32, y_q32, expected_hash) in enumerate(eval_rows)
+    ]
+    payload = {
+        "schema_id": "native_metal_healthcheck_vectors_v1",
+        "id": "sha256:" + ("0" * 64),
+        "op_id": op_id,
+        "restricted_ir_hash": restricted_ir_hash,
+        "vectors": vectors,
+    }
+    payload["id"] = _canon_hash_obj({k: v for k, v in payload.items() if k != "id"})
+    return payload
+
+
+def _run_metal_healthcheck_from_ir(
+    *,
+    state_root: Path,
+    op_id: str,
+    metal_hash: str,
+    restricted_ir_hash: str,
+    vectors_hash: str,
+    eval_rows: list[tuple[int, int, str]],
+) -> dict[str, Any]:
+    rows: list[dict[str, Any]] = []
+    overall_pass = True
+    prev_state_root = os.environ.get("OMEGA_DAEMON_STATE_ROOT")
+    os.environ["OMEGA_DAEMON_STATE_ROOT"] = str(state_root.resolve())
+    try:
+        for idx, (x_q32, y_q32, expected_hash) in enumerate(eval_rows):
+            try:
+                bloblist = _encode_bloblist_v1([struct.pack("<q", int(x_q32)), struct.pack("<q", int(y_q32))])
+                metal_out = metal_invoke_bloblist_v1(
+                    op_id=op_id,
+                    metal_binary_sha256=metal_hash,
+                    bloblist=bloblist,
+                    restricted_ir_hash=restricted_ir_hash,
+                )
+                if len(metal_out) != 8:
+                    raise TranspileError("SCHEMA_FAIL:metal_output_len")
+                got = struct.unpack("<q", metal_out)[0]
+                actual_hash = _hash_bytes(struct.pack("<q", int(got)))
+                match = actual_hash == str(expected_hash)
+            except Exception:  # noqa: BLE001
+                actual_hash = _hash_bytes(b"")
+                match = False
+            rows.append(
+                {
+                    "case_index_u64": int(idx),
+                    "vector_id": f"vec_{idx:04d}",
+                    "expected_output_sha256": str(expected_hash),
+                    "actual_output_sha256": actual_hash,
+                    "match_b": bool(match),
+                }
+            )
+            if not match:
+                overall_pass = False
+    finally:
+        if prev_state_root is None:
+            os.environ.pop("OMEGA_DAEMON_STATE_ROOT", None)
+        else:
+            os.environ["OMEGA_DAEMON_STATE_ROOT"] = prev_state_root
+
+    receipt = {
+        "schema_id": "native_metal_healthcheck_receipt_v1",
+        "id": "sha256:" + ("0" * 64),
+        "op_id": op_id,
+        "metal_binary_sha256": metal_hash,
+        "restricted_ir_hash": restricted_ir_hash,
+        "vectors_hash": vectors_hash,
+        "result": "PASS" if overall_pass else "FAIL",
+        "rows": rows,
+    }
+    receipt["id"] = _canon_hash_obj({k: v for k, v in receipt.items() if k != "id"})
+    return receipt
+
+
 def _render_runtime_command(contract: dict[str, Any], *, wasm_path: Path, x_q32: int, y_q32: int) -> list[str]:
     out: list[str] = []
     for token in list(contract.get("argv_template", [])):
@@ -727,6 +855,8 @@ def run_transpile(
     kernel_spec_path: Path,
     rust_toolchain_manifest_path: Path,
     wasmtime_manifest_path: Path,
+    emit_metal: bool = False,
+    strict_metal: bool = False,
 ) -> dict[str, Any]:
     state_root = state_root.resolve()
     op_id = "omega_kernel_eval_v1"
@@ -741,12 +871,35 @@ def run_transpile(
     bin_dir = native_root / "bin"
     errors_dir = native_root / "errors"
     work_crate = native_root / "work" / "crate"
+    work_metal = native_root / "work" / "metal"
+    metal_src_dir = native_root / "metal_src"
+    metal_toolchain_dir = native_root / "metal_toolchain"
+    metal_build_dir = native_root / "metal_build"
+    metal_vectors_dir = native_root / "metal_vectors"
+    metal_health_dir = native_root / "metal_health"
 
-    for path in [ir_dir, src_merkle_dir, build_dir, runtime_dir, health_dir, vectors_dir, bin_dir, errors_dir]:
+    for path in [
+        ir_dir,
+        src_merkle_dir,
+        build_dir,
+        runtime_dir,
+        health_dir,
+        vectors_dir,
+        bin_dir,
+        errors_dir,
+        metal_src_dir,
+        metal_toolchain_dir,
+        metal_build_dir,
+        metal_vectors_dir,
+        metal_health_dir,
+    ]:
         path.mkdir(parents=True, exist_ok=True)
     if work_crate.exists():
         shutil.rmtree(work_crate)
     work_crate.mkdir(parents=True, exist_ok=True)
+    if work_metal.exists():
+        shutil.rmtree(work_metal)
+    work_metal.mkdir(parents=True, exist_ok=True)
 
     sip_hash = _ensure_sha256(sip_knowledge_artifact_hash, field="sip_knowledge_artifact_hash")
     kernel_spec = _load_json_dict(kernel_spec_path)
@@ -885,7 +1038,136 @@ def run_transpile(
         id_field="receipt_id",
     )
 
-    return {
+    metal_status = "DISABLED"
+    metal_skip_reason: str | None = None
+    metal_payload: dict[str, Any] = {}
+
+    if bool(emit_metal):
+        try:
+            metal_status = "OK"
+            msl_source = generate_msl_source(ir_obj)
+            msl_path = work_metal / "omega_kernel_eval_v1.metal"
+            msl_path.write_text(msl_source, encoding="utf-8")
+
+            metal_source_rows = _source_rows(work_metal)
+            metal_src_merkle_root = _source_merkle(metal_source_rows)
+            metal_src_payload = _build_metal_src_merkle_payload(
+                op_id=op_id,
+                restricted_ir_hash=ir_hash,
+                src_files=metal_source_rows,
+                source_merkle_root=metal_src_merkle_root,
+            )
+            metal_src_path, _metal_src_obj, metal_src_hash = _write_hashed_json(
+                metal_src_dir,
+                "native_metal_src_merkle_v1.json",
+                metal_src_payload,
+                id_field="id",
+            )
+
+            toolchain_manifest = build_toolchain_manifest()
+            toolchain_manifest_path, toolchain_manifest_obj, toolchain_manifest_hash = _write_hashed_json(
+                metal_toolchain_dir,
+                "toolchain_manifest_metal_v1.json",
+                toolchain_manifest,
+                id_field="toolchain_id",
+            )
+
+            try:
+                metallib_bytes, metal_build_proof = build_metal_twice_repro(
+                    msl_src_path=msl_path,
+                    toolchain=toolchain_manifest_obj,
+                )
+            except NonReproMetalBuildError as exc:
+                err_path, err_obj, err_hash = _write_nonrepro_build(
+                    errors_dir,
+                    op_id=op_id,
+                    build1_binary_sha256=str(exc.build1_metallib_hash),
+                    build2_binary_sha256=str(exc.build2_metallib_hash),
+                    source_merkle_root=metal_src_merkle_root,
+                    runtime_contract_hash=toolchain_manifest_hash,
+                )
+                return {
+                    "status": "NONREPRO_BUILD",
+                    "nonrepro_build_hash": err_hash,
+                    "nonrepro_build_path": err_path,
+                    "error": err_obj,
+                }
+            metal_hash = _hash_bytes(metallib_bytes)
+            metal_out_path = bin_dir / f"sha256_{metal_hash.split(':', 1)[1]}.metallib"
+            metal_out_path.write_bytes(metallib_bytes)
+            if _hash_file(metal_out_path) != metal_hash:
+                raise TranspileError("NONDETERMINISTIC:metallib_copy_hash")
+
+            metal_build_proof["toolchain_manifest_hash"] = toolchain_manifest_hash
+            metal_build_proof["metal_src_merkle_hash"] = metal_src_hash
+            metal_build_proof["output_metallib_hash"] = metal_hash
+            metal_build_proof["build_twice_repro_b"] = True
+            metal_build_proof["created_at_utc"] = _utc_now_rfc3339()
+            metal_build_proof["id"] = _canon_hash_obj({k: v for k, v in metal_build_proof.items() if k != "id"})
+            metal_build_path, _metal_build_obj, metal_build_hash = _write_hashed_json(
+                metal_build_dir,
+                "native_metal_build_proof_v1.json",
+                metal_build_proof,
+                id_field="id",
+            )
+
+            metal_vectors_payload = _build_metal_vectors_payload(
+                op_id=op_id,
+                restricted_ir_hash=ir_hash,
+                eval_rows=eval_rows,
+            )
+            metal_vectors_path, _metal_vectors_obj, metal_vectors_hash = _write_hashed_json(
+                metal_vectors_dir,
+                "native_metal_healthcheck_vectors_v1.json",
+                metal_vectors_payload,
+                id_field="id",
+            )
+
+            metal_health_payload = _run_metal_healthcheck_from_ir(
+                state_root=state_root,
+                op_id=op_id,
+                metal_hash=metal_hash,
+                restricted_ir_hash=ir_hash,
+                vectors_hash=metal_vectors_hash,
+                eval_rows=eval_rows,
+            )
+            metal_health_path, metal_health_obj, metal_health_hash = _write_hashed_json(
+                metal_health_dir,
+                "native_metal_healthcheck_receipt_v1.json",
+                metal_health_payload,
+                id_field="id",
+            )
+            if str(metal_health_obj.get("result", "")) != "PASS":
+                raise TranspileError("VERIFY_ERROR:metal_healthcheck_failed")
+
+            metal_payload = {
+                "metal_src_merkle_hash": metal_src_hash,
+                "metal_src_merkle_path": metal_src_path,
+                "metal_toolchain_manifest_hash": toolchain_manifest_hash,
+                "metal_toolchain_manifest_path": toolchain_manifest_path,
+                "metal_build_proof_hash": metal_build_hash,
+                "metal_build_proof_path": metal_build_path,
+                "metal_healthcheck_vectors_hash": metal_vectors_hash,
+                "metal_healthcheck_vectors_path": metal_vectors_path,
+                "metal_healthcheck_receipt_hash": metal_health_hash,
+                "metal_healthcheck_receipt_path": metal_health_path,
+                "metal_binary_hash": metal_hash,
+                "metal_binary_path": metal_out_path,
+            }
+        except MetalToolchainError as exc:
+            if bool(strict_metal):
+                raise TranspileError(str(exc)) from exc
+            metal_status = "SKIP"
+            metal_skip_reason = str(exc)
+            metal_payload = {}
+        except Exception as exc:  # noqa: BLE001
+            if bool(strict_metal):
+                raise
+            metal_status = "SKIP"
+            metal_skip_reason = str(exc)
+            metal_payload = {}
+
+    result = {
         "status": "OK",
         "op_id": op_id,
         "restricted_ir_hash": ir_hash,
@@ -903,7 +1185,12 @@ def run_transpile(
         "native_binary_hash": wasm_hash,
         "native_binary_path": wasm_out_path,
         "rust_toolchain_hash": rust_toolchain_file_hash,
+        "metal_status": metal_status,
     }
+    if metal_skip_reason is not None:
+        result["metal_skip_reason"] = metal_skip_reason
+    result.update(metal_payload)
+    return result
 
 
 def _parse_args() -> argparse.Namespace:
@@ -913,6 +1200,8 @@ def _parse_args() -> argparse.Namespace:
     ap.add_argument("--kernel_spec", required=True)
     ap.add_argument("--rust_toolchain_manifest", required=True)
     ap.add_argument("--wasmtime_manifest", required=True)
+    ap.add_argument("--emit_metal", action="store_true")
+    ap.add_argument("--strict_metal", action="store_true")
     return ap.parse_args()
 
 
@@ -924,6 +1213,8 @@ def main() -> None:
         kernel_spec_path=Path(args.kernel_spec),
         rust_toolchain_manifest_path=Path(args.rust_toolchain_manifest),
         wasmtime_manifest_path=Path(args.wasmtime_manifest),
+        emit_metal=bool(args.emit_metal),
+        strict_metal=bool(args.strict_metal),
     )
     print(json.dumps(result, sort_keys=True, separators=(",", ":"), ensure_ascii=False))
 

@@ -1,0 +1,37 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v19_0/native_metal_healthcheck_vectors_v1",
+  "title": "Native metal healthcheck vectors v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_id",
+    "id",
+    "op_id",
+    "restricted_ir_hash",
+    "vectors"
+  ],
+  "properties": {
+    "schema_id": {"const": "native_metal_healthcheck_vectors_v1"},
+    "id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "op_id": {"type": "string", "minLength": 1},
+    "restricted_ir_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "vectors": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["vector_id", "argv_hex", "expected_output_sha256"],
+        "properties": {
+          "vector_id": {"type": "string", "minLength": 1},
+          "argv_hex": {
+            "type": "array",
+            "items": {"type": "string", "pattern": "^[0-9a-f]*$"}
+          },
+          "expected_output_sha256": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"}
+        }
+      }
+    }
+  }
+}

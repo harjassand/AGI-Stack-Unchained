@@ -12,6 +12,7 @@ from typing import Any
 
 from ..v1_7r.canon import write_canon_json
 from .omega_common_v1 import (
+    canon_hash_obj,
     fail,
     load_canon_dict,
     repo_root,
@@ -71,6 +72,8 @@ def run(*, campaign_pack: Path, out_dir: Path) -> None:
     sip_empirical_evidence_hash = _require_sha(pack.get("sip_empirical_evidence_hash"))
     if not kernel_spec_rel or not rust_toolchain_rel or not wasmtime_manifest_rel:
         fail("SCHEMA_FAIL")
+    emit_metal_b = bool(pack.get("emit_metal_b", True))
+    strict_metal_b = bool(pack.get("strict_metal_b", False))
 
     state_root = out_dir.resolve() / "daemon" / _CAMPAIGN_ID / "state"
     promotion_dir = state_root / "promotion"
@@ -108,6 +111,8 @@ def run(*, campaign_pack: Path, out_dir: Path) -> None:
         kernel_spec_path=kernel_spec_for_transpile_path,
         rust_toolchain_manifest_path=(root / rust_toolchain_rel).resolve(),
         wasmtime_manifest_path=(root / wasmtime_manifest_rel).resolve(),
+        emit_metal=bool(emit_metal_b),
+        strict_metal=bool(strict_metal_b),
     )
 
     status = str(result.get("status", "")).strip()
@@ -130,6 +135,20 @@ def run(*, campaign_pack: Path, out_dir: Path) -> None:
     healthcheck_receipt_hash = _require_sha(result.get("healthcheck_receipt_hash"))
     native_binary_hash = _require_sha(result.get("native_binary_hash"))
     rust_toolchain_hash = _require_sha(result.get("rust_toolchain_hash"))
+
+    optional_metal_fields: dict[str, str] = {}
+    for field in (
+        "metal_src_merkle_hash",
+        "metal_build_proof_hash",
+        "metal_healthcheck_vectors_hash",
+        "metal_healthcheck_receipt_hash",
+        "metal_binary_hash",
+        "metal_toolchain_manifest_hash",
+    ):
+        raw = result.get(field)
+        if raw is None:
+            continue
+        optional_metal_fields[field] = _require_sha(raw)
 
     native_module = {
         "op_id": str(result.get("op_id", "")).strip() or "omega_kernel_eval_v1",
@@ -163,6 +182,7 @@ def run(*, campaign_pack: Path, out_dir: Path) -> None:
         "native_binary_hash": native_binary_hash,
         "install_intent": "STATUS_SHADOW",
     }
+    bundle_payload.update(optional_metal_fields)
     validate_schema(bundle_payload, "omega_promotion_bundle_native_transpiler_v1_1")
 
     _, bundle_obj, _ = write_hashed_json(

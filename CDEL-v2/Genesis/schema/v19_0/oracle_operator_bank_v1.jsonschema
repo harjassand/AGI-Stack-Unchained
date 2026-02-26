@@ -2,24 +2,95 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://genesis.engine/specs/v19_0/oracle_operator_bank_v1",
   "title": "Oracle operator bank v1",
-  "type": "object",
-  "additionalProperties": false,
-  "required": ["schema_version", "bank_id", "operators"],
-  "properties": {
-    "schema_version": {
-      "const": "oracle_operator_bank_v1"
+  "oneOf": [
+    {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema_version", "bank_id", "operators"],
+      "properties": {
+        "schema_version": {"const": "oracle_operator_bank_v1"},
+        "bank_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+        "operators": {
+          "type": "array",
+          "items": {"$ref": "#/$defs/operator"}
+        }
+      }
     },
-    "bank_id": {
-      "type": "string",
-      "pattern": "^sha256:[0-9a-f]{64}$"
-    },
-    "operators": {
-      "type": "array",
-      "items": {
-        "$ref": "#/$defs/operator"
+    {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema_id", "id", "created_at_utc", "bank_version_u64", "macros"],
+      "properties": {
+        "schema_id": {"const": "oracle_operator_bank_v1"},
+        "id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+        "created_at_utc": {"type": "string", "format": "date-time"},
+        "bank_version_u64": {"type": "integer", "minimum": 1},
+        "macros": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "macro_id",
+              "token",
+              "description",
+              "arity_u64",
+              "placeholders",
+              "expansion_ir",
+              "mined_stats"
+            ],
+            "properties": {
+              "macro_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+              "token": {"type": "string", "pattern": "^OP_[A-Z0-9_]{3,64}$"},
+              "description": {"type": "string"},
+              "arity_u64": {"type": "integer", "minimum": 0},
+              "placeholders": {
+                "type": "array",
+                "items": {"type": "string", "pattern": "^ARG[0-9]+$"}
+              },
+              "expansion_ir": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["schema_id", "numeric_mode", "ops"],
+                "properties": {
+                  "schema_id": {"const": "polymath_restricted_ir_v1"},
+                  "numeric_mode": {"type": "string", "enum": ["Q32", "Q32_FIXEDPOINT"]},
+                  "ops": {
+                    "type": "array",
+                    "minItems": 1,
+                    "items": {
+                      "type": "object",
+                      "additionalProperties": false,
+                      "required": ["op"],
+                      "properties": {
+                        "op": {"type": "string", "minLength": 1},
+                        "idx": {"type": "integer", "minimum": 0},
+                        "value_q32": {"type": "integer"},
+                        "args": {
+                          "type": "array",
+                          "items": {"type": "integer"}
+                        }
+                      }
+                    }
+                  }
+                }
+              },
+              "mined_stats": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["count_u64", "avg_reward_q32", "compression_gain_q16"],
+                "properties": {
+                  "count_u64": {"type": "integer", "minimum": 1},
+                  "avg_reward_q32": {"type": "integer"},
+                  "compression_gain_q16": {"type": "integer"}
+                }
+              }
+            }
+          }
+        }
       }
     }
-  },
+  ],
   "$defs": {
     "operator": {
       "type": "object",

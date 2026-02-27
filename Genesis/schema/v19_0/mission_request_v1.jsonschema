@@ -8,6 +8,90 @@
   "properties": {
     "schema_name": {"const": "mission_request_v1"},
     "schema_version": {"const": "v19_0"},
+    "user_prompt": {"type": "string", "minLength": 1},
+    "attachments": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["filename", "mime", "size_bytes_u64"],
+        "properties": {
+          "content_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+          "filename": {"type": "string", "minLength": 1},
+          "mime": {"type": "string", "minLength": 1},
+          "size_bytes_u64": {"type": "integer", "minimum": 0}
+        }
+      }
+    },
+    "budgets": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "max_wall_ms_u64": {"type": "integer", "minimum": 0},
+        "max_cpu_ms_u64": {"type": "integer", "minimum": 0},
+        "max_steps_u64": {"type": "integer", "minimum": 0},
+        "max_disk_bytes_u64": {"type": "integer", "minimum": 0},
+        "max_net_bytes_u64": {"type": "integer", "minimum": 0}
+      }
+    },
+    "constraints": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "allowed_capabilities": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {"type": "string", "minLength": 1}
+        },
+        "forbidden_actions": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {"type": "string", "minLength": 1}
+        },
+        "forbidden_paths": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {"type": "string", "minLength": 1}
+        },
+        "network_mode": {
+          "type": "string",
+          "enum": ["OFF", "ALLOWLIST_ONLY", "ON"]
+        }
+      }
+    },
+    "success_spec": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "definition_of_done": {"type": "string", "minLength": 1},
+        "pinned_eval_refs": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["suitepack_id", "heldout_b", "gate"],
+            "properties": {
+              "suitepack_id": {"type": "string", "minLength": 1},
+              "heldout_b": {"type": "boolean"},
+              "gate": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["metric", "op", "threshold_q32"],
+                "properties": {
+                  "metric": {"type": "string", "minLength": 1},
+                  "op": {"type": "string", "enum": [">=", "<=", "=="]},
+                  "threshold_q32": {"type": "integer", "minimum": 0}
+                }
+              }
+            }
+          }
+        },
+        "deliverables": {
+          "type": "array",
+          "items": {"type": "string", "minLength": 1}
+        }
+      }
+    },
     "enabled_b": {"type": "boolean"},
     "priority": {"type": "string", "enum": ["HIGH", "MED", "LOW"]},
     "objective_tags": {
@@ -35,6 +119,7 @@
     "notes": {"type": "string"}
   },
   "anyOf": [
+    {"required": ["user_prompt"]},
     {"required": ["objective_tags"]},
     {"required": ["domain"]},
     {"required": ["allowed_capability_ids"]}

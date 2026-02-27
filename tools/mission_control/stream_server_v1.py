@@ -11,11 +11,18 @@ from pathlib import Path
 from typing import Any, AsyncIterator, Callable, Dict, Literal, Optional, Tuple
 
 from fastapi import FastAPI
+from fastapi import Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel
 
 from tools.mission_control.chat_router_v2 import decide_chat_route_v2
+from tools.mission_control.mission_pipeline_v1 import (
+    compile_mission,
+    current_mission_summary,
+    recent_mission_events,
+    run_compile_execute_and_pack,
+)
 from tools.mission_control._signal_parse_v1 import map_trace_class, parse_signal_line
 from tools.mission_control._state_discovery_v1 import (
     build_current_state_payload,
@@ -175,9 +182,32 @@ async def _stream_signal_events() -> AsyncIterator[str]:
     seq = 0
     file_handle = None
     active_path: Optional[Path] = None
+    mission_event_index = 0
 
     try:
         while True:
+            # Emit mission-control structured events first.
+            mission_events = recent_mission_events(limit=400, repo_root=REPO_ROOT)
+            if mission_event_index < len(mission_events):
+                for event in mission_events[mission_event_index:]:
+                    event_type = str(event.get("event_type", "MISSION_EVENT"))
+                    mission_id = str(event.get("mission_id", ""))
+                    payload = {
+                        "ts_unix_ms": _now_unix_ms(),
+                        "seq": seq,
+                        "trace_class": "MISSION",
+                        "signal": event_type,
+                        "tick_u64": int(event.get("tick_u64", 0)),
+                        "raw_line": json.dumps(event, sort_keys=True, separators=(",", ":")),
+                        "fields": {"mission_id": mission_id, "event_type": event_type},
+                        "event_type": event_type,
+                        "mission_id": mission_id,
+                        "payload": event.get("payload", {}),
+                    }
+                    yield _to_sse_data(payload)
+                    seq += 1
+                mission_event_index = len(mission_events)
+
             selected_path, _source = _discover_log_path_info()
             if selected_path is None:
                 payload = _build_event(
@@ -248,6 +278,53 @@ def _nlpmc_not_available_response() -> JSONResponse:
     )
 
 
+def _auto_run_enabled() -> bool:
+    return str(os.environ.get("MC_MISSION_AUTO_RUN", "1")).strip() not in {"0", "false", "False"}
+
+
+def _dev_mode_enabled() -> bool:
+    return str(os.environ.get("MC_MISSION_DEV_MODE", "1")).strip() not in {"0", "false", "False"}
+
+
+def _max_ticks_u64() -> int:
+    raw = str(os.environ.get("MC_MISSION_MAX_TICKS_U64", "64")).strip()
+    try:
+        value = int(raw)
+    except Exception:  # noqa: BLE001
+        value = 64
+    return max(1, value)
+
+
+def _run_pipeline_for_payload(
+    mission_request_payload: dict[str, Any],
+    *,
+    attachments: list[dict[str, Any]] | None = None,
+) -> dict[str, Any]:
+    if _auto_run_enabled():
+        return run_compile_execute_and_pack(
+            mission_request_payload,
+            attachment_files=attachments,
+            max_ticks_u64=_max_ticks_u64(),
+            dev_mode=_dev_mode_enabled(),
+            repo_root=REPO_ROOT,
+        )
+    compiled = compile_mission(
+        mission_request_payload,
+        attachment_files=attachments,
+        repo_root=REPO_ROOT,
+    )
+    return {
+        "ok_b": bool(compiled.get("compile_receipt", {}).get("ok_b", False)),
+        "reason_code": str(compiled.get("compile_receipt", {}).get("reason_code", "UNKNOWN")),
+        "mission_id": compiled.get("mission_id"),
+        "compile_receipt": compiled.get("compile_receipt"),
+        "mission_graph_id": compiled.get("mission_graph_id"),
+        "state": current_mission_summary(repo_root=REPO_ROOT).get("state", {}),
+        "evidence_pack_id": None,
+        "replay_verify": None,
+    }
+
+
 @app.get("/stream")
 async def stream() -> StreamingResponse:
     return StreamingResponse(
@@ -289,19 +366,89 @@ async def api_health() -> Dict[str, Any]:
 
 
 @app.post("/api/mission")
-async def api_mission(request: MissionRequest) -> Any:
-    compile_func = _resolve_nlpmc_compiler()
-    if compile_func is None:
-        return _nlpmc_not_available_response()
+async def api_mission(request: Request) -> Any:
+    staged_path = STAGED_PATH
+    attachments: list[dict[str, Any]] = []
+    mission_request_payload: dict[str, Any] | None = None
+    nlpmc_mission_id: str | None = None
+    human_intent = ""
+
+    content_type = str(request.headers.get("content-type", "")).lower()
+    if "multipart/form-data" in content_type:
+        form = await request.form()
+        mission_raw = form.get("mission_request")
+        if isinstance(mission_raw, str):
+            mission_request_payload = json.loads(mission_raw)
+        elif isinstance(mission_raw, dict):
+            mission_request_payload = dict(mission_raw)
+        for key, value in form.multi_items():
+            if key != "files":
+                continue
+            upload = value
+            if not hasattr(upload, "read"):
+                continue
+            data = await upload.read()
+            attachments.append(
+                {
+                    "filename": str(getattr(upload, "filename", "attachment.bin")),
+                    "mime": str(getattr(upload, "content_type", "application/octet-stream")),
+                    "data": data,
+                }
+            )
+    else:
+        payload = await request.json()
+        if isinstance(payload, dict):
+            if isinstance(payload.get("mission_request"), dict):
+                mission_request_payload = dict(payload.get("mission_request"))
+            elif isinstance(payload.get("human_intent_str"), str):
+                human_intent = str(payload.get("human_intent_str", "")).strip()
+            else:
+                mission_request_payload = dict(payload)
+
+    if mission_request_payload is None:
+        compile_func = _resolve_nlpmc_compiler()
+        if compile_func is None:
+            return _nlpmc_not_available_response()
+        try:
+            try:
+                nlpmc_result = compile_func(human_intent_str=human_intent)
+            except TypeError:
+                nlpmc_result = compile_func(human_intent)
+            if inspect.isawaitable(nlpmc_result):
+                nlpmc_result = await nlpmc_result
+        except Exception as exc:  # noqa: BLE001
+            return JSONResponse(
+                status_code=200,
+                content={
+                    "ok": False,
+                    "error": str(exc) if str(exc) else exc.__class__.__name__,
+                },
+            )
+
+        mission_request_payload = {
+            "schema_name": "mission_request_v1",
+            "schema_version": "v19_0",
+            "user_prompt": human_intent,
+            "domain": "general",
+        }
+        if isinstance(nlpmc_result, dict):
+            staged_path = str(nlpmc_result.get("staged_path", STAGED_PATH))
+            payload = nlpmc_result.get("payload")
+            if isinstance(payload, dict):
+                mission_request_payload = payload
+            nlpmc_mission_id = (
+                str(nlpmc_result.get("mission_id"))
+                if isinstance(nlpmc_result.get("mission_id"), str)
+                else None
+            )
+        elif isinstance(nlpmc_result, str):
+            nlpmc_mission_id = nlpmc_result
 
     try:
-        try:
-            result = compile_func(human_intent_str=request.human_intent_str)
-        except TypeError:
-            result = compile_func(request.human_intent_str)
-
-        if inspect.isawaitable(result):
-            result = await result
+        pipeline_result = _run_pipeline_for_payload(
+            mission_request_payload,
+            attachments=attachments,
+        )
     except Exception as exc:  # noqa: BLE001
         return JSONResponse(
             status_code=200,
@@ -311,18 +458,27 @@ async def api_mission(request: MissionRequest) -> Any:
             },
         )
 
-    mission_id = None
-    staged_path = STAGED_PATH
-    if isinstance(result, dict):
-        mission_id = result.get("mission_id")
-        staged_path = result.get("staged_path", STAGED_PATH)
-    elif isinstance(result, str):
-        mission_id = result
-
+    mission_id = pipeline_result.get("mission_id")
+    if not mission_id and nlpmc_mission_id:
+        mission_id = nlpmc_mission_id
     if not mission_id:
-        mission_id = f"sha256:{hashlib.sha256(request.human_intent_str.encode('utf-8')).hexdigest()}"
+        mission_id = f"sha256:{hashlib.sha256(human_intent.encode('utf-8')).hexdigest()}"
 
-    return {"ok": True, "mission_id": mission_id, "staged_path": staged_path}
+    return {
+        "ok": bool(pipeline_result.get("ok_b", True)),
+        "mission_id": mission_id,
+        "staged_path": staged_path,
+        "compile_receipt": pipeline_result.get("compile_receipt"),
+        "mission_graph_id": pipeline_result.get("mission_graph_id"),
+        "mission_state": pipeline_result.get("state"),
+        "evidence_pack_id": pipeline_result.get("evidence_pack_id"),
+        "replay_verify": pipeline_result.get("replay_verify"),
+    }
+
+
+@app.post("/api/mission/submit")
+async def api_mission_submit(request: Request) -> Any:
+    return await api_mission(request)
 
 
 @app.post("/api/chat")
@@ -360,11 +516,31 @@ async def api_chat(request: ChatRequest) -> Any:
 
     mission_staged_path = STAGED_PATH
     mission_request_preview: Dict[str, Any] = {}
+    mission_run: Dict[str, Any] = {}
     if isinstance(result, dict):
         mission_staged_path = str(result.get("staged_path", STAGED_PATH))
         payload = result.get("payload")
         if isinstance(payload, dict):
             mission_request_preview = payload
+    if not mission_request_preview:
+        mission_request_preview = {
+            "schema_name": "mission_request_v1",
+            "schema_version": "v19_0",
+            "user_prompt": request.message,
+            "domain": "general",
+        }
+
+    try:
+        mission_run = _run_pipeline_for_payload(mission_request_preview)
+    except Exception as exc:  # noqa: BLE001
+        return JSONResponse(
+            status_code=200,
+            content={
+                "ok": False,
+                "error": str(exc) if str(exc) else exc.__class__.__name__,
+                "kind": "MISSION",
+            },
+        )
 
     return {
         "ok": True,
@@ -372,6 +548,12 @@ async def api_chat(request: ChatRequest) -> Any:
         "assistant_message": "Queued. Streaming progress and verified artifacts as they arrive.",
         "mission_staged_path": mission_staged_path,
         "mission_request_preview": mission_request_preview,
+        "mission_id": mission_run.get("mission_id"),
+        "compile_receipt": mission_run.get("compile_receipt"),
+        "mission_graph_id": mission_run.get("mission_graph_id"),
+        "mission_state": mission_run.get("state"),
+        "evidence_pack_id": mission_run.get("evidence_pack_id"),
+        "replay_verify": mission_run.get("replay_verify"),
     }
 
 

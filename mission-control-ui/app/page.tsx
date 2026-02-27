@@ -13,6 +13,9 @@ type StreamPayload = {
   tick_u64?: number;
   raw_line: string;
   fields?: Record<string, string>;
+  event_type?: string;
+  mission_id?: string;
+  payload?: Record<string, unknown>;
 };
 
 type HealthPayload = {
@@ -34,6 +37,38 @@ type HealthPayload = {
 
 type StatePayload = {
   omega_state?: Record<string, unknown>;
+  mission_control?: {
+    summary?: {
+      found_b?: boolean;
+      mission_id?: string;
+      mission_graph_id?: string;
+      selected_branch_id?: string;
+      evidence_pack_id?: string;
+      replay_verify?: {
+        ok_b?: boolean;
+        reason_code?: string;
+      };
+      intent_branches?: Array<{
+        branch_id?: string;
+        title?: string;
+        confidence_q32?: number;
+      }>;
+      state?: {
+        status?: string;
+        active_node_id?: string | null;
+        completed_count_u64?: number;
+        total_node_results_u64?: number;
+        last_tick_u64?: number;
+        completed_node_ids?: string[];
+      };
+    };
+    recent_events?: Array<{
+      event_type?: string;
+      mission_id?: string;
+      tick_u64?: number;
+      payload?: Record<string, unknown>;
+    }>;
+  };
 };
 
 type ChatDirectResponse = {
@@ -49,6 +84,29 @@ type ChatMissionResponse = {
   assistant_message: string;
   mission_staged_path: string;
   mission_request_preview: Record<string, unknown>;
+  mission_id?: string;
+  compile_receipt?: {
+    ok_b?: boolean;
+    reason_code?: string;
+    selected_branch_id?: string;
+    mission_graph_id?: string;
+    required_clarifications?: Array<{
+      question?: string;
+      path?: string;
+      blocking_b?: boolean;
+    }>;
+  };
+  mission_graph_id?: string;
+  mission_state?: {
+    status?: string;
+    active_node_id?: string | null;
+    completed_count_u64?: number;
+  };
+  evidence_pack_id?: string | null;
+  replay_verify?: {
+    ok_b?: boolean;
+    reason_code?: string;
+  } | null;
 };
 
 type ChatFailureResponse = {
@@ -63,6 +121,10 @@ type ChatMessage = {
   role: "user" | "assistant";
   text: string;
   mission: boolean;
+  missionMeta?: {
+    missionId?: string;
+    selectedBranchId?: string;
+  };
 };
 
 function mapFriendlySignal(signal: string): string {
@@ -145,6 +207,15 @@ export default function Home() {
   const latestSignal = streamEvents.length > 0 ? streamEvents[streamEvents.length - 1].signal : "";
   const currentTick = extractTick(statePayload);
   const daemonDetected = Boolean(health?.log?.found_b && health?.state?.found_b);
+  const missionSummary = statePayload?.mission_control?.summary;
+  const missionState = missionSummary?.state;
+  const missionEvents = useMemo(
+    () =>
+      (statePayload?.mission_control?.recent_events ?? []).filter((event) =>
+        Boolean(event?.event_type?.startsWith("MISSION_NODE_")),
+      ),
+    [statePayload],
+  );
 
   useEffect(() => {
     const interval = window.setInterval(() => setNowMs(Date.now()), 1000);
@@ -285,13 +356,24 @@ export default function Home() {
           },
         ]);
       } else if (payload.ok && payload.kind === "MISSION") {
+        const missionId = payload.mission_id;
+        const selectedBranchId = payload.compile_receipt?.selected_branch_id;
+        const clarificationCount = payload.compile_receipt?.required_clarifications?.length ?? 0;
+        const status = payload.mission_state?.status ?? "RUNNING";
         setMessages((previous) => [
           ...previous,
           {
             id: ++idRef.current,
             role: "assistant",
-            text: "Queued...",
+            text:
+              clarificationCount > 0
+                ? `Clarification required (${clarificationCount}).`
+                : `Queued mission ${missionId ?? ""} (${status}).`,
             mission: true,
+            missionMeta: {
+              missionId,
+              selectedBranchId,
+            },
           },
         ]);
       } else {
@@ -378,7 +460,7 @@ export default function Home() {
                     </div>
                     {message.mission ? (
                       <div className="mt-2 rounded-xl border border-mc-border bg-mc-surface/90 p-3 text-xs text-mc-muted">
-                        <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+                        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
                           <div>
                             <p className="text-[10px] uppercase tracking-wide text-mc-muted2">Tick</p>
                             <p className="mt-1 font-medium text-mc-fg">{currentTick}</p>
@@ -393,6 +475,85 @@ export default function Home() {
                             <p className="text-[10px] uppercase tracking-wide text-mc-muted2">Verified receipts</p>
                             <p className="mt-1 font-medium text-mc-fg">{verifiedReceiptsCount}</p>
                           </div>
+                          <div>
+                            <p className="text-[10px] uppercase tracking-wide text-mc-muted2">Mission status</p>
+                            <p className="mt-1 font-medium text-mc-fg">{missionState?.status ?? "n/a"}</p>
+                          </div>
+                        </div>
+
+                        <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2">
+                          <div className="rounded-lg border border-mc-border/80 bg-black/20 px-2 py-2">
+                            <p className="text-[10px] uppercase tracking-wide text-mc-muted2">Branch Selection</p>
+                            <p className="mt-1 text-mc-fg">
+                              {message.missionMeta?.selectedBranchId ??
+                                missionSummary?.selected_branch_id ??
+                                "n/a"}
+                            </p>
+                          </div>
+                          <div className="rounded-lg border border-mc-border/80 bg-black/20 px-2 py-2">
+                            <p className="text-[10px] uppercase tracking-wide text-mc-muted2">Mission Graph</p>
+                            <p className="mt-1 text-mc-fg">
+                              {missionSummary?.mission_graph_id ?? "n/a"}
+                            </p>
+                          </div>
+                        </div>
+
+                        <div className="mt-3 rounded-lg border border-mc-border/80 bg-black/20 px-2 py-2">
+                          <p className="text-[10px] uppercase tracking-wide text-mc-muted2">
+                            DAG Progress
+                          </p>
+                          <p className="mt-1 text-mc-fg">
+                            {missionState?.completed_count_u64 ?? 0} completed
+                            {" / "}
+                            {missionState?.total_node_results_u64 ?? 0} results
+                          </p>
+                          <p className="text-mc-muted">
+                            Active node: {missionState?.active_node_id ?? "none"}
+                          </p>
+                        </div>
+
+                        {missionSummary?.intent_branches && missionSummary.intent_branches.length > 0 ? (
+                          <div className="mt-3 rounded-lg border border-mc-border/80 bg-black/20 px-2 py-2">
+                            <p className="text-[10px] uppercase tracking-wide text-mc-muted2">Intent branches</p>
+                            <div className="mt-1 space-y-1">
+                              {missionSummary.intent_branches.slice(0, 4).map((branch) => (
+                                <p key={branch.branch_id} className="text-mc-fg">
+                                  {branch.branch_id} · {branch.title} · q32=
+                                  {branch.confidence_q32 ?? "n/a"}
+                                </p>
+                              ))}
+                            </div>
+                          </div>
+                        ) : null}
+
+                        <div className="mt-3 rounded-lg border border-mc-border/80 bg-black/20 px-2 py-2">
+                          <p className="text-[10px] uppercase tracking-wide text-mc-muted2">Evidence Pack</p>
+                          <p className="mt-1 text-mc-fg">{missionSummary?.evidence_pack_id ?? "pending"}</p>
+                          <p className="text-mc-muted">
+                            Replay verify:{" "}
+                            {missionSummary?.replay_verify?.ok_b === true
+                              ? "PASS"
+                              : missionSummary?.replay_verify?.ok_b === false
+                                ? `FAIL (${missionSummary?.replay_verify?.reason_code ?? "unknown"})`
+                                : "pending"}
+                          </p>
+                        </div>
+
+                        <div className="mt-3 rounded-lg border border-mc-border/80 bg-black/20 px-2 py-2">
+                          <p className="text-[10px] uppercase tracking-wide text-mc-muted2">
+                            Node Timeline
+                          </p>
+                          {missionEvents.length === 0 ? (
+                            <p className="mt-1 text-mc-muted">No node events yet.</p>
+                          ) : (
+                            <div className="mt-1 space-y-1">
+                              {missionEvents.slice(-6).map((event, idx) => (
+                                <p key={`${event.event_type}-${event.tick_u64 ?? 0}-${idx}`} className="text-mc-fg">
+                                  t{event.tick_u64 ?? 0} {event.event_type}
+                                </p>
+                              ))}
+                            </div>
+                          )}
                         </div>
                         {!daemonDetected ? (
                           <p className="mt-3 text-mc-danger">

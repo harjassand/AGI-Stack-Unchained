@@ -9,7 +9,7 @@ use baremetal_lgp::search::descriptors::{
     bin_id, bucket_code, bucket_entropy, bucket_fuel, bucket_ratio, build_descriptor,
     output_entropy_sketch, Descriptor, DescriptorInputs,
 };
-use baremetal_lgp::search::ir::{CandidateCfg, Opcode};
+use baremetal_lgp::search::ir::{Block, CandidateCfg, Opcode, Terminator};
 use baremetal_lgp::search::mutate::{mutate_candidate, MUTATION_OPERATOR_COUNT};
 use baremetal_lgp::search::rng::Rng;
 
@@ -193,6 +193,55 @@ fn agent3_bandit_updates_and_persists_weights() {
     bandit.write_weights_file(&temp).expect("write weights");
     let body = fs::read_to_string(temp.join("mutation_weights.json")).expect("read file");
     assert!(body.contains("\"weights\""));
+}
+
+#[test]
+fn agent3_loop_term_transform_can_insert_bridge_jump() {
+    let mut parent = CandidateCfg::default();
+    parent.blocks = vec![
+        Block {
+            insns: Vec::new(),
+            term: Terminator::Loop {
+                reg: 0,
+                body_target: 1,
+                exit_target: 2,
+                imm14: 0,
+            },
+        },
+        Block {
+            insns: Vec::new(),
+            term: Terminator::Halt,
+        },
+        Block {
+            insns: Vec::new(),
+            term: Terminator::Halt,
+        },
+    ];
+    parent.entry = 0;
+    let archive = Archive::new();
+    let mut weights = [0.0_f32; MUTATION_OPERATOR_COUNT];
+    weights[8] = 1.0;
+
+    let mut saw_bridge = false;
+    for seed in 1..2048_u64 {
+        let mut rng = Rng::new(seed);
+        let child = mutate_candidate(&parent, &archive, &mut rng, &weights);
+        if child.blocks.len() <= parent.blocks.len() {
+            continue;
+        }
+        let bridge_target = child.blocks.last().and_then(|b| match b.term {
+            Terminator::Jump { target, .. } => Some(target),
+            _ => None,
+        });
+        if bridge_target == Some(1) {
+            saw_bridge = true;
+            break;
+        }
+    }
+    assert!(
+        saw_bridge,
+        "expected loop transform to create a bridge jump block"
+    );
 }
 
 fn unique_temp_dir(prefix: &str) -> PathBuf {

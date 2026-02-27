@@ -314,6 +314,7 @@ fn mut_term_transform(child: &mut CandidateCfg, rng: &mut Rng) {
         return;
     };
     let block_idx = candidates[choice];
+    let mut bridge_target = None;
     match &mut child.blocks[block_idx].term {
         Terminator::CondZero { .. } | Terminator::CondNonZero { .. } => {
             child.blocks[block_idx].term.swap_conditional_targets();
@@ -324,10 +325,25 @@ fn mut_term_transform(child: &mut CandidateCfg, rng: &mut Rng) {
             ..
         } => {
             if rng.gen_bool(0.3) {
+                let old_body = *body_target;
                 core::mem::swap(body_target, exit_target);
+                bridge_target = Some(old_body);
             }
         }
         Terminator::Halt | Terminator::Jump { .. } | Terminator::Return => {}
+    }
+
+    if let Some(target) = bridge_target {
+        if child.blocks.len() < CAND_MAX_BLOCKS {
+            let bridge_id = child.blocks.len() as u16;
+            child.blocks.push(Block {
+                insns: Vec::new(),
+                term: Terminator::Jump { target, imm14: 0 },
+            });
+            if let Terminator::Loop { exit_target, .. } = &mut child.blocks[block_idx].term {
+                *exit_target = bridge_id;
+            }
+        }
     }
 }
 

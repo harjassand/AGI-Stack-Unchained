@@ -5,6 +5,7 @@ ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 RUNS="$ROOT/runs"
 mkdir -p "$RUNS"
 
+# lower priority
 exec nice -n 10 \
   cargo run --release --manifest-path "${ROOT}/Cargo.toml" --bin lgp_hotloop -- \
     --workers "${LGP_WORKERS:-6}" \

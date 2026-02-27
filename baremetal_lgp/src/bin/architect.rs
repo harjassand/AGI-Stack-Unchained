@@ -45,6 +45,7 @@ fn run() -> Result<(), String> {
         .map_err(|e| e.to_string())?;
 
     let promotions_applied = architect.apply_promotions(&mut library, &decision.promotions);
+    write_library_epoch(&args.run_dir, library.epoch).map_err(|e| e.to_string())?;
 
     if let Some(path) = args.stage_a_module.as_ref() {
         let swapped = architect.try_stage_a_swap(path, |dispatch, episodes| {
@@ -67,10 +68,12 @@ fn run() -> Result<(), String> {
     }
 
     println!(
-        "mutation_weights_written=true promotions_applied={} stage_c_requests={} filled_bins={}",
+        "mutation_weights_written=true promotions_applied={} stage_c_requests={} filled_bins={} library_epoch={} weight0={:.6}",
         promotions_applied,
         decision.stage_c_requests.len(),
-        snapshot.filled_bins
+        snapshot.filled_bins,
+        library.epoch,
+        decision.mutation_weights[0]
     );
     Ok(())
 }
@@ -131,6 +134,11 @@ fn parse_f32(body: &str, key: &str) -> Option<f32> {
         .find(|c: char| !(c.is_ascii_digit() || c == '.' || c == '-'))
         .unwrap_or(tail.len());
     tail[..end].parse().ok()
+}
+
+fn write_library_epoch(run_dir: &PathBuf, epoch: u32) -> Result<(), std::io::Error> {
+    let body = format!("{{\"epoch\":{epoch}}}");
+    fs::write(run_dir.join("library_epoch.json"), body)
 }
 
 struct MockKernelBuilder;

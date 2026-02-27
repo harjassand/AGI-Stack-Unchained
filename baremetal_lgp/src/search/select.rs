@@ -20,8 +20,7 @@ pub fn select_parent<'a>(
     }
 
     let mut best: Option<&Elite> = None;
-    let rounds = TOURNAMENT_K.min(archive.filled as usize);
-    for _ in 0..rounds {
+    for _ in 0..TOURNAMENT_K {
         let Some(bin) = archive.random_filled_bin(rng) else {
             continue;
         };

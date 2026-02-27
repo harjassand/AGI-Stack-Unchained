@@ -14,7 +14,9 @@ use baremetal_lgp::search::evaluate::{
     scan_instruction_profile, EvalReport, EvaluatedCandidate, ExecConfig, Linker, Oracle,
 };
 use baremetal_lgp::search::ir::{CandidateCfg, Terminator};
-use baremetal_lgp::search::mutate::{mutate_candidate, DEFAULT_MUTATION_WEIGHTS};
+use baremetal_lgp::search::mutate::{
+    mutate_candidate, DEFAULT_MUTATION_WEIGHTS, MUTATION_OPERATOR_COUNT,
+};
 use baremetal_lgp::search::rng::Rng;
 use baremetal_lgp::search::select::select_parent;
 use baremetal_lgp::search::topk_trace::{TopKTraceManager, TraceOracle, TraceSummary};
@@ -98,17 +100,26 @@ fn run() -> Result<(), String> {
     let mut completed = 0_u64;
     let mut next_id = 1_u64;
     let mut proxy_wins = 0_u64;
+    let mut mutation_weights = DEFAULT_MUTATION_WEIGHTS;
+    let mut next_weight_refresh = 4096_u64;
     let started = Instant::now();
     let mut next_snapshot = started + Duration::from_secs(10);
 
     loop {
+        if sent >= next_weight_refresh {
+            if let Some(next) = read_mutation_weights(&args.run_dir) {
+                mutation_weights = next;
+            }
+            next_weight_refresh = next_weight_refresh.saturating_add(4096);
+        }
+
         while in_flight < worker_count.saturating_mul(2) {
             if args.max_evals != 0 && sent >= args.max_evals {
                 break;
             }
             let parent = select_parent(&archive, champion.as_ref().map(|c| &c.elite), &mut rng)
                 .map_or(&fallback_parent, |elite| &elite.candidate);
-            let child = mutate_candidate(parent, &archive, &mut rng, &DEFAULT_MUTATION_WEIGHTS);
+            let child = mutate_candidate(parent, &archive, &mut rng, &mutation_weights);
             let job = EvalJob {
                 id: CandidateId(next_id),
                 cfg: child,
@@ -209,7 +220,7 @@ fn worker_loop(
 ) {
     let mut worker = VmWorker::default();
     let mut linker = NoopLinker::default();
-    let mut oracle = SimOracle::new(worker_idx as u64 + 1);
+    let mut oracle = SimOracle::new(os_seed(worker_idx as u64 + 1));
 
     while let Ok(job) = rx.recv() {
         let Some(job) = job else {
@@ -233,6 +244,46 @@ fn worker_loop(
             break;
         }
     }
+}
+
+fn os_seed(salt: u64) -> u64 {
+    let mut bytes = [0_u8; 8];
+    if getrandom::getrandom(&mut bytes).is_ok() {
+        return u64::from_le_bytes(bytes) ^ salt;
+    }
+    let nanos = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_or(0_u64, |d| d.as_nanos() as u64);
+    nanos ^ 0xD6E8_FDDA_AE9D_3A57 ^ salt
+}
+
+fn read_mutation_weights(run_dir: &Path) -> Option<[f32; MUTATION_OPERATOR_COUNT]> {
+    let path = run_dir.join("mutation_weights.json");
+    let body = fs::read_to_string(path).ok()?;
+    let start = body.find('[')?;
+    let end = body[start..].find(']')?;
+    let payload = &body[start + 1..start + end];
+    let mut parsed = [0.0_f32; MUTATION_OPERATOR_COUNT];
+    let mut count = 0usize;
+    for item in payload.split(',') {
+        if count >= MUTATION_OPERATOR_COUNT {
+            break;
+        }
+        let value = item.trim().parse::<f32>().ok()?;
+        parsed[count] = value;
+        count += 1;
+    }
+    if count != MUTATION_OPERATOR_COUNT {
+        return None;
+    }
+    let sum = parsed.iter().sum::<f32>();
+    if sum <= f32::EPSILON {
+        return None;
+    }
+    for weight in &mut parsed {
+        *weight = (*weight / sum).max(0.0);
+    }
+    Some(parsed)
 }
 
 fn evaluate_cfg<L, O>(

@@ -27,6 +27,13 @@ if [[ ${#changed_files[@]} -eq 0 ]]; then
   exit 0
 fi
 
+added_files=()
+while IFS= read -r path; do
+  if [[ -n "${path}" ]]; then
+    added_files+=("${path}")
+  fi
+done < <(git diff --name-only --diff-filter=A "${base_sha}" "${head_sha}" | sed '/^$/d')
+
 echo "Changed files:"
 for path in "${changed_files[@]}"; do
   echo "  - ${path}"
@@ -122,6 +129,7 @@ esac
 
 violations_shared=()
 violations_ownership=()
+rfc_create_violations=()
 
 for path in "${changed_files[@]}"; do
   if [[ ${bootstrap_mode} -eq 0 ]]; then
@@ -155,6 +163,15 @@ for path in "${changed_files[@]}"; do
   violations_ownership+=("${path}")
 done
 
+# RFC policy nuance: agent3 creates RFC_*.md, agent2 may edit but not create.
+if [[ "${branch_name}" == "pivot/agent2_oracle" || "${branch_name}" == "codex/agent2_oracle" ]]; then
+  for path in "${added_files[@]}"; do
+    if [[ "${path}" == baremetal_lgp/rfcs/RFC_*.md ]]; then
+      rfc_create_violations+=("${path}")
+    fi
+  done
+fi
+
 failed=0
 
 if [[ ${#violations_shared[@]} -gt 0 ]]; then
@@ -169,6 +186,13 @@ if [[ ${#violations_ownership[@]} -gt 0 ]]; then
   echo
   echo "ERROR: Branch ${branch_name} modified out-of-ownership paths:"
   printf '  - %s\n' "${violations_ownership[@]}"
+fi
+
+if [[ ${#rfc_create_violations[@]} -gt 0 ]]; then
+  failed=1
+  echo
+  echo "ERROR: RFC file creation is restricted to agent3 branches:"
+  printf '  - %s\n' "${rfc_create_violations[@]}"
 fi
 
 if [[ ${failed} -ne 0 ]]; then

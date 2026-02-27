@@ -1,0 +1,130 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v19_0/mission_intent_graph_v1",
+  "title": "Mission intent graph v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "intent_graph_id",
+    "mission_request_content_id",
+    "manifest_id",
+    "nodes",
+    "edges",
+    "branches",
+    "required_clarifications"
+  ],
+  "$defs": {
+    "content_id": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "q32": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 4294967296
+    },
+    "clarification": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "clarification_id",
+        "path",
+        "question",
+        "expected_type",
+        "blocking_b"
+      ],
+      "properties": {
+        "clarification_id": {"type": "string", "minLength": 1},
+        "path": {"type": "string", "minLength": 1},
+        "question": {"type": "string", "minLength": 1},
+        "expected_type": {"type": "string", "minLength": 1},
+        "blocking_b": {"type": "boolean"}
+      }
+    }
+  },
+  "properties": {
+    "schema_version": {"const": "mission_intent_graph_v1"},
+    "intent_graph_id": {"$ref": "#/$defs/content_id"},
+    "mission_request_content_id": {"$ref": "#/$defs/content_id"},
+    "manifest_id": {"$ref": "#/$defs/content_id"},
+    "nodes": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "intent_node_id",
+          "kind",
+          "text",
+          "confidence_q32",
+          "canonical_fields"
+        ],
+        "properties": {
+          "intent_node_id": {"type": "string", "minLength": 1},
+          "kind": {
+            "type": "string",
+            "enum": ["INTENT", "CONSTRAINT", "ENTITY", "METRIC", "EVAL_REF"]
+          },
+          "text": {"type": "string"},
+          "confidence_q32": {"$ref": "#/$defs/q32"},
+          "canonical_fields": {
+            "type": "object",
+            "additionalProperties": true
+          }
+        }
+      }
+    },
+    "edges": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["src", "dst", "rel", "confidence_q32"],
+        "properties": {
+          "src": {"type": "string", "minLength": 1},
+          "dst": {"type": "string", "minLength": 1},
+          "rel": {
+            "type": "string",
+            "enum": ["SUPPORTS", "DEPENDS_ON", "CONFLICTS_WITH", "REFINES"]
+          },
+          "confidence_q32": {"$ref": "#/$defs/q32"}
+        }
+      }
+    },
+    "branches": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "branch_id",
+          "title",
+          "summary",
+          "selected_node_ids",
+          "assumptions",
+          "confidence_q32"
+        ],
+        "properties": {
+          "branch_id": {"type": "string", "minLength": 1},
+          "title": {"type": "string", "minLength": 1},
+          "summary": {"type": "string"},
+          "selected_node_ids": {
+            "type": "array",
+            "items": {"type": "string", "minLength": 1},
+            "uniqueItems": true
+          },
+          "assumptions": {
+            "type": "array",
+            "items": {"type": "string"}
+          },
+          "confidence_q32": {"$ref": "#/$defs/q32"}
+        }
+      }
+    },
+    "required_clarifications": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/clarification"}
+    }
+  }
+}

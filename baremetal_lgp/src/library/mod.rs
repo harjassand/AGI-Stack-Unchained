@@ -1,3 +1,5 @@
+pub mod bank;
+
 use crate::vm::VmProgram;
 
 #[derive(Clone, Debug, Default)]

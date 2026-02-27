@@ -1,0 +1,46 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v19_0/mission_input_manifest_v1",
+  "title": "Mission input manifest v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "manifest_id",
+    "mission_request_content_id",
+    "inputs"
+  ],
+  "properties": {
+    "schema_version": {"const": "mission_input_manifest_v1"},
+    "manifest_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "mission_request_content_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "inputs": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["role", "content_id", "size_bytes_u64"],
+        "properties": {
+          "role": {"type": "string", "enum": ["USER_PROMPT", "ATTACHMENT", "DERIVED"]},
+          "content_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+          "filename": {"type": "string"},
+          "mime": {"type": "string"},
+          "size_bytes_u64": {"type": "integer", "minimum": 0},
+          "sip_receipt_content_id": {
+            "anyOf": [
+              {"type": "null"},
+              {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"}
+            ]
+          }
+        }
+      }
+    },
+    "notes": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "ingestion_policy_id": {"type": "string"}
+      }
+    }
+  }
+}

@@ -35,7 +35,27 @@ def test_api_mission_keeps_not_available_response(monkeypatch) -> None:
 
 def test_api_mission_supports_positional_compiler(monkeypatch) -> None:
     def positional_compiler(human_intent_str: str):
-        return {"mission_id": "sha256:test", "staged_path": ".omega_cache/mission_staging/pending_mission.json"}
+        return {
+            "mission_id": "sha256:test",
+            "staged_path": ".omega_cache/mission_staging/pending_mission.json",
+            "payload": {
+                "schema_name": "mission_request_v1",
+                "schema_version": "v19_0",
+                "user_prompt": human_intent_str,
+                "domain": "general",
+                "success_spec": {
+                    "definition_of_done": "produce a deterministic report",
+                    "pinned_eval_refs": [
+                        {
+                            "suitepack_id": "suitepack_demo_v1",
+                            "heldout_b": True,
+                            "gate": {"metric": "score", "op": ">=", "threshold_q32": 0},
+                        }
+                    ],
+                    "deliverables": ["report"],
+                },
+            },
+        }
 
     monkeypatch.setattr(stream_server_v1, "_resolve_nlpmc_compiler", lambda: positional_compiler)
 
@@ -43,11 +63,12 @@ def test_api_mission_supports_positional_compiler(monkeypatch) -> None:
     response = client.post("/api/mission", json={"human_intent_str": "test intent"})
 
     assert response.status_code == 200
-    assert response.json() == {
-        "ok": True,
-        "mission_id": "sha256:test",
-        "staged_path": ".omega_cache/mission_staging/pending_mission.json",
-    }
+    payload = response.json()
+    assert payload["ok"] is True
+    assert isinstance(payload["mission_id"], str) and payload["mission_id"].startswith("sha256:")
+    assert payload["staged_path"] == ".omega_cache/mission_staging/pending_mission.json"
+    assert payload["compile_receipt"]["ok_b"] is True
+    assert payload["mission_graph_id"].startswith("sha256:")
 
 
 def test_api_chat_returns_direct_answer_for_arithmetic() -> None:
@@ -68,7 +89,23 @@ def test_api_chat_stages_mission_for_non_arithmetic(monkeypatch) -> None:
         return {
             "mission_id": "sha256:test",
             "staged_path": ".omega_cache/mission_staging/pending_mission.json",
-            "payload": {"schema_name": "mission_request_v1", "schema_version": "v19_0", "domain": "general"},
+            "payload": {
+                "schema_name": "mission_request_v1",
+                "schema_version": "v19_0",
+                "domain": "general",
+                "user_prompt": human_intent_str,
+                "success_spec": {
+                    "definition_of_done": "report",
+                    "pinned_eval_refs": [
+                        {
+                            "suitepack_id": "suitepack_demo_v1",
+                            "heldout_b": True,
+                            "gate": {"metric": "score", "op": ">=", "threshold_q32": 0},
+                        }
+                    ],
+                    "deliverables": ["report"],
+                },
+            },
         }
 
     monkeypatch.setattr(stream_server_v1, "_resolve_nlpmc_compiler", lambda: positional_compiler)
@@ -77,14 +114,12 @@ def test_api_chat_stages_mission_for_non_arithmetic(monkeypatch) -> None:
     response = client.post("/api/chat", json={"message": "solve dark matter", "mode": "customer"})
 
     assert response.status_code == 200
-    assert response.json() == {
-        "ok": True,
-        "kind": "MISSION",
-        "assistant_message": "Queued. Streaming progress and verified artifacts as they arrive.",
-        "mission_staged_path": ".omega_cache/mission_staging/pending_mission.json",
-        "mission_request_preview": {
-            "schema_name": "mission_request_v1",
-            "schema_version": "v19_0",
-            "domain": "general",
-        },
-    }
+    payload = response.json()
+    assert payload["ok"] is True
+    assert payload["kind"] == "MISSION"
+    assert payload["assistant_message"] == "Queued. Streaming progress and verified artifacts as they arrive."
+    assert payload["mission_staged_path"] == ".omega_cache/mission_staging/pending_mission.json"
+    assert payload["mission_request_preview"]["schema_name"] == "mission_request_v1"
+    assert payload["mission_request_preview"]["schema_version"] == "v19_0"
+    assert payload["compile_receipt"]["ok_b"] is True
+    assert payload["mission_graph_id"].startswith("sha256:")

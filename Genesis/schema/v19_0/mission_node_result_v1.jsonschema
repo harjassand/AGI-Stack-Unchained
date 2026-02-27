@@ -1,0 +1,87 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v19_0/mission_node_result_v1",
+  "title": "Mission node result v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "mission_id",
+    "node_id",
+    "status",
+    "reason_code",
+    "start_tick_u64",
+    "end_tick_u64",
+    "inputs",
+    "outputs",
+    "verifier_receipts",
+    "budgets_used"
+  ],
+  "properties": {
+    "schema_version": {"const": "mission_node_result_v1"},
+    "mission_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "node_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "status": {"type": "string", "enum": ["SUCCEEDED", "FAILED", "SKIPPED"]},
+    "reason_code": {
+      "type": "string",
+      "enum": [
+        "OK",
+        "PRECONDITION_FAILED",
+        "VERIFICATION_FAILED",
+        "BUDGET_EXCEEDED",
+        "POLICY_BLOCKED",
+        "EXECUTOR_ERROR"
+      ]
+    },
+    "start_tick_u64": {"type": "integer", "minimum": 0},
+    "end_tick_u64": {"type": "integer", "minimum": 0},
+    "inputs": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["role", "content_id"],
+        "properties": {
+          "role": {"type": "string", "minLength": 1},
+          "content_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"}
+        }
+      }
+    },
+    "outputs": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["role", "content_id"],
+        "properties": {
+          "role": {"type": "string", "minLength": 1},
+          "content_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"}
+        }
+      }
+    },
+    "verifier_receipts": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["verifier_id", "receipt_content_id"],
+        "properties": {
+          "verifier_id": {"type": "string", "minLength": 1},
+          "receipt_content_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"}
+        }
+      }
+    },
+    "budgets_used": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["wall_ms_u64", "cpu_ms_u64", "disk_bytes_u64", "net_bytes_u64", "steps_u64"],
+      "properties": {
+        "wall_ms_u64": {"type": "integer", "minimum": 0},
+        "cpu_ms_u64": {"type": "integer", "minimum": 0},
+        "disk_bytes_u64": {"type": "integer", "minimum": 0},
+        "net_bytes_u64": {"type": "integer", "minimum": 0},
+        "steps_u64": {"type": "integer", "minimum": 0}
+      }
+    }
+  }
+}

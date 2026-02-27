@@ -6,6 +6,7 @@ import time
 from pathlib import Path
 from typing import Any, Dict, Optional, Tuple
 
+from tools.mission_control.mission_pipeline_v1 import current_mission_summary, recent_mission_events
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 ACTIVE_BUNDLE_RELPATH = "meta-core/active/ACTIVE_BUNDLE"
@@ -165,6 +166,14 @@ def build_current_state_payload(repo_root: Path = REPO_ROOT) -> Dict[str, Any]:
         except (OSError, json.JSONDecodeError):
             omega_state = None
 
+    mission_summary = current_mission_summary(repo_root=repo_root)
+    mission_id = mission_summary.get("mission_id") if isinstance(mission_summary, dict) else None
+    mission_events = recent_mission_events(
+        mission_id=mission_id if isinstance(mission_id, str) else None,
+        limit=40,
+        repo_root=repo_root,
+    )
+
     return {
         "ts_unix_ms": int(time.time() * 1000),
         "omega_state": omega_state,
@@ -175,4 +184,8 @@ def build_current_state_payload(repo_root: Path = REPO_ROOT) -> Dict[str, Any]:
         },
         "active_bundle": read_active_bundle(repo_root=repo_root),
         "host": host_metrics(),
+        "mission_control": {
+            "summary": mission_summary,
+            "recent_events": mission_events,
+        },
     }

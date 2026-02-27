@@ -1,0 +1,51 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v19_0/mission_compile_receipt_v1",
+  "title": "Mission compile receipt v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "ok_b",
+    "reason_code",
+    "mission_request_content_id",
+    "manifest_id",
+    "intent_graph_id",
+    "required_clarifications"
+  ],
+  "properties": {
+    "schema_version": {"const": "mission_compile_receipt_v1"},
+    "ok_b": {"type": "boolean"},
+    "reason_code": {
+      "type": "string",
+      "enum": ["OK", "NEEDS_CLARIFICATION", "SCHEMA_INVALID", "POLICY_BLOCKED", "BUDGET_INVALID"]
+    },
+    "mission_request_content_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "manifest_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "intent_graph_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "selected_branch_id": {"type": "string", "minLength": 1},
+    "mission_graph_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "required_clarifications": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["clarification_id", "path", "question", "expected_type", "blocking_b"],
+        "properties": {
+          "clarification_id": {"type": "string", "minLength": 1},
+          "path": {"type": "string", "minLength": 1},
+          "question": {"type": "string", "minLength": 1},
+          "expected_type": {"type": "string", "minLength": 1},
+          "blocking_b": {"type": "boolean"}
+        }
+      }
+    },
+    "selection_rule": {"type": "string"}
+  },
+  "allOf": [
+    {
+      "if": {"properties": {"ok_b": {"const": true}}},
+      "then": {"required": ["selected_branch_id", "mission_graph_id"]}
+    }
+  ]
+}

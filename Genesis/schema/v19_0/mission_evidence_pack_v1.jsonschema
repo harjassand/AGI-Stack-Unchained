@@ -1,0 +1,107 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v19_0/mission_evidence_pack_v1",
+  "title": "Mission evidence pack v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "evidence_pack_id",
+    "mission_id",
+    "bindings",
+    "node_results",
+    "eval_reports",
+    "promotion_activation_receipts",
+    "trace",
+    "replay"
+  ],
+  "properties": {
+    "schema_version": {"const": "mission_evidence_pack_v1"},
+    "evidence_pack_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "mission_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "bindings": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "mission_request_content_id",
+        "manifest_id",
+        "intent_graph_id",
+        "mission_graph_id",
+        "mission_state_id"
+      ],
+      "properties": {
+        "mission_request_content_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+        "manifest_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+        "intent_graph_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+        "mission_graph_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+        "mission_state_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"}
+      }
+    },
+    "node_results": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["node_id", "node_result_id"],
+        "properties": {
+          "node_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+          "node_result_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"}
+        }
+      }
+    },
+    "eval_reports": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["eval_report_id", "suitepack_id"],
+        "properties": {
+          "eval_report_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+          "suitepack_id": {"type": "string", "minLength": 1}
+        }
+      }
+    },
+    "promotion_activation_receipts": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["kind", "content_id"],
+        "properties": {
+          "kind": {
+            "type": "string",
+            "enum": ["OMEGA_PROMOTION", "OMEGA_ACTIVATION", "MISSION_PROMOTION"]
+          },
+          "content_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"}
+        }
+      }
+    },
+    "trace": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["tick_snapshots", "ledger_entries"],
+      "properties": {
+        "tick_snapshots": {
+          "type": "array",
+          "items": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"}
+        },
+        "ledger_entries": {
+          "type": "array",
+          "items": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"}
+        }
+      }
+    },
+    "replay": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["verify_tool", "verify_args"],
+      "properties": {
+        "verify_tool": {"type": "string", "minLength": 1},
+        "verify_args": {
+          "type": "array",
+          "items": {"type": "string"}
+        }
+      }
+    }
+  }
+}

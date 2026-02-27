@@ -1,0 +1,169 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v19_0/mission_graph_v1",
+  "title": "Mission graph v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "mission_id",
+    "inputs",
+    "budgets",
+    "constraints",
+    "nodes",
+    "edges"
+  ],
+  "properties": {
+    "schema_version": {"const": "mission_graph_v1"},
+    "mission_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "inputs": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "mission_request_content_id",
+        "manifest_id",
+        "intent_graph_id",
+        "selected_branch_id"
+      ],
+      "properties": {
+        "mission_request_content_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+        "manifest_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+        "intent_graph_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+        "selected_branch_id": {"type": "string", "minLength": 1}
+      }
+    },
+    "budgets": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "max_wall_ms_u64": {"type": "integer", "minimum": 0},
+        "max_cpu_ms_u64": {"type": "integer", "minimum": 0},
+        "max_steps_u64": {"type": "integer", "minimum": 0},
+        "max_disk_bytes_u64": {"type": "integer", "minimum": 0},
+        "max_net_bytes_u64": {"type": "integer", "minimum": 0}
+      }
+    },
+    "constraints": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "allowed_capabilities": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {"type": "string", "minLength": 1}
+        },
+        "forbidden_actions": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {"type": "string", "minLength": 1}
+        },
+        "forbidden_paths": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {"type": "string", "minLength": 1}
+        },
+        "network_mode": {"type": "string", "enum": ["OFF", "ALLOWLIST_ONLY", "ON"]}
+      }
+    },
+    "nodes": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "node_id",
+          "node_type",
+          "name",
+          "inputs",
+          "outputs_expected",
+          "gates",
+          "budgets",
+          "executor"
+        ],
+        "properties": {
+          "node_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+          "node_type": {
+            "type": "string",
+            "enum": ["INGEST", "RETRIEVE", "SYNTHESIZE", "PROVE", "SIMULATE", "TRAIN", "EVAL", "PATCH", "WRITEUP"]
+          },
+          "name": {"type": "string", "minLength": 1},
+          "inputs": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["role", "content_id"],
+              "properties": {
+                "role": {"type": "string", "minLength": 1},
+                "content_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"}
+              }
+            }
+          },
+          "outputs_expected": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["role", "schema_version", "required_b"],
+              "properties": {
+                "role": {"type": "string", "minLength": 1},
+                "schema_version": {"type": "string", "minLength": 1},
+                "required_b": {"type": "boolean"}
+              }
+            }
+          },
+          "gates": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["gate_id", "gate_type", "params", "fail_closed_b"],
+              "properties": {
+                "gate_id": {"type": "string", "minLength": 1},
+                "gate_type": {
+                  "type": "string",
+                  "enum": ["SCHEMA", "EVAL", "PROOF", "NO_REGRESSION", "BUDGET", "POLICY"]
+                },
+                "params": {"type": "object"},
+                "fail_closed_b": {"type": "boolean"}
+              }
+            }
+          },
+          "budgets": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "max_wall_ms_u64": {"type": "integer", "minimum": 0},
+              "max_cpu_ms_u64": {"type": "integer", "minimum": 0},
+              "max_steps_u64": {"type": "integer", "minimum": 0},
+              "max_disk_bytes_u64": {"type": "integer", "minimum": 0},
+              "max_net_bytes_u64": {"type": "integer", "minimum": 0}
+            }
+          },
+          "executor": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["executor_kind", "ref"],
+            "properties": {
+              "executor_kind": {"type": "string", "enum": ["OMEGA_CAMPAIGN", "SCRIPT", "COMPOSITE"]},
+              "ref": {"type": "object"}
+            }
+          }
+        }
+      }
+    },
+    "edges": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["src", "dst", "kind"],
+        "properties": {
+          "src": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+          "dst": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+          "kind": {"type": "string", "enum": ["DATA", "CONTROL"]}
+        }
+      }
+    }
+  }
+}

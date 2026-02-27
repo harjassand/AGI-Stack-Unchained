@@ -41,6 +41,57 @@ extern "C" {
     );
 }
 
+#[cfg(not(target_os = "macos"))]
+#[inline]
+unsafe fn vadd_fallback(dst: *mut f32, x: *const f32, y: *const f32, len: usize) {
+    for i in 0..len {
+        *dst.add(i) = *x.add(i) + *y.add(i);
+    }
+}
+
+#[cfg(not(target_os = "macos"))]
+#[inline]
+unsafe fn vmul_fallback(dst: *mut f32, x: *const f32, y: *const f32, len: usize) {
+    for i in 0..len {
+        *dst.add(i) = *x.add(i) * *y.add(i);
+    }
+}
+
+#[cfg(not(target_os = "macos"))]
+#[inline]
+unsafe fn vfma_fallback(dst: *mut f32, x: *const f32, y: *const f32, len: usize) {
+    for i in 0..len {
+        *dst.add(i) = *dst.add(i) + (*x.add(i) * *y.add(i));
+    }
+}
+
+#[cfg(not(target_os = "macos"))]
+#[inline]
+unsafe fn dot_fallback(x: *const f32, y: *const f32, len: usize) -> f32 {
+    let mut acc = 0.0f32;
+    for i in 0..len {
+        acc += *x.add(i) * *y.add(i);
+    }
+    acc
+}
+
+#[cfg(not(target_os = "macos"))]
+#[inline]
+unsafe fn cdotc_fallback(x: *const f32, y: *const f32, len_c: usize) -> (f32, f32) {
+    let mut re = 0.0f32;
+    let mut im = 0.0f32;
+    for i in 0..len_c {
+        let w = i * 2;
+        let xr = *x.add(w);
+        let xi = *x.add(w + 1);
+        let yr = *y.add(w);
+        let yi = *y.add(w + 1);
+        re += (xr * yr) + (xi * yi);
+        im += (xr * yi) - (xi * yr);
+    }
+    (re, im)
+}
+
 /// # Safety
 ///
 /// `dst`, `x`, and `y` must be valid for `len` contiguous `f32` elements.
@@ -54,7 +105,7 @@ pub unsafe fn vadd(dst: *mut f32, x: *const f32, y: *const f32, len: usize) {
     }
     #[cfg(not(target_os = "macos"))]
     {
-        let _ = (dst, x, y, len);
+        vadd_fallback(dst, x, y, len);
     }
 }
 
@@ -71,7 +122,7 @@ pub unsafe fn vmul(dst: *mut f32, x: *const f32, y: *const f32, len: usize) {
     }
     #[cfg(not(target_os = "macos"))]
     {
-        let _ = (dst, x, y, len);
+        vmul_fallback(dst, x, y, len);
     }
 }
 
@@ -88,7 +139,7 @@ pub unsafe fn vfma(dst: *mut f32, x: *const f32, y: *const f32, len: usize) {
     }
     #[cfg(not(target_os = "macos"))]
     {
-        let _ = (dst, x, y, len);
+        vfma_fallback(dst, x, y, len);
     }
 }
 
@@ -100,14 +151,19 @@ pub unsafe fn dot(x: *const f32, y: *const f32, len: usize) -> f32 {
     #[cfg(target_os = "macos")]
     {
         if let Ok(n) = i32::try_from(len) {
-            return cblas_sdot(n, x, 1, y, 1);
+            cblas_sdot(n, x, 1, y, 1)
+        } else {
+            let mut acc = 0.0f32;
+            for i in 0..len {
+                acc += *x.add(i) * *y.add(i);
+            }
+            acc
         }
     }
     #[cfg(not(target_os = "macos"))]
     {
-        let _ = (x, y, len);
+        dot_fallback(x, y, len)
     }
-    0.0
 }
 
 /// # Safety
@@ -128,12 +184,24 @@ pub unsafe fn cdotc_interleaved(x: *const f32, y: *const f32, len_c: usize) -> (
                 1,
                 out.as_mut_ptr().cast::<libc::c_void>(),
             );
-            return (out[0], out[1]);
+            (out[0], out[1])
+        } else {
+            let mut re = 0.0f32;
+            let mut im = 0.0f32;
+            for i in 0..len_c {
+                let w = i * 2;
+                let xr = *x.add(w);
+                let xi = *x.add(w + 1);
+                let yr = *y.add(w);
+                let yi = *y.add(w + 1);
+                re += (xr * yr) + (xi * yi);
+                im += (xr * yi) - (xi * yr);
+            }
+            (re, im)
         }
     }
     #[cfg(not(target_os = "macos"))]
     {
-        let _ = (x, y, len_c);
+        cdotc_fallback(x, y, len_c)
     }
-    (0.0, 0.0)
 }

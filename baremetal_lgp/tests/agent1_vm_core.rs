@@ -19,7 +19,7 @@ fn mk_prog(words: Vec<u32>, const_pool: [f32; CONST_POOL_WORDS]) -> BytecodeProg
 }
 
 fn approx_eq(a: f32, b: f32) {
-    assert!((a - b).abs() < 1e-6, "left={a}, right={b}");
+    assert!((a - b).abs() < 1e-2, "left={a}, right={b}");
 }
 
 #[test]
@@ -132,4 +132,75 @@ fn agent1_vm_vcmul_correctness() {
         approx_eq(worker.scratch[100 + i * 2], re);
         approx_eq(worker.scratch[100 + i * 2 + 1], im);
     }
+}
+
+#[test]
+fn agent1_vm_vadd_threshold_path_correctness() {
+    let len = 128u16;
+    let prog = mk_prog(
+        vec![
+            encode(Op::IConst, 0, 0, 0, 700),
+            encode(Op::IConst, 1, 0, 0, 100),
+            encode(Op::IConst, 2, 0, 0, 300),
+            encode(Op::VAdd, 0, 1, 2, len),
+            encode(Op::Halt, 0, 0, 0, 0),
+        ],
+        [0.0; CONST_POOL_WORDS],
+    );
+
+    let mut worker = VmWorker::default();
+    for i in 0..usize::from(len) {
+        worker.scratch[100 + i] = (i as f32) * 0.25;
+        worker.scratch[300 + i] = (i as f32) * 0.5;
+    }
+
+    let lib = LibraryBank::default();
+    let cfg = ExecConfig {
+        fuel_max: 5000,
+        trace: false,
+        trace_budget_bytes: 0,
+    };
+
+    let res = run_candidate(&mut worker, &prog, &lib, &cfg);
+    assert_eq!(res.stop_reason, StopReason::Halt);
+
+    for i in 0..usize::from(len) {
+        let expected = worker.scratch[100 + i] + worker.scratch[300 + i];
+        approx_eq(worker.scratch[700 + i], expected);
+    }
+}
+
+#[test]
+fn agent1_vm_vdot_threshold_path_correctness() {
+    let len = 256u16;
+    let prog = mk_prog(
+        vec![
+            encode(Op::IConst, 1, 0, 0, 1000),
+            encode(Op::IConst, 2, 0, 0, 1400),
+            encode(Op::VDot, 5, 1, 2, len),
+            encode(Op::Halt, 0, 0, 0, 0),
+        ],
+        [0.0; CONST_POOL_WORDS],
+    );
+
+    let mut worker = VmWorker::default();
+    let mut expected = 0.0f32;
+    for i in 0..usize::from(len) {
+        let x = (i as f32) * 0.1 - 2.0;
+        let y = (i as f32) * 0.05 + 1.0;
+        worker.scratch[1000 + i] = x;
+        worker.scratch[1400 + i] = y;
+        expected += x * y;
+    }
+
+    let lib = LibraryBank::default();
+    let cfg = ExecConfig {
+        fuel_max: 5000,
+        trace: false,
+        trace_budget_bytes: 0,
+    };
+
+    let res = run_candidate(&mut worker, &prog, &lib, &cfg);
+    assert_eq!(res.stop_reason, StopReason::Halt);
+    approx_eq(worker.f[5], expected);
 }

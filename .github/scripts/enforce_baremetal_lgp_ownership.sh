@@ -112,24 +112,37 @@ agent3_globs=(
 
 allowed_prefixes=()
 allowed_globs=()
+branch_recognized=0
 case "${branch_name}" in
   "pivot/agent1_vm_isa_jit"|"codex/agent1_vm_isa_jit")
+    branch_recognized=1
     allowed_prefixes=("${agent1_prefixes[@]}")
     allowed_globs=("${agent1_globs[@]}")
     ;;
   "pivot/agent2_oracle"|"codex/agent2_oracle")
+    branch_recognized=1
     allowed_prefixes=("${agent2_prefixes[@]}")
     allowed_globs=("${agent2_globs[@]}")
     ;;
   "pivot/agent3_search_architect"|"codex/agent3_search_architect")
+    branch_recognized=1
     allowed_prefixes=("${agent3_prefixes[@]}")
     allowed_globs=("${agent3_globs[@]}")
+    ;;
+  "pivot/baremetal_lgp_rsi"|"codex/pivot/baremetal_lgp_rsi")
+    # Integration branch: shared-file rules still apply.
+    branch_recognized=1
     ;;
 esac
 
 violations_shared=()
 violations_ownership=()
 rfc_create_violations=()
+unknown_branch_violation=0
+
+if [[ ${bootstrap_mode} -eq 0 && ${branch_recognized} -eq 0 ]]; then
+  unknown_branch_violation=1
+fi
 
 for path in "${changed_files[@]}"; do
   if [[ ${bootstrap_mode} -eq 0 ]]; then
@@ -193,6 +206,17 @@ if [[ ${#rfc_create_violations[@]} -gt 0 ]]; then
   echo
   echo "ERROR: RFC file creation is restricted to agent3 branches:"
   printf '  - %s\n' "${rfc_create_violations[@]}"
+fi
+
+if [[ ${unknown_branch_violation} -ne 0 ]]; then
+  failed=1
+  echo
+  echo "ERROR: Unrecognized branch for ownership policy: ${branch_name}"
+  echo "Use one of:"
+  echo "  - pivot/agent1_vm_isa_jit"
+  echo "  - pivot/agent2_oracle"
+  echo "  - pivot/agent3_search_architect"
+  echo "  - pivot/baremetal_lgp_rsi (integration)"
 fi
 
 if [[ ${failed} -ne 0 ]]; then

@@ -1,4 +1,5 @@
 use std::fs;
+use std::path::Path;
 use std::path::PathBuf;
 
 use baremetal_lgp::library::bank::LibraryBank;
@@ -78,7 +79,7 @@ fn run() -> Result<(), String> {
     Ok(())
 }
 
-fn read_snapshot(run_dir: &PathBuf) -> ArchiveSnapshotSummary {
+fn read_snapshot(run_dir: &Path) -> ArchiveSnapshotSummary {
     let path = run_dir.join("snapshot_latest.json");
     let Ok(body) = fs::read_to_string(path) else {
         return ArchiveSnapshotSummary::default();
@@ -93,7 +94,7 @@ fn read_snapshot(run_dir: &PathBuf) -> ArchiveSnapshotSummary {
     }
 }
 
-fn collect_trace_diffs(run_dir: &PathBuf) -> Vec<TraceDiffSummary> {
+fn collect_trace_diffs(run_dir: &Path) -> Vec<TraceDiffSummary> {
     let traces_dir = run_dir.join("traces");
     let Ok(entries) = fs::read_dir(traces_dir) else {
         return Vec::new();
@@ -136,7 +137,7 @@ fn parse_f32(body: &str, key: &str) -> Option<f32> {
     tail[..end].parse().ok()
 }
 
-fn write_library_epoch(run_dir: &PathBuf, epoch: u32) -> Result<(), std::io::Error> {
+fn write_library_epoch(run_dir: &Path, epoch: u32) -> Result<(), std::io::Error> {
     let body = format!("{{\"epoch\":{epoch}}}");
     fs::write(run_dir.join("library_epoch.json"), body)
 }

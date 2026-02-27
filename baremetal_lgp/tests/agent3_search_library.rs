@@ -41,8 +41,7 @@ fn agent3_descriptor_bin_id_packs_exact_bits() {
         regime_profile: 0b1010,
     };
     let packed = bin_id(&d);
-    let expected =
-        3_u16 | (2_u16 << 2) | (1_u16 << 4) | (0_u16 << 6) | (3_u16 << 8) | (0b1010_u16 << 10);
+    let expected = 3_u16 | (2_u16 << 2) | (1_u16 << 4) | (3_u16 << 8) | (0b1010_u16 << 10);
     assert_eq!(packed, expected);
 }
 
@@ -126,7 +125,7 @@ fn agent3_mutation_can_force_calllib_insertion_pattern() {
     weights[7] = 1.0;
     let child = mutate_candidate(&parent, &archive, &mut rng, &weights);
     assert!(child.verify().is_ok());
-    assert!(child.blocks.len() >= parent.blocks.len() + 1);
+    assert!(child.blocks.len() > parent.blocks.len());
 
     let mut found_pattern = false;
     for block in &child.blocks {
@@ -197,27 +196,29 @@ fn agent3_bandit_updates_and_persists_weights() {
 
 #[test]
 fn agent3_loop_term_transform_can_insert_bridge_jump() {
-    let mut parent = CandidateCfg::default();
-    parent.blocks = vec![
-        Block {
-            insns: Vec::new(),
-            term: Terminator::Loop {
-                reg: 0,
-                body_target: 1,
-                exit_target: 2,
-                imm14: 0,
+    let parent = CandidateCfg {
+        blocks: vec![
+            Block {
+                insns: Vec::new(),
+                term: Terminator::Loop {
+                    reg: 0,
+                    body_target: 1,
+                    exit_target: 2,
+                    imm14: 0,
+                },
             },
-        },
-        Block {
-            insns: Vec::new(),
-            term: Terminator::Halt,
-        },
-        Block {
-            insns: Vec::new(),
-            term: Terminator::Halt,
-        },
-    ];
-    parent.entry = 0;
+            Block {
+                insns: Vec::new(),
+                term: Terminator::Halt,
+            },
+            Block {
+                insns: Vec::new(),
+                term: Terminator::Halt,
+            },
+        ],
+        entry: 0,
+        ..CandidateCfg::default()
+    };
     let archive = Archive::new();
     let mut weights = [0.0_f32; MUTATION_OPERATOR_COUNT];
     weights[8] = 1.0;

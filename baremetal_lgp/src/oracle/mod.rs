@@ -354,9 +354,7 @@ impl Oracle {
             episode.work_len,
         );
 
-        if worker.scratch.len() != SCRATCH_WORDS_F32 {
-            worker.scratch.resize(SCRATCH_WORDS_F32, 0.0);
-        }
+        let _ = SCRATCH_WORDS_F32;
         worker.scratch[layout.out_base..layout.out_base + layout.out_len].fill(0.0);
         worker.scratch[layout.work_base..layout.work_base + layout.work_len].fill(0.0);
 

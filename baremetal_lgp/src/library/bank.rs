@@ -3,7 +3,7 @@ use crate::bytecode::program::BytecodeProgram;
 use crate::library::LibraryImage;
 use crate::vm::VmProgram;
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug)]
 pub struct LibraryProgram {
     pub program: BytecodeProgram,
 }

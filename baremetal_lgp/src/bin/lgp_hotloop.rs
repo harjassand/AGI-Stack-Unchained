@@ -168,8 +168,7 @@ fn run() -> Result<(), String> {
 
                 if champion_updated {
                     let summary = tracer.run_trace(&result.evaluated.child_cfg);
-                    let _ = topk
-                        .write_champion_trace(result.id, &summary)
+                    topk.write_champion_trace(result.id, &summary)
                         .map_err(|e| e.to_string())?;
                 }
             }
@@ -343,6 +342,9 @@ impl Linker for NoopLinker {
         self.arena.scratch.extend(candidate.to_program_words());
         VmProgram {
             words: self.arena.scratch.clone(),
+            const_pool: [0.0; baremetal_lgp::abi::CONST_POOL_WORDS],
+            #[cfg(feature = "trace")]
+            pc_to_block: Vec::new(),
         }
     }
 }

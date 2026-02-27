@@ -23,30 +23,34 @@ pub fn sample_weighted_excluding(
     rng: &mut SplitMix64,
 ) -> u8 {
     let coverage_idx = usize::from(coverage_family % NUM_FAMILIES as u8);
-    let total: f32 = weights
-        .iter()
-        .enumerate()
-        .filter_map(|(idx, value)| {
-            if idx != coverage_idx {
-                Some(*value)
-            } else {
-                None
-            }
-        })
-        .sum();
+    let mut renorm = [0.0_f32; NUM_FAMILIES];
+    let mut total = 0.0_f32;
+    for (idx, weight) in weights.iter().copied().enumerate() {
+        if idx != coverage_idx {
+            let w = weight.max(0.0);
+            renorm[idx] = w;
+            total += w;
+        }
+    }
 
     if total <= f32::EPSILON {
         return ((coverage_idx + 1) % NUM_FAMILIES) as u8;
     }
 
-    let mut draw = rng.next_f32() * total;
+    for (idx, prob) in renorm.iter_mut().enumerate() {
+        if idx != coverage_idx {
+            *prob /= total;
+        }
+    }
+
+    let mut draw = rng.next_f32();
     let mut fallback = ((coverage_idx + 1) % NUM_FAMILIES) as u8;
-    for (idx, weight) in weights.iter().enumerate() {
+    for (idx, prob) in renorm.iter().copied().enumerate() {
         if idx == coverage_idx {
             continue;
         }
         fallback = idx as u8;
-        draw -= *weight;
+        draw -= prob;
         if draw <= 0.0 {
             return idx as u8;
         }

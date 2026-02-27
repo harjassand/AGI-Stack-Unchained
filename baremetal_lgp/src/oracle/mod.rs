@@ -10,6 +10,9 @@ pub mod regimes;
 pub mod scoring;
 
 const NUM_FAMILIES: usize = 4;
+const FIXED_PROXY_EPS: usize = 2;
+const FIXED_FULL_EPS_PER_FAMILY: usize = 4;
+const FIXED_STABILITY_RUNS: usize = 3;
 const SCRATCH_ALIGN_WORDS: usize = 64;
 const SCRATCH_LAYOUT_TRIES: usize = 16;
 const SCRATCH_MASK_I32: i32 = 0x3FFF;
@@ -149,6 +152,13 @@ pub struct Oracle {
 
 impl Oracle {
     pub fn new(cfg: OracleConfig, seed: u64) -> Self {
+        let cfg = OracleConfig {
+            fuel_max: cfg.fuel_max,
+            proxy_eps: FIXED_PROXY_EPS,
+            full_eps_per_family: FIXED_FULL_EPS_PER_FAMILY,
+            stability_runs: FIXED_STABILITY_RUNS,
+            topk_trace: cfg.topk_trace,
+        };
         Self {
             cfg,
             rng: SplitMix64::new(seed),
@@ -233,6 +243,7 @@ impl Oracle {
         prog: &VmProgram,
         lib: &LibraryImage,
     ) -> ProxyEvalStats {
+        debug_assert_eq!(self.cfg.proxy_eps, FIXED_PROXY_EPS);
         let weights = self.mixture.weights();
         let (coverage_family, weighted_family) =
             funnel::next_proxy_families(&mut self.proxy_counter, weights, &mut self.rng);
@@ -279,6 +290,7 @@ impl Oracle {
         prog: &VmProgram,
         lib: &LibraryImage,
     ) -> FullEvalStats {
+        debug_assert_eq!(self.cfg.full_eps_per_family, FIXED_FULL_EPS_PER_FAMILY);
         let mut all_scores =
             Vec::with_capacity(self.cfg.full_eps_per_family.saturating_mul(NUM_FAMILIES));
         let mut family_sums = [0.0_f32; NUM_FAMILIES];
@@ -483,6 +495,7 @@ impl OracleHarness for Oracle {
                 }
             }
             EvalMode::Stability => {
+                debug_assert_eq!(self.cfg.stability_runs, FIXED_STABILITY_RUNS);
                 let runs = self.cfg.stability_runs.max(1);
                 let mut run_means = Vec::with_capacity(runs);
                 let mut run_fuel = Vec::with_capacity(runs);

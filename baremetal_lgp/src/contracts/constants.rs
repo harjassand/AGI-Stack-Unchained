@@ -20,8 +20,8 @@ pub const MAX_BLOCK_INSTRS: usize = 128;
 pub const MAX_TOTAL_INSTRS: usize = 2048;
 
 // Vector backend policy thresholds (exact)
-pub const NEON_THRESHOLD_F32: usize = 128;      // real len in f32
-pub const NEON_THRESHOLD_COMPLEX: usize = 64;   // complex len in complex numbers
+pub const NEON_THRESHOLD_F32: usize = 128; // real len in f32
+pub const NEON_THRESHOLD_COMPLEX: usize = 64; // complex len in complex numbers
 
 // Oracle families (exact v0)
 pub const ORACLE_FAMILIES: usize = 4;

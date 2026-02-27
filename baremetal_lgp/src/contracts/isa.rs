@@ -13,7 +13,7 @@
 #[repr(u8)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Op {
-    Nop  = 0x00,
+    Nop = 0x00,
     Halt = 0x01,
 
     // Float scalar
@@ -25,13 +25,13 @@ pub enum Op {
     FNeg = 0x15, // f[rd]=-f[ra]
     Tanh = 0x16, // f[rd]=fast_tanh(f[ra])  extra +2
     Sigm = 0x17, // f[rd]=fast_sigm(f[ra])  extra +2
-    Ldc  = 0x18, // f[rd]=const_pool[imm8 % CONST_POOL_LEN]
+    Ldc = 0x18,  // f[rd]=const_pool[imm8 % CONST_POOL_LEN]
 
     // Int scalar
     IAdd = 0x20, // i[rd]=i[ra]+i[rb]
     ISub = 0x21,
     IAnd = 0x22,
-    IOr  = 0x23,
+    IOr = 0x23,
     IXor = 0x24,
     ShlI = 0x25, // i[rd]=i[ra] << (imm8 & 31)
     ShrI = 0x26, // logical
@@ -47,12 +47,12 @@ pub enum Op {
     StF = 0x39, // scratch[(i[ra] + imm16_s) & MASK] = f[rd]
 
     // Control flow (rel16)
-    Jmp    = 0x3A, // pc += rel16_s
-    JzI    = 0x3B, // if i[rd]==0 pc += rel16_s
-    JnzI   = 0x3C,
-    Loop   = 0x3D, // i[rd] -= 1; if i[rd]!=0 pc += rel16_s
-    Call   = 0x3E, // push (prog,pc); pc += rel16_s   extra +1
-    Ret    = 0x3F, // pop -> (prog,pc)                extra +1
+    Jmp = 0x3A, // pc += rel16_s
+    JzI = 0x3B, // if i[rd]==0 pc += rel16_s
+    JnzI = 0x3C,
+    Loop = 0x3D,    // i[rd] -= 1; if i[rd]!=0 pc += rel16_s
+    Call = 0x3E,    // push (prog,pc); pc += rel16_s   extra +1
+    Ret = 0x3F,     // pop -> (prog,pc)                extra +1
     CallLib = 0x37, // NEW: call library slot imm8 (extra +1)
 
     // Vector real (len in i[rc]) extra = 2 + ceil(len/8)

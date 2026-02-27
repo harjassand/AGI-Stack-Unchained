@@ -1,6 +1,7 @@
 pub mod archive;
 pub mod champion;
 pub mod descriptors;
+pub mod digest;
 pub mod evaluate;
 pub mod ir;
 pub mod mutate;

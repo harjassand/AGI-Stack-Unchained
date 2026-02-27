@@ -1,6 +1,6 @@
+use crate::library::LibraryImage;
 use crate::types::*;
 use crate::vm::{VmProgram, VmWorker};
-use crate::library::LibraryImage;
 
 pub trait OracleHarness {
     fn eval(&mut self, worker: &mut VmWorker, prog: &VmProgram, mode: EvalMode) -> EvalSummary;
@@ -21,5 +21,10 @@ pub trait TraceSink {
 }
 
 pub trait SearchEngine {
-    fn step(&mut self, oracle: &mut dyn OracleHarness, workers: &mut [VmWorker], lib: &LibraryImage);
+    fn step(
+        &mut self,
+        oracle: &mut dyn OracleHarness,
+        workers: &mut [VmWorker],
+        lib: &LibraryImage,
+    );
 }

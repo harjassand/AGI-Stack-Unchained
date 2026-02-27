@@ -16,10 +16,10 @@ pub enum StopReason {
     FaultPcOob,
     FaultCallstackOverflow,
     FaultCallstackUnderflow,
-    FaultVecWrap,      // vector op range wraps scratch
-    FaultVecOob,       // base+len exceeds scratch
-    FaultGemmOob,      // gemm range exceeds scratch
-    FaultLibMissing,   // CALL_LIB to empty slot
+    FaultVecWrap,    // vector op range wraps scratch
+    FaultVecOob,     // base+len exceeds scratch
+    FaultGemmOob,    // gemm range exceeds scratch
+    FaultLibMissing, // CALL_LIB to empty slot
 }
 
 #[derive(Clone, Copy, Debug)]

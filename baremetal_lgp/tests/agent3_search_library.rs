@@ -123,7 +123,8 @@ fn agent3_mutation_can_force_calllib_insertion_pattern() {
     let mut weights = [0.0_f32; MUTATION_OPERATOR_COUNT];
     // Force insert CALL_LIB operator.
     weights[7] = 1.0;
-    let child = mutate_candidate(&parent, &archive, &mut rng, &weights);
+    let mut child = CandidateCfg::default();
+    mutate_candidate(&parent, &archive, &mut rng, &weights, &mut child);
     assert!(child.verify().is_ok());
     assert!(child.blocks.len() > parent.blocks.len());
 
@@ -226,7 +227,8 @@ fn agent3_loop_term_transform_can_insert_bridge_jump() {
     let mut saw_bridge = false;
     for seed in 1..2048_u64 {
         let mut rng = Rng::new(seed);
-        let child = mutate_candidate(&parent, &archive, &mut rng, &weights);
+        let mut child = CandidateCfg::default();
+        mutate_candidate(&parent, &archive, &mut rng, &weights, &mut child);
         if child.blocks.len() <= parent.blocks.len() {
             continue;
         }

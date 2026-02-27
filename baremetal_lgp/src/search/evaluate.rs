@@ -116,7 +116,8 @@ where
     O: Oracle,
 {
     let weights = mutation_weights.unwrap_or(&DEFAULT_MUTATION_WEIGHTS);
-    let child_cfg = mutate_candidate(parent_cfg, archive, rng, weights);
+    let mut child_cfg = CandidateCfg::default();
+    mutate_candidate(parent_cfg, archive, rng, weights, &mut child_cfg);
     let program = harness.linker.link(&child_cfg);
     let report =
         harness

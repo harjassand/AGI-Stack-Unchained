@@ -46,19 +46,50 @@ pub fn mutate_candidate(
     archive: &Archive,
     rng: &mut Rng,
     weights: &[f32; MUTATION_OPERATOR_COUNT],
-) -> CandidateCfg {
+    child_out: &mut CandidateCfg,
+) {
     for _attempt in 0..8 {
-        let mut child = parent.clone();
+        copy_candidate_cfg(child_out, parent);
         let mutation_count = rng.gen_range_usize(1..5);
         for _ in 0..mutation_count {
             let op = select_operator(rng, weights);
-            apply_operator(op, &mut child, archive, rng);
+            apply_operator(op, child_out, archive, rng);
         }
-        if child.verify().is_ok() {
-            return child;
+        if child_out.verify().is_ok() {
+            return;
         }
     }
-    parent.clone()
+    copy_candidate_cfg(child_out, parent);
+}
+
+fn copy_candidate_cfg(dst: &mut CandidateCfg, src: &CandidateCfg) {
+    dst.entry = src.entry;
+    dst.const_pool = src.const_pool;
+
+    if dst.blocks.len() > src.blocks.len() {
+        dst.blocks.truncate(src.blocks.len());
+    }
+    if dst.blocks.len() < src.blocks.len() {
+        dst.blocks.reserve(src.blocks.len() - dst.blocks.len());
+    }
+
+    for (idx, src_block) in src.blocks.iter().enumerate() {
+        if idx == dst.blocks.len() {
+            dst.blocks.push(Block {
+                insns: Vec::new(),
+                term: Terminator::Halt,
+            });
+        }
+        let dst_block = &mut dst.blocks[idx];
+        dst_block.term = src_block.term.clone();
+        dst_block.insns.clear();
+        if dst_block.insns.capacity() < src_block.insns.len() {
+            dst_block
+                .insns
+                .reserve(src_block.insns.len() - dst_block.insns.capacity());
+        }
+        dst_block.insns.extend(src_block.insns.iter().cloned());
+    }
 }
 
 fn select_operator(rng: &mut Rng, weights: &[f32; MUTATION_OPERATOR_COUNT]) -> MutationOp {

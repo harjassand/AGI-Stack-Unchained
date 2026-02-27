@@ -6,6 +6,7 @@ use crate::vm::{VmProgram, VmWorker};
 
 pub mod funnel;
 pub mod mixture;
+pub mod raw;
 pub mod regimes;
 pub mod scoring;
 

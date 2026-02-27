@@ -1,13 +1,13 @@
 pub mod abi;
 
-pub mod accel;
-pub mod bytecode;
-pub mod cfg;
 pub mod isa;
-pub mod jit;
+pub mod cfg;
+pub mod bytecode;
 pub mod vm;
+pub mod accel;
+pub mod jit;
 
-pub mod library;
 pub mod oracle;
-pub mod outer_loop;
 pub mod search;
+pub mod library;
+pub mod outer_loop;

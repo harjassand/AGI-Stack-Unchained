@@ -1,21 +1,6 @@
-#[derive(Clone, Debug, Default)]
-pub struct VmProgram {
-    pub words: Vec<u32>,
-}
+pub mod exec;
+pub mod gas;
+pub mod trace;
+pub mod worker;
 
-#[derive(Clone, Debug)]
-pub struct VmWorker {
-    pub f: [f32; 16],
-    pub i: [i32; 16],
-    pub scratch: Vec<f32>,
-}
-
-impl Default for VmWorker {
-    fn default() -> Self {
-        Self {
-            f: [0.0; 16],
-            i: [0; 16],
-            scratch: vec![0.0; crate::contracts::constants::SCRATCH_WORDS_F32],
-        }
-    }
-}
+pub use worker::{StopReason, VmWorker};

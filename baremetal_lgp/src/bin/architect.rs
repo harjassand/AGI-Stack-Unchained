@@ -1,3 +1,3 @@
 fn main() {
-    panic!("not implemented");
+    eprintln!("architect stub: implemented by agent3");
 }

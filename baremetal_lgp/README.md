@@ -1,5 +1,5 @@
 # baremetal_lgp
 
-Bootstrap skeleton for baremetal LGP runtime, search, oracle, and JIT split work.
+Baremetal LGP runtime/search/oracle stack with strict agent path ownership.
 
-Shared contracts in `src/contracts/` plus `src/types.rs` are immutable after bootstrap.
+This crate is bootstrapped from locked contracts in `src/abi.rs`, `src/isa/**`, and `src/vm/**`.

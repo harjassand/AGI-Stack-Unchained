@@ -71,4 +71,7 @@ authority/holdouts/packs/*.oracle_hidden_tests_pack_v1.json
 # baremetal_lgp runtime artifacts
 baremetal_lgp/runs/*
 !baremetal_lgp/runs/
-!baremetal_lgp/runs/.gitkeep
+!baremetal_lgp/runs/.gitignore
+
+# baremetal_lgp local lockfile
+baremetal_lgp/Cargo.lock

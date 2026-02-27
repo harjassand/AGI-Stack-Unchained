@@ -1,6 +1,3 @@
-use crate::vm::VmProgram;
-
-#[derive(Clone, Debug, Default)]
-pub struct LibraryImage {
-    pub slots: Vec<Option<VmProgram>>,
-}
+pub mod bank;
+pub mod promote;
+pub mod seed;

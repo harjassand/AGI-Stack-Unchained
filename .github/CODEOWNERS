@@ -1,0 +1,31 @@
+# Default owner for unmatched paths.
+* @harjassand
+
+# Agent 1 owns these paths.
+/baremetal_lgp/src/abi.rs @harjassand
+/baremetal_lgp/src/isa/ @harjassand
+/baremetal_lgp/src/bytecode/ @harjassand
+/baremetal_lgp/src/cfg/ @harjassand
+/baremetal_lgp/src/vm/ @harjassand
+/baremetal_lgp/src/accel/ @harjassand
+/baremetal_lgp/src/jit/ @harjassand
+/baremetal_lgp/tests/agent1_*.rs @harjassand
+
+# Agent 2 owns these paths.
+/baremetal_lgp/src/oracle/ @harjassand
+/baremetal_lgp/tests/agent2_*.rs @harjassand
+
+# Agent 3 owns these paths.
+/baremetal_lgp/src/search/ @harjassand
+/baremetal_lgp/src/library/ @harjassand
+/baremetal_lgp/src/outer_loop/ @harjassand
+/baremetal_lgp/src/bin/ @harjassand
+/baremetal_lgp/scripts/ @harjassand
+/baremetal_lgp/benches/ @harjassand
+/baremetal_lgp/tests/agent3_*.rs @harjassand
+
+# Shared bootstrap-only files.
+/baremetal_lgp/Cargo.toml @harjassand
+/baremetal_lgp/src/lib.rs @harjassand
+/baremetal_lgp/README.md @harjassand
+/baremetal_lgp/OWNERS.md @harjassand

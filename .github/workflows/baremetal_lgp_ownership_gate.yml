@@ -1,0 +1,33 @@
+name: baremetal-lgp-ownership-gate
+
+on:
+  pull_request:
+    branches:
+      - pivot/baremetal_lgp_rsi
+  push:
+    branches:
+      - pivot/baremetal_lgp_rsi
+      - pivot/agent1_vm_isa_jit
+      - pivot/agent2_oracle
+      - pivot/agent3_search_architect
+      - codex/agent1_vm_isa_jit
+      - codex/agent2_oracle
+      - codex/agent3_search_architect
+
+jobs:
+  enforce:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Enforce ownership and immutability
+        env:
+          BRANCH_NAME: ${{ github.head_ref || github.ref_name }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: .github/scripts/enforce_baremetal_lgp_ownership.sh

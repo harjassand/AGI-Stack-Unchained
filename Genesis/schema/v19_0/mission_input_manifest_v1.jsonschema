@@ -1,0 +1,58 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genesis.engine/specs/v19_0/mission_input_manifest_v1",
+  "title": "Mission input manifest v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "manifest_id",
+    "mission_request_content_id",
+    "inputs"
+  ],
+  "$defs": {
+    "content_id": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "u64": {
+      "type": "integer",
+      "minimum": 0
+    }
+  },
+  "properties": {
+    "schema_version": {"const": "mission_input_manifest_v1"},
+    "manifest_id": {"$ref": "#/$defs/content_id"},
+    "mission_request_content_id": {"$ref": "#/$defs/content_id"},
+    "inputs": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "role",
+          "content_id",
+          "size_bytes_u64"
+        ],
+        "properties": {
+          "role": {
+            "type": "string",
+            "enum": ["USER_PROMPT", "ATTACHMENT", "DERIVED"]
+          },
+          "content_id": {"$ref": "#/$defs/content_id"},
+          "filename": {"type": "string", "minLength": 1},
+          "mime": {"type": "string", "minLength": 1},
+          "size_bytes_u64": {"$ref": "#/$defs/u64"},
+          "sip_receipt_content_id": {"$ref": "#/$defs/content_id"}
+        }
+      }
+    },
+    "notes": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "ingestion_policy_id": {"type": "string", "minLength": 1}
+      }
+    }
+  }
+}

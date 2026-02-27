@@ -67,3 +67,8 @@ authority/benchmark_suites/oracle_ladder_*
 authority/benchmark_suite_sets/oracle_ladder_*
 authority/holdouts/packs/*.oracle_task_inputs_pack_v1.json
 authority/holdouts/packs/*.oracle_hidden_tests_pack_v1.json
+
+# baremetal_lgp runtime artifacts
+baremetal_lgp/runs/*
+!baremetal_lgp/runs/
+!baremetal_lgp/runs/.gitkeep

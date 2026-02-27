@@ -1,10 +1,20 @@
+@config "../tailwind.config.mjs";
 @import "tailwindcss";
-@import "reactflow/dist/style.css";
 
-:root {
-  --background: #020617;
-  --foreground: #e2e8f0;
-  --panel: rgba(15, 23, 42, 0.76);
+:root{
+  --mc-bg-0: 222 47% 4%;
+  --mc-bg-1: 223 44% 8%;
+  --mc-surface: 223 34% 11%;
+  --mc-surface-2: 223 34% 14%;
+  --mc-border: 220 14% 22%;
+  --mc-fg: 210 40% 98%;
+  --mc-muted: 215 16% 72%;
+  --mc-muted-2: 215 10% 60%;
+  --mc-accent: 213 94% 68%;
+  --mc-danger: 0 84% 60%;
+  --mc-success: 142 76% 36%;
+  --background: hsl(var(--mc-bg-0));
+  --foreground: hsl(var(--mc-fg));
 }
 
 @theme inline {
@@ -14,24 +24,18 @@
   --font-mono: var(--font-ibm-plex-mono);
 }
 
+* {
+  box-sizing: border-box;
+}
+
 body {
-  background: var(--background);
-  color: var(--foreground);
+  margin: 0;
+  min-height: 100vh;
+  background: hsl(var(--mc-bg-0));
+  color: hsl(var(--mc-fg));
   font-family: var(--font-space-grotesk), sans-serif;
 }
 
 * {
-  scrollbar-color: rgba(56, 189, 248, 0.4) rgba(15, 23, 42, 0.6);
-}
-
-.react-flow__controls-button {
-  background: rgba(15, 23, 42, 0.86);
-  border-bottom: 1px solid rgba(148, 163, 184, 0.3);
-  color: #cbd5e1;
-}
-
-.react-flow__controls {
-  border: 1px solid rgba(148, 163, 184, 0.35);
-  border-radius: 10px;
-  overflow: hidden;
+  scrollbar-color: hsl(var(--mc-muted-2) / 0.45) hsl(var(--mc-surface));
 }

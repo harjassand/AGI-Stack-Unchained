@@ -8336,3 +8336,324 @@ This is not a narrow feature patch. It is a high-density governance + capability
 5. Keep `.tmp_*` diagnostic artifacts explicitly non-authoritative in campaign loaders and automation.
 
 *End Appendix AB.*
+
+# Appendix AC: Last 18h Delta (2026-02-26 to 2026-02-27)
+
+Evidence capture time for this appendix: **2026-02-27 09:21:18 +1000**.
+
+## AC.1 Evidence Basis and Capture Method
+
+This appendix was built from repository-native evidence, using:
+
+- `git log --since='18 hours ago' --date=iso --pretty=format:'%H|%ad|%an|%s'`
+- `git rev-list --count --since='18 hours ago'` with `--merges` and `--no-merges`
+- `git show --shortstat` and `git show --name-only` for each in-window non-merge commit
+- `git log --since='18 hours ago' --no-merges --numstat` aggregation
+- `git status --porcelain` and `git diff --stat` for active local delta
+- targeted pytest runs for changed subsystems
+
+No external data source is used in this appendix.
+
+## AC.2 Window Boundaries and Commit Ledger
+
+Query lower bound at capture time is approximately **2026-02-26 15:21 +1000** (`now - 18h`).  
+No commits were present between 15:21 and 17:18; earliest observed in-window commit is:
+
+- `ae0d31c` at **2026-02-26 17:18:53 +1000**
+
+Latest in-window commit is:
+
+- `f8f3832` at **2026-02-27 01:20:48 +1000**
+
+Exact in-window commit ledger (oldest to newest):
+
+1. `ae0d31c00d3be572236394eeace856a9b3e05bd5` | 2026-02-26 17:18:53 +1000 | Codex Runner | Agent1: deterministic governance lock, receipts, and preflight gates
+2. `47387bf7c48797485162e703ee223b871e1d341f` | 2026-02-26 17:22:30 +1000 | Codex Runner | Checkpoint dirty local main changes
+3. `d18319307f41701502791c01f64020217ad12275` | 2026-02-26 17:32:53 +1000 | Codex Runner | feat(ttc-grpo): add TTC GRPO schemas, tools, and verifiers
+4. `7a045e98538c5e025480d309c53dcf22caeb76a8` | 2026-02-26 17:33:31 +1000 | Harjas Sandhu | Merge pull request #9 from harjassand/codex/feat/sidc-v2-ttc-grpo
+5. `1fd82329a63572b2635a4466c87bbf2a50b58532` | 2026-02-26 17:32:59 +1000 | Codex Runner | feat(macro-active-metal): add macro miner, active inference, and metal toolchain artifacts
+6. `12419a2154b91f4f5c9458021c58eb108610ad6d` | 2026-02-26 17:34:06 +1000 | Harjas Sandhu | Merge pull request #10 from harjassand/codex/feat/sidc-v2-macro-active-metal
+7. `548ec9e38131e13a4e907a86112553349757e21d` | 2026-02-26 17:36:09 +1000 | Codex Runner | chore(agent1): PR backfill marker for governance-lock merge path
+8. `1342f3ac2deb32dd0c1254b271bb496a8f40f448` | 2026-02-26 17:36:29 +1000 | Harjas Sandhu | Merge pull request #11 from harjassand/codex/feat/sidc-v2-governance-lock
+9. `2d9879ab3e22821a2c4d3f09e8df330b5f75a771` | 2026-02-26 23:03:37 +1000 | Codex Runner | mc(phase2): add fastapi sse stream server and state endpoint
+10. `9d71d0ce13ea9bc14d6c67e0b629bebe9104c7ef` | 2026-02-26 23:30:39 +1000 | Harjas Sandhu | Merge pull request #12 from harjassand/mc/phase2-stream
+11. `4070d0fbba743662a98eaea9366f3640fba21ca6` | 2026-02-26 23:32:30 +1000 | Codex Runner | mc(phase1): add nlpmc mission compiler with schema validation
+12. `9dc59b53e6b740ca6db547d01203442b711dea46` | 2026-02-26 23:33:17 +1000 | Harjas Sandhu | Merge pull request #13 from harjassand/codex/mc-phase1-nlpmc
+13. `5e9e180e1faacf913aa5b920af95c5b6c1e5b622` | 2026-02-26 23:35:26 +1000 | Codex Runner | mc(phase3): add nextjs dashboard with sse monologue and dag
+14. `25373d095fa28d9857c40bbecb5f99c2abdacd10` | 2026-02-26 23:36:10 +1000 | Harjas Sandhu | Merge pull request #14 from harjassand/codex/mc-phase3-ui
+15. `f8f3832e9a2ff7e4846a05cbbb80bb85523fe0ad` | 2026-02-27 01:20:48 +1000 | Codex Runner | chore: update mission control and benchmark assets
+
+## AC.3 Quantitative Delta Summary (Committed, Last 18h)
+
+Counts:
+
+- **15 total commits**
+- **6 merge commits**
+- **9 non-merge commits**
+- **1 metadata-only non-merge commit** with no file delta (`548ec9e`)
+- **8 non-merge commits with material file changes**
+
+Aggregate non-merge delta volume:
+
+- **321 file-change entries** (`git log --no-merges --numstat`)
+- **23,572 insertions**
+- **846 deletions**
+
+Per-non-merge commit shortstat evidence:
+
+- `ae0d31c`: 28 files, `+3886/-739`
+- `47387bf`: 35 files, `+2236/-37`
+- `d183193`: 28 files, `+3444/-0`
+- `1fd8232`: 55 files, `+4621/-48`
+- `2d9879a`: 3 files, `+350/-0`
+- `4070d0f`: 1 file, `+398/-0`
+- `5e9e180`: 17 files, `+7476/-0`
+- `f8f3832`: 154 files, `+1161/-22`
+
+Path surface breadth (non-merge commits):
+
+- **315 unique paths touched**
+- **58 unique schema paths** under `Genesis/schema/` and `CDEL-v2/Genesis/schema/`
+- **9 unique test paths**
+
+Top-level concentration by changed-path count:
+
+- `authority`: 144
+- `tools`: 44
+- `CDEL-v2`: 43
+- `Genesis`: 30
+- `campaigns`: 21
+- `mission-control-ui`: 17
+- `orchestrator`: 14
+- `scripts`: 5
+- `SOURCE_OF_TRUTH.md`: 1
+- `MISSION_CONTROL_PHASES_1_2_3_HANDOFF_2026-02-26.md`: 1
+- `LONG_RUN_PREFLIGHT_SUMMARY_v1.json`: 1
+
+## AC.4 Relationship to Appendix AB (Overlap and Increment)
+
+Appendix AB was captured at **2026-02-26 21:18:28 +1000**.  
+This Appendix AC intentionally overlaps AB in the 17:18-17:36 commit block, then extends beyond AB to include late-night Mission Control and benchmark asset commits.
+
+Post-AB incremental commit subset (from `2026-02-26 21:18:28 +1000` onward):
+
+- **7 commits total**
+- **3 merges**
+- **4 non-merges**
+- **175 file-change entries**
+- **9,385 insertions**
+- **22 deletions**
+- **173 unique changed paths**
+- **144 authority paths** in this incremental slice
+
+This means the dominant *new* movement after AB was:
+
+1. Mission Control Phases 1/2/3 landing and PR merges (#12/#13/#14),
+2. authority benchmark + holdout materialization commit (`f8f3832`),
+3. follow-up hardening in mission-control and utility/governance codepaths.
+
+## AC.5 Workstream A: Governance + TTC-GRPO + Macro/Active-Metal (Early Window Continuity)
+
+This section is continuity evidence that the AB-era control/capability expansion is still within this 18h slice:
+
+- `ae0d31c` (`+3886/-739`, 28 files)
+- `47387bf` (`+2236/-37`, 35 files)
+- `d183193` (`+3444/-0`, 28 files)
+- `1fd8232` (`+4621/-48`, 55 files)
+- merged via PR merges `#9`, `#10`, `#11`
+
+Concrete file evidence in this window includes:
+
+- Governance contracts and runtime:
+  - `Genesis/schema/v19_0/anti_monopoly_state_v1.jsonschema`
+  - `Genesis/schema/v19_0/dependency_debt_state_v1.jsonschema`
+  - `Genesis/schema/v19_0/dependency_routing_receipt_v1.jsonschema`
+  - `orchestrator/omega_v19_0/governance/frontier_lock_v1.py`
+  - `orchestrator/omega_v19_0/governance/anti_monopoly_gate_v1.py`
+- TTC-GRPO surfaces:
+  - `Genesis/schema/v19_0/ttc_grpo_run_config_v1.jsonschema`
+  - `Genesis/schema/v19_0/ttc_grpo_run_receipt_v1.jsonschema`
+  - `tools/ttc_grpo/grpo_runner_v1.py`
+  - `CDEL-v2/cdel/v19_0/verify_ttc_grpo_run_receipt_v1.py`
+- Macro-active-metal surfaces:
+  - `orchestrator/native/metal_runner_v1.py`
+  - `tools/macro_miner/macro_miner_v1.py`
+  - `tools/orch_worldmodel/active_inference_driver_v1.py`
+  - `Genesis/schema/v19_0/orch_active_inference_receipt_v1.jsonschema`
+  - `Genesis/schema/v19_0/orch_worldmodel_uncertainty_report_v1.jsonschema`
+
+Testing surfaces added in this early block include:
+
+- `CDEL-v2/cdel/v19_0/tests_omega_daemon/test_frontier_hard_lock_v1.py`
+- `CDEL-v2/cdel/v19_0/tests_omega_daemon/test_long_run_preflight_summary_v1.py`
+- `CDEL-v2/cdel/v19_0/tests_training/test_ttc_grpo_runner_v1.py`
+- `tools/macro_miner/tests/test_macro_miner_v1.py`
+
+Source-of-truth implication:
+
+The window still includes the governance lock + training + native expansion that AB described; this remains first-order context for any operational interpretation of current `main`.
+
+## AC.6 Workstream B: Mission Control Vertical Slice (Phases 2 -> 1 -> 3)
+
+Phase commits and merges in this window:
+
+- `2d9879a` (phase2 backend stream/state/mission API scaffold)
+- `4070d0f` (phase1 NLPMC compiler with schema validation)
+- `5e9e180` (phase3 Next.js dashboard)
+- merged by `9d71d0c` (PR #12), `9dc59b5` (PR #13), `25373d0` (PR #14)
+
+Commit-level file evidence:
+
+- `2d9879a` changed exactly:
+  - `tools/mission_control/_signal_parse_v1.py`
+  - `tools/mission_control/_state_discovery_v1.py`
+  - `tools/mission_control/stream_server_v1.py`
+- `4070d0f` changed exactly:
+  - `tools/mission_control/nlpmc_v1.py`
+- `5e9e180` added `mission-control-ui/*` with:
+  - `app/page.tsx` (`+668`)
+  - `package-lock.json` (`+6548`)
+  - full Next.js app/config skeleton
+
+Operational evidence from committed handoff artifact:
+
+- `MISSION_CONTROL_PHASES_1_2_3_HANDOFF_2026-02-26.md` (created in `f8f3832`, `+457`) explicitly records:
+  - exact phase timeline and PR mapping,
+  - endpoint contracts (`GET /stream`, `GET /api/state/current`, `POST /api/mission`),
+  - expected local run commands,
+  - risk register and hardening gaps.
+
+Source-of-truth implication:
+
+Mission Control is no longer conceptual or stub-level; it is present as a concrete backend+UI path in-repo, with explicit handoff documentation.
+
+## AC.7 Workstream C: Benchmark/Authority Materialization + Hardening Commit (`f8f3832`)
+
+Commit `f8f3832` evidence:
+
+- **154 files changed**
+- **+1161 / -22**
+- top-level distribution:
+  - `authority`: 144 paths
+  - `tools`: 6 paths
+  - `orchestrator`: 1
+  - plus `LONG_RUN_PREFLIGHT_SUMMARY_v1.json`, `SOURCE_OF_TRUTH.md`, and handoff doc
+
+Authority asset materialization details:
+
+- `authority/benchmark_suite_sets`: **9** seed suite-set files added
+- `authority/benchmark_suites`: **45** micdrop-v2 suite files added
+- `authority/holdouts/packs`: **90** holdout pack files added
+
+Filesystem inventory after this commit:
+
+- `authority/benchmark_suite_sets/micdrop_v2_seed_*_suite_set.json`: **9**
+- `authority/benchmark_suites/micdrop_v2_seed_*.json`: **45**
+- `authority/holdouts/packs/sha256_*.json`: **282 total**
+
+Functional code deltas in the same commit:
+
+1. `orchestrator/omega_v19_0/microkernel_v1.py`
+   - governance reason code extraction hardened to accept only non-empty string values for:
+     - `forced_heavy_reason_code`
+     - `anti_monopoly_reason_code`
+2. `tools/orch_worldmodel/active_inference_driver_v1.py`
+   - expands utility proof payload with:
+     - `schema_id`, `id`, `producer_run_id`, `utility_action_id`, `utility_class`
+     - debt maps (`before/after/delta`) and evidence list
+     - timestamp
+   - computes canonical hashed `id` after payload assembly
+3. `tools/mission_control/nlpmc_v1.py`
+   - robust JSON extraction improvements:
+     - fenced JSON support
+     - first-object extraction from wrapper text
+     - candidate parse fallback strategy
+4. `tools/mission_control/stream_server_v1.py`
+   - `/api/mission` now wraps compiler exceptions into stable `{"ok": false, "error": ...}` payload with HTTP 200 for compile failures
+5. tests added:
+   - `tools/mission_control/tests/test_nlpmc_v1.py`
+   - `tools/mission_control/tests/test_stream_server_v1.py`
+
+Additionally, `LONG_RUN_PREFLIGHT_SUMMARY_v1.json` was rewritten from a long run-specific report blob to a compact summary envelope (`schema_id`, env block, governance checks, git head).
+
+Source-of-truth implication:
+
+This commit converts a previously uncommitted authority corpus expansion into tracked repo state while simultaneously hardening mission-control and governance/utility serialization behavior.
+
+## AC.8 Active Local Delta at Capture Time (Uncommitted)
+
+`git status --porcelain` evidence at capture time:
+
+- **11 total entries**
+- **6 tracked modified files**
+- **5 untracked paths**
+
+Tracked modified files:
+
+- `mission-control-ui/app/globals.css`
+- `mission-control-ui/app/page.tsx`
+- `tools/mission_control/_state_discovery_v1.py`
+- `tools/mission_control/nlpmc_v1.py`
+- `tools/mission_control/stream_server_v1.py`
+- `tools/mission_control/tests/test_stream_server_v1.py`
+
+Untracked paths:
+
+- `mission-control-ui/app/dev/`
+- `mission-control-ui/tailwind.config.mjs`
+- `tools/mission_control/chat_router_v2.py`
+- `tools/mission_control/tests/test_chat_router_v2.py`
+- `wt-mc-uxv2/`
+
+Tracked-diff size evidence (`git diff --stat`):
+
+- **6 files changed**
+- **748 insertions**
+- **603 deletions**
+
+Untracked mirror size evidence:
+
+- `wt-mc-uxv2/` contains **32,258 files** across **4,820 directories**
+
+Source-of-truth implication:
+
+The committed state is materially updated, but there is an active Mission Control follow-on branch-like local delta plus a very large untracked mirror directory that should be explicitly dispositioned.
+
+## AC.9 Test and Execution Evidence Collected During This Update
+
+Executed tests:
+
+1. `pytest -q tools/mission_control/tests/test_nlpmc_v1.py tools/mission_control/tests/test_stream_server_v1.py`
+   - result: **8 passed**
+2. `pytest -q tools/macro_miner/tests/test_macro_miner_v1.py tools/polymath/tests/test_metal_codegen_v1.py CDEL-v2/cdel/v19_0/tests_training/test_ttc_grpo_runner_v1.py`
+   - result: **15 passed**
+
+Total evidence in this capture pass:
+
+- **23 passing tests**
+- no failing tests observed in the targeted suites above
+
+## AC.10 Net Source-of-Truth Interpretation for This 18h Cycle
+
+This window shows a two-stage progression:
+
+1. **Control/capability formalization block** (governance lock + TTC-GRPO + macro-active-metal) carried through PR merge closure (#9-#11).
+2. **Operator and benchmark concretization block** (Mission Control phases #12-#14 plus benchmark/holdout materialization in `f8f3832`).
+
+Compared with AB:
+
+- AB's noted untracked authority batch is now largely committed in `f8f3832`.
+- Mission Control moved from absent-to-present in one integrated backend/UI wave.
+- A new local uncommitted delta has opened around Mission Control and chat routing.
+
+Operationally, the repo is now in a stronger documented and test-backed state than AB capture time, but with immediate hygiene decisions still pending for the active local delta.
+
+## AC.11 Required Continuity Checks for Next Appendix
+
+1. Decide disposition for `wt-mc-uxv2/` (track, ignore, or move out of repo root) before next governance/evidence sweep.
+2. Either commit or explicitly discard the current Mission Control tracked modifications to prevent source-of-truth drift between documented and executable state.
+3. Run UI-level checks for `mission-control-ui` (`npm install`, `npm run lint`, `npm run build`) and capture results in the next appendix.
+4. Re-verify downstream consumers of expanded utility proof payload fields (`id`, producer/evidence/debt maps) in any long-run report generators not covered by targeted tests.
+5. Keep the handoff file (`MISSION_CONTROL_PHASES_1_2_3_HANDOFF_2026-02-26.md`) synchronized with further local edits so the handoff remains accurate.
+
+*End Appendix AC.*

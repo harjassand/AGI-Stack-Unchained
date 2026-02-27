@@ -36,6 +36,9 @@ fn full_eval_populates_balanced_report_and_profile_bits() {
     let mut worker = VmWorker::default();
     let prog = VmProgram {
         words: vec![0x1, 0x2, 0x3, 0x4, 0x5],
+        const_pool: [0.0; baremetal_lgp::abi::CONST_POOL_WORDS],
+        #[cfg(feature = "trace")]
+        pc_to_block: Vec::new(),
     };
     let lib = LibraryImage::default();
     let report = oracle.eval_candidate(

@@ -1,0 +1,15 @@
+{
+  "pack_kind": "Prior",
+  "pack_hash": "",
+  "protocol_version": "apfsc-phase3-mvp-v1",
+  "created_unix_s": 1735689600,
+  "family_id": null,
+  "provenance": {
+    "source_name": "macro_seed_alt",
+    "source_type": "synthetic",
+    "attestation": null,
+    "notes": "phase3 macro seed alt prior"
+  },
+  "payload_hashes": [],
+  "meta": null
+}

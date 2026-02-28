@@ -216,11 +216,24 @@ pub fn build_constellation(
 
     family_specs.sort_by(|a, b| a.family_id.cmp(&b.family_id));
 
+    let mut fresh_families = Vec::new();
+    for fam in &family_specs {
+        if fam.family_id == "event_sparse" || fam.family_id == "formal_alg" {
+            fresh_families.push(crate::apfsc::types::FamilyFreshnessMeta {
+                family_id: fam.family_id.clone(),
+                admitted_epoch: 0,
+                fresh_until_epoch: cfg.phase3.fresh_horizon_epochs,
+            });
+        }
+    }
+    fresh_families.sort_by(|a, b| a.family_id.cmp(&b.family_id));
+
     let normalization = cfg.phase2_policy();
     let mut manifest = ConstellationManifest {
         constellation_id: String::new(),
         snapshot_hash: snapshot_hash.to_string(),
         family_specs,
+        fresh_families,
         normalization,
         protocol_version: cfg.protocol.version.clone(),
         manifest_hash: String::new(),
@@ -229,6 +242,7 @@ pub fn build_constellation(
     let constellation_seed = digest_json(&(
         manifest.snapshot_hash.clone(),
         manifest.family_specs.clone(),
+        manifest.fresh_families.clone(),
         manifest.normalization.clone(),
         manifest.protocol_version.clone(),
     ))?;

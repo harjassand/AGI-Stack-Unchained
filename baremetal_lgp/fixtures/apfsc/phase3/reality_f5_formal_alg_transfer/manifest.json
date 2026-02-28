@@ -1,0 +1,22 @@
+{
+  "pack_kind": "Reality",
+  "pack_hash": "",
+  "protocol_version": "apfsc-phase3-mvp-v1",
+  "created_unix_s": 1735689600,
+  "family_id": "formal_alg",
+  "provenance": {
+    "source_name": "reality_f5_formal_alg_transfer",
+    "source_type": "synthetic",
+    "attestation": null,
+    "notes": "phase3 fixture"
+  },
+  "payload_hashes": [],
+  "meta": {
+    "family_id": "formal_alg",
+    "family_kind": "AlgorithmicSymbolic",
+    "role": "Transfer",
+    "variant_id": "formal_alg_transfer",
+    "base_family_id": null,
+    "description": "formal alg transfer"
+  }
+}

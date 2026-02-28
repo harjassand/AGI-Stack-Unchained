@@ -128,6 +128,10 @@ fn phase1_canary_activation_updates_pointers_atomically() {
     cfg.judge.require_canary_for_a = true;
 
     let bridge = WarmRefinementPack {
+        observable_map_hash: None,
+        state_map_hash: None,
+        tolerance_spec_hash: None,
+        protected_head_ids: Vec::new(),
         protected_families: vec!["F0".to_string(), "F1".to_string()],
         max_anchor_regress_bits: 0.0,
         max_public_regress_bits: 0.0,

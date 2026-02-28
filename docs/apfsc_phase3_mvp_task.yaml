@@ -1,0 +1,184 @@
+phase3_mvp:
+  branch_name: feat/apfsc-phase3-mvp
+  prerequisites:
+    - phase1_mvp_contract_present: true
+    - phase2_mvp_contract_present: true
+  constraints:
+    - keep_apf3_immutable: true
+    - extend_phase2_not_redesign: true
+    - deterministic_execution: true
+    - single_node_only: true
+    - interpreter_is_truth_source: true
+    - no_nativeblock_in_judged_path: true
+    - allow_p_warm: true
+    - allow_p_cold: true
+    - keep_g_disabled: true
+  tasks:
+    - id: P301
+      name: Extend common types, config, and promotion enums for Phase 3
+      outputs:
+        - src/apfsc/types.rs
+        - src/apfsc/config.rs
+        - src/apfsc/paradigm.rs
+      depends_on: []
+    - id: P302
+      name: Upgrade SCIR to v2 with canonicalization, lowering, and bounds verification
+      outputs:
+        - src/apfsc/scir/ast.rs
+        - src/apfsc/scir/canonical.rs
+        - src/apfsc/scir/lower.rs
+        - src/apfsc/scir/verify.rs
+        - src/apfsc/scir/interp.rs
+      depends_on: [P301]
+    - id: P303
+      name: Add seed macro registry and deterministic macro lowering support
+      outputs:
+        - src/apfsc/macro_lib.rs
+        - fixtures/apfsc/phase3/priors/macro_seed/**
+        - fixtures/apfsc/phase3/priors/macro_seed_alt/**
+      depends_on: [P302]
+    - id: P304
+      name: Implement bounded macro induction from archive fragments
+      outputs:
+        - src/apfsc/macro_mine.rs
+        - src/bin/apfsc_macro_mine.rs
+      depends_on: [P303]
+    - id: P305
+      name: Add backend plans and GraphBackend equivalence receipts
+      outputs:
+        - src/apfsc/scir/graph_backend.rs
+        - src/apfsc/scir/backend_equiv.rs
+        - src/apfsc/schedule_pack.rs
+        - src/bin/apfsc_backend_equiv.rs
+      depends_on: [P302]
+    - id: P306
+      name: Extend candidate and headpack contracts with Phase 3 metadata
+      outputs:
+        - src/apfsc/candidate.rs
+        - src/apfsc/headpack.rs
+      depends_on: [P301, P303, P305]
+    - id: P307
+      name: Extend bridge contracts with strengthened warm refinement and cold boundary packs
+      outputs:
+        - src/apfsc/bridge.rs
+        - src/bin/apfsc_bridge_eval.rs
+      depends_on: [P301, P306]
+    - id: P308
+      name: Add fresh family metadata and recent-family gain calculator
+      outputs:
+        - src/apfsc/fresh_contact.rs
+        - src/apfsc/bank.rs
+        - src/apfsc/constellation.rs
+      depends_on: [P301]
+    - id: P309
+      name: Add Phase 3 fresh families and expected receipts fixtures
+      outputs:
+        - fixtures/apfsc/phase3/reality_f4_event_sparse_base/**
+        - fixtures/apfsc/phase3/reality_f4_event_sparse_transfer/**
+        - fixtures/apfsc/phase3/reality_f4_event_sparse_robust/**
+        - fixtures/apfsc/phase3/reality_f5_formal_alg_base/**
+        - fixtures/apfsc/phase3/reality_f5_formal_alg_transfer/**
+        - fixtures/apfsc/phase3/reality_f5_formal_alg_robust/**
+        - fixtures/apfsc/phase3/expected/**
+        - fixtures/apfsc/phase3/config/phase3.toml
+      depends_on: [P308]
+    - id: P310
+      name: Upgrade equivalence lane to bounded e-graph extraction
+      outputs:
+        - src/apfsc/scir/egraph.rs
+        - src/apfsc/lanes/equivalence.rs
+      depends_on: [P302, P303]
+    - id: P311
+      name: Upgrade incubator lane for macro-aware and paradigm-aware sidecars
+      outputs:
+        - src/apfsc/lanes/incubator.rs
+      depends_on: [P303, P306, P308]
+    - id: P312
+      name: Extend truth lane for warm-bridgeable paradigm proposals
+      outputs:
+        - src/apfsc/lanes/truth.rs
+      depends_on: [P303, P306]
+    - id: P313
+      name: Activate the cold-frontier lane for PCold candidate proposals
+      outputs:
+        - src/apfsc/lanes/cold_frontier.rs
+      depends_on: [P303, P306, P308]
+    - id: P314
+      name: Extend public evaluation for SCIR-v2 lowering, backend plans, and class quotas
+      outputs:
+        - src/bin/apfsc_build_lowered_candidate.rs
+        - src/bin/apfsc_public_eval.rs
+        - src/apfsc/orchestrator.rs
+      depends_on: [P305, P310, P311, P312, P313]
+    - id: P315
+      name: Implement warm bridge evaluation and receipts
+      outputs:
+        - src/apfsc/bridge.rs
+        - src/bin/apfsc_bridge_eval.rs
+      depends_on: [P307, P314]
+    - id: P316
+      name: Implement cold boundary evaluation and recent-family gate
+      outputs:
+        - src/apfsc/bridge.rs
+        - src/apfsc/fresh_contact.rs
+        - src/bin/apfsc_bridge_eval.rs
+      depends_on: [P307, P308, P314]
+    - id: P317
+      name: Extend judge with S, A, PWarm, and PCold lexicographic gates
+      outputs:
+        - src/apfsc/judge.rs
+        - src/bin/apfsc_judge_daemon.rs
+      depends_on: [P315, P316]
+    - id: P318
+      name: Extend canary and rollback for mandatory paradigm safety
+      outputs:
+        - src/apfsc/canary.rs
+        - src/apfsc/rollback.rs
+        - src/bin/apfsc_shadow_canary.rs
+      depends_on: [P317]
+    - id: P319
+      name: Extend archive streams for paradigm, bridge, backend, macro, and canary evidence
+      outputs:
+        - src/apfsc/archive/paradigm_receipts.rs
+        - src/apfsc/archive/bridge_trace.rs
+        - src/apfsc/archive/backend_equiv.rs
+        - src/apfsc/archive/macro_registry.rs
+        - src/apfsc/archive/canary_trace.rs
+        - src/apfsc/archive/genealogy.rs
+        - src/apfsc/archive/error_atlas.rs
+        - src/apfsc/archive/mod.rs
+      depends_on: [P304, P305, P317, P318]
+    - id: P320
+      name: Wire Phase 3 profile into orchestrator and epoch runner
+      outputs:
+        - src/apfsc/orchestrator.rs
+        - src/bin/apfsc_epoch_run.rs
+        - src/apfsc/mod.rs
+      depends_on: [P317, P318, P319]
+    - id: P321
+      name: Add Phase 3 tests
+      outputs:
+        - tests/apfsc_phase3_scir_v2.rs
+        - tests/apfsc_phase3_macro_lowering.rs
+        - tests/apfsc_phase3_macro_mine.rs
+        - tests/apfsc_phase3_graph_backend.rs
+        - tests/apfsc_phase3_classifier.rs
+        - tests/apfsc_phase3_warm_bridge.rs
+        - tests/apfsc_phase3_cold_boundary.rs
+        - tests/apfsc_phase3_recent_family_gate.rs
+        - tests/apfsc_phase3_canary_rollback.rs
+        - tests/apfsc_phase3_e2e_pwarm.rs
+        - tests/apfsc_phase3_e2e_pcold.rs
+      depends_on: [P320]
+  completion_criteria:
+    - cargo_test_passes: true
+    - scir_v2_candidate_compiles_and_lowers: true
+    - macro_registry_and_induction_emit_receipts: true
+    - graph_backend_equiv_receipts_exist_for_eligible_candidates: true
+    - candidate_classifier_emits_s_a_pwarm_pcold: true
+    - warm_bridge_positive_path_exists: true
+    - cold_boundary_positive_path_exists: true
+    - recent_family_gain_gate_is_enforced: true
+    - mandatory_paradigm_canary_is_enforced: true
+    - rollback_pointer_written_before_paradigm_activation: true
+    - deterministic_replay_on_phase3_epoch: true

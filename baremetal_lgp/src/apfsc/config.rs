@@ -29,6 +29,8 @@ pub struct Phase1Config {
     pub witness: WitnessConfig,
     #[serde(default)]
     pub phase2: Phase2Config,
+    #[serde(default)]
+    pub phase3: Phase3Config,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -185,6 +187,120 @@ pub struct Phase2Config {
     pub transfer: TransferAdaptSpec,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct Phase3BudgetConfig {
+    #[serde(default = "default_phase3_budget_truth")]
+    pub truth: f64,
+    #[serde(default = "default_phase3_budget_equivalence")]
+    pub equivalence: f64,
+    #[serde(default = "default_phase3_budget_incubator")]
+    pub incubator: f64,
+    #[serde(default = "default_phase3_budget_cold_frontier")]
+    pub cold_frontier: f64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct Phase3LimitsConfig {
+    #[serde(default = "default_phase3_max_scir_core_ops")]
+    pub max_scir_core_ops: u32,
+    #[serde(default = "default_phase3_max_macro_calls_per_program")]
+    pub max_macro_calls_per_program: u32,
+    #[serde(default = "default_phase3_max_macro_expansion_ops")]
+    pub max_macro_expansion_ops: u32,
+    #[serde(default = "default_phase3_max_macro_depth")]
+    pub max_macro_depth: u32,
+    #[serde(default = "default_phase3_max_egraph_nodes")]
+    pub max_egraph_nodes: u32,
+    #[serde(default = "default_phase3_max_egraph_extractions")]
+    pub max_egraph_extractions: u32,
+    #[serde(default = "default_phase3_max_paradigm_public_candidates")]
+    pub max_paradigm_public_candidates: usize,
+    #[serde(default = "default_phase3_max_pwarm_holdout_admissions")]
+    pub max_pwarm_holdout_admissions: usize,
+    #[serde(default = "default_phase3_max_pcold_holdout_admissions")]
+    pub max_pcold_holdout_admissions: usize,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct Phase3PromotionConfig {
+    #[serde(default = "default_p_warm_min_static_delta_bpb")]
+    pub p_warm_min_static_delta_bpb: f64,
+    #[serde(default = "default_p_warm_min_transfer_delta_bpb")]
+    pub p_warm_min_transfer_delta_bpb: f64,
+    #[serde(default = "default_p_warm_max_robust_regress_bpb")]
+    pub p_warm_max_robust_regress_bpb: f64,
+    #[serde(default = "default_p_warm_min_recent_family_gain_bpb")]
+    pub p_warm_min_recent_family_gain_bpb: f64,
+    #[serde(default = "default_p_cold_min_static_delta_bpb")]
+    pub p_cold_min_static_delta_bpb: f64,
+    #[serde(default = "default_p_cold_min_transfer_delta_bpb")]
+    pub p_cold_min_transfer_delta_bpb: f64,
+    #[serde(default = "default_p_cold_min_recent_family_gain_bpb")]
+    pub p_cold_min_recent_family_gain_bpb: f64,
+    #[serde(default = "default_p_cold_max_anchor_regret_bpb")]
+    pub p_cold_max_anchor_regret_bpb: f64,
+    #[serde(default = "default_p_cold_max_error_streak")]
+    pub p_cold_max_error_streak: u32,
+    #[serde(default = "default_p_cold_min_improved_families")]
+    pub p_cold_min_improved_families: usize,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct Phase3MacroConfig {
+    #[serde(default = "default_phase3_min_macro_support")]
+    pub min_macro_support: u32,
+    #[serde(default = "default_phase3_min_macro_public_gain_bpb")]
+    pub min_macro_public_gain_bpb: f64,
+    #[serde(default = "default_phase3_min_macro_reduction_ratio")]
+    pub min_macro_reduction_ratio: f64,
+    #[serde(default = "default_phase3_max_induced_macros_per_epoch")]
+    pub max_induced_macros_per_epoch: u32,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct Phase3BackendConfig {
+    #[serde(default = "default_true")]
+    pub allow_graph_backend_public: bool,
+    #[serde(default = "default_true")]
+    pub allow_graph_backend_canary: bool,
+    #[serde(default)]
+    pub allow_graph_backend_holdout: bool,
+    #[serde(default = "default_true")]
+    pub require_exact_backend_equiv: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct Phase3CanaryConfig {
+    #[serde(default = "default_phase3_canary_warm_windows")]
+    pub warm_windows: u32,
+    #[serde(default = "default_phase3_canary_cold_windows")]
+    pub cold_windows: u32,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct Phase3Config {
+    #[serde(default = "default_phase3_profile_name")]
+    pub profile: String,
+    #[serde(default = "default_true")]
+    pub allow_p_warm: bool,
+    #[serde(default = "default_true")]
+    pub allow_p_cold: bool,
+    #[serde(default = "default_phase3_fresh_horizon_epochs")]
+    pub fresh_horizon_epochs: u64,
+    #[serde(default)]
+    pub budgets: Phase3BudgetConfig,
+    #[serde(default)]
+    pub limits: Phase3LimitsConfig,
+    #[serde(default)]
+    pub promotion: Phase3PromotionConfig,
+    #[serde(default, rename = "macro")]
+    pub macro_cfg: Phase3MacroConfig,
+    #[serde(default)]
+    pub backend: Phase3BackendConfig,
+    #[serde(default)]
+    pub canary: Phase3CanaryConfig,
+}
+
 impl Default for Phase1Config {
     fn default() -> Self {
         Self {
@@ -198,6 +314,7 @@ impl Default for Phase1Config {
             incubator: IncubatorConfig::default(),
             witness: WitnessConfig::default(),
             phase2: Phase2Config::default(),
+            phase3: Phase3Config::default(),
         }
     }
 }
@@ -330,6 +447,98 @@ impl Default for Phase2Config {
             weights: default_phase2_weights(),
             floors: default_phase2_floors(),
             transfer: default_phase2_transfer(),
+        }
+    }
+}
+
+impl Default for Phase3BudgetConfig {
+    fn default() -> Self {
+        Self {
+            truth: default_phase3_budget_truth(),
+            equivalence: default_phase3_budget_equivalence(),
+            incubator: default_phase3_budget_incubator(),
+            cold_frontier: default_phase3_budget_cold_frontier(),
+        }
+    }
+}
+
+impl Default for Phase3LimitsConfig {
+    fn default() -> Self {
+        Self {
+            max_scir_core_ops: default_phase3_max_scir_core_ops(),
+            max_macro_calls_per_program: default_phase3_max_macro_calls_per_program(),
+            max_macro_expansion_ops: default_phase3_max_macro_expansion_ops(),
+            max_macro_depth: default_phase3_max_macro_depth(),
+            max_egraph_nodes: default_phase3_max_egraph_nodes(),
+            max_egraph_extractions: default_phase3_max_egraph_extractions(),
+            max_paradigm_public_candidates: default_phase3_max_paradigm_public_candidates(),
+            max_pwarm_holdout_admissions: default_phase3_max_pwarm_holdout_admissions(),
+            max_pcold_holdout_admissions: default_phase3_max_pcold_holdout_admissions(),
+        }
+    }
+}
+
+impl Default for Phase3PromotionConfig {
+    fn default() -> Self {
+        Self {
+            p_warm_min_static_delta_bpb: default_p_warm_min_static_delta_bpb(),
+            p_warm_min_transfer_delta_bpb: default_p_warm_min_transfer_delta_bpb(),
+            p_warm_max_robust_regress_bpb: default_p_warm_max_robust_regress_bpb(),
+            p_warm_min_recent_family_gain_bpb: default_p_warm_min_recent_family_gain_bpb(),
+            p_cold_min_static_delta_bpb: default_p_cold_min_static_delta_bpb(),
+            p_cold_min_transfer_delta_bpb: default_p_cold_min_transfer_delta_bpb(),
+            p_cold_min_recent_family_gain_bpb: default_p_cold_min_recent_family_gain_bpb(),
+            p_cold_max_anchor_regret_bpb: default_p_cold_max_anchor_regret_bpb(),
+            p_cold_max_error_streak: default_p_cold_max_error_streak(),
+            p_cold_min_improved_families: default_p_cold_min_improved_families(),
+        }
+    }
+}
+
+impl Default for Phase3MacroConfig {
+    fn default() -> Self {
+        Self {
+            min_macro_support: default_phase3_min_macro_support(),
+            min_macro_public_gain_bpb: default_phase3_min_macro_public_gain_bpb(),
+            min_macro_reduction_ratio: default_phase3_min_macro_reduction_ratio(),
+            max_induced_macros_per_epoch: default_phase3_max_induced_macros_per_epoch(),
+        }
+    }
+}
+
+impl Default for Phase3BackendConfig {
+    fn default() -> Self {
+        Self {
+            allow_graph_backend_public: true,
+            allow_graph_backend_canary: true,
+            allow_graph_backend_holdout: false,
+            require_exact_backend_equiv: true,
+        }
+    }
+}
+
+impl Default for Phase3CanaryConfig {
+    fn default() -> Self {
+        Self {
+            warm_windows: default_phase3_canary_warm_windows(),
+            cold_windows: default_phase3_canary_cold_windows(),
+        }
+    }
+}
+
+impl Default for Phase3Config {
+    fn default() -> Self {
+        Self {
+            profile: default_phase3_profile_name(),
+            allow_p_warm: true,
+            allow_p_cold: true,
+            fresh_horizon_epochs: default_phase3_fresh_horizon_epochs(),
+            budgets: Phase3BudgetConfig::default(),
+            limits: Phase3LimitsConfig::default(),
+            promotion: Phase3PromotionConfig::default(),
+            macro_cfg: Phase3MacroConfig::default(),
+            backend: Phase3BackendConfig::default(),
+            canary: Phase3CanaryConfig::default(),
         }
     }
 }
@@ -608,4 +817,128 @@ fn default_phase2_transfer() -> TransferAdaptSpec {
             "fast_weights".to_string(),
         ],
     }
+}
+
+fn default_phase3_profile_name() -> String {
+    "phase3".to_string()
+}
+
+fn default_phase3_fresh_horizon_epochs() -> u64 {
+    8
+}
+
+fn default_phase3_budget_truth() -> f64 {
+    0.35
+}
+
+fn default_phase3_budget_equivalence() -> f64 {
+    0.20
+}
+
+fn default_phase3_budget_incubator() -> f64 {
+    0.25
+}
+
+fn default_phase3_budget_cold_frontier() -> f64 {
+    0.20
+}
+
+fn default_phase3_max_scir_core_ops() -> u32 {
+    constants::MAX_SCIR_CORE_OPS
+}
+
+fn default_phase3_max_macro_calls_per_program() -> u32 {
+    constants::MAX_MACRO_CALLS_PER_PROGRAM
+}
+
+fn default_phase3_max_macro_expansion_ops() -> u32 {
+    constants::MAX_MACRO_EXPANSION_OPS
+}
+
+fn default_phase3_max_macro_depth() -> u32 {
+    constants::MAX_MACRO_DEPTH
+}
+
+fn default_phase3_max_egraph_nodes() -> u32 {
+    constants::MAX_EGRAPH_NODES
+}
+
+fn default_phase3_max_egraph_extractions() -> u32 {
+    constants::MAX_EGRAPH_EXTRACTIONS
+}
+
+fn default_phase3_max_paradigm_public_candidates() -> usize {
+    constants::MAX_PARADIGM_PUBLIC_CANDIDATES
+}
+
+fn default_phase3_max_pwarm_holdout_admissions() -> usize {
+    constants::MAX_PWARM_HOLDOUT_ADMISSIONS
+}
+
+fn default_phase3_max_pcold_holdout_admissions() -> usize {
+    constants::MAX_PCOLD_HOLDOUT_ADMISSIONS
+}
+
+fn default_p_warm_min_static_delta_bpb() -> f64 {
+    0.0020
+}
+
+fn default_p_warm_min_transfer_delta_bpb() -> f64 {
+    0.0010
+}
+
+fn default_p_warm_max_robust_regress_bpb() -> f64 {
+    0.0005
+}
+
+fn default_p_warm_min_recent_family_gain_bpb() -> f64 {
+    0.0010
+}
+
+fn default_p_cold_min_static_delta_bpb() -> f64 {
+    0.0060
+}
+
+fn default_p_cold_min_transfer_delta_bpb() -> f64 {
+    0.0030
+}
+
+fn default_p_cold_min_recent_family_gain_bpb() -> f64 {
+    0.0025
+}
+
+fn default_p_cold_max_anchor_regret_bpb() -> f64 {
+    0.0010
+}
+
+fn default_p_cold_max_error_streak() -> u32 {
+    3
+}
+
+fn default_p_cold_min_improved_families() -> usize {
+    2
+}
+
+fn default_phase3_min_macro_support() -> u32 {
+    constants::MIN_MACRO_SUPPORT
+}
+
+fn default_phase3_min_macro_public_gain_bpb() -> f64 {
+    constants::MIN_MACRO_PUBLIC_GAIN_BPB
+}
+
+fn default_phase3_min_macro_reduction_ratio() -> f64 {
+    constants::MIN_MACRO_REDUCTION_RATIO
+}
+
+fn default_phase3_max_induced_macros_per_epoch() -> u32 {
+    constants::MAX_INDUCED_MACROS_PER_EPOCH
+}
+
+fn default_phase3_canary_warm_windows() -> u32 {
+    constants::MAX_PARADIGM_CANARY_WINDOWS_WARM
+}
+
+fn default_phase3_canary_cold_windows() -> u32 {
+    constants::MAX_PARADIGM_CANARY_WINDOWS_COLD
 }

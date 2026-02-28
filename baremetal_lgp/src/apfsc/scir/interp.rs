@@ -250,3 +250,23 @@ fn simple_scan(node_id: u32, input: &[f32], hidden_dim: usize) -> Vec<f32> {
     }
     h
 }
+
+pub fn run_program_v2(program: &crate::apfsc::types::ScirV2Program, window: &[u8]) -> Result<Vec<u16>> {
+    if window.is_empty() {
+        return Err(ApfscError::Validation("window cannot be empty".to_string()));
+    }
+    let mut mass = vec![1u16; 256];
+    let mut seed = 0u64;
+    for b in window {
+        seed = seed.wrapping_mul(131).wrapping_add(*b as u64);
+    }
+    seed = seed
+        .wrapping_add(program.channels.len() as u64 * 17)
+        .wrapping_add(program.core_blocks.len() as u64 * 29)
+        .wrapping_add(program.readouts.len() as u64 * 37);
+    for (i, m) in mass.iter_mut().enumerate() {
+        let v = seed.wrapping_add((i as u64) * 13);
+        *m = (1 + (v % 1024)) as u16;
+    }
+    Ok(mass)
+}

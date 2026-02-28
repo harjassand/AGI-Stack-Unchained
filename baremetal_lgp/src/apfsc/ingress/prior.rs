@@ -145,6 +145,10 @@ fn validate_macros(macro_names: &[String]) -> Result<()> {
         "delimiter_segment_macro",
         "text_local_context_macro",
         "sidecar_memory_macro",
+        "EventSparseAccumulator",
+        "RingDelayTap",
+        "SelectiveStateCell",
+        "ResetOnDelimiter",
     ]
     .into_iter()
     .collect();
@@ -169,6 +173,16 @@ fn validate_macro_expansions(macro_names: &[String]) -> Result<()> {
                 lags: vec![1, 2, 4, 8],
             },
             "sidecar_memory_macro" => ScirOp::ShiftRegister { width: 8 },
+            "EventSparseAccumulator" => ScirOp::SimpleScan {
+                in_dim: 8,
+                hidden_dim: 16,
+            },
+            "RingDelayTap" => ScirOp::ShiftRegister { width: 16 },
+            "SelectiveStateCell" => ScirOp::SimpleScan {
+                in_dim: 8,
+                hidden_dim: 12,
+            },
+            "ResetOnDelimiter" => ScirOp::DelimiterReset { byte: b'|' },
             _ => {
                 return Err(ApfscError::Validation(format!(
                     "unsupported macro expansion for {name}"
@@ -182,6 +196,7 @@ fn validate_macro_expansions(macro_names: &[String]) -> Result<()> {
             ScirOp::DelimiterReset { .. } => 1,
             ScirOp::LagBytes { lags } => lags.len() as u32,
             ScirOp::ShiftRegister { width } => *width,
+            ScirOp::SimpleScan { hidden_dim, .. } => *hidden_dim,
             _ => 1,
         };
 

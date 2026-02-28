@@ -1,0 +1,22 @@
+{
+  "pack_kind": "Reality",
+  "pack_hash": "",
+  "protocol_version": "apfsc-phase3-mvp-v1",
+  "created_unix_s": 1735689600,
+  "family_id": "event_sparse",
+  "provenance": {
+    "source_name": "reality_f4_event_sparse_base",
+    "source_type": "synthetic",
+    "attestation": null,
+    "notes": "phase3 fixture"
+  },
+  "payload_hashes": [],
+  "meta": {
+    "family_id": "event_sparse",
+    "family_kind": "SensoryTemporal",
+    "role": "Base",
+    "variant_id": "event_sparse_base",
+    "base_family_id": null,
+    "description": "event sparse base"
+  }
+}

@@ -122,6 +122,7 @@ pub fn drain_queue(
                 incumbent_hash,
                 decision: JudgeDecision::Reject,
                 reason: "Reject(CanaryFail)".to_string(),
+                promotion_class: Some(candidate.manifest.promotion_class.clone()),
                 public_delta_bits: 0.0,
                 holdout_delta_bits: 0.0,
                 anchor_regress_bits: 0.0,
@@ -132,8 +133,11 @@ pub fn drain_queue(
                 improved_family_ids: Vec::new(),
                 regressed_family_ids: Vec::new(),
                 protected_floor_failures: Vec::new(),
+                recent_family_receipt_hash: None,
+                bridge_receipt_hash: None,
                 canary_required: true,
                 canary_result: Some("fail".to_string()),
+                rollback_target_hash: None,
                 snapshot_hash: candidate.manifest.snapshot_hash.clone(),
                 protocol_version: cfg.protocol.version.clone(),
                 constellation_id: None,
@@ -215,5 +219,70 @@ pub fn run_phase2_canary(
         )?;
     }
 
+    Ok(receipt)
+}
+
+pub fn run_phase3_canary(
+    root: &Path,
+    candidate_hash: &str,
+    incumbent_hash: &str,
+    constellation_id: &str,
+    required_windows: u32,
+    cfg: &Phase1Config,
+) -> Result<CanaryReceipt> {
+    let constellation = load_constellation(root, constellation_id)?;
+    let candidate = load_candidate(root, candidate_hash)?;
+    let incumbent = load_candidate(root, incumbent_hash)?;
+    let safety = SafetyBudget::from_config(cfg);
+
+    let available_canary_windows: u64 = constellation
+        .family_specs
+        .iter()
+        .map(|f| {
+            crate::apfsc::bank::load_family_panel_windows(root, &f.family_id, "canary")
+                .map(|rows| rows.len() as u64)
+                .unwrap_or(0)
+        })
+        .sum();
+
+    let eval = evaluate_static_panel(
+        root,
+        &candidate,
+        &incumbent,
+        &constellation,
+        crate::apfsc::types::PanelKind::Canary,
+    )?;
+    let pass = eval.protected_floor_failures.is_empty()
+        && available_canary_windows >= required_windows as u64
+        && safety
+            .validate_envelope(&candidate.manifest.resource_envelope)
+            .is_ok();
+    let reason = if pass {
+        "pass".to_string()
+    } else {
+        crate::apfsc::types::JudgeRejectReason::CanaryFail.as_reason()
+    };
+
+    let receipt = CanaryReceipt {
+        candidate_hash: candidate_hash.to_string(),
+        incumbent_hash: incumbent_hash.to_string(),
+        pass,
+        reason: reason.clone(),
+        candidate_bits: eval.candidate_weighted_bpb,
+        incumbent_bits: eval.incumbent_weighted_bpb,
+        protocol_version: Some(constellation.protocol_version.clone()),
+        snapshot_hash: Some(candidate.manifest.snapshot_hash.clone()),
+        constellation_id: Some(constellation.constellation_id.clone()),
+        weighted_delta_bpb: Some(eval.delta_bpb),
+    };
+
+    write_json_atomic(
+        &receipt_path(root, "canary", &format!("{}.json", candidate_hash)),
+        &receipt,
+    )?;
+    if pass {
+        activate_candidate(root, candidate_hash, &candidate.manifest.snapshot_hash)?;
+        crate::apfsc::artifacts::write_pointer(root, "active_constellation", constellation_id)?;
+    }
     Ok(receipt)
 }

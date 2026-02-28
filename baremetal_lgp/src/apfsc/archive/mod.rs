@@ -1,7 +1,12 @@
+pub mod backend_equiv;
+pub mod bridge_trace;
+pub mod canary_trace;
 pub mod error_atlas;
 pub mod failure_morph;
 pub mod family_scores;
 pub mod genealogy;
 pub mod hardware_trace;
+pub mod macro_registry;
+pub mod paradigm_receipts;
 pub mod robustness_trace;
 pub mod transfer_trace;

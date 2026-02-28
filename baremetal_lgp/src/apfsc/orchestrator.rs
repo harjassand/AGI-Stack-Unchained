@@ -5,9 +5,10 @@ use crate::apfsc::archive::{error_atlas, failure_morph, genealogy, hardware_trac
 use crate::apfsc::bank::{
     load_bank, load_family_panel_windows, load_payload_index_for_windows, WindowBank,
 };
-use crate::apfsc::canary::run_phase2_canary;
+use crate::apfsc::canary::{run_phase2_canary, run_phase3_canary};
 use crate::apfsc::candidate::{
-    load_active_candidate, rehash_candidate, save_candidate, set_phase2_build_meta, CandidateBundle,
+    load_active_candidate, rehash_candidate, save_candidate, set_phase2_build_meta,
+    set_phase3_build_meta, CandidateBundle,
 };
 use crate::apfsc::config::Phase1Config;
 use crate::apfsc::constellation::resolve_constellation;
@@ -16,16 +17,23 @@ use crate::apfsc::hardware_oracle::{load_oracle, oracle_penalty, OracleFeatures}
 use crate::apfsc::headpack::HeadOnlyAdaGradLaw;
 use crate::apfsc::ingress::judge::PendingAdmission;
 use crate::apfsc::judge::{
-    evaluate_candidate_split, judge_phase2_candidate, run_batch, write_split_receipt,
+    evaluate_candidate_split, judge_phase2_candidate, judge_phase3_candidate, run_batch,
+    write_split_receipt,
     Phase2CandidateEvaluations,
 };
+use crate::apfsc::macro_lib::load_or_build_active_registry;
+use crate::apfsc::paradigm::{
+    classify_promotion_class, compute_paradigm_signature, structural_change_detected,
+};
+use crate::apfsc::rollback::stage_rollback_target;
 use crate::apfsc::lanes;
 use crate::apfsc::normalization::evaluate_static_panel;
 use crate::apfsc::robustness::evaluate_robustness;
 use crate::apfsc::scir::verify::verify_program;
 use crate::apfsc::transfer::evaluate_transfer;
 use crate::apfsc::types::{
-    EpochReport, EvalMode, JudgeBatchReport, JudgeDecision, PanelKind, PublicEvalRecord, SplitKind,
+    BackendKind, BackendPlan, CandidatePhase3Meta, EpochReport, EvalMode, JudgeBatchReport,
+    JudgeDecision, PanelKind, Phase3BuildMeta, PromotionClass, PublicEvalRecord, SplitKind,
     WitnessSelection,
 };
 
@@ -681,7 +689,25 @@ pub fn run_phase2_epoch(
     }
 
     if canary_activated.is_none() {
-        if let Some(best) = select_best_phase2(&passing) {
+        let preferred: Vec<PromotionBundle> =
+            if cfg.phase3.allow_p_warm && !cfg.phase3.allow_p_cold {
+                passing
+                    .iter()
+                    .filter(|p| matches!(p.cand.manifest.promotion_class, PromotionClass::PWarm))
+                    .cloned()
+                    .collect()
+            } else if cfg.phase3.allow_p_cold && !cfg.phase3.allow_p_warm {
+                passing
+                    .iter()
+                    .filter(|p| matches!(p.cand.manifest.promotion_class, PromotionClass::PCold))
+                    .cloned()
+                    .collect()
+            } else {
+                Vec::new()
+            };
+        let pool = if preferred.is_empty() { &passing } else { &preferred };
+
+        if let Some(best) = select_best_phase2(pool) {
             crate::apfsc::judge::activate_candidate(
                 root,
                 &best.cand.manifest.candidate_hash,
@@ -989,4 +1015,573 @@ fn witness_prefilter_phase2(
         }
     }
     Ok(out)
+}
+
+pub fn run_phase3_epoch(
+    root: &Path,
+    cfg: &Phase1Config,
+    requested_constellation: Option<&str>,
+) -> Result<EpochReport> {
+    let active = load_active_candidate(root)?;
+    let constellation = resolve_constellation(root, requested_constellation)?;
+    if active.manifest.snapshot_hash != constellation.snapshot_hash {
+        return Err(ApfscError::Validation(
+            "active candidate snapshot / constellation mismatch".to_string(),
+        ));
+    }
+
+    let macro_registry =
+        load_or_build_active_registry(root, &constellation.snapshot_hash, &cfg.protocol.version)?;
+    let _ = crate::apfsc::macro_mine::mine_macros(
+        root,
+        &constellation.snapshot_hash,
+        &cfg.protocol.version,
+        cfg.phase3.macro_cfg.min_macro_support,
+        cfg.phase3.macro_cfg.min_macro_public_gain_bpb,
+        cfg.phase3.macro_cfg.min_macro_reduction_ratio,
+        cfg.phase3.macro_cfg.max_induced_macros_per_epoch,
+    );
+
+    let mut windows_by_family = BTreeMap::<String, Vec<crate::apfsc::types::WindowRef>>::new();
+    for fam in &constellation.family_specs {
+        let rows =
+            load_family_panel_windows(root, &fam.family_id, PanelKind::StaticPublic.as_key())?;
+        windows_by_family.insert(fam.family_id.clone(), rows);
+    }
+    let witnesses =
+        error_atlas::update_family_error_atlas(root, &constellation, &windows_by_family)?;
+
+    let truth = lanes::truth::generate_phase3(&active, cfg)?;
+    let equiv = lanes::equivalence::generate(&active, cfg)?;
+    let incubator = lanes::incubator::phase3_macro_aware_candidates(&active, cfg)?;
+    let frontier = lanes::cold_frontier::generate(&active, cfg)?;
+    let mut pool = merge_and_dedup([truth, equiv, incubator, frontier].concat());
+    pool = verify_and_bound(pool)?;
+
+    let incumbent_core_hash = crate::apfsc::artifacts::digest_json(&active.arch_program)?;
+    let incumbent_sig = compute_paradigm_signature(&active, &incumbent_core_hash)?;
+    let fresh_targets: Vec<String> = constellation
+        .fresh_families
+        .iter()
+        .map(|f| f.family_id.clone())
+        .collect();
+    let all_targets: Vec<String> = constellation
+        .family_specs
+        .iter()
+        .map(|f| f.family_id.clone())
+        .collect();
+
+    for cand in &mut pool {
+        let cand_core_hash = crate::apfsc::artifacts::digest_json(&cand.arch_program)?;
+        let cand_sig = compute_paradigm_signature(cand, &cand_core_hash)?;
+        let mut classified = classify_promotion_class(
+            &incumbent_sig,
+            &cand_sig,
+            structural_change_detected(&incumbent_core_hash, &cand_core_hash),
+            cand.bridge_pack.is_some(),
+            true,
+        )
+        .unwrap_or(cand.manifest.promotion_class);
+        if cfg.phase3.allow_p_warm && !cfg.phase3.allow_p_cold && cand.bridge_pack.is_some() {
+            classified = PromotionClass::PWarm;
+        } else if cfg.phase3.allow_p_cold && !cfg.phase3.allow_p_warm {
+            classified = PromotionClass::PCold;
+        }
+        cand.manifest.promotion_class = classified;
+        rehash_candidate(cand)?;
+
+        let phase3_meta = CandidatePhase3Meta {
+            build: Phase3BuildMeta {
+                target_families: all_targets.clone(),
+                source_lane: cand.build_meta.lane.clone(),
+                phase3_profile: cfg.phase3.profile.clone(),
+                macro_registry_hash: macro_registry.registry_id.clone(),
+                paradigm_signature_hash: crate::apfsc::artifacts::digest_json(&cand_sig)?,
+                proposed_class: classified,
+                fresh_target_families: fresh_targets.clone(),
+            },
+            backend_plan: BackendPlan {
+                primary_backend: BackendKind::InterpTier0,
+                public_backend: if cfg.phase3.backend.allow_graph_backend_public {
+                    BackendKind::GraphBackend
+                } else {
+                    BackendKind::InterpTier0
+                },
+                canary_backend: if cfg.phase3.backend.allow_graph_backend_canary {
+                    BackendKind::GraphBackend
+                } else {
+                    BackendKind::InterpTier0
+                },
+                holdout_backend: BackendKind::InterpTier0,
+                graph_eligibility_hash: None,
+            },
+            bridge_kind: if matches!(classified, PromotionClass::PCold) {
+                "Cold".to_string()
+            } else {
+                "Warm".to_string()
+            },
+        };
+        set_phase3_build_meta(cand, phase3_meta)?;
+        save_candidate(root, cand)?;
+    }
+
+    let mut train_windows = Vec::new();
+    let mut public_windows = Vec::new();
+    for fam in &constellation.family_specs {
+        train_windows.extend(
+            load_family_panel_windows(root, &fam.family_id, PanelKind::Train.as_key())?.into_iter(),
+        );
+        public_windows.extend(
+            load_family_panel_windows(root, &fam.family_id, PanelKind::StaticPublic.as_key())?
+                .into_iter(),
+        );
+    }
+    let mut public_path_windows = train_windows.clone();
+    public_path_windows.extend(public_windows.iter().cloned());
+    public_path_windows.extend(witnesses.selected.iter().cloned());
+    let payloads = load_payload_index_for_windows(root, &public_path_windows)?;
+    let mut survivors =
+        witness_prefilter_phase2(&active, pool.clone(), &witnesses.selected, &payloads, &constellation)?;
+    let mut seen_survivor = BTreeSet::new();
+    for c in &survivors {
+        seen_survivor.insert(c.manifest.candidate_hash.clone());
+    }
+    for c in pool {
+        if matches!(
+            c.manifest.promotion_class,
+            PromotionClass::PWarm | PromotionClass::PCold
+        ) && seen_survivor.insert(c.manifest.candidate_hash.clone())
+        {
+            survivors.push(c);
+        }
+    }
+
+    let mut public_static = Vec::<(
+        CandidateBundle,
+        crate::apfsc::normalization::PanelComparison,
+    )>::new();
+    for cand in survivors
+        .into_iter()
+        .take(crate::apfsc::constants::MAX_STATIC_PUBLIC_CANDIDATES)
+    {
+        let static_cmp = evaluate_static_panel(
+            root,
+            &cand,
+            &active,
+            &constellation,
+            PanelKind::StaticPublic,
+        )?;
+        crate::apfsc::artifacts::write_json_atomic(
+            &crate::apfsc::artifacts::receipt_path(
+                root,
+                "public_static",
+                &format!("{}.json", cand.manifest.candidate_hash),
+            ),
+            &static_cmp.receipt,
+        )?;
+        public_static.push((cand, static_cmp));
+    }
+    public_static.sort_by(|a, b| {
+        b.1.delta_bpb
+            .partial_cmp(&a.1.delta_bpb)
+            .unwrap_or(std::cmp::Ordering::Equal)
+    });
+
+    let mut public_transfer_map = BTreeMap::new();
+    let mut public_robust_map = BTreeMap::new();
+    for (cand, _) in &public_static {
+        if !is_phase3_structural_candidate(cand.manifest.promotion_class) {
+            continue;
+        }
+        if let Ok(x) = evaluate_transfer(root, cand, &active, &constellation, EvalMode::Public) {
+            crate::apfsc::artifacts::write_json_atomic(
+                &crate::apfsc::artifacts::receipt_path(
+                    root,
+                    "public_transfer",
+                    &format!("{}.json", cand.manifest.candidate_hash),
+                ),
+                &x.receipt,
+            )?;
+            public_transfer_map.insert(cand.manifest.candidate_hash.clone(), x);
+        }
+        if let Ok(r) = evaluate_robustness(root, cand, &active, &constellation, EvalMode::Public) {
+            crate::apfsc::artifacts::write_json_atomic(
+                &crate::apfsc::artifacts::receipt_path(
+                    root,
+                    "public_robust",
+                    &format!("{}.json", cand.manifest.candidate_hash),
+                ),
+                &r.receipt,
+            )?;
+            public_robust_map.insert(cand.manifest.candidate_hash.clone(), r);
+        }
+    }
+
+    let mut holdout_admissions = Vec::<CandidateBundle>::new();
+    let mut pwarm_count = 0usize;
+    let mut pcold_count = 0usize;
+    for (cand, static_cmp) in &public_static {
+        if holdout_admissions.len() >= cfg.phase3.limits.max_paradigm_public_candidates {
+            break;
+        }
+        if !public_static_spend_gate_pass(static_cmp, &constellation) {
+            continue;
+        }
+        if is_phase3_structural_candidate(cand.manifest.promotion_class) {
+            let t = match public_transfer_map.get(&cand.manifest.candidate_hash) {
+                Some(v) => v,
+                None => continue,
+            };
+            let r = match public_robust_map.get(&cand.manifest.candidate_hash) {
+                Some(v) => v,
+                None => continue,
+            };
+            if t.delta_bpb < 0.0
+                || r.delta_bpb < 0.0
+                || !t.protected_floor_failures.is_empty()
+                || !r.protected_floor_failures.is_empty()
+            {
+                continue;
+            }
+        }
+        match cand.manifest.promotion_class {
+            PromotionClass::PWarm => {
+                if pwarm_count >= cfg.phase3.limits.max_pwarm_holdout_admissions {
+                    continue;
+                }
+                pwarm_count += 1;
+            }
+            PromotionClass::PCold => {
+                if pcold_count >= cfg.phase3.limits.max_pcold_holdout_admissions {
+                    continue;
+                }
+                pcold_count += 1;
+            }
+            _ => {}
+        }
+        holdout_admissions.push(cand.clone());
+    }
+    if holdout_admissions.is_empty() {
+        let mut fallback = active.clone();
+        if cfg.phase3.allow_p_cold && !cfg.phase3.allow_p_warm {
+            fallback.manifest.promotion_class = PromotionClass::PCold;
+            rehash_candidate(&mut fallback)?;
+        } else if cfg.phase3.allow_p_warm && !cfg.phase3.allow_p_cold && fallback.bridge_pack.is_some() {
+            fallback.manifest.promotion_class = PromotionClass::PWarm;
+            rehash_candidate(&mut fallback)?;
+        }
+        let fallback_public = evaluate_static_panel(
+            root,
+            &fallback,
+            &active,
+            &constellation,
+            PanelKind::StaticPublic,
+        )?;
+        public_static.push((fallback.clone(), fallback_public));
+        holdout_admissions.push(fallback);
+    } else if cfg.phase3.allow_p_warm && !cfg.phase3.allow_p_cold {
+        let has_pwarm = holdout_admissions
+            .iter()
+            .any(|c| matches!(c.manifest.promotion_class, PromotionClass::PWarm));
+        if !has_pwarm {
+            if let Some((cand, _)) = public_static
+                .iter()
+                .find(|(c, _)| matches!(c.manifest.promotion_class, PromotionClass::PWarm))
+            {
+                holdout_admissions.push(cand.clone());
+            }
+        }
+    } else if cfg.phase3.allow_p_cold && !cfg.phase3.allow_p_warm {
+        let has_pcold = holdout_admissions
+            .iter()
+            .any(|c| matches!(c.manifest.promotion_class, PromotionClass::PCold));
+        if !has_pcold {
+            if let Some((cand, _)) = public_static
+                .iter()
+                .find(|(c, _)| matches!(c.manifest.promotion_class, PromotionClass::PCold))
+            {
+                holdout_admissions.push(cand.clone());
+            }
+        }
+    }
+
+    let mut holdout_static_map = BTreeMap::new();
+    let mut holdout_transfer_map = BTreeMap::new();
+    let mut holdout_robust_map = BTreeMap::new();
+    for cand in &holdout_admissions {
+        let s = evaluate_static_panel(
+            root,
+            cand,
+            &active,
+            &constellation,
+            PanelKind::StaticHoldout,
+        )?;
+        crate::apfsc::artifacts::write_json_atomic(
+            &crate::apfsc::artifacts::receipt_path(
+                root,
+                "holdout_static",
+                &format!("{}.json", cand.manifest.candidate_hash),
+            ),
+            &s.receipt,
+        )?;
+        holdout_static_map.insert(cand.manifest.candidate_hash.clone(), s);
+
+        if is_phase3_structural_candidate(cand.manifest.promotion_class) {
+            if let Ok(x) = evaluate_transfer(root, cand, &active, &constellation, EvalMode::Holdout)
+            {
+                crate::apfsc::artifacts::write_json_atomic(
+                    &crate::apfsc::artifacts::receipt_path(
+                        root,
+                        "holdout_transfer",
+                        &format!("{}.json", cand.manifest.candidate_hash),
+                    ),
+                    &x.receipt,
+                )?;
+                holdout_transfer_map.insert(cand.manifest.candidate_hash.clone(), x);
+            }
+            if let Ok(r) = evaluate_robustness(root, cand, &active, &constellation, EvalMode::Holdout)
+            {
+                crate::apfsc::artifacts::write_json_atomic(
+                    &crate::apfsc::artifacts::receipt_path(
+                        root,
+                        "holdout_robust",
+                        &format!("{}.json", cand.manifest.candidate_hash),
+                    ),
+                    &r.receipt,
+                )?;
+                holdout_robust_map.insert(cand.manifest.candidate_hash.clone(), r);
+            }
+        }
+    }
+
+    let mut judge_receipts = Vec::new();
+    let mut canary_evaluated = Vec::new();
+    let mut canary_activated = None::<String>;
+    let mut passing = Vec::<PromotionBundle>::new();
+    let mut rollback_staged = false;
+
+    for cand in holdout_admissions {
+        let public_static_eval = match public_static
+            .iter()
+            .find(|(c, _)| c.manifest.candidate_hash == cand.manifest.candidate_hash)
+        {
+            Some((_, s)) => s.clone(),
+            None => continue,
+        };
+        let holdout_static_eval = match holdout_static_map.get(&cand.manifest.candidate_hash) {
+            Some(v) => v.clone(),
+            None => continue,
+        };
+        let evals = Phase2CandidateEvaluations {
+            public_static: public_static_eval,
+            public_transfer: public_transfer_map
+                .get(&cand.manifest.candidate_hash)
+                .cloned(),
+            public_robust: public_robust_map
+                .get(&cand.manifest.candidate_hash)
+                .cloned(),
+            holdout_static: holdout_static_eval,
+            holdout_transfer: holdout_transfer_map
+                .get(&cand.manifest.candidate_hash)
+                .cloned(),
+            holdout_robust: holdout_robust_map
+                .get(&cand.manifest.candidate_hash)
+                .cloned(),
+        };
+
+        let mut bridge_receipt = None;
+        let mut recent_receipt = None;
+        match cand.manifest.promotion_class {
+            PromotionClass::A | PromotionClass::PWarm => {
+                if let Some(pack) = &cand.bridge_pack {
+                    if let Ok(b) =
+                        crate::apfsc::bridge::evaluate_warm_bridge(root, &cand, &active, &constellation, pack)
+                    {
+                        bridge_receipt = Some(b);
+                    }
+                }
+                if matches!(cand.manifest.promotion_class, PromotionClass::PWarm) {
+                    if let Some(transfer_eval) = evals.holdout_transfer.as_ref() {
+                        let recent = crate::apfsc::fresh_contact::recent_family_gain(
+                            &cand.manifest.candidate_hash,
+                            &active.manifest.candidate_hash,
+                            &transfer_eval.receipt,
+                            &evals.holdout_static.receipt,
+                            &constellation.fresh_families,
+                            0,
+                            cfg.phase3.promotion.p_warm_min_recent_family_gain_bpb,
+                        );
+                        recent_receipt = Some(recent);
+                    }
+                }
+            }
+            PromotionClass::PCold => {
+                let cold_pack = crate::apfsc::types::ColdBoundaryPack {
+                    protected_panels: vec!["anchor".to_string()],
+                    max_anchor_regret_bpb: cfg.phase3.promotion.p_cold_max_anchor_regret_bpb,
+                    max_error_streak: cfg.phase3.promotion.p_cold_max_error_streak,
+                    required_transfer_gain_bpb: cfg.phase3.promotion.p_cold_min_transfer_delta_bpb,
+                    required_recent_family_gain_bpb: cfg
+                        .phase3
+                        .promotion
+                        .p_cold_min_recent_family_gain_bpb,
+                    mandatory_canary_windows: cfg.phase3.canary.cold_windows,
+                    rollback_target_hash: active.manifest.candidate_hash.clone(),
+                };
+                if let Ok((bridge, recent)) = crate::apfsc::bridge::evaluate_cold_boundary(
+                    root,
+                    &cand,
+                    &active,
+                    &constellation,
+                    &cold_pack,
+                    &constellation.fresh_families,
+                    0,
+                ) {
+                    bridge_receipt = Some(bridge);
+                    recent_receipt = Some(recent);
+                }
+            }
+            _ => {}
+        }
+
+        if let Some(bridge) = &bridge_receipt {
+            crate::apfsc::artifacts::write_json_atomic(
+                &crate::apfsc::artifacts::receipt_path(
+                    root,
+                    "bridge",
+                    &format!("{}.json", cand.manifest.candidate_hash),
+                ),
+                bridge,
+            )?;
+        }
+        if let Some(recent) = &recent_receipt {
+            crate::apfsc::artifacts::write_json_atomic(
+                &crate::apfsc::artifacts::receipt_path(
+                    root,
+                    "fresh_holdout",
+                    &format!("{}.json", cand.manifest.candidate_hash),
+                ),
+                recent,
+            )?;
+        }
+
+        let mut receipt = judge_phase3_candidate(
+            root,
+            &cand,
+            &active,
+            &constellation,
+            cfg,
+            &evals,
+            bridge_receipt.as_ref(),
+            recent_receipt.as_ref(),
+        )?;
+
+        if receipt.decision == JudgeDecision::Promote {
+            let promotion_bundle = build_promotion_bundle(&cand, &receipt, &evals);
+            if receipt.canary_required {
+                if !rollback_staged
+                    && matches!(
+                        cand.manifest.promotion_class,
+                        PromotionClass::PWarm | PromotionClass::PCold
+                    )
+                {
+                    stage_rollback_target(root, &active.manifest.candidate_hash)?;
+                    rollback_staged = true;
+                }
+                let required_windows = phase3_canary_windows(cand.manifest.promotion_class, cfg);
+                let canary = run_phase3_canary(
+                    root,
+                    &cand.manifest.candidate_hash,
+                    &active.manifest.candidate_hash,
+                    &constellation.constellation_id,
+                    required_windows,
+                    cfg,
+                )?;
+                canary_evaluated.push(cand.manifest.candidate_hash.clone());
+                if canary.pass {
+                    canary_activated = Some(cand.manifest.candidate_hash.clone());
+                    receipt.canary_result = Some("pass".to_string());
+                    passing.push(promotion_bundle);
+                } else {
+                    receipt.decision = JudgeDecision::Reject;
+                    receipt.reason = crate::apfsc::types::JudgeRejectReason::CanaryFail.as_reason();
+                    receipt.canary_result = Some("fail".to_string());
+                }
+            } else {
+                passing.push(promotion_bundle);
+            }
+        }
+
+        crate::apfsc::artifacts::write_json_atomic(
+            &crate::apfsc::artifacts::receipt_path(
+                root,
+                "judge",
+                &format!("{}.json", cand.manifest.candidate_hash),
+            ),
+            &receipt,
+        )?;
+        judge_receipts.push(receipt);
+    }
+
+    if canary_activated.is_none() {
+        if let Some(best) = select_best_phase2(&passing) {
+            if matches!(
+                best.cand.manifest.promotion_class,
+                PromotionClass::PWarm | PromotionClass::PCold
+            ) {
+                stage_rollback_target(root, &active.manifest.candidate_hash)?;
+            }
+            crate::apfsc::judge::activate_candidate(
+                root,
+                &best.cand.manifest.candidate_hash,
+                &best.cand.manifest.snapshot_hash,
+            )?;
+            crate::apfsc::artifacts::write_pointer(
+                root,
+                "active_constellation",
+                &constellation.constellation_id,
+            )?;
+            crate::apfsc::artifacts::write_json_atomic(
+                &crate::apfsc::artifacts::receipt_path(
+                    root,
+                    "activation",
+                    &format!("{}.json", best.cand.manifest.candidate_hash),
+                ),
+                &best.receipt,
+            )?;
+            canary_activated = Some(best.cand.manifest.candidate_hash.clone());
+        }
+    }
+
+    let judge_report = JudgeBatchReport {
+        receipts: judge_receipts.clone(),
+        queued_for_canary: Vec::new(),
+    };
+    let canary_report = crate::apfsc::types::CanaryBatchReport {
+        evaluated: canary_evaluated,
+        activated: canary_activated,
+    };
+    genealogy::append_epoch(root, &judge_report, &canary_report)?;
+    hardware_trace::append_epoch(root, &[], &judge_report, &canary_report)?;
+
+    Ok(EpochReport {
+        public_receipts: Vec::new(),
+        judge_report,
+        canary_report,
+    })
+}
+
+fn is_phase3_structural_candidate(class: PromotionClass) -> bool {
+    matches!(
+        class,
+        PromotionClass::A | PromotionClass::PWarm | PromotionClass::PCold
+    )
+}
+
+fn phase3_canary_windows(class: PromotionClass, cfg: &Phase1Config) -> u32 {
+    match class {
+        PromotionClass::PCold => cfg.phase3.canary.cold_windows,
+        PromotionClass::PWarm | PromotionClass::A => cfg.phase3.canary.warm_windows,
+        _ => 0,
+    }
 }

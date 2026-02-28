@@ -59,6 +59,47 @@ pub fn generate(active: &CandidateBundle, cfg: &Phase1Config) -> Result<Vec<Cand
     Ok(out)
 }
 
+pub fn generate_phase3(active: &CandidateBundle, cfg: &Phase1Config) -> Result<Vec<CandidateBundle>> {
+    let mut out = generate(active, cfg)?;
+
+    let mut schedule = active.schedule_pack.clone();
+    schedule.scheduler_class = Some(crate::apfsc::types::SchedulerClass::EventSparse);
+    schedule.memory_law = Some(crate::apfsc::types::MemoryLawKind::RingSlots);
+    schedule.learning_law = Some(crate::apfsc::types::LearningLawKind::ResidualAdaGrad);
+    out.push(clone_with_mutation(
+        active,
+        "truth",
+        "phase3_warm_scheduler_shift",
+        PromotionClass::PWarm,
+        active.arch_program.clone(),
+        active.head_pack.clone(),
+        active.state_pack.clone(),
+        schedule,
+        active.bridge_pack.clone(),
+        BTreeMap::new(),
+    )?);
+
+    let mut schedule_a = active.schedule_pack.clone();
+    schedule_a.scheduler_class = Some(crate::apfsc::types::SchedulerClass::SerialScan);
+    schedule_a.memory_law = Some(crate::apfsc::types::MemoryLawKind::FlatState);
+    schedule_a.learning_law = Some(crate::apfsc::types::LearningLawKind::HeadOnlyAdaGrad);
+    out.push(clone_with_mutation(
+        active,
+        "truth",
+        "phase3_structural_same_signature",
+        PromotionClass::A,
+        active.arch_program.clone(),
+        active.head_pack.clone(),
+        active.state_pack.clone(),
+        schedule_a,
+        active.bridge_pack.clone(),
+        BTreeMap::new(),
+    )?);
+
+    out.truncate(cfg.lanes.max_truth_candidates.max(2));
+    Ok(out)
+}
+
 fn mutation_add_lag(active: &CandidateBundle) -> Result<CandidateBundle> {
     let mut program = active.arch_program.clone();
     if let Some(node) = program

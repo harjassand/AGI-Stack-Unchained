@@ -45,6 +45,10 @@ void jit_trap_thread_init(void);
 
 int run_jit_candidate(void (*entry)(void*), void* runtime_state_ptr,
                       trap_info_t* out_trap);
+int run_jit_candidate_i32_on_stack(int32_t (*entry)(void*),
+                                   void* runtime_state_ptr, void* stack_top,
+                                   trap_info_t* out_trap,
+                                   int32_t* out_status);
 
 // Test helpers (macOS AArch64 only; stubs elsewhere).
 void jit_test_snapshot_regs(uint64_t* out_gpr11, uint8_t* out_q8_q15_bytes);

@@ -227,6 +227,32 @@ static inline void call_entry_on_jit_stack(void (*entry)(void*), void* arg,
   void* restore_sp = g_saved_host_sp;
   asm volatile("mov sp, %0" : : "r"(restore_sp) : "memory");
 }
+
+static inline int32_t call_entry_i32_on_jit_stack(int32_t (*entry)(void*),
+                                                   void* arg,
+                                                   void* stack_top) {
+  int32_t ret = 0;
+  void* orig_sp = NULL;
+  asm volatile("mov %0, sp" : "=r"(orig_sp) : : "memory");
+  g_saved_host_sp = orig_sp;
+
+  asm volatile(
+      "mov sp, %1\n"
+      "mov x0, %2\n"
+      "blr %3\n"
+      "mov %w0, w0\n"
+      : "=r"(ret)
+      : "r"(stack_top), "r"(arg), "r"(entry)
+      : "x0", "x1", "x2", "x3", "x4", "x5", "x6", "x7", "x8", "x9", "x10",
+        "x11", "x12", "x13", "x14", "x15", "x16", "x17", "x30", "v0", "v1",
+        "v2", "v3", "v4", "v5", "v6", "v7", "v16", "v17", "v18", "v19",
+        "v20", "v21", "v22", "v23", "v24", "v25", "v26", "v27", "v28",
+        "v29", "v30", "v31", "memory");
+
+  void* restore_sp = g_saved_host_sp;
+  asm volatile("mov sp, %0" : : "r"(restore_sp) : "memory");
+  return ret;
+}
 #else
 typedef struct {
   uint64_t unused;
@@ -244,6 +270,13 @@ static inline void call_entry_on_jit_stack(void (*entry)(void*), void* arg,
                                            void* stack_top) {
   (void)stack_top;
   entry(arg);
+}
+
+static inline int32_t call_entry_i32_on_jit_stack(int32_t (*entry)(void*),
+                                                   void* arg,
+                                                   void* stack_top) {
+  (void)stack_top;
+  return entry(arg);
 }
 #endif
 
@@ -287,6 +320,65 @@ int run_jit_candidate(void (*entry)(void*), void* runtime_state_ptr,
 
     call_entry_on_jit_stack(entry, runtime_state_ptr, (void*)top_raw);
 
+    g_armed = 0;
+    restore_regs(&regs);
+    return 0;
+  }
+
+  g_armed = 0;
+  if (out_trap != NULL) {
+    *out_trap = g_last_trap;
+  }
+  restore_regs(&regs);
+  return 1;
+}
+
+int run_jit_candidate_i32_on_stack(int32_t (*entry)(void*),
+                                   void* runtime_state_ptr, void* stack_top,
+                                   trap_info_t* out_trap,
+                                   int32_t* out_status) {
+  if (out_trap != NULL) {
+    memset(out_trap, 0, sizeof(*out_trap));
+  }
+  if (out_status != NULL) {
+    *out_status = 0;
+  }
+
+  if (entry == NULL) {
+    if (out_trap != NULL) {
+      out_trap->kind = TRAP_OTHER;
+    }
+    return 1;
+  }
+
+  if (g_jit_stack_base == NULL || g_altstack_mem == NULL) {
+    jit_trap_thread_init();
+  }
+
+  uintptr_t top_raw = (uintptr_t)(g_jit_stack_base + g_jit_stack_len);
+  top_raw &= ~(uintptr_t)0xF;
+  if (top_raw >= 16u) {
+    top_raw -= 16u;
+  }
+  if (stack_top != NULL) {
+    uintptr_t explicit_top = ((uintptr_t)stack_top) & ~(uintptr_t)0xF;
+    if (explicit_top >= 16u) {
+      explicit_top -= 16u;
+      top_raw = explicit_top;
+    }
+  }
+
+  RegSave regs;
+  save_regs(&regs);
+  memset(&g_last_trap, 0, sizeof(g_last_trap));
+
+  if (sigsetjmp(g_env, 1) == 0) {
+    g_armed = 1;
+    int32_t status = call_entry_i32_on_jit_stack(entry, runtime_state_ptr,
+                                                 (void*)top_raw);
+    if (out_status != NULL) {
+      *out_status = status;
+    }
     g_armed = 0;
     restore_regs(&regs);
     return 0;

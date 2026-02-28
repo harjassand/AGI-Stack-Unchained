@@ -341,6 +341,8 @@ pub struct Phase4Config {
     pub searchlaw_max_ab_epochs: u32,
     #[serde(default = "default_phase4_searchlaw_required_yield_improvement")]
     pub searchlaw_required_yield_improvement: f64,
+    #[serde(default = "default_phase4_searchlaw_max_safety_regression")]
+    pub searchlaw_max_safety_regression: f64,
 
     #[serde(default = "default_phase4_max_portfolio_branches")]
     pub max_portfolio_branches: usize,
@@ -634,6 +636,7 @@ impl Default for Phase4Config {
             searchlaw_max_ab_epochs: default_phase4_searchlaw_max_ab_epochs(),
             searchlaw_required_yield_improvement:
                 default_phase4_searchlaw_required_yield_improvement(),
+            searchlaw_max_safety_regression: default_phase4_searchlaw_max_safety_regression(),
             max_portfolio_branches: default_phase4_max_portfolio_branches(),
             max_branch_local_debt_credits: default_phase4_max_branch_local_debt_credits(),
             max_global_debt_credits: default_phase4_max_global_debt_credits(),
@@ -1084,6 +1087,10 @@ fn default_phase4_searchlaw_max_ab_epochs() -> u32 {
 
 fn default_phase4_searchlaw_required_yield_improvement() -> f64 {
     constants::SEARCHLAW_REQUIRED_YIELD_IMPROVEMENT
+}
+
+fn default_phase4_searchlaw_max_safety_regression() -> f64 {
+    constants::SEARCHLAW_MAX_SAFETY_REGRESSION
 }
 
 fn default_phase4_max_portfolio_branches() -> usize {

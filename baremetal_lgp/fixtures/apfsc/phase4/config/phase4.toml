@@ -114,6 +114,7 @@ max_searchlaw_ab_candidates = 2
 searchlaw_min_ab_epochs = 2
 searchlaw_max_ab_epochs = 4
 searchlaw_required_yield_improvement = 0.20
+searchlaw_max_safety_regression = 0.00
 max_portfolio_branches = 8
 max_branch_local_debt_credits = 3
 max_global_debt_credits = 8

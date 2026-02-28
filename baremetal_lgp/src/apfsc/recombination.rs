@@ -1,12 +1,14 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::Path;
 
-use crate::apfsc::artifacts::{digest_json, write_json_atomic};
+use crate::apfsc::artifacts::{digest_json, read_json, write_json_atomic};
 use crate::apfsc::candidate::{
     clone_with_mutation, load_candidate, save_candidate, CandidateBundle,
 };
 use crate::apfsc::config::Phase1Config;
 use crate::apfsc::errors::{ApfscError, Result};
+use crate::apfsc::formal_policy::{load_active_formal_policy, seed_formal_policy};
+use crate::apfsc::scir::verify::verify_program_with_formal_policy;
 use crate::apfsc::types::{PromotionClass, RecombinationSpec};
 
 fn blend_vec(a: &[f32], b: &[f32]) -> Vec<f32> {
@@ -29,6 +31,47 @@ fn dedup_sorted(values: impl IntoIterator<Item = String>) -> Vec<String> {
     set.into_iter().collect()
 }
 
+fn read_candidate_dependency_pack(
+    root: &Path,
+    candidate_hash: &str,
+) -> Result<Option<crate::apfsc::types::DependencyPack>> {
+    let path = root
+        .join("candidates")
+        .join(candidate_hash)
+        .join("dependency_pack.json");
+    if !path.exists() {
+        return Ok(None);
+    }
+    let dep = read_json(&path)?;
+    Ok(Some(dep))
+}
+
+fn ensure_parent_dependency_compatibility(
+    a: &CandidateBundle,
+    _b: &CandidateBundle,
+    da: Option<&crate::apfsc::types::DependencyPack>,
+    db: Option<&crate::apfsc::types::DependencyPack>,
+) -> Result<()> {
+    if let (Some(da), Some(db)) = (da, db) {
+        if da.snapshot_hash != db.snapshot_hash || da.snapshot_hash != a.manifest.snapshot_hash {
+            return Err(ApfscError::Validation(
+                "recombination parents have incompatible dependency snapshot roots".to_string(),
+            ));
+        }
+        if da.formal_policy_hash != db.formal_policy_hash {
+            return Err(ApfscError::Validation(
+                "recombination parents have incompatible formal policy roots".to_string(),
+            ));
+        }
+        if da.macro_registry_hash != db.macro_registry_hash {
+            return Err(ApfscError::Validation(
+                "recombination parents have incompatible macro registry roots".to_string(),
+            ));
+        }
+    }
+    Ok(())
+}
+
 pub fn materialize_recombination_candidate(
     root: &Path,
     parent_a_hash: &str,
@@ -49,6 +92,9 @@ pub fn materialize_recombination_candidate(
             "recombination parents must share snapshot".to_string(),
         ));
     }
+    let dep_a = read_candidate_dependency_pack(root, parent_a_hash)?;
+    let dep_b = read_candidate_dependency_pack(root, parent_b_hash)?;
+    ensure_parent_dependency_compatibility(&a, &b, dep_a.as_ref(), dep_b.as_ref())?;
 
     let mut arch = a.arch_program.clone();
     let mut head = a.head_pack.clone();
@@ -118,8 +164,68 @@ pub fn materialize_recombination_candidate(
         a.bridge_pack.clone(),
         deps,
     )?;
+
+    // Recombination must not bypass formal-policy verification.
+    let active_formal = load_active_formal_policy(root).unwrap_or_else(|_| seed_formal_policy());
+    verify_program_with_formal_policy(
+        &child.arch_program,
+        &child.manifest.resource_envelope,
+        &active_formal,
+    )?;
+
     crate::apfsc::candidate::rehash_candidate(&mut child)?;
     save_candidate(root, &child)?;
+
+    // If parent dependency packs exist, persist a deterministic compatible pack for the child.
+    if dep_a.is_some() || dep_b.is_some() {
+        let snapshot_prior_roots = dep_a
+            .as_ref()
+            .map(|d| d.prior_roots.clone())
+            .or_else(|| dep_b.as_ref().map(|d| d.prior_roots.clone()))
+            .unwrap_or_default();
+        let snapshot_tool_roots = dep_a
+            .as_ref()
+            .map(|d| d.tool_roots.clone())
+            .or_else(|| dep_b.as_ref().map(|d| d.tool_roots.clone()))
+            .unwrap_or_default();
+        let snapshot_substrate_roots = dep_a
+            .as_ref()
+            .map(|d| d.substrate_roots.clone())
+            .or_else(|| dep_b.as_ref().map(|d| d.substrate_roots.clone()))
+            .unwrap_or_default();
+        let macro_registry_hash = dep_a
+            .as_ref()
+            .map(|d| d.macro_registry_hash.clone())
+            .or_else(|| dep_b.as_ref().map(|d| d.macro_registry_hash.clone()))
+            .unwrap_or_default();
+        let formal_policy_hash = dep_a
+            .as_ref()
+            .map(|d| d.formal_policy_hash.clone())
+            .or_else(|| dep_b.as_ref().map(|d| d.formal_policy_hash.clone()))
+            .unwrap_or_else(|| "formal_policy_seed_v1".to_string());
+        let snapshot_hash = dep_a
+            .as_ref()
+            .map(|d| d.snapshot_hash.clone())
+            .or_else(|| dep_b.as_ref().map(|d| d.snapshot_hash.clone()))
+            .unwrap_or_else(|| child.manifest.snapshot_hash.clone());
+        if !macro_registry_hash.is_empty() {
+            let mut dep = crate::apfsc::types::DependencyPack {
+                snapshot_hash,
+                prior_roots: snapshot_prior_roots,
+                tool_roots: snapshot_tool_roots,
+                formal_policy_hash,
+                substrate_roots: snapshot_substrate_roots,
+                macro_registry_hash,
+                manifest_hash: String::new(),
+            };
+            dep.manifest_hash = digest_json(&dep)?;
+            crate::apfsc::dependency_pack::write_candidate_dependency_pack(
+                root,
+                &child.manifest.candidate_hash,
+                &dep,
+            )?;
+        }
+    }
 
     let mut spec = RecombinationSpec {
         parent_candidate_hashes: vec![

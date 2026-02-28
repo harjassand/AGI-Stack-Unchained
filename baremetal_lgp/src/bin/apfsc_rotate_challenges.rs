@@ -1,7 +1,7 @@
 use std::path::PathBuf;
 
 use baremetal_lgp::apfsc::config::Phase1Config;
-use baremetal_lgp::apfsc::retirement::rotate_hidden_challenges;
+use baremetal_lgp::apfsc::retirement::{rotate_hidden_challenges, rotate_hidden_challenges_for};
 use clap::Parser;
 
 #[derive(Debug, Parser)]
@@ -25,8 +25,18 @@ fn main() -> Result<(), String> {
     } else {
         Phase1Config::default()
     };
-    let manifest =
-        rotate_hidden_challenges(&args.root, &cfg, args.epoch).map_err(|e| e.to_string())?;
+    let manifest = match (&args.snapshot, &args.constellation) {
+        (Some(snapshot), Some(constellation)) => {
+            rotate_hidden_challenges_for(&args.root, &cfg, snapshot, constellation, args.epoch)
+                .map_err(|e| e.to_string())?
+        }
+        (None, None) => {
+            rotate_hidden_challenges(&args.root, &cfg, args.epoch).map_err(|e| e.to_string())?
+        }
+        _ => {
+            return Err("both --snapshot and --constellation must be provided together".to_string())
+        }
+    };
     println!(
         "challenge manifest={} active={} retired={}",
         manifest.manifest_hash,

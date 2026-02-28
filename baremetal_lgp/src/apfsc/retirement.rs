@@ -1,12 +1,12 @@
 use std::path::Path;
 
-use crate::apfsc::artifacts::{append_jsonl_atomic, digest_json, write_json_atomic};
+use crate::apfsc::artifacts::{append_jsonl_atomic, digest_json, load_snapshot};
 use crate::apfsc::challenge_scheduler::{
     build_hidden_challenge_manifest, load_hidden_challenge_manifest_for_snapshot,
     persist_hidden_challenge_manifest,
 };
 use crate::apfsc::config::Phase1Config;
-use crate::apfsc::constellation::load_active_constellation;
+use crate::apfsc::constellation::{load_active_constellation, load_constellation};
 use crate::apfsc::errors::Result;
 use crate::apfsc::types::HiddenChallengeManifest;
 
@@ -25,6 +25,30 @@ pub fn rotate_hidden_challenges(
     current_epoch: u64,
 ) -> Result<HiddenChallengeManifest> {
     let constellation = load_active_constellation(root)?;
+    rotate_hidden_challenges_for(
+        root,
+        cfg,
+        &constellation.snapshot_hash,
+        &constellation.constellation_id,
+        current_epoch,
+    )
+}
+
+pub fn rotate_hidden_challenges_for(
+    root: &Path,
+    cfg: &Phase1Config,
+    snapshot_hash: &str,
+    constellation_id: &str,
+    current_epoch: u64,
+) -> Result<HiddenChallengeManifest> {
+    let constellation = load_constellation(root, constellation_id)?;
+    if constellation.snapshot_hash != snapshot_hash {
+        return Err(crate::apfsc::errors::ApfscError::Validation(format!(
+            "constellation '{}' is bound to snapshot '{}' not '{}'",
+            constellation_id, constellation.snapshot_hash, snapshot_hash
+        )));
+    }
+    let _ = load_snapshot(root, snapshot_hash)?;
     let path = root
         .join("snapshots")
         .join(&constellation.snapshot_hash)
@@ -61,14 +85,13 @@ pub fn rotate_hidden_challenges(
         replacement_manifest_hash: cur.manifest_hash.clone(),
         reason: "RotationComplete".to_string(),
     };
-    append_jsonl_atomic(&root.join("archive/challenge_retirement.jsonl"), &receipt)?;
     append_jsonl_atomic(&root.join("archives/challenge_retirement.jsonl"), &receipt)?;
-    write_json_atomic(
+    append_jsonl_atomic(
         &root
             .join("challenges")
             .join(&cur.manifest_hash)
             .join("retirement_receipts.jsonl"),
-        &vec![receipt],
+        &receipt,
     )?;
 
     Ok(cur)

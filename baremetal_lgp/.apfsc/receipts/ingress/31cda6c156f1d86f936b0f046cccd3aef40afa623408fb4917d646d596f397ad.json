@@ -1,0 +1,14 @@
+{
+  "pack_hash": "fce19dcb78fdf49754329c47c41ff6bbd335103470a579760c583c64dfcc8981",
+  "pack_kind": "Reality",
+  "validation_checks_passed": [
+    "payload_exists",
+    "payload_hash_matches_manifest",
+    "family_id_present",
+    "split_policy_legal",
+    "window_bounds_legal"
+  ],
+  "ingest_time_unix_s": 1772287638,
+  "protocol_version": "apfsc-phase1-mvp-v1",
+  "snapshot_included": true
+}

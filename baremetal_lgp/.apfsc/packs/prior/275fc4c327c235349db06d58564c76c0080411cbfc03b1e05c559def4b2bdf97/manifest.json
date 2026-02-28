@@ -1,0 +1,20 @@
+{
+  "pack_kind": "Prior",
+  "pack_hash": "275fc4c327c235349db06d58564c76c0080411cbfc03b1e05c559def4b2bdf97",
+  "protocol_version": "apfsc-phase1-mvp-v1",
+  "created_unix_s": 1735689600,
+  "family_id": null,
+  "provenance": {
+    "source_name": "prior_seed",
+    "source_type": "registry",
+    "attestation": null,
+    "notes": "seed op and macro registry"
+  },
+  "payload_hashes": [
+    "6d5f413d7d3ee39efecdf86bb3a05e178f786e34cfcbce73b9c0252d887a59e3",
+    "1d7734d950fbe027e640a8879ccfd635623f00113ad3397a4534a5aaff356ab9"
+  ],
+  "meta": {
+    "description": "phase1 seed prior"
+  }
+}

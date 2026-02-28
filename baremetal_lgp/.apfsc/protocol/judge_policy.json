@@ -1,0 +1,7 @@
+{
+  "public_min_delta_bits": 32.0,
+  "holdout_min_delta_bits": 16.0,
+  "anchor_max_regress_bits": 0.0,
+  "mini_transfer_min_delta_bits": 0.0,
+  "require_canary_for_a": true
+}

@@ -1,0 +1,19 @@
+{
+  "pack_kind": "Substrate",
+  "pack_hash": "a444ab6b76d3a6124caca027a0ca0d5bd0adcec56bcc0a209f1a3cf4f0eb1d39",
+  "protocol_version": "apfsc-phase1-mvp-v1",
+  "created_unix_s": 1735689600,
+  "family_id": null,
+  "provenance": {
+    "source_name": "substrate_seed",
+    "source_type": "trace",
+    "attestation": null,
+    "notes": "runtime calibration traces"
+  },
+  "payload_hashes": [
+    "19516b04f27838ba0ad0335a7a781c3a4b1502b196e2a8e01cbb1b8e7bdb1477"
+  ],
+  "meta": {
+    "description": "hardware trace seed"
+  }
+}

@@ -1,0 +1,30 @@
+{
+  "candidate_hash": "52fb162c4195740bb93aa85f2061e58cda9af7ba949132535a580e89b07ccb63",
+  "parent_hashes": [
+    "78b555497cc593120e0d4296d0cd5fedc08e07e87a83a418a39426d7597f684b"
+  ],
+  "snapshot_hash": "bde1bed998a086dcc12b2cacdb4ffd348dcc04e16c3c74655cc496ef71bd6e06",
+  "promotion_class": "A",
+  "interface_pack_hash": "f8739166bfe1181cdfdd33177f562635583a840a6ac655a6b4ea70d91c33f13c",
+  "arch_program_hash": "4c245546526498dbb8fee0f79515fd4d5694ded5f6d47c4f46ede98578f30494",
+  "state_pack_hash": "1b9606b29bbbda6552683cea359aaeb4b52865d6759de29ea4fb7b58236eeb18",
+  "head_pack_hash": "e2dc0aaa7dcc2b855415b536120a03e9816b44b1815aa15c7d99fe92f6d00ad9",
+  "bridge_pack_hash": null,
+  "schedule_pack_hash": "5fbcaeffef35afa0747cfc327c06a284a1ac92926894a585af1a0f2eb3da8739",
+  "prior_deps": [],
+  "substrate_deps": [],
+  "resource_envelope": {
+    "max_steps": 1000000,
+    "max_state_bytes": 2097152,
+    "max_param_bits": 67108864,
+    "max_wall_ms": 60000,
+    "peak_rss_limit_bytes": 12884901888,
+    "max_mapped_bytes": 2147483648,
+    "backend": "Tier0Cpu",
+    "batch_shape": [
+      1,
+      1
+    ]
+  },
+  "build_meta_hash": "dbe8f9c81fdf69251d312259dc28dbba24c02710157d61b328e8eb62b8e67b7b"
+}

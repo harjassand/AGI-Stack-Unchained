@@ -1,0 +1,9 @@
+{
+  "snapshot_hash": "08e9713300a278423e0982cb404beb6a7d6779de0d2c4ed04d96568c2084b782",
+  "reality_roots": [
+    "f4eed6d3d3eeaad60a13a5ef5c98db4457867f4b48ef5e7ba50bf406120e7e18"
+  ],
+  "prior_roots": [],
+  "substrate_roots": [],
+  "protocol_version": "apfsc-phase1-mvp-v1"
+}

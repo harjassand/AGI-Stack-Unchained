@@ -1,0 +1,6 @@
+{
+  "lane": "seed",
+  "mutation_type": "seed_incumbent",
+  "created_unix_s": 0,
+  "notes": "deterministic phase1 seed incumbent"
+}

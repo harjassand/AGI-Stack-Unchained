@@ -1,0 +1,95 @@
+{
+  "input_len": 256,
+  "nodes": [
+    {
+      "id": 1,
+      "op": {
+        "ByteEmbedding": {
+          "vocab": 256,
+          "dim": 32
+        }
+      },
+      "inputs": [],
+      "out_dim": 32,
+      "mutable": true
+    },
+    {
+      "id": 2,
+      "op": {
+        "LagBytes": {
+          "lags": [
+            1,
+            2,
+            4,
+            8
+          ]
+        }
+      },
+      "inputs": [],
+      "out_dim": 4,
+      "mutable": false
+    },
+    {
+      "id": 3,
+      "op": "Concat",
+      "inputs": [
+        1,
+        2
+      ],
+      "out_dim": 36,
+      "mutable": false
+    },
+    {
+      "id": 4,
+      "op": {
+        "SimpleScan": {
+          "in_dim": 36,
+          "hidden_dim": 32
+        }
+      },
+      "inputs": [
+        3
+      ],
+      "out_dim": 32,
+      "mutable": false
+    },
+    {
+      "id": 5,
+      "op": "Concat",
+      "inputs": [
+        3,
+        4
+      ],
+      "out_dim": 68,
+      "mutable": false
+    },
+    {
+      "id": 6,
+      "op": {
+        "Linear": {
+          "in_dim": 68,
+          "out_dim": 68,
+          "bias": false
+        }
+      },
+      "inputs": [
+        5
+      ],
+      "out_dim": 68,
+      "mutable": false
+    }
+  ],
+  "outputs": {
+    "feature_node": 6,
+    "shadow_feature_nodes": [],
+    "probe_nodes": [
+      2,
+      4
+    ]
+  },
+  "bounds": {
+    "max_state_bytes": 2097152,
+    "max_param_bits": 67108864,
+    "max_steps": 1000000
+  }
+}

@@ -1,0 +1,136 @@
+phase2_mvp:
+  branch_name: feat/apfsc-phase2-mvp
+  prerequisites:
+    - phase1_mvp_contract_present: true
+  constraints:
+    - keep_apf3_immutable: true
+    - extend_phase1_not_redesign: true
+    - deterministic_execution: true
+    - single_node_only: true
+    - no_p_warm_or_p_cold: true
+    - no_challenge_as_promotion_gate: true
+    - no_nativeblock_in_judged_path: true
+  tasks:
+    - id: P201
+      name: Extend common types, config, and manifest parsing for family roles
+      outputs:
+        - src/apfsc/types.rs
+        - src/apfsc/config.rs
+        - src/apfsc/ingress/manifest.rs
+      depends_on: []
+    - id: P202
+      name: Add constellation manifest and builder
+      outputs:
+        - src/apfsc/constellation.rs
+        - src/bin/apfsc_build_constellation.rs
+      depends_on: [P201]
+    - id: P203
+      name: Extend reality ingestion for base, transfer, robust, and challenge-stub roles
+      outputs:
+        - src/apfsc/ingress/reality.rs
+        - src/apfsc/ingress/receipts.rs
+        - src/bin/apfsc_ingest_reality.rs
+      depends_on: [P201]
+    - id: P204
+      name: Extend bank builder for family-aware panel generation
+      outputs:
+        - src/apfsc/bank.rs
+      depends_on: [P202, P203]
+    - id: P205
+      name: Add Phase 2 seed fixtures for four family groups
+      outputs:
+        - fixtures/apfsc/phase2/**
+        - src/apfsc/seed.rs
+      depends_on: [P203, P204]
+    - id: P206
+      name: Add family normalization formulas and score aggregators
+      outputs:
+        - src/apfsc/normalization.rs
+        - src/apfsc/candidate.rs
+      depends_on: [P201, P202]
+    - id: P207
+      name: Implement transfer adaptation law and transfer evaluator
+      outputs:
+        - src/apfsc/transfer.rs
+        - src/bin/apfsc_transfer_eval.rs
+      depends_on: [P204, P206]
+    - id: P208
+      name: Implement robustness evaluator
+      outputs:
+        - src/apfsc/robustness.rs
+        - src/bin/apfsc_robust_eval.rs
+      depends_on: [P204, P206]
+    - id: P209
+      name: Add challenge-stub schema support
+      outputs:
+        - src/apfsc/challenge_stub.rs
+      depends_on: [P202, P203]
+    - id: P210
+      name: Extend archive streams for family, transfer, and robustness outcomes
+      outputs:
+        - src/apfsc/archive/family_scores.rs
+        - src/apfsc/archive/transfer_trace.rs
+        - src/apfsc/archive/robustness_trace.rs
+        - src/apfsc/archive/genealogy.rs
+        - src/apfsc/archive/error_atlas.rs
+        - src/apfsc/archive/mod.rs
+      depends_on: [P206, P207, P208]
+    - id: P211
+      name: Upgrade truth lane for family quotas and target metadata
+      outputs:
+        - src/apfsc/lanes/truth.rs
+      depends_on: [P205, P206]
+    - id: P212
+      name: Upgrade equivalence lane for family-balanced witnesses
+      outputs:
+        - src/apfsc/lanes/equivalence.rs
+      depends_on: [P205, P206]
+    - id: P213
+      name: Upgrade incubator lane for multi-family residual and nuisance objectives
+      outputs:
+        - src/apfsc/lanes/incubator.rs
+      depends_on: [P205, P206, P207, P208]
+    - id: P214
+      name: Extend public evaluation staging for static then transfer then robustness
+      outputs:
+        - src/bin/apfsc_public_eval.rs
+        - src/apfsc/orchestrator.rs
+      depends_on: [P207, P208, P211, P212, P213]
+    - id: P215
+      name: Extend judge with cross-family gates and protected-family floors
+      outputs:
+        - src/apfsc/judge.rs
+        - src/bin/apfsc_judge_daemon.rs
+      depends_on: [P206, P207, P208, P214]
+    - id: P216
+      name: Extend canary and activation receipts for constellation context
+      outputs:
+        - src/apfsc/canary.rs
+      depends_on: [P215]
+    - id: P217
+      name: Wire phase2 profile into epoch runner
+      outputs:
+        - src/bin/apfsc_epoch_run.rs
+        - src/apfsc/orchestrator.rs
+        - src/apfsc/mod.rs
+      depends_on: [P210, P215, P216]
+    - id: P218
+      name: Add Phase 2 tests
+      outputs:
+        - tests/apfsc_phase2_constellation.rs
+        - tests/apfsc_phase2_normalization.rs
+        - tests/apfsc_phase2_transfer.rs
+        - tests/apfsc_phase2_robustness.rs
+        - tests/apfsc_phase2_judge.rs
+        - tests/apfsc_phase2_specialist_reject.rs
+        - tests/apfsc_phase2_e2e.rs
+      depends_on: [P217]
+  completion_criteria:
+    - cargo_test_passes: true
+    - four_family_constellation_builds: true
+    - weighted_static_receipts_emit: true
+    - transfer_receipts_emit: true
+    - robustness_receipts_emit: true
+    - specialist_candidate_is_rejected: true
+    - cross_family_candidate_can_promote: true
+    - deterministic_replay_on_phase2_epoch: true

@@ -1,0 +1,17 @@
+name: nightly-qual
+on:
+  schedule:
+    - cron: '0 2 * * *'
+  workflow_dispatch:
+jobs:
+  nightly:
+    runs-on: macos-latest
+    defaults:
+      run:
+        working-directory: baremetal_lgp
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - run: ./scripts/ci/test_faults.sh
+      - run: ./scripts/ci/test_bench_smoke.sh
+      - run: ./scripts/ci/test_release_qual.sh

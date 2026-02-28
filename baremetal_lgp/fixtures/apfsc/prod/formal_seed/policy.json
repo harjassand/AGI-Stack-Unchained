@@ -1,0 +1,15 @@
+{
+  "policy_id": "formal_policy_prod_seed",
+  "version": 1,
+  "rules": [
+    {
+      "rule_id": "deny_shift_register",
+      "severity": "high",
+      "scope": "scir.verify",
+      "pattern_hash": "ShiftRegister",
+      "action": "deny"
+    }
+  ],
+  "source_pack_hashes": [],
+  "manifest_hash": ""
+}

@@ -1,0 +1,248 @@
+production_ready:
+  branch_name: feat/apfsc-production-ready
+  prerequisites:
+    - phase1_mvp_contract_present: true
+    - phase2_mvp_contract_present: true
+    - phase3_mvp_contract_present: true
+    - phase4_final_contract_present: true
+  constraints:
+    - keep_apf3_immutable: true
+    - keep_holdout_truth_on_interpreter: true
+    - deterministic_execution: true
+    - single_node_only: true
+    - no_protocol_self_modification: true
+    - no_remote_public_control_api: true
+    - no_judged_network_access: true
+    - no_nativeblock_in_judged_path: true
+  tasks:
+    - id: P501
+      name: Add production module skeleton, profiles, and common config/versioning types
+      outputs:
+        - src/apfsc/prod/mod.rs
+        - src/apfsc/prod/profiles.rs
+        - src/apfsc/prod/versioning.rs
+        - src/apfsc/config.rs
+        - config/base.toml
+        - config/profiles/dev.toml
+        - config/profiles/fixture_ci.toml
+        - config/profiles/nightly_qual.toml
+        - config/profiles/release_qual.toml
+        - config/profiles/prod_single_node.toml
+        - config/schema/config.schema.json
+      depends_on: []
+    - id: P502
+      name: Implement apfscd daemon shell, local control API, and apfscctl CLI
+      outputs:
+        - src/apfsc/prod/daemon.rs
+        - src/apfsc/prod/service.rs
+        - src/apfsc/prod/control_api.rs
+        - src/bin/apfscd.rs
+        - src/bin/apfscctl.rs
+      depends_on: [P501]
+    - id: P503
+      name: Add ControlDB schema, migrations ledger, and access helpers
+      outputs:
+        - src/apfsc/prod/control_db.rs
+        - src/apfsc/prod/migration.rs
+        - src/bin/apfsc_migrate.rs
+      depends_on: [P501]
+    - id: P504
+      name: Add write-ahead journal, job state machine, and idempotency handling
+      outputs:
+        - src/apfsc/prod/journal.rs
+        - src/apfsc/prod/jobs.rs
+      depends_on: [P502, P503]
+    - id: P505
+      name: Add lease manager and activation-safe exclusion rules
+      outputs:
+        - src/apfsc/prod/lease.rs
+      depends_on: [P503, P504]
+    - id: P506
+      name: Add startup recovery and crash-safe resume logic
+      outputs:
+        - src/apfsc/prod/recovery.rs
+        - src/apfsc/orchestrator.rs
+        - src/apfsc/judge.rs
+        - src/apfsc/canary.rs
+      depends_on: [P504, P505]
+    - id: P507
+      name: Add backup, restore, and manifest verification
+      outputs:
+        - src/apfsc/prod/backup.rs
+        - src/apfsc/prod/restore.rs
+        - src/bin/apfsc_backup.rs
+        - src/bin/apfsc_restore.rs
+      depends_on: [P503, P506]
+    - id: P508
+      name: Add retention, GC, tombstones, and compaction
+      outputs:
+        - src/apfsc/prod/retention.rs
+        - src/apfsc/prod/gc.rs
+        - src/apfsc/prod/compaction.rs
+        - src/bin/apfsc_gc.rs
+        - src/bin/apfsc_compact.rs
+      depends_on: [P507]
+    - id: P509
+      name: Add authn/authz, secret providers, and immutable audit chain
+      outputs:
+        - src/apfsc/prod/auth.rs
+        - src/apfsc/prod/secrets.rs
+        - src/apfsc/prod/audit.rs
+      depends_on: [P502, P503]
+    - id: P510
+      name: Add telemetry, health endpoints, diagnostics bundles, and preflight
+      outputs:
+        - src/apfsc/prod/telemetry.rs
+        - src/apfsc/prod/health.rs
+        - src/apfsc/prod/diagnostics.rs
+        - src/apfsc/prod/preflight.rs
+        - src/bin/apfsc_preflight.rs
+        - src/bin/apfsc_diag_dump.rs
+        - ops/dashboards/apfsc_overview.json
+        - ops/dashboards/apfsc_qualification.json
+        - ops/dashboards/apfsc_release.json
+        - ops/alerts/apfsc_rules.yaml
+      depends_on: [P502, P503, P506, P509]
+    - id: P511
+      name: Add build info, release manifest generation, and release verification
+      outputs:
+        - src/apfsc/prod/buildinfo.rs
+        - src/apfsc/prod/release_manifest.rs
+        - src/bin/apfsc_release_verify.rs
+      depends_on: [P501, P503]
+    - id: P512
+      name: Add release scripts for build, SBOM, provenance, signing, publish, and rollback
+      outputs:
+        - scripts/release/build_release.sh
+        - scripts/release/generate_sbom.sh
+        - scripts/release/generate_provenance.sh
+        - scripts/release/sign_release.sh
+        - scripts/release/publish_release.sh
+        - scripts/release/rollback_release.sh
+      depends_on: [P511]
+    - id: P513
+      name: Add launchd packaging and install helpers
+      outputs:
+        - src/apfsc/prod/install.rs
+        - deploy/launchd/dev.apfscd.plist
+        - deploy/launchd/prod.apfscd.plist
+        - ops/runbooks/install.md
+      depends_on: [P502, P510, P511]
+    - id: P514
+      name: Add evaluation registry, baselines, and qualification harness
+      outputs:
+        - evals/registry.yaml
+        - evals/suites/phase1_regression.yaml
+        - evals/suites/phase2_constellation.yaml
+        - evals/suites/phase3_paradigm.yaml
+        - evals/suites/phase4_searchlaw.yaml
+        - evals/suites/prod_recovery.yaml
+        - evals/suites/prod_migration.yaml
+        - evals/suites/prod_perf.yaml
+        - evals/suites/prod_soak.yaml
+        - evals/suites/prod_security.yaml
+        - evals/baselines/reference_m4pro_16g.json
+        - src/bin/apfsc_qualify.rs
+      depends_on: [P506, P507, P508, P509, P510, P511]
+    - id: P515
+      name: Add CI scripts and GitHub workflow wiring
+      outputs:
+        - scripts/ci/lint.sh
+        - scripts/ci/test_unit.sh
+        - scripts/ci/test_property.sh
+        - scripts/ci/test_integration.sh
+        - scripts/ci/test_faults.sh
+        - scripts/ci/test_bench_smoke.sh
+        - scripts/ci/test_release_qual.sh
+        - scripts/ci/verify_release_artifacts.sh
+        - .github/workflows/pr-ci.yml
+        - .github/workflows/nightly-qual.yml
+        - .github/workflows/release-qual.yml
+        - .github/workflows/release.yml
+      depends_on: [P512, P514]
+    - id: P516
+      name: Add golden fixture stores, production fixture packs, and expected receipts
+      outputs:
+        - fixtures/apfsc/prod/**
+        - evals/reports/.gitkeep
+      depends_on: [P514]
+    - id: P517
+      name: Add unit, property, and loom tests for production control plane
+      outputs:
+        - tests/apfsc_prod_control_db.rs
+        - tests/apfsc_prod_journal.rs
+        - tests/apfsc_prod_audit.rs
+        - tests/apfsc_prod_auth.rs
+        - tests/apfsc_prod_preflight.rs
+        - tests/apfsc_prod_release_manifest.rs
+        - tests/loom_prod_leases.rs
+        - tests/loom_prod_activation.rs
+      depends_on: [P509, P510, P511]
+    - id: P518
+      name: Add migration, backup, restore, GC, and compaction tests
+      outputs:
+        - tests/apfsc_prod_migrations.rs
+        - tests/apfsc_prod_backup_restore.rs
+        - tests/apfsc_prod_retention_gc.rs
+        - tests/apfsc_prod_compaction.rs
+      depends_on: [P507, P508]
+    - id: P519
+      name: Add daemon, control API, crash-resume, and release-qualification end-to-end tests
+      outputs:
+        - tests/apfsc_prod_e2e_daemon.rs
+        - tests/apfsc_prod_e2e_crash_resume.rs
+        - tests/apfsc_prod_release_verify.rs
+        - tests/apfsc_prod_e2e_release_qual.rs
+      depends_on: [P506, P510, P514, P516]
+    - id: P520
+      name: Add fuzz targets and nightly fuzz wiring
+      outputs:
+        - fuzz/fuzz_targets/manifest_parse.rs
+        - fuzz/fuzz_targets/scir_verify.rs
+        - fuzz/fuzz_targets/bridge_parse.rs
+        - fuzz/fuzz_targets/archive_read.rs
+        - fuzz/fuzz_targets/control_api_parse.rs
+      depends_on: [P503, P509, P515]
+    - id: P521
+      name: Add performance, soak, and security qualification suites
+      outputs:
+        - evals/suites/prod_perf.yaml
+        - evals/suites/prod_soak.yaml
+        - evals/suites/prod_security.yaml
+        - ops/runbooks/daily_ops.md
+        - ops/runbooks/recovery.md
+        - ops/runbooks/backup_restore.md
+        - ops/runbooks/release.md
+        - ops/runbooks/rollback.md
+        - ops/runbooks/incident_response.md
+        - ops/runbooks/challenge_rotation.md
+      depends_on: [P514, P515]
+    - id: P522
+      name: Wire release-state transitions, audit requirements, and rollback commands into daemon
+      outputs:
+        - src/apfsc/prod/service.rs
+        - src/apfsc/prod/release_manifest.rs
+        - src/bin/apfscctl.rs
+      depends_on: [P509, P511, P512, P513, P521]
+    - id: P523
+      name: Add production-readiness documentation and top-level implementation notes
+      outputs:
+        - ops/runbooks/bootstrap.md
+        - docs/apfsc_production_model.md
+      depends_on: [P521, P522]
+  completion_criteria:
+    - cargo_test_and_property_and_loom_pass: true
+    - apfscd_runs_under_launchd: true
+    - local_authenticated_control_mutations_work: true
+    - crash_resume_recovers_without_ambiguous_activation: true
+    - backup_restore_roundtrip_verifies: true
+    - gc_never_deletes_reachable_objects: true
+    - migration_preserves_goldens: true
+    - release_bundle_contains_manifest_sbom_provenance_signature: true
+    - release_verify_command_passes: true
+    - nightly_qualification_emits_green_report: true
+    - release_qualification_emits_green_report: true
+    - seventy_two_hour_soak_passes: true
+    - judged_qualification_runs_have_zero_pageouts: true
+    - audit_chain_survives_restarts: true
+    - operator_runbooks_present_and_validated: true

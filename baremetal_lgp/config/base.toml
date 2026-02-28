@@ -1,0 +1,18 @@
+[paths]
+root = ".apfsc"
+artifacts = "artifacts"
+archives = "archives"
+backups = "backups"
+control_db = "control/control.db"
+control_socket = "run/apfscd.sock"
+metrics_bind = "127.0.0.1:9464"
+
+[auth]
+enable_control_socket_tokens = true
+token_file = "secrets/control_tokens.json"
+
+[release]
+require_signed_artifacts = true
+require_sbom = true
+require_provenance = true
+require_green_release_qual = true

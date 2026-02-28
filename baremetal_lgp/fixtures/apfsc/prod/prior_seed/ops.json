@@ -1,0 +1,9 @@
+{
+  "ops": [
+    "lag_1",
+    "lag_2",
+    "rolling_hash_2",
+    "run_length_bucket",
+    "simple_scan_small"
+  ]
+}

@@ -1,0 +1,2 @@
+{"candidate_or_program_fingerprint":"prod_seed_a","op_count":12,"feature_dim":64,"scan_hidden_dim":32,"window_len":256,"peak_rss_bytes":100000000,"wall_ms":11}
+{"candidate_or_program_fingerprint":"prod_seed_b","op_count":18,"feature_dim":96,"scan_hidden_dim":48,"window_len":256,"peak_rss_bytes":130000000,"wall_ms":16}

@@ -1,0 +1,4 @@
+name: prod_security
+profile: fixture_ci
+command: cargo test -q
+expected: pass

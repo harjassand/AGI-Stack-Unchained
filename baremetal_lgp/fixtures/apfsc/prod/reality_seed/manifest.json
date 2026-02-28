@@ -1,0 +1,19 @@
+{
+  "pack_kind": "Reality",
+  "pack_hash": "",
+  "protocol_version": "apfsc-production-ready-v1",
+  "created_unix_s": 1735689600,
+  "family_id": "F_PROD",
+  "provenance": {
+    "source_name": "prod_reality_seed",
+    "source_type": "synthetic",
+    "attestation": null,
+    "notes": "production fixture reality seed"
+  },
+  "payload_hashes": [],
+  "meta": {
+    "family_kind": "det_micro",
+    "role": "Base",
+    "variant_id": "prod_base"
+  }
+}

@@ -1,0 +1,4 @@
+name: prod_soak
+profile: fixture_ci
+command: cargo test -q
+expected: pass

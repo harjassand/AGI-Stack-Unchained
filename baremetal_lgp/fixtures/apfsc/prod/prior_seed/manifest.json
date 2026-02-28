@@ -1,0 +1,17 @@
+{
+  "pack_kind": "Prior",
+  "pack_hash": "",
+  "protocol_version": "apfsc-production-ready-v1",
+  "created_unix_s": 1735689600,
+  "family_id": null,
+  "provenance": {
+    "source_name": "prod_prior_seed",
+    "source_type": "registry",
+    "attestation": null,
+    "notes": "production fixture prior seed"
+  },
+  "payload_hashes": [],
+  "meta": {
+    "description": "prod prior pack"
+  }
+}

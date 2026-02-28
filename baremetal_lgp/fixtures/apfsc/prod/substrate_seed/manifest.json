@@ -1,0 +1,17 @@
+{
+  "pack_kind": "Substrate",
+  "pack_hash": "",
+  "protocol_version": "apfsc-production-ready-v1",
+  "created_unix_s": 1735689600,
+  "family_id": null,
+  "provenance": {
+    "source_name": "prod_substrate_seed",
+    "source_type": "trace",
+    "attestation": null,
+    "notes": "production fixture substrate seed"
+  },
+  "payload_hashes": [],
+  "meta": {
+    "description": "prod substrate traces"
+  }
+}

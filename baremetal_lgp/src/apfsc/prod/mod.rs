@@ -1,0 +1,28 @@
+#![allow(dead_code)]
+
+pub mod audit;
+pub mod auth;
+pub mod backup;
+pub mod buildinfo;
+pub mod compaction;
+pub mod control_api;
+pub mod control_db;
+pub mod daemon;
+pub mod diagnostics;
+pub mod gc;
+pub mod health;
+pub mod install;
+pub mod jobs;
+pub mod journal;
+pub mod lease;
+pub mod migration;
+pub mod preflight;
+pub mod profiles;
+pub mod recovery;
+pub mod release_manifest;
+pub mod restore;
+pub mod retention;
+pub mod secrets;
+pub mod service;
+pub mod telemetry;
+pub mod versioning;

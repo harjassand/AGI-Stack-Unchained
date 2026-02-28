@@ -1,0 +1,8 @@
+[paths]
+root = ".apfsc-release-qual"
+
+[release]
+require_signed_artifacts = true
+require_sbom = true
+require_provenance = true
+require_green_release_qual = true

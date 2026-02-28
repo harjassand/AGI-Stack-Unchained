@@ -1,0 +1,4 @@
+name: phase2_constellation
+profile: fixture_ci
+command: cargo test -q
+expected: pass

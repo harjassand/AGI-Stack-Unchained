@@ -10,6 +10,7 @@ pub struct TrapInfo {
 }
 
 pub type JitEntry = unsafe extern "C" fn(*mut c_void);
+pub type JitEntryI32 = unsafe extern "C" fn(*mut c_void) -> i32;
 
 unsafe extern "C" {
     pub fn jit_trap_thread_init();
@@ -17,6 +18,13 @@ unsafe extern "C" {
         entry: JitEntry,
         runtime_state_ptr: *mut c_void,
         out_trap: *mut TrapInfo,
+    ) -> libc::c_int;
+    pub fn run_jit_candidate_i32_on_stack(
+        entry: JitEntryI32,
+        runtime_state_ptr: *mut c_void,
+        stack_top: *mut c_void,
+        out_trap: *mut TrapInfo,
+        out_status: *mut i32,
     ) -> libc::c_int;
 
     pub fn sniper_start_once(max_stall_us: u64);

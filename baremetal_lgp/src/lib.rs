@@ -6,6 +6,7 @@ pub mod types;
 
 pub mod accel;
 pub mod agent_b;
+pub mod apf3;
 pub mod cfg;
 pub mod jit;
 pub mod jit2;

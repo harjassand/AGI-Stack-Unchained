@@ -75,6 +75,7 @@ pub fn seed_init(
             created_unix_s: 0,
             notes: Some("deterministic phase1 seed incumbent".to_string()),
             phase2: None,
+            phase3: None,
         },
     };
 

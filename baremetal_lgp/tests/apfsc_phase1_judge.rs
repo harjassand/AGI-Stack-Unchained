@@ -145,6 +145,10 @@ fn judge_requires_canary_for_a_class() {
     cfg.judge.anchor_max_regress_bits = 1_000_000.0;
 
     let bridge = WarmRefinementPack {
+        observable_map_hash: None,
+        state_map_hash: None,
+        tolerance_spec_hash: None,
+        protected_head_ids: Vec::new(),
         protected_families: vec!["F0".to_string()],
         max_anchor_regress_bits: 0.0,
         max_public_regress_bits: 0.0,

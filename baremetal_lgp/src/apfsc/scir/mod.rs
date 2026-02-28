@@ -1,4 +1,9 @@
 pub mod ast;
+pub mod backend_equiv;
+pub mod canonical;
+pub mod egraph;
+pub mod graph_backend;
 pub mod interp;
+pub mod lower;
 pub mod rewrite;
 pub mod verify;

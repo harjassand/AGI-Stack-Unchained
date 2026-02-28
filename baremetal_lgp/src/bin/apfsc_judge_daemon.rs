@@ -5,9 +5,11 @@ use baremetal_lgp::apfsc::bank::{load_bank, WindowBank};
 use baremetal_lgp::apfsc::candidate::{load_active_candidate, load_candidate};
 use baremetal_lgp::apfsc::config::Phase1Config;
 use baremetal_lgp::apfsc::constellation::resolve_constellation;
+use baremetal_lgp::apfsc::fresh_contact::recent_family_gain;
 use baremetal_lgp::apfsc::judge::{
-    evaluate_phase2_candidate, judge_phase2_candidate, run_pending_batch,
+    evaluate_phase2_candidate, judge_phase2_candidate, judge_phase3_candidate, run_pending_batch,
 };
+use baremetal_lgp::apfsc::types::{ColdBoundaryPack, PromotionClass};
 use clap::Parser;
 
 #[derive(Debug, Parser)]
@@ -34,10 +36,10 @@ fn main() -> Result<(), String> {
         Phase1Config::default()
     };
 
-    if args.profile == "phase2" {
+    if args.profile == "phase2" || args.profile == "phase3" {
         let candidate_hash = args
             .candidate
-            .ok_or_else(|| "--candidate is required for phase2".to_string())?;
+            .ok_or_else(|| "--candidate is required for phase2/phase3".to_string())?;
         let incumbent_hash = if let Some(v) = args.incumbent {
             v
         } else {
@@ -52,15 +54,90 @@ fn main() -> Result<(), String> {
 
         let evals = evaluate_phase2_candidate(&args.root, &candidate, &incumbent, &constellation)
             .map_err(|e| e.to_string())?;
-        let receipt = judge_phase2_candidate(
-            &args.root,
-            &candidate,
-            &incumbent,
-            &constellation,
-            &cfg,
-            &evals,
-        )
-        .map_err(|e| e.to_string())?;
+        let receipt = if args.profile == "phase3" {
+            let (bridge, recent) = match candidate.manifest.promotion_class {
+                PromotionClass::A | PromotionClass::PWarm => {
+                    let bridge = candidate
+                        .bridge_pack
+                        .as_ref()
+                        .and_then(|p| {
+                            baremetal_lgp::apfsc::bridge::evaluate_warm_bridge(
+                                &args.root,
+                                &candidate,
+                                &incumbent,
+                                &constellation,
+                                p,
+                            )
+                            .ok()
+                        });
+                    let recent = if matches!(candidate.manifest.promotion_class, PromotionClass::PWarm)
+                    {
+                        evals.holdout_transfer.as_ref().map(|t| {
+                            recent_family_gain(
+                                &candidate.manifest.candidate_hash,
+                                &incumbent.manifest.candidate_hash,
+                                &t.receipt,
+                                &evals.holdout_static.receipt,
+                                &constellation.fresh_families,
+                                0,
+                                cfg.phase3.promotion.p_warm_min_recent_family_gain_bpb,
+                            )
+                        })
+                    } else {
+                        None
+                    };
+                    (bridge, recent)
+                }
+                PromotionClass::PCold => {
+                    let cold_pack = ColdBoundaryPack {
+                        protected_panels: vec!["anchor".to_string()],
+                        max_anchor_regret_bpb: cfg.phase3.promotion.p_cold_max_anchor_regret_bpb,
+                        max_error_streak: cfg.phase3.promotion.p_cold_max_error_streak,
+                        required_transfer_gain_bpb: cfg.phase3.promotion.p_cold_min_transfer_delta_bpb,
+                        required_recent_family_gain_bpb: cfg
+                            .phase3
+                            .promotion
+                            .p_cold_min_recent_family_gain_bpb,
+                        mandatory_canary_windows: cfg.phase3.canary.cold_windows,
+                        rollback_target_hash: incumbent.manifest.candidate_hash.clone(),
+                    };
+                    match baremetal_lgp::apfsc::bridge::evaluate_cold_boundary(
+                        &args.root,
+                        &candidate,
+                        &incumbent,
+                        &constellation,
+                        &cold_pack,
+                        &constellation.fresh_families,
+                        0,
+                    ) {
+                        Ok((b, r)) => (Some(b), Some(r)),
+                        Err(_) => (None, None),
+                    }
+                }
+                _ => (None, None),
+            };
+            judge_phase3_candidate(
+                &args.root,
+                &candidate,
+                &incumbent,
+                &constellation,
+                &cfg,
+                &evals,
+                bridge.as_ref(),
+                recent.as_ref(),
+            )
+            .map_err(|e| e.to_string())?
+        } else {
+            judge_phase2_candidate(
+                &args.root,
+                &candidate,
+                &incumbent,
+                &constellation,
+                &cfg,
+                &evals,
+            )
+            .map_err(|e| e.to_string())?
+        };
 
         baremetal_lgp::apfsc::artifacts::write_json_atomic(
             &baremetal_lgp::apfsc::artifacts::receipt_path(

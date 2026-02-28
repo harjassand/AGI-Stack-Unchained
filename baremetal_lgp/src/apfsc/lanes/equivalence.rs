@@ -149,3 +149,14 @@ pub fn witness_preserves_output(
     }
     Ok(max_abs <= 1e-6)
 }
+
+pub fn extract_phase3_equivalents(
+    program: &crate::apfsc::types::ScirV2Program,
+    cfg: &Phase1Config,
+) -> Vec<crate::apfsc::types::ScirV2Program> {
+    crate::apfsc::scir::egraph::bounded_extract_equivalents(
+        program,
+        cfg.phase3.limits.max_egraph_nodes,
+        cfg.phase3.limits.max_egraph_extractions,
+    )
+}

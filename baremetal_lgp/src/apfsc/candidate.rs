@@ -24,6 +24,8 @@ pub struct BuildMeta {
     pub notes: Option<String>,
     #[serde(default)]
     pub phase2: Option<types::CandidateBuildMeta>,
+    #[serde(default)]
+    pub phase3: Option<types::CandidatePhase3Meta>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -261,7 +263,7 @@ pub fn default_resource_envelope() -> ResourceEnvelope {
         max_wall_ms: 60_000,
         peak_rss_limit_bytes: crate::apfsc::constants::RSS_HARD_LIMIT_BYTES,
         max_mapped_bytes: crate::apfsc::constants::MAX_CONCURRENT_MAPPED_BYTES,
-        backend: types::BackendKind::Tier0Cpu,
+        backend: types::BackendKind::InterpTier0,
         batch_shape: (1, 1),
     }
 }
@@ -296,6 +298,7 @@ pub fn clone_with_mutation(
             created_unix_s: 0,
             notes: None,
             phase2: None,
+            phase3: None,
         },
     };
     build_candidate(input)
@@ -312,6 +315,14 @@ pub fn set_phase2_build_meta(
         source_lane: source_lane.to_string(),
         phase2_profile: phase2_profile.to_string(),
     });
+    rehash_candidate(bundle)
+}
+
+pub fn set_phase3_build_meta(
+    bundle: &mut CandidateBundle,
+    meta: types::CandidatePhase3Meta,
+) -> Result<()> {
+    bundle.build_meta.phase3 = Some(meta);
     rehash_candidate(bundle)
 }
 

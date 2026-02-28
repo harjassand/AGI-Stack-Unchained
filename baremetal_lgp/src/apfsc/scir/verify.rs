@@ -2,7 +2,7 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use crate::apfsc::errors::{ApfscError, Result};
 use crate::apfsc::scir::ast::{ScirOp, ScirProgram};
-use crate::apfsc::types::ResourceEnvelope;
+use crate::apfsc::types::{ResourceEnvelope, ScirV2Program};
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct VerifySummary {
@@ -245,4 +245,39 @@ fn op_costs(op: &ScirOp, out_dim: u32) -> (&'static str, u64, u64) {
         ScirOp::ReduceMean => ("ReduceMean", 0, 4),
         ScirOp::ReduceSum => ("ReduceSum", 0, 4),
     }
+}
+
+pub fn verify_scir_v2(program: &ScirV2Program) -> Result<()> {
+    let core_ops: u32 = program.core_blocks.iter().map(|b| b.ops.len() as u32).sum();
+    if core_ops > crate::apfsc::constants::MAX_SCIR_CORE_OPS {
+        return Err(ApfscError::Validation(format!(
+            "core op count {} exceeds {}",
+            core_ops,
+            crate::apfsc::constants::MAX_SCIR_CORE_OPS
+        )));
+    }
+    if program.macro_calls.len() as u32 > crate::apfsc::constants::MAX_MACRO_CALLS_PER_PROGRAM {
+        return Err(ApfscError::Validation(format!(
+            "macro call count {} exceeds {}",
+            program.macro_calls.len(),
+            crate::apfsc::constants::MAX_MACRO_CALLS_PER_PROGRAM
+        )));
+    }
+    if program.state_schema.bytes > crate::apfsc::constants::STATE_TILE_BYTES_MAX {
+        return Err(ApfscError::Validation(format!(
+            "state schema bytes {} exceed {}",
+            program.state_schema.bytes,
+            crate::apfsc::constants::STATE_TILE_BYTES_MAX
+        )));
+    }
+    for b in &program.core_blocks {
+        for op in &b.ops {
+            if op.op == "MacroCall" || op.op == "RecursiveCall" {
+                return Err(ApfscError::Validation(
+                    "recursive macro form is forbidden in SCIR-v2".to_string(),
+                ));
+            }
+        }
+    }
+    Ok(())
 }

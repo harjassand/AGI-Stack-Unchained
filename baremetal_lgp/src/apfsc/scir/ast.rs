@@ -1,5 +1,26 @@
 use serde::{Deserialize, Serialize};
 
+// Phase 3 SCIR-v2 program surface is owned by `types.rs`; we re-export the
+// model here so the `scir::ast` module remains the single language entrypoint.
+pub use crate::apfsc::types::{
+    AdaptHook, BoundSpec, ChannelDef, CoreBlock, CoreOp, MacroCall, ReadoutDef, ScirV2Program,
+    ScheduleDef, StateSchema,
+};
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub enum ScirV2Primitive {
+    LinearMix,
+    AffineBias,
+    ElementwiseGate,
+    StateUpdate,
+    ScanReduce,
+    SlotRead,
+    SlotWrite,
+    EventMask,
+    ResetIf,
+    HeadReadout,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub enum ScirOp {
     ByteEmbedding {

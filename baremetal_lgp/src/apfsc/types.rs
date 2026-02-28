@@ -13,6 +13,32 @@ pub type SnapshotId = String;
 pub enum BackendKind {
     Tier0Cpu,
     Tier1Stub,
+    InterpTier0,
+    GraphBackend,
+    NativeBlockDisabled,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+pub enum SchedulerClass {
+    SerialScan,
+    BlockScan,
+    EventSparse,
+    TwoPassMemory,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+pub enum MemoryLawKind {
+    FlatState,
+    RingSlots,
+    SelectiveState,
+    AccumulatorBank,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+pub enum LearningLawKind {
+    HeadOnlyAdaGrad,
+    ResidualAdaGrad,
+    FastWeightDelta,
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
@@ -208,8 +234,10 @@ pub struct FamilyBankManifest {
 pub enum PromotionClass {
     S,
     A,
-    PWarmDisabled,
-    PColdDisabled,
+    #[serde(alias = "PWarmDisabled")]
+    PWarm,
+    #[serde(alias = "PColdDisabled")]
+    PCold,
     GDisabled,
 }
 
@@ -248,6 +276,24 @@ pub struct CandidateBuildMeta {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct Phase3BuildMeta {
+    pub target_families: Vec<String>,
+    pub source_lane: String,
+    pub phase3_profile: String,
+    pub macro_registry_hash: String,
+    pub paradigm_signature_hash: String,
+    pub proposed_class: PromotionClass,
+    pub fresh_target_families: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct CandidatePhase3Meta {
+    pub build: Phase3BuildMeta,
+    pub backend_plan: BackendPlan,
+    pub bridge_kind: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct StatePack {
     pub core_weights: Vec<f32>,
     pub resid_weights: Vec<f32>,
@@ -274,6 +320,14 @@ pub struct LinearHead {
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct WarmRefinementPack {
+    #[serde(default)]
+    pub observable_map_hash: Option<String>,
+    #[serde(default)]
+    pub state_map_hash: Option<String>,
+    #[serde(default)]
+    pub tolerance_spec_hash: Option<String>,
+    #[serde(default)]
+    pub protected_head_ids: Vec<String>,
     pub protected_families: Vec<FamilyId>,
     pub max_anchor_regress_bits: f64,
     pub max_public_regress_bits: f64,
@@ -281,10 +335,33 @@ pub struct WarmRefinementPack {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct ColdBoundaryPack {
+    pub protected_panels: Vec<String>,
+    pub max_anchor_regret_bpb: f64,
+    pub max_error_streak: u32,
+    pub required_transfer_gain_bpb: f64,
+    pub required_recent_family_gain_bpb: f64,
+    pub mandatory_canary_windows: u32,
+    pub rollback_target_hash: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub enum BridgePack {
+    Warm(WarmRefinementPack),
+    Cold(ColdBoundaryPack),
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct SchedulePack {
     pub backend: BackendKind,
     pub tile_bytes: u64,
     pub segment_bytes: u64,
+    #[serde(default)]
+    pub scheduler_class: Option<SchedulerClass>,
+    #[serde(default)]
+    pub memory_law: Option<MemoryLawKind>,
+    #[serde(default)]
+    pub learning_law: Option<LearningLawKind>,
     pub predicted_cost: Option<PredictedCost>,
 }
 
@@ -371,9 +448,18 @@ pub struct ConstellationManifest {
     pub constellation_id: ConstellationId,
     pub snapshot_hash: SnapshotId,
     pub family_specs: Vec<FamilySpec>,
+    #[serde(default)]
+    pub fresh_families: Vec<FamilyFreshnessMeta>,
     pub normalization: NormalizationPolicy,
     pub protocol_version: String,
     pub manifest_hash: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct FamilyFreshnessMeta {
+    pub family_id: String,
+    pub admitted_epoch: u64,
+    pub fresh_until_epoch: u64,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -451,6 +537,15 @@ pub enum JudgeRejectReason {
     ConstellationMismatch,
     MissingFamilyRole,
     TransferDeltaBudgetExceeded,
+    ParadigmClassMismatch,
+    MacroLoweringFail,
+    BackendEquivalenceFail,
+    WarmRefinementFail,
+    ColdBoundaryFail,
+    RecentFamilyGainFail,
+    RollbackTargetMissing,
+    UnsupportedBackendPlan,
+    PColdMarginInsufficient,
 }
 
 impl JudgeRejectReason {
@@ -465,6 +560,8 @@ pub struct PromotionReceipt {
     pub incumbent_hash: CandidateId,
     pub decision: JudgeDecision,
     pub reason: String,
+    #[serde(default)]
+    pub promotion_class: Option<PromotionClass>,
 
     // Phase-1 fields kept for backward compatibility.
     pub public_delta_bits: f64,
@@ -482,6 +579,12 @@ pub struct PromotionReceipt {
 
     pub canary_required: bool,
     pub canary_result: Option<String>,
+    #[serde(default)]
+    pub recent_family_receipt_hash: Option<String>,
+    #[serde(default)]
+    pub bridge_receipt_hash: Option<String>,
+    #[serde(default)]
+    pub rollback_target_hash: Option<String>,
     pub snapshot_hash: SnapshotId,
     #[serde(default)]
     pub protocol_version: String,
@@ -596,4 +699,203 @@ pub struct RobustnessFamilyTrace {
     pub incumbent_bpb: f64,
     pub delta_bpb: f64,
     pub replay_hash: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct BackendPlan {
+    pub primary_backend: BackendKind,
+    pub public_backend: BackendKind,
+    pub canary_backend: BackendKind,
+    pub holdout_backend: BackendKind,
+    pub graph_eligibility_hash: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct LoweringReceipt {
+    pub candidate_hash: String,
+    pub scir_hash: String,
+    pub canonical_hash: String,
+    pub lowered_hash: String,
+    pub macro_registry_hash: String,
+    pub core_op_count: u32,
+    pub state_bytes_estimate: u64,
+    pub graph_backend_eligible: bool,
+    pub replay_hash: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct BackendEquivReceipt {
+    pub candidate_hash: String,
+    pub canonical_hash: String,
+    pub lowered_hash: String,
+    pub backend_kind: BackendKind,
+    pub witness_exact_match: bool,
+    pub public_exact_match: bool,
+    pub max_abs_mass_diff_q16: u32,
+    pub eligible: bool,
+    pub reason: String,
+    pub snapshot_hash: String,
+    pub constellation_id: String,
+    pub protocol_version: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub enum MacroOriginKind {
+    SeedPrior,
+    InducedFromArchive,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct PortSpec {
+    pub name: String,
+    pub width: u32,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct CoreOp {
+    pub op: String,
+    pub args: BTreeMap<String, String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct MacroDef {
+    pub macro_id: String,
+    pub version: u32,
+    pub origin_kind: MacroOriginKind,
+    pub origin_hash: String,
+    pub input_ports: Vec<PortSpec>,
+    pub output_ports: Vec<PortSpec>,
+    pub local_state_bytes: u64,
+    pub expansion_hash: String,
+    pub expansion_core: Vec<CoreOp>,
+    pub max_expansion_ops: u32,
+    pub canonical_hash: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct MacroCall {
+    pub call_id: String,
+    pub macro_id: String,
+    pub arg_bindings: BTreeMap<String, String>,
+    pub instance_seed: u64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct MacroRegistry {
+    pub registry_id: String,
+    pub snapshot_hash: String,
+    pub macro_defs: Vec<MacroDef>,
+    pub protocol_version: String,
+    pub manifest_hash: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct MacroInductionReceipt {
+    pub macro_id: String,
+    pub support_count: u32,
+    pub source_fragment_hashes: Vec<String>,
+    pub mean_public_gain_bpb: f64,
+    pub op_count_reduction_ratio: f64,
+    pub accepted: bool,
+    pub reason: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct Phase3HeadPack {
+    pub native_head_hash: String,
+    pub compat_head_hash: Option<String>,
+    pub shadow_head_hashes: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct StateSchema {
+    pub schema_id: String,
+    pub bytes: u64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct ChannelDef {
+    pub id: String,
+    pub width: u32,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct CoreBlock {
+    pub id: String,
+    pub ops: Vec<CoreOp>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct ScheduleDef {
+    pub scheduler_class: SchedulerClass,
+    pub backend_hint: BackendKind,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct ReadoutDef {
+    pub id: String,
+    pub head: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct AdaptHook {
+    pub id: String,
+    pub target: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct BoundSpec {
+    pub max_core_ops: u32,
+    pub max_state_bytes: u64,
+    pub max_macro_calls: u32,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct ScirV2Program {
+    pub version: String,
+    pub state_schema: StateSchema,
+    pub channels: Vec<ChannelDef>,
+    pub core_blocks: Vec<CoreBlock>,
+    pub macro_calls: Vec<MacroCall>,
+    pub schedule: ScheduleDef,
+    pub readouts: Vec<ReadoutDef>,
+    pub adapt_hooks: Vec<AdaptHook>,
+    pub bounds: BoundSpec,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct ParadigmSignature {
+    pub primitive_family_hash: String,
+    pub scheduler_class: SchedulerClass,
+    pub memory_law: MemoryLawKind,
+    pub learning_law: LearningLawKind,
+    pub state_schema_hash: String,
+    pub native_head_semantics_hash: String,
+    pub canonical_core_hash: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct RecentFamilyGainReceipt {
+    pub candidate_hash: String,
+    pub incumbent_hash: String,
+    pub recent_family_ids: Vec<String>,
+    pub family_gain_bpb: BTreeMap<String, f64>,
+    pub max_recent_family_gain_bpb: f64,
+    pub pass: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct BridgeReceipt {
+    pub candidate_hash: String,
+    pub incumbent_hash: String,
+    pub promotion_class: PromotionClass,
+    pub bridge_kind: String,
+    pub pass: bool,
+    pub reason: String,
+    pub anchor_regret_bpb: Option<f64>,
+    pub max_error_streak: Option<u32>,
+    pub canary_windows_required: u32,
+    pub snapshot_hash: String,
+    pub constellation_id: String,
+    pub protocol_version: String,
 }

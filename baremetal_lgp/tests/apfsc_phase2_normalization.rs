@@ -68,6 +68,7 @@ fn mock_constellation() -> ConstellationManifest {
         constellation_id: "cid".to_string(),
         snapshot_hash: "snap".to_string(),
         family_specs: vec![fam_a, fam_b],
+        fresh_families: Vec::new(),
         normalization: NormalizationPolicy {
             codelen_ref_bytes: 4096,
             transfer_ref_bytes: 4096,

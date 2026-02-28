@@ -153,6 +153,10 @@ pub fn materialize_splice_candidates(
             .extend(vec![0.0; item.sidecar_dim as usize]);
 
         let bridge = WarmRefinementPack {
+            observable_map_hash: None,
+            state_map_hash: None,
+            tolerance_spec_hash: None,
+            protected_head_ids: Vec::new(),
             protected_families: vec!["det_micro".to_string(), "text_code".to_string()],
             max_anchor_regress_bits: 0.0,
             max_public_regress_bits: 0.0,
@@ -173,6 +177,31 @@ pub fn materialize_splice_candidates(
         )?;
         out.push(cand);
     }
+    Ok(out)
+}
+
+pub fn phase3_macro_aware_candidates(
+    active: &CandidateBundle,
+    cfg: &Phase1Config,
+) -> Result<Vec<CandidateBundle>> {
+    let mut out = Vec::new();
+    let mut schedule = active.schedule_pack.clone();
+    schedule.scheduler_class = Some(crate::apfsc::types::SchedulerClass::BlockScan);
+    schedule.memory_law = Some(crate::apfsc::types::MemoryLawKind::RingSlots);
+    schedule.learning_law = Some(crate::apfsc::types::LearningLawKind::ResidualAdaGrad);
+    out.push(clone_with_mutation(
+        active,
+        "incubator",
+        "phase3_macro_aware",
+        PromotionClass::PWarm,
+        active.arch_program.clone(),
+        active.head_pack.clone(),
+        active.state_pack.clone(),
+        schedule,
+        active.bridge_pack.clone(),
+        BTreeMap::new(),
+    )?);
+    out.truncate(cfg.lanes.max_incubator_candidates.max(1));
     Ok(out)
 }
 

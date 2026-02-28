@@ -2,7 +2,7 @@ use std::fs;
 use std::path::PathBuf;
 
 use baremetal_lgp::apfsc::bank::{load_bank, WindowBank};
-use baremetal_lgp::apfsc::canary::drain_queue;
+use baremetal_lgp::apfsc::canary::{drain_queue, run_phase3_canary};
 use baremetal_lgp::apfsc::config::Phase1Config;
 use clap::Parser;
 
@@ -12,6 +12,14 @@ struct Args {
     root: PathBuf,
     #[arg(long)]
     config: Option<PathBuf>,
+    #[arg(long, default_value = "phase1")]
+    profile: String,
+    #[arg(long)]
+    candidate: Option<String>,
+    #[arg(long)]
+    incumbent: Option<String>,
+    #[arg(long)]
+    constellation: Option<String>,
 }
 
 fn main() -> Result<(), String> {
@@ -21,13 +29,44 @@ fn main() -> Result<(), String> {
     } else {
         Phase1Config::default()
     };
-    let banks = load_all_banks(&args.root).map_err(|e| e.to_string())?;
-    let report = drain_queue(&args.root, &banks, &cfg).map_err(|e| e.to_string())?;
-    println!(
-        "canary evaluated={} activated={}",
-        report.evaluated.len(),
-        report.activated.unwrap_or_else(|| "none".to_string())
-    );
+    if args.profile == "phase3" {
+        let candidate = args
+            .candidate
+            .ok_or_else(|| "--candidate is required for --profile phase3".to_string())?;
+        let incumbent = if let Some(v) = args.incumbent {
+            v
+        } else {
+            baremetal_lgp::apfsc::artifacts::read_pointer(&args.root, "active_candidate")
+                .map_err(|e| e.to_string())?
+        };
+        let constellation = if let Some(v) = args.constellation {
+            v
+        } else {
+            baremetal_lgp::apfsc::artifacts::read_pointer(&args.root, "active_constellation")
+                .map_err(|e| e.to_string())?
+        };
+        let receipt = run_phase3_canary(
+            &args.root,
+            &candidate,
+            &incumbent,
+            &constellation,
+            cfg.phase3.canary.warm_windows,
+            &cfg,
+        )
+        .map_err(|e| e.to_string())?;
+        println!(
+            "canary pass={} reason={} candidate={}",
+            receipt.pass, receipt.reason, receipt.candidate_hash
+        );
+    } else {
+        let banks = load_all_banks(&args.root).map_err(|e| e.to_string())?;
+        let report = drain_queue(&args.root, &banks, &cfg).map_err(|e| e.to_string())?;
+        println!(
+            "canary evaluated={} activated={}",
+            report.evaluated.len(),
+            report.activated.unwrap_or_else(|| "none".to_string())
+        );
+    }
     Ok(())
 }
 

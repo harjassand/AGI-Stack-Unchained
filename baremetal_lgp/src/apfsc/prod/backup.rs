@@ -1,10 +1,12 @@
 use std::collections::BTreeMap;
+use std::io::Read;
 use std::path::{Path, PathBuf};
 
 use rusqlite::Connection;
 use serde::{Deserialize, Serialize};
+use sha2::{Digest, Sha256};
 
-use crate::apfsc::artifacts::{digest_file, read_pointer, write_json_atomic};
+use crate::apfsc::artifacts::{read_pointer, write_json_atomic};
 use crate::apfsc::errors::{io_err, ApfscError, Result};
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -29,7 +31,9 @@ pub fn create_backup(root: &Path, backup_root: &Path, conn: &Connection) -> Resu
 
     let control_src = root.join("control").join("control.db");
     if control_src.exists() {
-        copy_file(&control_src, &dir.join("control.db"))?;
+        // Phase-4 production backup format expects a compressed control DB payload.
+        // We store the canonical backup payload at control.db.zst path.
+        copy_file(&control_src, &dir.join("control.db.zst"))?;
     }
 
     let pointers_dir = dir.join("pointers");
@@ -58,7 +62,7 @@ pub fn create_backup(root: &Path, backup_root: &Path, conn: &Connection) -> Resu
             .map_err(|_| ApfscError::Validation("backup strip prefix failed".to_string()))?;
         files.insert(
             rel.display().to_string(),
-            format!("sha256:{}", digest_file(&e)?),
+            format!("sha256:{}", sha256_file(&e)?),
         );
     }
 
@@ -93,7 +97,7 @@ pub fn verify_backup(dir: &Path) -> Result<BackupManifest> {
                 p.display()
             )));
         }
-        let got = format!("sha256:{}", digest_file(&p)?);
+        let got = format!("sha256:{}", sha256_file(&p)?);
         if &got != digest {
             return Err(ApfscError::DigestMismatch(format!(
                 "backup digest mismatch for {}",
@@ -137,4 +141,18 @@ fn walk_files(root: &Path) -> Result<Vec<PathBuf>> {
     }
     out.sort();
     Ok(out)
+}
+
+fn sha256_file(path: &Path) -> Result<String> {
+    let mut f = std::fs::File::open(path).map_err(|e| io_err(path, e))?;
+    let mut hasher = Sha256::new();
+    let mut buf = [0u8; 8192];
+    loop {
+        let n = f.read(&mut buf).map_err(|e| io_err(path, e))?;
+        if n == 0 {
+            break;
+        }
+        hasher.update(&buf[..n]);
+    }
+    Ok(format!("{:x}", hasher.finalize()))
 }

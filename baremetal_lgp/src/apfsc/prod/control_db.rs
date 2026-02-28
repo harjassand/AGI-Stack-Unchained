@@ -15,6 +15,7 @@ pub fn open_control_db(path: &Path) -> Result<Connection> {
     conn.pragma_update(None, "foreign_keys", "ON")
         .map_err(|e| ApfscError::Protocol(e.to_string()))?;
     init_schema(&conn)?;
+    verify_schema_checksums(&conn)?;
     Ok(conn)
 }
 
@@ -185,4 +186,24 @@ pub fn list_jobs_by_state(conn: &Connection, states: &[&str]) -> Result<Vec<(Str
         ));
     }
     Ok(out)
+}
+
+fn verify_schema_checksums(conn: &Connection) -> Result<()> {
+    let mut stmt = conn
+        .prepare("SELECT version, checksum FROM schema_migrations ORDER BY version")
+        .map_err(|e| ApfscError::Protocol(e.to_string()))?;
+    let rows = stmt
+        .query_map([], |r| Ok((r.get::<_, i64>(0)?, r.get::<_, String>(1)?)))
+        .map_err(|e| ApfscError::Protocol(e.to_string()))?;
+    for row in rows {
+        let (version, checksum) = row.map_err(|e| ApfscError::Protocol(e.to_string()))?;
+        let expected = format!("v{}", version);
+        if checksum != expected {
+            return Err(ApfscError::Validation(format!(
+                "schema checksum mismatch for version {}: {} != {}",
+                version, checksum, expected
+            )));
+        }
+    }
+    Ok(())
 }

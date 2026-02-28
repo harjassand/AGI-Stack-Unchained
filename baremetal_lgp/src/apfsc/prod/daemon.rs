@@ -20,6 +20,12 @@ pub fn serve(
         std::fs::create_dir_all(parent).map_err(|e| io_err(parent, e))?;
     }
     let listener = UnixListener::bind(socket_path).map_err(|e| io_err(socket_path, e))?;
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        std::fs::set_permissions(socket_path, std::fs::Permissions::from_mode(0o600))
+            .map_err(|e| io_err(socket_path, e))?;
+    }
     for stream in listener.incoming() {
         match stream {
             Ok(mut s) => {

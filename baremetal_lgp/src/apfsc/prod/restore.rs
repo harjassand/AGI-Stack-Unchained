@@ -26,7 +26,7 @@ pub fn restore_apply(backup_dir: &Path, target_root: &Path) -> Result<RestoreRep
             continue;
         }
         let src = backup_dir.join(rel);
-        let dst = target_root.join(rel);
+        let dst = map_restore_path(target_root, rel);
         if let Some(parent) = dst.parent() {
             std::fs::create_dir_all(parent).map_err(|e| io_err(parent, e))?;
         }
@@ -51,4 +51,11 @@ pub fn restore_apply(backup_dir: &Path, target_root: &Path) -> Result<RestoreRep
         mode: "apply".to_string(),
         restored_files: manifest.files.len(),
     })
+}
+
+fn map_restore_path(target_root: &Path, rel: &str) -> std::path::PathBuf {
+    match rel {
+        "control.db.zst" => target_root.join("control").join("control.db"),
+        _ => target_root.join(rel),
+    }
 }

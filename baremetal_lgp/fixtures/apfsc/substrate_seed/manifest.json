@@ -1,0 +1,17 @@
+{
+  "pack_kind": "Substrate",
+  "pack_hash": "",
+  "protocol_version": "apfsc-phase1-mvp-v1",
+  "created_unix_s": 1735689600,
+  "family_id": null,
+  "provenance": {
+    "source_name": "substrate_seed",
+    "source_type": "trace",
+    "attestation": null,
+    "notes": "runtime calibration traces"
+  },
+  "payload_hashes": [],
+  "meta": {
+    "description": "hardware trace seed"
+  }
+}

@@ -1,0 +1,162 @@
+phase1_mvp:
+  branch_name: feat/apfsc-phase1-mvp
+  constraints:
+    - keep_apf3_immutable: true
+    - judge_only_activation: true
+    - no_nativeblock_in_judged_path: true
+    - no_p_warm_or_p_cold: true
+    - single_node_only: true
+    - deterministic_execution: true
+  tasks:
+    - id: T01
+      name: Module skeleton and exports
+      outputs:
+        - src/apfsc/mod.rs
+        - src/lib.rs export
+      depends_on: []
+    - id: T02
+      name: Common types, constants, config, errors
+      outputs:
+        - src/apfsc/types.rs
+        - src/apfsc/constants.rs
+        - src/apfsc/config.rs
+        - src/apfsc/errors.rs
+      depends_on: [T01]
+    - id: T03
+      name: Artifact store and atomic pointer helpers
+      outputs:
+        - src/apfsc/artifacts.rs
+        - src/apfsc/protocol.rs
+      depends_on: [T02]
+    - id: T04
+      name: Ingress manifests and receipts
+      outputs:
+        - src/apfsc/ingress/manifest.rs
+        - src/apfsc/ingress/receipts.rs
+        - src/apfsc/ingress/mod.rs
+      depends_on: [T03]
+    - id: T05
+      name: RealityPack ingestion and WindowBank builder
+      outputs:
+        - src/apfsc/ingress/reality.rs
+        - src/apfsc/bank.rs
+        - src/bin/apfsc_ingest_reality.rs
+      depends_on: [T04]
+    - id: T06
+      name: PriorPack ingestion
+      outputs:
+        - src/apfsc/ingress/prior.rs
+        - src/bin/apfsc_ingest_prior.rs
+      depends_on: [T04]
+    - id: T07
+      name: SubstratePack ingestion and oracle cache
+      outputs:
+        - src/apfsc/ingress/substrate.rs
+        - src/apfsc/hardware_oracle.rs
+        - src/bin/apfsc_ingest_substrate.rs
+      depends_on: [T04]
+    - id: T08
+      name: Bytecoder and MDL scorer
+      outputs:
+        - src/apfsc/bytecoder.rs
+        - src/apfsc/mdl.rs
+      depends_on: [T02]
+    - id: T09
+      name: SCIR-Lite AST and verifier
+      outputs:
+        - src/apfsc/scir/ast.rs
+        - src/apfsc/scir/verify.rs
+        - src/apfsc/scir/mod.rs
+      depends_on: [T02, T06]
+    - id: T10
+      name: Tier-0 interpreter and rewrite helpers
+      outputs:
+        - src/apfsc/scir/interp.rs
+        - src/apfsc/scir/rewrite.rs
+      depends_on: [T09, T08]
+    - id: T11
+      name: Candidate, head, bridge, schedule structs
+      outputs:
+        - src/apfsc/candidate.rs
+        - src/apfsc/headpack.rs
+        - src/apfsc/bridge.rs
+        - src/apfsc/schedule_pack.rs
+        - src/apfsc/emission.rs
+      depends_on: [T02, T10]
+    - id: T12
+      name: Seed incumbent and fixtures
+      outputs:
+        - src/apfsc/seed.rs
+        - src/bin/apfsc_seed_init.rs
+        - fixtures/apfsc/**
+      depends_on: [T05, T06, T08, T10, T11]
+    - id: T13
+      name: Truth lane
+      outputs:
+        - src/apfsc/lanes/truth.rs
+      depends_on: [T11, T12]
+    - id: T14
+      name: Equivalence lane
+      outputs:
+        - src/apfsc/lanes/equivalence.rs
+      depends_on: [T10, T11, T12]
+    - id: T15
+      name: Incubator lane with shadow heads
+      outputs:
+        - src/apfsc/lanes/incubator.rs
+      depends_on: [T11, T12]
+    - id: T16
+      name: Cold-frontier stub lane
+      outputs:
+        - src/apfsc/lanes/cold_frontier_stub.rs
+        - src/apfsc/lanes/mod.rs
+      depends_on: [T11]
+    - id: T17
+      name: Public eval binary
+      outputs:
+        - src/bin/apfsc_public_eval.rs
+      depends_on: [T08, T10, T11, T13, T14, T15]
+    - id: T18
+      name: Judge daemon
+      outputs:
+        - src/apfsc/judge.rs
+        - src/bin/apfsc_judge_daemon.rs
+      depends_on: [T03, T05, T08, T11, T17]
+    - id: T19
+      name: Canary worker
+      outputs:
+        - src/apfsc/canary.rs
+        - src/bin/apfsc_shadow_canary.rs
+      depends_on: [T18]
+    - id: T20
+      name: Archives
+      outputs:
+        - src/apfsc/archive/genealogy.rs
+        - src/apfsc/archive/error_atlas.rs
+        - src/apfsc/archive/failure_morph.rs
+        - src/apfsc/archive/hardware_trace.rs
+        - src/apfsc/archive/mod.rs
+      depends_on: [T17, T18, T19]
+    - id: T21
+      name: Epoch orchestrator
+      outputs:
+        - src/apfsc/orchestrator.rs
+        - src/bin/apfsc_epoch_run.rs
+      depends_on: [T13, T14, T15, T16, T18, T19, T20]
+    - id: T22
+      name: Tests
+      outputs:
+        - tests/apfsc_phase1_ingress.rs
+        - tests/apfsc_phase1_bank.rs
+        - tests/apfsc_phase1_scir.rs
+        - tests/apfsc_phase1_lanes.rs
+        - tests/apfsc_phase1_judge.rs
+        - tests/apfsc_phase1_e2e.rs
+      depends_on: [T21]
+  completion_criteria:
+    - cargo_test_passes: true
+    - seed_init_works: true
+    - ingress_three_pack_types_works: true
+    - epoch_run_emits_receipts: true
+    - canary_activation_pointer_updates_atomically: true
+    - deterministic_replay_on_fixture_epoch: true

@@ -1,0 +1,18 @@
+fn rolling_hash(bytes: &[u8]) -> u64 {
+    let mut h: u64 = 1469598103934665603;
+    for b in bytes {
+        h ^= *b as u64;
+        h = h.wrapping_mul(1099511628211);
+    }
+    h
+}
+
+impl Window {
+    pub fn next_target(&self) -> Option<u8> {
+        self.payload.get((self.start + self.len) as usize).copied()
+    }
+}
+
+The quick brown fox jumps over the lazy dog.
+Determinism requires fixed iteration order and immutable receipts.
+Public panels are noisy, holdout panels are sealed.

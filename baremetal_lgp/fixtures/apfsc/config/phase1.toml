@@ -1,0 +1,52 @@
+[root]
+artifact_root = ".apfsc"
+
+[protocol]
+version = "apfsc-phase1-mvp-v1"
+
+[bank]
+window_len = 256
+stride = 64
+
+[limits]
+rss_hard_limit_bytes = 12884901888
+rss_abort_limit_bytes = 15032385536
+max_concurrent_mapped_bytes = 2147483648
+segment_bytes = 268435456
+state_tile_bytes_max = 2097152
+max_public_workers = 2
+max_incubator_workers = 1
+max_canary_workers = 1
+
+[train]
+steps = 200
+lr = 0.05
+eps = 1e-8
+l2 = 1e-5
+clip_grad = 1.0
+batch_windows = 8
+shuffle = false
+
+[judge]
+public_min_delta_bits = 32.0
+holdout_min_delta_bits = 16.0
+anchor_max_regress_bits = 0.0
+mini_transfer_min_delta_bits = 0.0
+require_canary_for_a = true
+max_holdout_admissions = 8
+
+[lanes]
+max_truth_candidates = 12
+max_equivalence_candidates = 8
+max_incubator_candidates = 8
+max_public_candidates = 32
+
+[incubator]
+incubator_min_utility_bits = 8.0
+lambda_code = 0.1
+lambda_risk = 0.1
+shadow_steps = 100
+
+[witness]
+count = 32
+rotation = 8

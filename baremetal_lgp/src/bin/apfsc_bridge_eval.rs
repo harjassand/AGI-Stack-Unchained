@@ -37,8 +37,8 @@ fn main() -> Result<(), String> {
             .map_err(|e| e.to_string())?
     };
     let incumbent = load_candidate(&args.root, &incumbent_hash).map_err(|e| e.to_string())?;
-    let constellation =
-        resolve_constellation(&args.root, args.constellation.as_deref()).map_err(|e| e.to_string())?;
+    let constellation = resolve_constellation(&args.root, args.constellation.as_deref())
+        .map_err(|e| e.to_string())?;
 
     let (bridge_receipt, recent) = match candidate.manifest.promotion_class {
         PromotionClass::A | PromotionClass::PWarm => {
@@ -62,7 +62,10 @@ fn main() -> Result<(), String> {
                 max_anchor_regret_bpb: cfg.phase3.promotion.p_cold_max_anchor_regret_bpb,
                 max_error_streak: cfg.phase3.promotion.p_cold_max_error_streak,
                 required_transfer_gain_bpb: cfg.phase3.promotion.p_cold_min_transfer_delta_bpb,
-                required_recent_family_gain_bpb: cfg.phase3.promotion.p_cold_min_recent_family_gain_bpb,
+                required_recent_family_gain_bpb: cfg
+                    .phase3
+                    .promotion
+                    .p_cold_min_recent_family_gain_bpb,
                 mandatory_canary_windows: cfg.phase3.canary.cold_windows,
                 rollback_target_hash: incumbent.manifest.candidate_hash.clone(),
             };
@@ -82,7 +85,8 @@ fn main() -> Result<(), String> {
     };
 
     let cdir = candidate_dir(&args.root, &candidate.manifest.candidate_hash);
-    write_json_atomic(&cdir.join("bridge_receipt.json"), &bridge_receipt).map_err(|e| e.to_string())?;
+    write_json_atomic(&cdir.join("bridge_receipt.json"), &bridge_receipt)
+        .map_err(|e| e.to_string())?;
     write_json_atomic(
         &receipt_path(
             &args.root,
@@ -94,7 +98,8 @@ fn main() -> Result<(), String> {
     .map_err(|e| e.to_string())?;
 
     if let Some(r) = recent {
-        write_json_atomic(&cdir.join("fresh_public_receipt.json"), &r).map_err(|e| e.to_string())?;
+        write_json_atomic(&cdir.join("fresh_public_receipt.json"), &r)
+            .map_err(|e| e.to_string())?;
     }
 
     println!(

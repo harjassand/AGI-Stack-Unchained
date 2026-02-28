@@ -1,0 +1,8 @@
+{
+  "tool_id": "tool_graph_shadow",
+  "version": "1.0.0",
+  "backend_kind": "GraphBackend",
+  "entrypoints": ["compile", "run"],
+  "dependency_digests": ["depA", "depB"],
+  "manifest_hash": ""
+}

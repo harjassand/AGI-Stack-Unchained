@@ -36,7 +36,8 @@ fn ingest_all(root: &std::path::Path, cfg: &Phase1Config) {
         "reality_f3_phys_robust",
     ];
     for d in phase2_dirs {
-        ingest_reality(root, cfg, &fixtures_phase2().join(d).join("manifest.json")).expect("ingest p2");
+        ingest_reality(root, cfg, &fixtures_phase2().join(d).join("manifest.json"))
+            .expect("ingest p2");
     }
     let phase3_dirs = [
         "reality_f4_event_sparse_base",
@@ -47,7 +48,8 @@ fn ingest_all(root: &std::path::Path, cfg: &Phase1Config) {
         "reality_f5_formal_alg_robust",
     ];
     for d in phase3_dirs {
-        ingest_reality(root, cfg, &fixtures_phase3().join(d).join("manifest.json")).expect("ingest p3");
+        ingest_reality(root, cfg, &fixtures_phase3().join(d).join("manifest.json"))
+            .expect("ingest p3");
     }
 }
 
@@ -60,12 +62,15 @@ fn cold_boundary_pass_and_failure_modes() {
     seed_init(&root, &cfg, None, true).expect("seed");
     ingest_all(&root, &cfg);
 
-    let snapshot = baremetal_lgp::apfsc::artifacts::read_pointer(&root, "active_snapshot").expect("snapshot");
+    let snapshot =
+        baremetal_lgp::apfsc::artifacts::read_pointer(&root, "active_snapshot").expect("snapshot");
     let packs = pack_hashes_from_snapshot(&root, &snapshot).expect("packs");
     let constellation = build_constellation(&root, &cfg, &snapshot, &packs).expect("constellation");
 
-    let active_hash = baremetal_lgp::apfsc::artifacts::read_pointer(&root, "active_candidate").expect("active");
-    let incumbent = baremetal_lgp::apfsc::candidate::load_candidate(&root, &active_hash).expect("incumbent");
+    let active_hash =
+        baremetal_lgp::apfsc::artifacts::read_pointer(&root, "active_candidate").expect("active");
+    let incumbent =
+        baremetal_lgp::apfsc::candidate::load_candidate(&root, &active_hash).expect("incumbent");
 
     let pass_pack = ColdBoundaryPack {
         protected_panels: vec!["anchor".to_string()],

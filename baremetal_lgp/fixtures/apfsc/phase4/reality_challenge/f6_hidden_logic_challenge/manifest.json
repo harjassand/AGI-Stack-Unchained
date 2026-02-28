@@ -1,0 +1,22 @@
+{
+  "pack_kind": "Reality",
+  "pack_hash": "",
+  "protocol_version": "apfsc-phase4-final-v1",
+  "created_unix_s": 1735689600,
+  "family_id": "event_sparse",
+  "provenance": {
+    "source_name": "f6_hidden_logic_challenge",
+    "source_type": "synthetic",
+    "attestation": null,
+    "notes": "phase4 hidden challenge family"
+  },
+  "payload_hashes": [],
+  "meta": {
+    "family_id": "event_sparse",
+    "family_kind": "SensoryTemporal",
+    "role": "ChallengeStub",
+    "variant_id": "event_sparse_hidden_logic_challenge",
+    "base_family_id": null,
+    "description": "hidden logic challenge"
+  }
+}

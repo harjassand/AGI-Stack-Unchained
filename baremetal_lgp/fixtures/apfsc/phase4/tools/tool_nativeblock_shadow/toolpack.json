@@ -1,0 +1,8 @@
+{
+  "tool_id": "tool_nativeblock_shadow",
+  "version": "1.0.0",
+  "backend_kind": "NativeBlock",
+  "entrypoints": ["compile", "run"],
+  "dependency_digests": ["depN"],
+  "manifest_hash": ""
+}

@@ -1,0 +1,188 @@
+phase4_final:
+  branch_name: feat/apfsc-phase4-final
+  prerequisites:
+    - phase3_mvp_contract_present: true
+  constraints:
+    - keep_apf3_immutable: true
+    - keep_holdout_truth_on_interpreter: true
+    - deterministic_execution: true
+    - single_node_only: true
+    - no_protocol_self_modification: true
+    - no_autonomous_external_browsing: true
+    - no_toolpack_on_holdout_truth: true
+    - no_raw_holdout_or_hidden_challenge_inputs_to_searchlaw: true
+  tasks:
+    - id: P401
+      name: Extend common types, config, and active-pointer management for Phase 4
+      outputs:
+        - src/apfsc/types.rs
+        - src/apfsc/config.rs
+        - src/apfsc/active.rs
+        - src/apfsc/mod.rs
+      depends_on: []
+    - id: P402
+      name: Add DependencyPack and extend candidate manifests with provenance and recombination metadata
+      outputs:
+        - src/apfsc/dependency_pack.rs
+        - src/apfsc/candidate.rs
+      depends_on: [P401]
+    - id: P403
+      name: Implement FormalPack ingestion, formal policy validation, and active formal policy digest
+      outputs:
+        - src/apfsc/formal_policy.rs
+        - src/apfsc/ingress/formal.rs
+        - src/bin/apfsc_ingest_formal.rs
+      depends_on: [P401]
+    - id: P404
+      name: Implement ToolPack ingestion and tool-shadow receipts
+      outputs:
+        - src/apfsc/tool_shadow.rs
+        - src/apfsc/ingress/tool.rs
+        - src/bin/apfsc_ingest_tool.rs
+        - src/bin/apfsc_tool_shadow.rs
+      depends_on: [P401]
+    - id: P405
+      name: Extend SCIR verification and backend equivalence with formal policy and tool-shadow checks
+      outputs:
+        - src/apfsc/scir/verify.rs
+        - src/apfsc/scir/backend_equiv.rs
+        - src/apfsc/scir/graph_backend.rs
+      depends_on: [P403, P404]
+    - id: P406
+      name: Extend bank and constellation for hidden challenge families and retirement metadata
+      outputs:
+        - src/apfsc/bank.rs
+        - src/apfsc/constellation.rs
+        - src/apfsc/challenge_scheduler.rs
+        - src/apfsc/retirement.rs
+        - src/bin/apfsc_rotate_challenges.rs
+      depends_on: [P401]
+    - id: P407
+      name: Extend judge with architecture hidden-challenge gates and phase4 promotion extensions
+      outputs:
+        - src/apfsc/judge.rs
+        - src/apfsc/yield_points.rs
+        - src/apfsc/bridge.rs
+        - src/bin/apfsc_judge_daemon.rs
+      depends_on: [P402, P405, P406]
+    - id: P408
+      name: Add law archive records and law-token distillation
+      outputs:
+        - src/apfsc/law_archive.rs
+        - src/apfsc/law_tokens.rs
+        - src/apfsc/archive/law_archive.rs
+      depends_on: [P407]
+    - id: P409
+      name: Add NeedToken model and emission path
+      outputs:
+        - src/apfsc/need.rs
+        - src/apfsc/archive/need_tokens.rs
+      depends_on: [P408]
+    - id: P410
+      name: Add portfolio manifests and credit/debt ledgers
+      outputs:
+        - src/apfsc/portfolio.rs
+        - src/apfsc/credit.rs
+        - src/apfsc/archive/portfolio_trace.rs
+        - src/bin/apfsc_portfolio_step.rs
+      depends_on: [P407]
+    - id: P411
+      name: Add morphology descriptors and QD archive
+      outputs:
+        - src/apfsc/qd_archive.rs
+        - src/apfsc/archive/qd_archive.rs
+      depends_on: [P408, P410]
+    - id: P412
+      name: Add bounded two-parent recombination lane
+      outputs:
+        - src/apfsc/recombination.rs
+        - src/apfsc/lanes/recombination.rs
+        - src/bin/apfsc_recombine.rs
+      depends_on: [P402, P403, P411]
+    - id: P413
+      name: Add tool-shadow lane for discovery and public/canary eligibility
+      outputs:
+        - src/apfsc/lanes/tool_shadow.rs
+        - src/apfsc/archive/tool_shadow.rs
+      depends_on: [P404, P405, P410]
+    - id: P414
+      name: Implement SearchLawPack schema, feature extraction, and deterministic rule-table planner
+      outputs:
+        - src/apfsc/search_law.rs
+        - src/apfsc/searchlaw_features.rs
+      depends_on: [P408, P409, P410, P411]
+    - id: P415
+      name: Implement search-law offline replay evaluator
+      outputs:
+        - src/apfsc/searchlaw_eval.rs
+        - src/bin/apfsc_searchlaw_offline_eval.rs
+      depends_on: [P414]
+    - id: P416
+      name: Implement live A/B search-law branch trials and search-law promotion receipts
+      outputs:
+        - src/apfsc/searchlaw_eval.rs
+        - src/apfsc/archive/searchlaw_trace.rs
+        - src/bin/apfsc_searchlaw_ab.rs
+      depends_on: [P410, P414, P415]
+    - id: P417
+      name: Extend truth, equivalence, incubator, and cold-frontier lanes to consume search plans and portfolio attribution
+      outputs:
+        - src/apfsc/lanes/truth.rs
+        - src/apfsc/lanes/equivalence.rs
+        - src/apfsc/lanes/incubator.rs
+        - src/apfsc/lanes/cold_frontier.rs
+      depends_on: [P410, P414]
+    - id: P418
+      name: Extend public evaluation and canary for phase4 dependency packs, hidden challenges, and tool-shadow routing
+      outputs:
+        - src/bin/apfsc_public_eval.rs
+        - src/apfsc/canary.rs
+      depends_on: [P404, P406, P413, P417]
+    - id: P419
+      name: Wire the Phase 4 macro-epoch orchestrator and activation ordering
+      outputs:
+        - src/apfsc/orchestrator.rs
+        - src/bin/apfsc_epoch_run.rs
+      depends_on: [P407, P408, P409, P410, P411, P412, P413, P416, P418]
+    - id: P420
+      name: Add Phase 4 fixtures and expected receipts
+      outputs:
+        - fixtures/apfsc/phase4/**
+      depends_on: [P403, P404, P406, P414]
+    - id: P421
+      name: Add Phase 4 tests
+      outputs:
+        - tests/apfsc_phase4_formal_pack.rs
+        - tests/apfsc_phase4_tool_shadow.rs
+        - tests/apfsc_phase4_hidden_challenge.rs
+        - tests/apfsc_phase4_challenge_retirement.rs
+        - tests/apfsc_phase4_law_archive.rs
+        - tests/apfsc_phase4_law_tokens.rs
+        - tests/apfsc_phase4_need_tokens.rs
+        - tests/apfsc_phase4_portfolio_credit.rs
+        - tests/apfsc_phase4_qd_archive.rs
+        - tests/apfsc_phase4_recombination.rs
+        - tests/apfsc_phase4_searchlaw_offline.rs
+        - tests/apfsc_phase4_searchlaw_ab.rs
+        - tests/apfsc_phase4_judge.rs
+        - tests/apfsc_phase4_e2e_architecture.rs
+        - tests/apfsc_phase4_e2e_searchlaw.rs
+        - tests/apfsc_phase4_e2e_full_loop.rs
+      depends_on: [P419, P420]
+  completion_criteria:
+    - cargo_test_passes: true
+    - all_five_pack_types_ingest: true
+    - hidden_challenge_gate_is_active: true
+    - challenge_retirement_and_rotation_work: true
+    - formal_policy_tightens_admissibility: true
+    - tool_shadow_can_admit_public_canary_tools: true
+    - dependency_pack_pins_external_inputs: true
+    - law_archive_and_law_tokens_emit: true
+    - need_tokens_emit_under_plateau_or_gap_conditions: true
+    - portfolio_credit_and_debt_ledgers_work: true
+    - bounded_recombination_candidate_compiles: true
+    - qd_archive_updates_deterministically: true
+    - searchlaw_offline_receipts_emit: true
+    - searchlaw_ab_receipts_emit: true
+    - g_can_activate_independently_of_architecture: true
+    - deterministic_replay_on_two_epoch_phase4_run: true

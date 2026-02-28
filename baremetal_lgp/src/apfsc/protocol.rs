@@ -56,6 +56,8 @@ pub fn materialize_snapshot(
     reality_roots: Vec<String>,
     prior_roots: Vec<String>,
     substrate_roots: Vec<String>,
+    formal_roots: Vec<String>,
+    tool_roots: Vec<String>,
     protocol_version: String,
 ) -> EpochSnapshot {
     let mut snap = EpochSnapshot {
@@ -63,6 +65,8 @@ pub fn materialize_snapshot(
         reality_roots,
         prior_roots,
         substrate_roots,
+        formal_roots,
+        tool_roots,
         protocol_version,
     };
     snap.snapshot_hash = digest_json(&snap).unwrap_or_else(|_| "snapshot_digest_error".to_string());

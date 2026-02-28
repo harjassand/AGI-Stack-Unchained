@@ -1,7 +1,9 @@
 use std::path::PathBuf;
 
 use baremetal_lgp::apfsc::config::Phase1Config;
-use baremetal_lgp::apfsc::orchestrator::{run_epoch, run_phase2_epoch, run_phase3_epoch};
+use baremetal_lgp::apfsc::orchestrator::{
+    run_epoch, run_phase2_epoch, run_phase3_epoch, run_phase4_epoch,
+};
 use clap::Parser;
 
 #[derive(Debug, Parser)]
@@ -28,9 +30,14 @@ fn main() -> Result<(), String> {
 
     for i in 0..args.epochs {
         let report = if args.profile == "phase2" {
-            run_phase2_epoch(&args.root, &cfg, args.constellation.as_deref()).map_err(|e| e.to_string())?
+            run_phase2_epoch(&args.root, &cfg, args.constellation.as_deref())
+                .map_err(|e| e.to_string())?
         } else if args.profile == "phase3" {
-            run_phase3_epoch(&args.root, &cfg, args.constellation.as_deref()).map_err(|e| e.to_string())?
+            run_phase3_epoch(&args.root, &cfg, args.constellation.as_deref())
+                .map_err(|e| e.to_string())?
+        } else if args.profile == "phase4" {
+            run_phase4_epoch(&args.root, &cfg, args.constellation.as_deref())
+                .map_err(|e| e.to_string())?
         } else {
             run_epoch(&args.root, &cfg).map_err(|e| e.to_string())?
         };

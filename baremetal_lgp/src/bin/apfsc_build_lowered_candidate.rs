@@ -54,8 +54,9 @@ fn main() -> Result<(), String> {
     let canonical = canonicalize_v2(scir_v2);
     write_json_atomic(&cdir.join("scir_canonical.json"), &canonical).map_err(|e| e.to_string())?;
 
-    let (lowered, receipt) = lower_v2_with_macros(&candidate.manifest.candidate_hash, &canonical, &registry)
-        .map_err(|e| e.to_string())?;
+    let (lowered, receipt) =
+        lower_v2_with_macros(&candidate.manifest.candidate_hash, &canonical, &registry)
+            .map_err(|e| e.to_string())?;
     verify_scir_v2(&lowered).map_err(|e| e.to_string())?;
 
     write_json_atomic(&cdir.join("scir_lowered.json"), &lowered).map_err(|e| e.to_string())?;
@@ -68,7 +69,9 @@ fn main() -> Result<(), String> {
     Ok(())
 }
 
-fn derive_v2_from_candidate(candidate: &baremetal_lgp::apfsc::candidate::CandidateBundle) -> ScirV2Program {
+fn derive_v2_from_candidate(
+    candidate: &baremetal_lgp::apfsc::candidate::CandidateBundle,
+) -> ScirV2Program {
     let mut ops = Vec::new();
     for node in &candidate.arch_program.nodes {
         let mut args = BTreeMap::new();

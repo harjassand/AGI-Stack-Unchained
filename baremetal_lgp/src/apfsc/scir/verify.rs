@@ -1,6 +1,7 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use crate::apfsc::errors::{ApfscError, Result};
+use crate::apfsc::formal_policy::enforce_formal_policy_on_ops;
 use crate::apfsc::scir::ast::{ScirOp, ScirProgram};
 use crate::apfsc::types::{ResourceEnvelope, ScirV2Program};
 
@@ -132,6 +133,41 @@ pub fn verify_program(program: &ScirProgram, env: &ResourceEnvelope) -> Result<V
         estimated_param_bits: param_bits,
         op_counts,
     })
+}
+
+pub fn verify_program_with_formal_policy(
+    program: &ScirProgram,
+    env: &ResourceEnvelope,
+    policy: &crate::apfsc::types::FormalPolicy,
+) -> Result<VerifySummary> {
+    let summary = verify_program(program, env)?;
+    let mut ops = Vec::new();
+    for n in &program.nodes {
+        let name = match &n.op {
+            ScirOp::ByteEmbedding { .. } => "ByteEmbedding",
+            ScirOp::LagBytes { .. } => "LagBytes",
+            ScirOp::Linear { .. } => "Linear",
+            ScirOp::Add => "Add",
+            ScirOp::Mul => "Mul",
+            ScirOp::Tanh => "Tanh",
+            ScirOp::Sigmoid => "Sigmoid",
+            ScirOp::Relu => "Relu",
+            ScirOp::Concat => "Concat",
+            ScirOp::ReduceMean => "ReduceMean",
+            ScirOp::ReduceSum => "ReduceSum",
+            ScirOp::ShiftRegister { .. } => "ShiftRegister",
+            ScirOp::RunLengthBucket { .. } => "RunLengthBucket",
+            ScirOp::ModCounter { .. } => "ModCounter",
+            ScirOp::RollingHash { .. } => "RollingHash",
+            ScirOp::DelimiterReset { .. } => "DelimiterReset",
+            ScirOp::SimpleScan { .. } => "SimpleScan",
+            ScirOp::ReadoutNative { .. } => "ReadoutNative",
+            ScirOp::ReadoutShadow { .. } => "ReadoutShadow",
+        };
+        ops.push(name.to_string());
+    }
+    enforce_formal_policy_on_ops(policy, &ops)?;
+    Ok(summary)
 }
 
 fn infer_node_dim(

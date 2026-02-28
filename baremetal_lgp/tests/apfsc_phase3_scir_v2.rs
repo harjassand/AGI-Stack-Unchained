@@ -7,7 +7,7 @@ use baremetal_lgp::apfsc::scir::lower::lower_v2_with_macros;
 use baremetal_lgp::apfsc::scir::verify::verify_scir_v2;
 use baremetal_lgp::apfsc::types::{
     AdaptHook, BackendKind, BoundSpec, ChannelDef, CoreBlock, CoreOp, MacroCall, ReadoutDef,
-    ScirV2Program, SchedulerClass, ScheduleDef, StateSchema,
+    ScheduleDef, SchedulerClass, ScirV2Program, StateSchema,
 };
 
 fn sample_program_with_macro() -> ScirV2Program {
@@ -61,7 +61,10 @@ fn scir_v2_canonical_lower_verify_is_deterministic() {
 
     let c1 = canonicalize_v2(p.clone());
     let c2 = canonicalize_v2(p);
-    assert_eq!(digest_json(&c1).expect("hash1"), digest_json(&c2).expect("hash2"));
+    assert_eq!(
+        digest_json(&c1).expect("hash1"),
+        digest_json(&c2).expect("hash2")
+    );
 
     let (l1, r1) = lower_v2_with_macros("cand", &c1, &registry).expect("lower 1");
     let (l2, r2) = lower_v2_with_macros("cand", &c2, &registry).expect("lower 2");

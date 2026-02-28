@@ -36,10 +36,10 @@ fn main() -> Result<(), String> {
         Phase1Config::default()
     };
 
-    if args.profile == "phase2" || args.profile == "phase3" {
+    if args.profile == "phase2" || args.profile == "phase3" || args.profile == "phase4" {
         let candidate_hash = args
             .candidate
-            .ok_or_else(|| "--candidate is required for phase2/phase3".to_string())?;
+            .ok_or_else(|| "--candidate is required for phase2/phase3/phase4".to_string())?;
         let incumbent_hash = if let Some(v) = args.incumbent {
             v
         } else {
@@ -54,38 +54,35 @@ fn main() -> Result<(), String> {
 
         let evals = evaluate_phase2_candidate(&args.root, &candidate, &incumbent, &constellation)
             .map_err(|e| e.to_string())?;
-        let receipt = if args.profile == "phase3" {
+        let receipt = if args.profile == "phase3" || args.profile == "phase4" {
             let (bridge, recent) = match candidate.manifest.promotion_class {
                 PromotionClass::A | PromotionClass::PWarm => {
-                    let bridge = candidate
-                        .bridge_pack
-                        .as_ref()
-                        .and_then(|p| {
-                            baremetal_lgp::apfsc::bridge::evaluate_warm_bridge(
-                                &args.root,
-                                &candidate,
-                                &incumbent,
-                                &constellation,
-                                p,
-                            )
-                            .ok()
-                        });
-                    let recent = if matches!(candidate.manifest.promotion_class, PromotionClass::PWarm)
-                    {
-                        evals.holdout_transfer.as_ref().map(|t| {
-                            recent_family_gain(
-                                &candidate.manifest.candidate_hash,
-                                &incumbent.manifest.candidate_hash,
-                                &t.receipt,
-                                &evals.holdout_static.receipt,
-                                &constellation.fresh_families,
-                                0,
-                                cfg.phase3.promotion.p_warm_min_recent_family_gain_bpb,
-                            )
-                        })
-                    } else {
-                        None
-                    };
+                    let bridge = candidate.bridge_pack.as_ref().and_then(|p| {
+                        baremetal_lgp::apfsc::bridge::evaluate_warm_bridge(
+                            &args.root,
+                            &candidate,
+                            &incumbent,
+                            &constellation,
+                            p,
+                        )
+                        .ok()
+                    });
+                    let recent =
+                        if matches!(candidate.manifest.promotion_class, PromotionClass::PWarm) {
+                            evals.holdout_transfer.as_ref().map(|t| {
+                                recent_family_gain(
+                                    &candidate.manifest.candidate_hash,
+                                    &incumbent.manifest.candidate_hash,
+                                    &t.receipt,
+                                    &evals.holdout_static.receipt,
+                                    &constellation.fresh_families,
+                                    0,
+                                    cfg.phase3.promotion.p_warm_min_recent_family_gain_bpb,
+                                )
+                            })
+                        } else {
+                            None
+                        };
                     (bridge, recent)
                 }
                 PromotionClass::PCold => {
@@ -93,7 +90,10 @@ fn main() -> Result<(), String> {
                         protected_panels: vec!["anchor".to_string()],
                         max_anchor_regret_bpb: cfg.phase3.promotion.p_cold_max_anchor_regret_bpb,
                         max_error_streak: cfg.phase3.promotion.p_cold_max_error_streak,
-                        required_transfer_gain_bpb: cfg.phase3.promotion.p_cold_min_transfer_delta_bpb,
+                        required_transfer_gain_bpb: cfg
+                            .phase3
+                            .promotion
+                            .p_cold_min_transfer_delta_bpb,
                         required_recent_family_gain_bpb: cfg
                             .phase3
                             .promotion

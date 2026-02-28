@@ -34,9 +34,11 @@ fn macro_mining_accepts_and_rejects_by_thresholds() {
         append_jsonl_atomic(&root.join("archive/family_scores.jsonl"), &row(i, 0.01)).expect("row");
     }
 
-    let (_registry1, receipts1) = mine_macros(&root, "snap", "v", 3, 0.001, 1.20, 8).expect("mine 1");
+    let (_registry1, receipts1) =
+        mine_macros(&root, "snap", "v", 3, 0.001, 1.20, 8).expect("mine 1");
     assert!(receipts1.iter().any(|r| r.accepted));
 
-    let (_registry2, receipts2) = mine_macros(&root, "snap", "v", 99, 10.0, 99.0, 8).expect("mine 2");
+    let (_registry2, receipts2) =
+        mine_macros(&root, "snap", "v", 99, 10.0, 99.0, 8).expect("mine 2");
     assert!(receipts2.iter().all(|r| !r.accepted));
 }

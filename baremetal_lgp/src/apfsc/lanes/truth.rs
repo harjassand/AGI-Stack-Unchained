@@ -59,7 +59,10 @@ pub fn generate(active: &CandidateBundle, cfg: &Phase1Config) -> Result<Vec<Cand
     Ok(out)
 }
 
-pub fn generate_phase3(active: &CandidateBundle, cfg: &Phase1Config) -> Result<Vec<CandidateBundle>> {
+pub fn generate_phase3(
+    active: &CandidateBundle,
+    cfg: &Phase1Config,
+) -> Result<Vec<CandidateBundle>> {
     let mut out = generate(active, cfg)?;
 
     let mut schedule = active.schedule_pack.clone();

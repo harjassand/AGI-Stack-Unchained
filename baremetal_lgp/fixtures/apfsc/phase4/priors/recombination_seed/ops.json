@@ -1,0 +1,3 @@
+{
+  "ops": ["lag_1", "simple_scan_small", "rolling_hash_2"]
+}

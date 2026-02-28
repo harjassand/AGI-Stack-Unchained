@@ -1,7 +1,9 @@
 use std::path::PathBuf;
 
 use baremetal_lgp::apfsc::artifacts::{candidate_dir, read_json, write_json_atomic};
-use baremetal_lgp::apfsc::bank::{load_family_panel_windows, load_payload_index_for_windows, window_bytes};
+use baremetal_lgp::apfsc::bank::{
+    load_family_panel_windows, load_payload_index_for_windows, window_bytes,
+};
 use baremetal_lgp::apfsc::candidate::load_candidate;
 use baremetal_lgp::apfsc::config::Phase1Config;
 use baremetal_lgp::apfsc::constellation::resolve_constellation;
@@ -30,18 +32,25 @@ fn main() -> Result<(), String> {
     };
 
     let candidate = load_candidate(&args.root, &args.candidate).map_err(|e| e.to_string())?;
-    let constellation =
-        resolve_constellation(&args.root, args.constellation.as_deref()).map_err(|e| e.to_string())?;
+    let constellation = resolve_constellation(&args.root, args.constellation.as_deref())
+        .map_err(|e| e.to_string())?;
 
     let cdir = candidate_dir(&args.root, &candidate.manifest.candidate_hash);
-    let lowered: ScirV2Program = read_json(&cdir.join("scir_lowered.json")).map_err(|e| e.to_string())?;
-    let compile: LoweringReceipt = read_json(&cdir.join("compile_receipt.json")).map_err(|e| e.to_string())?;
+    let lowered: ScirV2Program =
+        read_json(&cdir.join("scir_lowered.json")).map_err(|e| e.to_string())?;
+    let compile: LoweringReceipt =
+        read_json(&cdir.join("compile_receipt.json")).map_err(|e| e.to_string())?;
 
     let mut refs = Vec::new();
     for fam in &constellation.family_specs {
         let mut family_refs =
-            load_family_panel_windows(&args.root, &fam.family_id, "static_public").map_err(|e| e.to_string())?;
-        family_refs.sort_by(|a, b| a.seq_hash.cmp(&b.seq_hash).then_with(|| a.start.cmp(&b.start)));
+            load_family_panel_windows(&args.root, &fam.family_id, "static_public")
+                .map_err(|e| e.to_string())?;
+        family_refs.sort_by(|a, b| {
+            a.seq_hash
+                .cmp(&b.seq_hash)
+                .then_with(|| a.start.cmp(&b.start))
+        });
         refs.extend(family_refs.into_iter().take(2));
     }
     if refs.is_empty() {
@@ -53,7 +62,11 @@ fn main() -> Result<(), String> {
         let payload = payloads
             .get(&r.seq_hash)
             .ok_or_else(|| format!("missing payload for {}", r.seq_hash))?;
-        windows.push(window_bytes(payload, r).map_err(|e| e.to_string())?.to_vec());
+        windows.push(
+            window_bytes(payload, r)
+                .map_err(|e| e.to_string())?
+                .to_vec(),
+        );
     }
 
     let receipt = evaluate_backend_equivalence(
@@ -68,7 +81,8 @@ fn main() -> Result<(), String> {
     )
     .map_err(|e| e.to_string())?;
 
-    write_json_atomic(&cdir.join("backend_equiv_receipt.json"), &receipt).map_err(|e| e.to_string())?;
+    write_json_atomic(&cdir.join("backend_equiv_receipt.json"), &receipt)
+        .map_err(|e| e.to_string())?;
     baremetal_lgp::apfsc::archive::backend_equiv::append_receipt(&args.root, &receipt)
         .map_err(|e| e.to_string())?;
 

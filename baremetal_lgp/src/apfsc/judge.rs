@@ -901,7 +901,7 @@ pub fn judge_phase3_candidate(
                     reject_reason = Some(JudgeRejectReason::RollbackTargetMissing);
                 }
             }
-            PromotionClass::GDisabled => {
+            PromotionClass::G | PromotionClass::GDisabled => {
                 reject_reason = Some(JudgeRejectReason::ParadigmClassMismatch);
             }
         }

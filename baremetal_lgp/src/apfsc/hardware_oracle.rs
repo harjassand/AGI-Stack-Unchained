@@ -54,7 +54,10 @@ impl SafetyBudget {
     }
 
     pub fn validate_envelope(&self, env: &ResourceEnvelope) -> Result<()> {
-        if !matches!(env.backend, BackendKind::Tier0Cpu | BackendKind::InterpTier0) {
+        if !matches!(
+            env.backend,
+            BackendKind::Tier0Cpu | BackendKind::InterpTier0
+        ) {
             return Err(ApfscError::Validation(
                 "unsupported backend for judged path".to_string(),
             ));

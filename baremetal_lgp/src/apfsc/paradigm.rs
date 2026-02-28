@@ -64,6 +64,9 @@ pub fn classify_promotion_class(
     ))
 }
 
-pub fn structural_change_detected(incumbent_canonical_hash: &str, candidate_canonical_hash: &str) -> bool {
+pub fn structural_change_detected(
+    incumbent_canonical_hash: &str,
+    candidate_canonical_hash: &str,
+) -> bool {
     incumbent_canonical_hash != candidate_canonical_hash
 }

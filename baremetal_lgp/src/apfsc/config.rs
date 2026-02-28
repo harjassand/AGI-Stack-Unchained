@@ -31,6 +31,8 @@ pub struct Phase1Config {
     pub phase2: Phase2Config,
     #[serde(default)]
     pub phase3: Phase3Config,
+    #[serde(default)]
+    pub phase4: Phase4Config,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -301,6 +303,73 @@ pub struct Phase3Config {
     pub canary: Phase3CanaryConfig,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct Phase4Config {
+    #[serde(default = "default_true")]
+    pub enable_hidden_challenge_gate: bool,
+    #[serde(default = "default_phase4_challenge_min_bucket_score")]
+    pub challenge_min_bucket_score: i32,
+    #[serde(default = "default_phase4_challenge_retire_after_epochs")]
+    pub challenge_retire_after_epochs: u64,
+    #[serde(default = "default_phase4_holdout_retire_after_epochs")]
+    pub holdout_retire_after_epochs: u64,
+
+    #[serde(default = "default_true")]
+    pub enable_formal_pack: bool,
+    #[serde(default = "default_true")]
+    pub enable_tool_pack: bool,
+    #[serde(default = "default_true")]
+    pub enable_recombination: bool,
+    #[serde(default = "default_true")]
+    pub enable_qd_archive: bool,
+    #[serde(default = "default_true")]
+    pub enable_searchlaw: bool,
+    #[serde(default = "default_true")]
+    pub enable_need_tokens: bool,
+    #[serde(default = "default_true")]
+    pub enable_credit_debt: bool,
+
+    #[serde(default = "default_phase4_max_hidden_challenge_families")]
+    pub max_hidden_challenge_families: usize,
+    #[serde(default = "default_phase4_max_searchlaw_public_candidates")]
+    pub max_searchlaw_public_candidates: usize,
+    #[serde(default = "default_phase4_max_searchlaw_ab_candidates")]
+    pub max_searchlaw_ab_candidates: usize,
+    #[serde(default = "default_phase4_searchlaw_min_ab_epochs")]
+    pub searchlaw_min_ab_epochs: u32,
+    #[serde(default = "default_phase4_searchlaw_max_ab_epochs")]
+    pub searchlaw_max_ab_epochs: u32,
+    #[serde(default = "default_phase4_searchlaw_required_yield_improvement")]
+    pub searchlaw_required_yield_improvement: f64,
+
+    #[serde(default = "default_phase4_max_portfolio_branches")]
+    pub max_portfolio_branches: usize,
+    #[serde(default = "default_phase4_max_branch_local_debt_credits")]
+    pub max_branch_local_debt_credits: i32,
+    #[serde(default = "default_phase4_max_global_debt_credits")]
+    pub max_global_debt_credits: i32,
+    #[serde(default = "default_phase4_max_idle_epochs_before_cull")]
+    pub max_idle_epochs_before_cull: u32,
+
+    #[serde(default = "default_phase4_max_qd_cells")]
+    pub max_qd_cells: usize,
+    #[serde(default = "default_phase4_max_needtokens_per_epoch")]
+    pub max_needtokens_per_epoch: usize,
+    #[serde(default = "default_phase4_max_recombination_parents")]
+    pub max_recombination_parents: usize,
+
+    #[serde(default = "default_phase4_yield_points_s")]
+    pub yield_points_s: i32,
+    #[serde(default = "default_phase4_yield_points_a")]
+    pub yield_points_a: i32,
+    #[serde(default = "default_phase4_yield_points_pwarm")]
+    pub yield_points_pwarm: i32,
+    #[serde(default = "default_phase4_yield_points_pcold")]
+    pub yield_points_pcold: i32,
+    #[serde(default = "default_phase4_yield_points_challenge_bonus")]
+    pub yield_points_challenge_bonus: i32,
+}
+
 impl Default for Phase1Config {
     fn default() -> Self {
         Self {
@@ -315,6 +384,7 @@ impl Default for Phase1Config {
             witness: WitnessConfig::default(),
             phase2: Phase2Config::default(),
             phase3: Phase3Config::default(),
+            phase4: Phase4Config::default(),
         }
     }
 }
@@ -539,6 +609,43 @@ impl Default for Phase3Config {
             macro_cfg: Phase3MacroConfig::default(),
             backend: Phase3BackendConfig::default(),
             canary: Phase3CanaryConfig::default(),
+        }
+    }
+}
+
+impl Default for Phase4Config {
+    fn default() -> Self {
+        Self {
+            enable_hidden_challenge_gate: true,
+            challenge_min_bucket_score: default_phase4_challenge_min_bucket_score(),
+            challenge_retire_after_epochs: default_phase4_challenge_retire_after_epochs(),
+            holdout_retire_after_epochs: default_phase4_holdout_retire_after_epochs(),
+            enable_formal_pack: true,
+            enable_tool_pack: true,
+            enable_recombination: true,
+            enable_qd_archive: true,
+            enable_searchlaw: true,
+            enable_need_tokens: true,
+            enable_credit_debt: true,
+            max_hidden_challenge_families: default_phase4_max_hidden_challenge_families(),
+            max_searchlaw_public_candidates: default_phase4_max_searchlaw_public_candidates(),
+            max_searchlaw_ab_candidates: default_phase4_max_searchlaw_ab_candidates(),
+            searchlaw_min_ab_epochs: default_phase4_searchlaw_min_ab_epochs(),
+            searchlaw_max_ab_epochs: default_phase4_searchlaw_max_ab_epochs(),
+            searchlaw_required_yield_improvement:
+                default_phase4_searchlaw_required_yield_improvement(),
+            max_portfolio_branches: default_phase4_max_portfolio_branches(),
+            max_branch_local_debt_credits: default_phase4_max_branch_local_debt_credits(),
+            max_global_debt_credits: default_phase4_max_global_debt_credits(),
+            max_idle_epochs_before_cull: default_phase4_max_idle_epochs_before_cull(),
+            max_qd_cells: default_phase4_max_qd_cells(),
+            max_needtokens_per_epoch: default_phase4_max_needtokens_per_epoch(),
+            max_recombination_parents: default_phase4_max_recombination_parents(),
+            yield_points_s: default_phase4_yield_points_s(),
+            yield_points_a: default_phase4_yield_points_a(),
+            yield_points_pwarm: default_phase4_yield_points_pwarm(),
+            yield_points_pcold: default_phase4_yield_points_pcold(),
+            yield_points_challenge_bonus: default_phase4_yield_points_challenge_bonus(),
         }
     }
 }
@@ -941,4 +1048,88 @@ fn default_phase3_canary_warm_windows() -> u32 {
 
 fn default_phase3_canary_cold_windows() -> u32 {
     constants::MAX_PARADIGM_CANARY_WINDOWS_COLD
+}
+
+fn default_phase4_challenge_min_bucket_score() -> i32 {
+    0
+}
+
+fn default_phase4_challenge_retire_after_epochs() -> u64 {
+    constants::CHALLENGE_RETIRE_AFTER_EPOCHS
+}
+
+fn default_phase4_holdout_retire_after_epochs() -> u64 {
+    constants::HOLDOUT_RETIRE_AFTER_EPOCHS
+}
+
+fn default_phase4_max_hidden_challenge_families() -> usize {
+    constants::MAX_HIDDEN_CHALLENGE_FAMILIES
+}
+
+fn default_phase4_max_searchlaw_public_candidates() -> usize {
+    constants::MAX_SEARCHLAW_PUBLIC_CANDIDATES
+}
+
+fn default_phase4_max_searchlaw_ab_candidates() -> usize {
+    constants::MAX_SEARCHLAW_AB_CANDIDATES
+}
+
+fn default_phase4_searchlaw_min_ab_epochs() -> u32 {
+    constants::SEARCHLAW_MIN_AB_EPOCHS
+}
+
+fn default_phase4_searchlaw_max_ab_epochs() -> u32 {
+    constants::SEARCHLAW_MAX_AB_EPOCHS
+}
+
+fn default_phase4_searchlaw_required_yield_improvement() -> f64 {
+    constants::SEARCHLAW_REQUIRED_YIELD_IMPROVEMENT
+}
+
+fn default_phase4_max_portfolio_branches() -> usize {
+    constants::MAX_PORTFOLIO_BRANCHES
+}
+
+fn default_phase4_max_branch_local_debt_credits() -> i32 {
+    constants::MAX_BRANCH_LOCAL_DEBT_CREDITS
+}
+
+fn default_phase4_max_global_debt_credits() -> i32 {
+    constants::MAX_GLOBAL_DEBT_CREDITS
+}
+
+fn default_phase4_max_idle_epochs_before_cull() -> u32 {
+    constants::MAX_IDLE_EPOCHS_BEFORE_CULL
+}
+
+fn default_phase4_max_qd_cells() -> usize {
+    constants::MAX_QD_CELLS
+}
+
+fn default_phase4_max_needtokens_per_epoch() -> usize {
+    constants::MAX_NEEDTOKENS_PER_EPOCH
+}
+
+fn default_phase4_max_recombination_parents() -> usize {
+    constants::MAX_RECOMBINATION_PARENTS
+}
+
+fn default_phase4_yield_points_s() -> i32 {
+    1
+}
+
+fn default_phase4_yield_points_a() -> i32 {
+    2
+}
+
+fn default_phase4_yield_points_pwarm() -> i32 {
+    3
+}
+
+fn default_phase4_yield_points_pcold() -> i32 {
+    4
+}
+
+fn default_phase4_yield_points_challenge_bonus() -> i32 {
+    1
 }

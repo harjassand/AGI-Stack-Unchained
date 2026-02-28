@@ -1,0 +1,15 @@
+{
+  "candidate_hash": "52fb162c4195740bb93aa85f2061e58cda9af7ba949132535a580e89b07ccb63",
+  "snapshot_hash": "bde1bed998a086dcc12b2cacdb4ffd348dcc04e16c3c74655cc496ef71bd6e06",
+  "split": "Public",
+  "family_scores_bits": {
+    "F0": 16.057760424636037,
+    "F1": 7.901967917039474
+  },
+  "total_bits": 23.95972834167551,
+  "mean_bits_per_byte": 7.986576113891837,
+  "peak_rss_bytes": 2097152,
+  "wall_ms": 21,
+  "replay_hash": "d1eaebdcfa70a47598564ec4883596e53f648caba4a9580c00048fbec685bbb7",
+  "backend_fingerprint": "apfsc-tier0-cpu-v1"
+}

@@ -1,0 +1,19 @@
+{
+  "pack_kind": "Reality",
+  "pack_hash": "f4eed6d3d3eeaad60a13a5ef5c98db4457867f4b48ef5e7ba50bf406120e7e18",
+  "protocol_version": "apfsc-phase1-mvp-v1",
+  "created_unix_s": 1735689600,
+  "family_id": "F0",
+  "provenance": {
+    "source_name": "fixture_f0_det",
+    "source_type": "synthetic",
+    "attestation": null,
+    "notes": "deterministic microtheory byte stream"
+  },
+  "payload_hashes": [
+    "0f57d1fbb7345afe1920728c2db10755bd25e8fb4cea0d2417be1bde843c31b9"
+  ],
+  "meta": {
+    "description": "periodic + stack trace + delimiter reset + copy patterns"
+  }
+}

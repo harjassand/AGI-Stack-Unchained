@@ -1,0 +1,6 @@
+{
+  "lane": "equivalence",
+  "mutation_type": "split_readout_zero_init",
+  "created_unix_s": 0,
+  "notes": null
+}

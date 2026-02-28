@@ -1,0 +1,18 @@
+{
+  "ops": [
+    "lag_1",
+    "lag_2",
+    "lag_4",
+    "lag_8",
+    "lag_16",
+    "rolling_hash_2",
+    "rolling_hash_3",
+    "run_length_bucket",
+    "mod_counter_2",
+    "mod_counter_4",
+    "mod_counter_8",
+    "delimiter_reset_newline",
+    "simple_scan_small",
+    "simple_scan_medium"
+  ]
+}

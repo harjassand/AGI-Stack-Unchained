@@ -1,0 +1,16 @@
+{
+  "family_id": "F0",
+  "source_pack_hash": "f4eed6d3d3eeaad60a13a5ef5c98db4457867f4b48ef5e7ba50bf406120e7e18",
+  "window_len": 256,
+  "stride": 64,
+  "split_counts": {
+    "anchor": 0,
+    "canary": 0,
+    "holdout": 0,
+    "public": 2,
+    "train": 5,
+    "transfer_eval": 0,
+    "transfer_train": 0
+  },
+  "manifest_hash": "6d633b89c70eb5b327b6c6419164a5cd4f24952a828f46e44bb9d4d0b4127f42"
+}

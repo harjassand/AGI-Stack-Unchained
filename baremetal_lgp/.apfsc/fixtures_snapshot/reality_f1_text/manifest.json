@@ -1,0 +1,17 @@
+{
+  "pack_kind": "Reality",
+  "pack_hash": "",
+  "protocol_version": "apfsc-phase1-mvp-v1",
+  "created_unix_s": 1735689600,
+  "family_id": "F1",
+  "provenance": {
+    "source_name": "fixture_f1_text",
+    "source_type": "text",
+    "attestation": null,
+    "notes": "fixed local text/code bytes"
+  },
+  "payload_hashes": [],
+  "meta": {
+    "description": "passive text/code bytes"
+  }
+}

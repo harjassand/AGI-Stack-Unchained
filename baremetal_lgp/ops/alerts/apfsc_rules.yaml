@@ -1,0 +1,9 @@
+alerts:
+  - name: replay_mismatch
+    expr: apfsc_replay_mismatch_total > 0
+  - name: pageouts_detected
+    expr: apfsc_pageouts_total > 0
+  - name: stale_backup
+    expr: apfsc_backup_total == 0
+  - name: release_qual_failed
+    expr: apfsc_release_qual_fail_total > 0

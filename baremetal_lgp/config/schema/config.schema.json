@@ -1,0 +1,39 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "APFSC Production Config",
+  "type": "object",
+  "required": ["paths", "auth", "release"],
+  "properties": {
+    "paths": {
+      "type": "object",
+      "required": ["root", "control_db", "control_socket"],
+      "properties": {
+        "root": { "type": "string" },
+        "artifacts": { "type": "string" },
+        "archives": { "type": "string" },
+        "backups": { "type": "string" },
+        "control_db": { "type": "string" },
+        "control_socket": { "type": "string" },
+        "metrics_bind": { "type": "string" }
+      }
+    },
+    "auth": {
+      "type": "object",
+      "required": ["enable_control_socket_tokens", "token_file"],
+      "properties": {
+        "enable_control_socket_tokens": { "type": "boolean" },
+        "token_file": { "type": "string" }
+      }
+    },
+    "release": {
+      "type": "object",
+      "required": ["require_signed_artifacts", "require_sbom", "require_provenance", "require_green_release_qual"],
+      "properties": {
+        "require_signed_artifacts": { "type": "boolean" },
+        "require_sbom": { "type": "boolean" },
+        "require_provenance": { "type": "boolean" },
+        "require_green_release_qual": { "type": "boolean" }
+      }
+    }
+  }
+}

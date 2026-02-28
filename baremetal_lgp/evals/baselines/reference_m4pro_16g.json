@@ -1,0 +1,12 @@
+{
+  "machine": "Apple-silicon M4 Pro 16GiB",
+  "public_eval_windows_per_s": 1200,
+  "holdout_windows_per_s": 350,
+  "startup_ms": 800,
+  "recovery_ms": 1200,
+  "backup_verify_ms": 1000,
+  "restore_dry_run_ms": 1200,
+  "activation_latency_ms": 250,
+  "rss_hard_limit_bytes": 12884901888,
+  "pageouts_allowed": 0
+}

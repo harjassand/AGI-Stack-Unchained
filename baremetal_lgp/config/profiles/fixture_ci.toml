@@ -1,0 +1,5 @@
+[paths]
+root = ".apfsc-ci"
+
+[release]
+require_green_release_qual = false

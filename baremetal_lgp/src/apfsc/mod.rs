@@ -32,6 +32,7 @@ pub mod normalization;
 pub mod orchestrator;
 pub mod paradigm;
 pub mod portfolio;
+pub mod prod;
 pub mod protocol;
 pub mod qd_archive;
 pub mod recombination;

@@ -1,0 +1,15 @@
+{
+  "pack_kind": "Tool",
+  "pack_hash": "",
+  "protocol_version": "apfsc-production-ready-v1",
+  "created_unix_s": 1735689600,
+  "family_id": null,
+  "provenance": {
+    "source_name": "prod_tool_seed",
+    "source_type": "synthetic",
+    "attestation": null,
+    "notes": "production fixture toolpack"
+  },
+  "payload_hashes": [],
+  "meta": null
+}

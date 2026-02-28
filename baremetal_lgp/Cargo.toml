@@ -30,10 +30,14 @@ rand = "0.8.5"
 rand_core = "0.6.4"
 serde_json = "1.0.120"
 smallvec = { version = "1.13.2", optional = true }
+rusqlite = { version = "0.31.0", features = ["bundled"] }
+serde_yaml = "0.9.34"
+sha2 = "0.10.9"
 
 [dev-dependencies]
 proptest = "1.5.0"
 tempfile = "3.10.1"
+loom = "0.7.2"
 
 [build-dependencies]
 cc = "1.0"

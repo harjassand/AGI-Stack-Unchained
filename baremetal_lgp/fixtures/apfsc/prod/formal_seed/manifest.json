@@ -1,0 +1,15 @@
+{
+  "pack_kind": "Formal",
+  "pack_hash": "",
+  "protocol_version": "apfsc-production-ready-v1",
+  "created_unix_s": 1735689600,
+  "family_id": null,
+  "provenance": {
+    "source_name": "prod_formal_seed",
+    "source_type": "synthetic",
+    "attestation": null,
+    "notes": "production fixture formal policy"
+  },
+  "payload_hashes": [],
+  "meta": null
+}

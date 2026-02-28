@@ -1,0 +1,4 @@
+name: phase3_paradigm
+profile: fixture_ci
+command: cargo test -q
+expected: pass

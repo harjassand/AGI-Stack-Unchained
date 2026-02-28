@@ -1,0 +1,55 @@
+suites:
+  - name: phase1_regression
+    cadence: merge
+    command: cargo test -q apfsc_phase1_e2e
+    profile: fixture_ci
+    baseline: evals/baselines/reference_m4pro_16g.json
+    gate: required
+  - name: phase2_constellation
+    cadence: merge
+    command: cargo test -q apfsc_phase2
+    profile: fixture_ci
+    baseline: evals/baselines/reference_m4pro_16g.json
+    gate: required
+  - name: phase3_paradigm
+    cadence: nightly
+    command: cargo test -q apfsc_phase3
+    profile: nightly_qual
+    baseline: evals/baselines/reference_m4pro_16g.json
+    gate: required
+  - name: phase4_searchlaw
+    cadence: nightly
+    command: cargo test -q apfsc_phase4
+    profile: nightly_qual
+    baseline: evals/baselines/reference_m4pro_16g.json
+    gate: required
+  - name: prod_recovery
+    cadence: release
+    command: cargo test -q apfsc_prod_e2e_crash_resume
+    profile: release_qual
+    baseline: evals/baselines/reference_m4pro_16g.json
+    gate: required
+  - name: prod_migration
+    cadence: release
+    command: cargo test -q apfsc_prod_migrations
+    profile: release_qual
+    baseline: evals/baselines/reference_m4pro_16g.json
+    gate: required
+  - name: prod_perf
+    cadence: nightly
+    command: cargo test -q apfsc_prod_telemetry
+    profile: nightly_qual
+    baseline: evals/baselines/reference_m4pro_16g.json
+    gate: required
+  - name: prod_soak
+    cadence: release
+    command: cargo run --bin apfsc_qualify -- --mode release
+    profile: release_qual
+    baseline: evals/baselines/reference_m4pro_16g.json
+    gate: required
+  - name: prod_security
+    cadence: nightly
+    command: cargo test -q apfsc_prod_auth apfsc_prod_audit
+    profile: nightly_qual
+    baseline: evals/baselines/reference_m4pro_16g.json
+    gate: required

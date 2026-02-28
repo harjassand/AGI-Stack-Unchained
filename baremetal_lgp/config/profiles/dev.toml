@@ -1,0 +1,6 @@
+[paths]
+root = ".apfsc-dev"
+control_socket = "run/apfscd.sock"
+
+[release]
+require_green_release_qual = false

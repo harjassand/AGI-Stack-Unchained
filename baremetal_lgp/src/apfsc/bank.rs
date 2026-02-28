@@ -7,7 +7,7 @@ use crate::apfsc::artifacts::{
     digest_bytes, digest_json, read_json, read_jsonl, write_json_atomic,
 };
 use crate::apfsc::errors::{io_err, ApfscError, Result};
-use crate::apfsc::types::{BankManifest, SplitKind, WindowRef};
+use crate::apfsc::types::{BankManifest, FamilyBankManifest, SplitKind, WindowRef};
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct WindowBank {
@@ -19,6 +19,12 @@ pub struct WindowBank {
     pub canary: Vec<WindowRef>,
     pub transfer_train: Vec<WindowRef>,
     pub transfer_eval: Vec<WindowRef>,
+    #[serde(default)]
+    pub robust_public: Vec<WindowRef>,
+    #[serde(default)]
+    pub robust_holdout: Vec<WindowRef>,
+    #[serde(default)]
+    pub challenge_stub: Vec<WindowRef>,
 }
 
 impl WindowBank {
@@ -31,6 +37,9 @@ impl WindowBank {
             SplitKind::Canary => &self.canary,
             SplitKind::TransferTrain => &self.transfer_train,
             SplitKind::TransferEval => &self.transfer_eval,
+            SplitKind::RobustPublic => &self.robust_public,
+            SplitKind::RobustHoldout => &self.robust_holdout,
+            SplitKind::ChallengeStub => &self.challenge_stub,
         }
     }
 }
@@ -121,6 +130,9 @@ pub fn build_bank(
         canary,
         transfer_train,
         transfer_eval,
+        robust_public: Vec::new(),
+        robust_holdout: Vec::new(),
+        challenge_stub: Vec::new(),
     })
 }
 
@@ -141,6 +153,18 @@ pub fn persist_bank(root: &Path, bank: &WindowBank) -> Result<()> {
     write_jsonl(
         &dir.join("transfer_eval_windows.jsonl"),
         &bank.transfer_eval,
+    )?;
+    write_jsonl(
+        &dir.join("robust_public_windows.jsonl"),
+        &bank.robust_public,
+    )?;
+    write_jsonl(
+        &dir.join("robust_holdout_windows.jsonl"),
+        &bank.robust_holdout,
+    )?;
+    write_jsonl(
+        &dir.join("challenge_stub_windows.jsonl"),
+        &bank.challenge_stub,
     )
 }
 
@@ -156,6 +180,9 @@ pub fn load_bank(root: &Path, family_id: &str) -> Result<WindowBank> {
         canary: read_jsonl(&dir.join("canary_windows.jsonl"))?,
         transfer_train: read_jsonl(&dir.join("transfer_train_windows.jsonl"))?,
         transfer_eval: read_jsonl(&dir.join("transfer_eval_windows.jsonl"))?,
+        robust_public: read_jsonl_if_exists(&dir.join("robust_public_windows.jsonl"))?,
+        robust_holdout: read_jsonl_if_exists(&dir.join("robust_holdout_windows.jsonl"))?,
+        challenge_stub: read_jsonl_if_exists(&dir.join("challenge_stub_windows.jsonl"))?,
     })
 }
 
@@ -235,6 +262,13 @@ fn write_jsonl<T: Serialize>(path: &Path, rows: &[T]) -> Result<()> {
     crate::apfsc::artifacts::write_bytes_atomic(path, &out)
 }
 
+fn read_jsonl_if_exists<T: serde::de::DeserializeOwned>(path: &Path) -> Result<Vec<T>> {
+    if !path.exists() {
+        return Ok(Vec::new());
+    }
+    read_jsonl(path)
+}
+
 pub fn window_bytes<'a>(payload: &'a [u8], w: &WindowRef) -> Result<&'a [u8]> {
     let start = w.start as usize;
     let end = start + w.len as usize;
@@ -309,4 +343,139 @@ pub fn load_payload_index_for_windows(
         out.insert(seq_hash, redacted);
     }
     Ok(out)
+}
+
+pub fn build_role_panel_windows(
+    family_id: &str,
+    source_pack_hash: &str,
+    payload: &[u8],
+    window_len: u32,
+    stride: u32,
+    split_ratios: &BTreeMap<String, f64>,
+    split_mapping: &BTreeMap<String, SplitKind>,
+) -> Result<BTreeMap<String, Vec<WindowRef>>> {
+    if payload.len() < (window_len as usize + 1) {
+        return Err(ApfscError::Validation(
+            "payload too short for windowing".to_string(),
+        ));
+    }
+    if stride == 0 {
+        return Err(ApfscError::Validation("stride must be > 0".to_string()));
+    }
+
+    let seq_hash = digest_bytes(payload);
+    let mut windows = Vec::new();
+    let mut start = 0usize;
+    while start + (window_len as usize) < payload.len() {
+        windows.push(WindowRef {
+            family_id: family_id.to_string(),
+            split: SplitKind::Train,
+            seq_hash: seq_hash.clone(),
+            start: start as u64,
+            len: window_len,
+            target_offset: window_len,
+        });
+        start += stride as usize;
+    }
+    if windows.is_empty() {
+        return Err(ApfscError::Validation("no windows generated".to_string()));
+    }
+
+    let rotated = rotate_windows(windows, source_pack_hash);
+    let counts = split_counts_dynamic(rotated.len(), split_ratios)?;
+    let mut out = BTreeMap::<String, Vec<WindowRef>>::new();
+    let mut offset = 0usize;
+    for (panel_name, count) in counts {
+        let end = (offset + count).min(rotated.len());
+        let mut segment = rotated[offset..end].to_vec();
+        if let Some(split) = split_mapping.get(&panel_name).copied() {
+            for w in &mut segment {
+                w.split = split;
+            }
+            out.entry(panel_name).or_default().extend(segment);
+        }
+        offset = end;
+    }
+    for rows in out.values_mut() {
+        rows.sort_by(|a, b| {
+            a.seq_hash
+                .cmp(&b.seq_hash)
+                .then_with(|| a.start.cmp(&b.start))
+        });
+    }
+    Ok(out)
+}
+
+fn split_counts_dynamic(
+    total: usize,
+    ratios: &BTreeMap<String, f64>,
+) -> Result<BTreeMap<String, usize>> {
+    let mut keys: Vec<String> = ratios.keys().cloned().collect();
+    keys.sort();
+    let mut counts = BTreeMap::new();
+    let mut assigned = 0usize;
+    for key in &keys {
+        let ratio = *ratios
+            .get(key)
+            .ok_or_else(|| ApfscError::Validation(format!("missing split ratio for {key}")))?;
+        if !(0.0..=1.0).contains(&ratio) {
+            return Err(ApfscError::Validation(format!(
+                "invalid split ratio for {key}"
+            )));
+        }
+        let c = ((total as f64) * ratio).floor() as usize;
+        counts.insert(key.clone(), c);
+        assigned += c;
+    }
+    if assigned < total && !keys.is_empty() {
+        let mut i = 0usize;
+        while assigned < total {
+            let key = &keys[i % keys.len()];
+            *counts.get_mut(key).expect("split key exists") += 1;
+            assigned += 1;
+            i += 1;
+        }
+    }
+    Ok(counts)
+}
+
+pub fn persist_family_bank(
+    root: &Path,
+    manifest: &FamilyBankManifest,
+    panel_windows: &BTreeMap<String, Vec<WindowRef>>,
+) -> Result<()> {
+    let dir = root.join("banks").join(&manifest.family_id);
+    let windows_dir = dir.join("windows");
+    std::fs::create_dir_all(&windows_dir).map_err(|e| io_err(&windows_dir, e))?;
+
+    write_json_atomic(&dir.join("family_manifest.json"), manifest)?;
+    for (panel, rows) in panel_windows {
+        let panel_dir = windows_dir.join(panel);
+        std::fs::create_dir_all(&panel_dir).map_err(|e| io_err(&panel_dir, e))?;
+        write_jsonl(&panel_dir.join("index.jsonl"), rows)?;
+    }
+    Ok(())
+}
+
+pub fn load_family_panel_windows(
+    root: &Path,
+    family_id: &str,
+    panel: &str,
+) -> Result<Vec<WindowRef>> {
+    let path = root
+        .join("banks")
+        .join(family_id)
+        .join("windows")
+        .join(panel)
+        .join("index.jsonl");
+    read_jsonl_if_exists(&path)
+}
+
+pub fn load_family_bank_manifest(root: &Path, family_id: &str) -> Result<FamilyBankManifest> {
+    read_json(
+        &root
+            .join("banks")
+            .join(family_id)
+            .join("family_manifest.json"),
+    )
 }

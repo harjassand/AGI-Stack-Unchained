@@ -1,7 +1,7 @@
 use std::path::PathBuf;
 
 use baremetal_lgp::apfsc::config::Phase1Config;
-use baremetal_lgp::apfsc::orchestrator::run_epoch;
+use baremetal_lgp::apfsc::orchestrator::{run_epoch, run_phase2_epoch};
 use clap::Parser;
 
 #[derive(Debug, Parser)]
@@ -10,6 +10,10 @@ struct Args {
     root: PathBuf,
     #[arg(long)]
     config: Option<PathBuf>,
+    #[arg(long, default_value = "phase1")]
+    profile: String,
+    #[arg(long)]
+    constellation: Option<String>,
     #[arg(long, default_value_t = 1)]
     epochs: u32,
 }
@@ -23,7 +27,12 @@ fn main() -> Result<(), String> {
     };
 
     for i in 0..args.epochs {
-        let report = run_epoch(&args.root, &cfg).map_err(|e| e.to_string())?;
+        let report = if args.profile == "phase2" {
+            run_phase2_epoch(&args.root, &cfg, args.constellation.as_deref())
+                .map_err(|e| e.to_string())?
+        } else {
+            run_epoch(&args.root, &cfg).map_err(|e| e.to_string())?
+        };
         println!(
             "epoch={} public={} judge={} canary={}",
             i + 1,

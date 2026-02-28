@@ -9,10 +9,10 @@ use crate::apfsc::bank::{build_bank, persist_bank};
 use crate::apfsc::candidate::rebase_active_candidate_to_snapshot;
 use crate::apfsc::config::Phase1Config;
 use crate::apfsc::errors::{io_err, ApfscError, Result};
-use crate::apfsc::ingress::manifest::{finalize_manifest, load_pack_manifest};
+use crate::apfsc::ingress::manifest::{decode_reality_meta, finalize_manifest, load_pack_manifest};
 use crate::apfsc::ingress::receipts::write_ingress_receipt;
 use crate::apfsc::protocol::{materialize_snapshot, now_unix_s};
-use crate::apfsc::types::{IngressReceipt, PackKind};
+use crate::apfsc::types::{IngressReceipt, PackKind, RealityRole};
 
 pub fn ingest_reality(
     root: &Path,
@@ -28,10 +28,8 @@ pub fn ingest_reality(
         ));
     }
 
-    let family_id = raw_manifest
-        .family_id
-        .clone()
-        .ok_or_else(|| ApfscError::Validation("reality manifest missing family_id".to_string()))?;
+    let reality_meta = decode_reality_meta(&raw_manifest)?;
+    let family_id = reality_meta.family_id.clone();
 
     let payload_src = manifest_path
         .parent()
@@ -54,16 +52,19 @@ pub fn ingest_reality(
     write_json_atomic(&pack_dst.join("manifest.json"), &manifest)?;
     copy_file(&payload_src, &pack_dst.join("payload.bin"))?;
 
-    let payload = fs::read(&payload_src).map_err(|e| io_err(&payload_src, e))?;
-    let bank = build_bank(
-        &family_id,
-        &manifest.pack_hash,
-        &payload,
-        cfg.bank.window_len,
-        cfg.bank.stride,
-        &cfg.bank.split_ratios,
-    )?;
-    persist_bank(root, &bank)?;
+    // Legacy phase-1 bank path is still built for base role packs.
+    if reality_meta.role == RealityRole::Base {
+        let payload = fs::read(&payload_src).map_err(|e| io_err(&payload_src, e))?;
+        let bank = build_bank(
+            &family_id,
+            &manifest.pack_hash,
+            &payload,
+            cfg.bank.window_len,
+            cfg.bank.stride,
+            &cfg.bank.split_ratios,
+        )?;
+        persist_bank(root, &bank)?;
+    }
 
     let checks = vec![
         "payload_exists".to_string(),
@@ -80,6 +81,10 @@ pub fn ingest_reality(
         ingest_time_unix_s: now_unix_s(),
         protocol_version: cfg.protocol.version.clone(),
         snapshot_included: true,
+        family_id: Some(reality_meta.family_id),
+        family_kind: Some(reality_meta.family_kind),
+        reality_role: Some(reality_meta.role),
+        variant_id: Some(reality_meta.variant_id),
     };
 
     write_ingress_receipt(root, &receipt)?;

@@ -8,8 +8,10 @@ use clap::Parser;
 struct Args {
     #[arg(long, default_value = ".apfsc")]
     root: PathBuf,
+    #[arg(value_name = "MANIFEST_OR_DIR")]
+    input: Option<PathBuf>,
     #[arg(long)]
-    manifest: PathBuf,
+    manifest: Option<PathBuf>,
     #[arg(long)]
     config: Option<PathBuf>,
 }
@@ -21,7 +23,28 @@ fn main() -> Result<(), String> {
     } else {
         Phase1Config::default()
     };
-    let receipt = ingest_reality(&args.root, &cfg, &args.manifest).map_err(|e| e.to_string())?;
+    let manifest = resolve_manifest(args.input, args.manifest)?;
+    let receipt = ingest_reality(&args.root, &cfg, &manifest).map_err(|e| e.to_string())?;
     println!("ingested reality pack {}", receipt.pack_hash);
     Ok(())
+}
+
+fn resolve_manifest(input: Option<PathBuf>, manifest: Option<PathBuf>) -> Result<PathBuf, String> {
+    if let Some(path) = manifest {
+        return Ok(path);
+    }
+    let path = input.ok_or_else(|| "missing manifest path".to_string())?;
+    if path.is_dir() {
+        let m = path.join("manifest.json");
+        if m.exists() {
+            Ok(m)
+        } else {
+            Err(format!(
+                "manifest not found in directory: {}",
+                path.display()
+            ))
+        }
+    } else {
+        Ok(path)
+    }
 }

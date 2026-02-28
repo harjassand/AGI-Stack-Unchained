@@ -10,3 +10,15 @@ pub fn write_ingress_receipt(root: &Path, receipt: &IngressReceipt) -> Result<St
     write_json_atomic(&path, receipt)?;
     Ok(hash)
 }
+
+pub fn write_family_receipt<T: serde::Serialize>(
+    root: &Path,
+    lane: &str,
+    candidate_hash: &str,
+    receipt: &T,
+) -> Result<String> {
+    let hash = digest_json(receipt)?;
+    let path = receipt_path(root, lane, &format!("{candidate_hash}.json"));
+    write_json_atomic(&path, receipt)?;
+    Ok(hash)
+}

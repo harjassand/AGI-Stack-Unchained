@@ -22,6 +22,8 @@ pub struct BuildMeta {
     pub mutation_type: String,
     pub created_unix_s: u64,
     pub notes: Option<String>,
+    #[serde(default)]
+    pub phase2: Option<types::CandidateBuildMeta>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -293,9 +295,24 @@ pub fn clone_with_mutation(
             mutation_type: mutation_type.to_string(),
             created_unix_s: 0,
             notes: None,
+            phase2: None,
         },
     };
     build_candidate(input)
+}
+
+pub fn set_phase2_build_meta(
+    bundle: &mut CandidateBundle,
+    target_families: Vec<String>,
+    source_lane: &str,
+    phase2_profile: &str,
+) -> Result<()> {
+    bundle.build_meta.phase2 = Some(types::CandidateBuildMeta {
+        target_families,
+        source_lane: source_lane.to_string(),
+        phase2_profile: phase2_profile.to_string(),
+    });
+    rehash_candidate(bundle)
 }
 
 pub fn rehash_candidate(bundle: &mut CandidateBundle) -> Result<()> {

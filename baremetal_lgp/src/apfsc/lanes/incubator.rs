@@ -153,7 +153,7 @@ pub fn materialize_splice_candidates(
             .extend(vec![0.0; item.sidecar_dim as usize]);
 
         let bridge = WarmRefinementPack {
-            protected_families: vec!["F0".to_string(), "F1".to_string()],
+            protected_families: vec!["det_micro".to_string(), "text_code".to_string()],
             max_anchor_regress_bits: 0.0,
             max_public_regress_bits: 0.0,
             migration_policy: "local_splice_v1".to_string(),

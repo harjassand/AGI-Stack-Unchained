@@ -15,6 +15,12 @@ pub struct GenealogyRow {
     pub mutation_type: String,
     pub decision: String,
     pub snapshot_hash: String,
+    #[serde(default)]
+    pub constellation_id: Option<String>,
+    #[serde(default)]
+    pub improved_family_ids: Vec<String>,
+    #[serde(default)]
+    pub regressed_family_ids: Vec<String>,
 }
 
 pub fn append_row(root: &Path, row: &GenealogyRow) -> Result<()> {
@@ -53,6 +59,9 @@ pub fn append_epoch(
                 .as_ref()
                 .map(|c| c.manifest.snapshot_hash.clone())
                 .unwrap_or_else(|| r.snapshot_hash.clone()),
+            constellation_id: r.constellation_id.clone(),
+            improved_family_ids: r.improved_family_ids.clone(),
+            regressed_family_ids: r.regressed_family_ids.clone(),
         };
         append_row(root, &row)?;
     }
@@ -79,6 +88,9 @@ pub fn append_epoch(
                 .as_ref()
                 .map(|cand| cand.manifest.snapshot_hash.clone())
                 .unwrap_or_default(),
+            constellation_id: None,
+            improved_family_ids: Vec::new(),
+            regressed_family_ids: Vec::new(),
         };
         append_row(root, &row)?;
     }

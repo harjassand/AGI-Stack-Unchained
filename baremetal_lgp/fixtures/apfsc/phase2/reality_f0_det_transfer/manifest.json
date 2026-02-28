@@ -1,0 +1,22 @@
+{
+  "pack_kind": "Reality",
+  "pack_hash": "",
+  "protocol_version": "apfsc-phase2-mvp-v1",
+  "created_unix_s": 1735689600,
+  "family_id": "det_micro",
+  "provenance": {
+    "source_name": "reality_f0_det_transfer",
+    "source_type": "synthetic",
+    "attestation": null,
+    "notes": "phase2 fixture"
+  },
+  "payload_hashes": [],
+  "meta": {
+    "family_id": "det_micro",
+    "family_kind": "AlgorithmicSymbolic",
+    "role": "Transfer",
+    "variant_id": "det_transfer",
+    "base_family_id": null,
+    "description": "det micro transfer"
+  }
+}

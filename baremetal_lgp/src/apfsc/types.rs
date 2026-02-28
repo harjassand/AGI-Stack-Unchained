@@ -4,6 +4,8 @@ use serde::{Deserialize, Serialize};
 
 pub type DigestHex = String;
 pub type FamilyId = String;
+pub type VariantId = String;
+pub type ConstellationId = String;
 pub type CandidateId = String;
 pub type SnapshotId = String;
 
@@ -11,6 +13,68 @@ pub type SnapshotId = String;
 pub enum BackendKind {
     Tier0Cpu,
     Tier1Stub,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+pub enum FamilyKind {
+    AlgorithmicSymbolic,
+    TextCodeLog,
+    SensoryTemporal,
+    PhysicalSimulation,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+pub enum RealityRole {
+    Base,
+    Transfer,
+    Robust,
+    ChallengeStub,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord)]
+pub enum PanelKind {
+    Train,
+    StaticPublic,
+    StaticHoldout,
+    Anchor,
+    Canary,
+    TransferTrain,
+    TransferEval,
+    RobustPublic,
+    RobustHoldout,
+    ChallengeStub,
+}
+
+impl PanelKind {
+    pub fn as_key(self) -> &'static str {
+        match self {
+            PanelKind::Train => "train",
+            PanelKind::StaticPublic => "static_public",
+            PanelKind::StaticHoldout => "static_holdout",
+            PanelKind::Anchor => "anchor",
+            PanelKind::Canary => "canary",
+            PanelKind::TransferTrain => "transfer_train",
+            PanelKind::TransferEval => "transfer_eval",
+            PanelKind::RobustPublic => "robust_public",
+            PanelKind::RobustHoldout => "robust_holdout",
+            PanelKind::ChallengeStub => "challenge_stub",
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+pub enum EvalMode {
+    Public,
+    Holdout,
+}
+
+impl EvalMode {
+    pub fn as_key(self) -> &'static str {
+        match self {
+            EvalMode::Public => "public",
+            EvalMode::Holdout => "holdout",
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -52,6 +116,16 @@ pub struct Provenance {
     pub notes: Option<String>,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct RealityMeta {
+    pub family_id: FamilyId,
+    pub family_kind: FamilyKind,
+    pub role: RealityRole,
+    pub variant_id: VariantId,
+    pub base_family_id: Option<FamilyId>,
+    pub description: String,
+}
+
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord)]
 pub enum SplitKind {
     Train,
@@ -61,6 +135,9 @@ pub enum SplitKind {
     Canary,
     TransferTrain,
     TransferEval,
+    RobustPublic,
+    RobustHoldout,
+    ChallengeStub,
 }
 
 impl SplitKind {
@@ -73,6 +150,9 @@ impl SplitKind {
             SplitKind::Canary => "canary",
             SplitKind::TransferTrain => "transfer_train",
             SplitKind::TransferEval => "transfer_eval",
+            SplitKind::RobustPublic => "robust_public",
+            SplitKind::RobustHoldout => "robust_holdout",
+            SplitKind::ChallengeStub => "challenge_stub",
         }
     }
 
@@ -85,6 +165,9 @@ impl SplitKind {
             "canary" => Some(SplitKind::Canary),
             "transfer_train" => Some(SplitKind::TransferTrain),
             "transfer_eval" => Some(SplitKind::TransferEval),
+            "robust_public" => Some(SplitKind::RobustPublic),
+            "robust_holdout" => Some(SplitKind::RobustHoldout),
+            "challenge_stub" => Some(SplitKind::ChallengeStub),
             _ => None,
         }
     }
@@ -108,6 +191,17 @@ pub struct BankManifest {
     pub stride: u32,
     pub split_counts: BTreeMap<String, u64>,
     pub manifest_hash: DigestHex,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct FamilyBankManifest {
+    pub family_id: FamilyId,
+    pub family_kind: FamilyKind,
+    pub source_pack_hashes: Vec<String>,
+    pub window_len: u32,
+    pub stride: u32,
+    pub panel_counts: BTreeMap<String, u64>,
+    pub manifest_hash: String,
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
@@ -144,6 +238,13 @@ pub struct CandidateManifest {
     pub substrate_deps: Vec<DigestHex>,
     pub resource_envelope: ResourceEnvelope,
     pub build_meta_hash: DigestHex,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct CandidateBuildMeta {
+    pub target_families: Vec<FamilyId>,
+    pub source_lane: String,
+    pub phase2_profile: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -208,10 +309,154 @@ pub struct ByteScoreReceipt {
     pub backend_fingerprint: String,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct FamilyWeights {
+    pub static_weight: f64,
+    pub transfer_weight: f64,
+    pub robust_weight: f64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct ProtectionFloor {
+    pub protected: bool,
+    pub max_static_regress_bpb: f64,
+    pub max_transfer_regress_bpb: f64,
+    pub max_robust_regress_bpb: f64,
+    pub min_family_improve_bpb: f64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct TransferAdaptSpec {
+    pub steps: u32,
+    pub lr: f32,
+    pub eps: f32,
+    pub l2: f32,
+    pub clip_grad: f32,
+    pub batch_windows: u32,
+    pub max_fast_weight_bytes: u64,
+    pub max_delta_bits: u64,
+    pub reset_ephemeral_state: bool,
+    pub mutable_surfaces: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct FamilySpec {
+    pub family_id: FamilyId,
+    pub family_kind: FamilyKind,
+    pub base_pack_hash: String,
+    pub transfer_pack_hashes: Vec<String>,
+    pub robust_pack_hashes: Vec<String>,
+    pub challenge_pack_hashes: Vec<String>,
+    pub weights: FamilyWeights,
+    pub floors: ProtectionFloor,
+    pub transfer_adapt: TransferAdaptSpec,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct NormalizationPolicy {
+    pub codelen_ref_bytes: u64,
+    pub transfer_ref_bytes: u64,
+    pub min_improved_families: u32,
+    pub min_nonprotected_improved_families: u32,
+    pub require_target_subset_hit: bool,
+    pub target_subset: Vec<FamilyId>,
+    pub public_static_margin_bpb: f64,
+    pub holdout_static_margin_bpb: f64,
+    pub holdout_transfer_margin_bpb: f64,
+    pub holdout_robust_margin_bpb: f64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct ConstellationManifest {
+    pub constellation_id: ConstellationId,
+    pub snapshot_hash: SnapshotId,
+    pub family_specs: Vec<FamilySpec>,
+    pub normalization: NormalizationPolicy,
+    pub protocol_version: String,
+    pub manifest_hash: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct FamilyPanelMetric {
+    pub family_id: FamilyId,
+    pub panel: PanelKind,
+    pub bits_total: f64,
+    pub target_bytes: u64,
+    pub mean_bpb: f64,
+    pub window_count: u64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct FamilyEvalVector {
+    pub family_id: FamilyId,
+    pub static_public_bpb: Option<f64>,
+    pub static_holdout_bpb: Option<f64>,
+    pub anchor_bpb: Option<f64>,
+    pub transfer_public_bpb: Option<f64>,
+    pub transfer_holdout_bpb: Option<f64>,
+    pub robust_public_bpb: Option<f64>,
+    pub robust_holdout_bpb: Option<f64>,
+    pub challenge_stub_bpb: Option<f64>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct ConstellationScoreReceipt {
+    pub candidate_hash: CandidateId,
+    pub incumbent_hash: CandidateId,
+    pub snapshot_hash: SnapshotId,
+    pub constellation_id: ConstellationId,
+    #[serde(default)]
+    pub protocol_version: String,
+    pub per_family: BTreeMap<FamilyId, FamilyEvalVector>,
+    pub code_penalty_bpb: f64,
+    pub weighted_static_public_bpb: Option<f64>,
+    pub weighted_static_holdout_bpb: Option<f64>,
+    pub weighted_transfer_public_bpb: Option<f64>,
+    pub weighted_transfer_holdout_bpb: Option<f64>,
+    pub weighted_robust_public_bpb: Option<f64>,
+    pub weighted_robust_holdout_bpb: Option<f64>,
+    pub improved_families: Vec<FamilyId>,
+    pub nonprotected_improved_families: Vec<FamilyId>,
+    pub regressed_families: Vec<FamilyId>,
+    pub protected_floor_pass: bool,
+    pub target_subset_pass: bool,
+    pub replay_hash: String,
+}
+
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
 pub enum JudgeDecision {
     Promote,
     Reject,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub enum JudgeRejectReason {
+    NoPublicMargin,
+    NoHoldoutMargin,
+    ArtifactMissing,
+    ArtifactInvalid,
+    MissingSnapshot,
+    ResourceViolation,
+    HoldoutNoGain,
+    AnchorRegress,
+    WarmBridgeFail,
+    MiniTransferFail,
+    StabilityFail,
+    CanaryFail,
+    InsufficientCrossFamilyEvidence,
+    ProtectedFamilyRegress,
+    TransferRegression,
+    RobustRegression,
+    TargetSubsetMiss,
+    ConstellationMismatch,
+    MissingFamilyRole,
+    TransferDeltaBudgetExceeded,
+}
+
+impl JudgeRejectReason {
+    pub fn as_reason(&self) -> String {
+        format!("Reject({self:?})")
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -220,12 +465,27 @@ pub struct PromotionReceipt {
     pub incumbent_hash: CandidateId,
     pub decision: JudgeDecision,
     pub reason: String,
+
+    // Phase-1 fields kept for backward compatibility.
     pub public_delta_bits: f64,
     pub holdout_delta_bits: f64,
     pub anchor_regress_bits: f64,
+
+    // Phase-2 fields.
+    pub weighted_static_public_delta_bpb: f64,
+    pub weighted_static_holdout_delta_bpb: f64,
+    pub weighted_transfer_holdout_delta_bpb: Option<f64>,
+    pub weighted_robust_holdout_delta_bpb: Option<f64>,
+    pub improved_family_ids: Vec<FamilyId>,
+    pub regressed_family_ids: Vec<FamilyId>,
+    pub protected_floor_failures: Vec<FamilyId>,
+
     pub canary_required: bool,
     pub canary_result: Option<String>,
     pub snapshot_hash: SnapshotId,
+    #[serde(default)]
+    pub protocol_version: String,
+    pub constellation_id: Option<ConstellationId>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -236,6 +496,14 @@ pub struct IngressReceipt {
     pub ingest_time_unix_s: u64,
     pub protocol_version: String,
     pub snapshot_included: bool,
+    #[serde(default)]
+    pub family_id: Option<FamilyId>,
+    #[serde(default)]
+    pub family_kind: Option<FamilyKind>,
+    #[serde(default)]
+    pub reality_role: Option<RealityRole>,
+    #[serde(default)]
+    pub variant_id: Option<VariantId>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -286,4 +554,46 @@ pub struct CandidateStub {
 pub struct WitnessSelection {
     pub selected: Vec<WindowRef>,
     pub bins: BTreeMap<String, usize>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct FamilyWitnessSelection {
+    pub selected: Vec<WindowRef>,
+    pub bins: BTreeMap<String, usize>,
+    pub per_family_counts: BTreeMap<FamilyId, usize>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct TransferFamilyTrace {
+    pub candidate_hash: CandidateId,
+    pub incumbent_hash: CandidateId,
+    pub snapshot_hash: SnapshotId,
+    pub constellation_id: ConstellationId,
+    #[serde(default)]
+    pub protocol_version: String,
+    pub family_id: FamilyId,
+    pub mode: EvalMode,
+    pub candidate_panel_bpb: f64,
+    pub incumbent_panel_bpb: f64,
+    pub candidate_penalty_bpb: f64,
+    pub incumbent_penalty_bpb: f64,
+    pub delta_bpb: f64,
+    pub delta_bits: u64,
+    pub replay_hash: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct RobustnessFamilyTrace {
+    pub candidate_hash: CandidateId,
+    pub incumbent_hash: CandidateId,
+    pub snapshot_hash: SnapshotId,
+    pub constellation_id: ConstellationId,
+    #[serde(default)]
+    pub protocol_version: String,
+    pub family_id: FamilyId,
+    pub panel: PanelKind,
+    pub candidate_bpb: f64,
+    pub incumbent_bpb: f64,
+    pub delta_bpb: f64,
+    pub replay_hash: String,
 }

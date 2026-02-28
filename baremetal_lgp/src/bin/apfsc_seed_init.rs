@@ -8,6 +8,8 @@ use clap::Parser;
 struct Args {
     #[arg(long, default_value = ".apfsc")]
     root: PathBuf,
+    #[arg(long, default_value = "phase1")]
+    profile: String,
     #[arg(long)]
     fixtures: Option<PathBuf>,
     #[arg(long)]
@@ -18,6 +20,9 @@ struct Args {
 
 fn main() -> Result<(), String> {
     let args = Args::parse();
+    if args.profile != "phase1" && args.profile != "phase2" {
+        return Err(format!("unsupported profile: {}", args.profile));
+    }
     let cfg = if let Some(path) = &args.config {
         Phase1Config::from_path(path).map_err(|e| e.to_string())?
     } else {

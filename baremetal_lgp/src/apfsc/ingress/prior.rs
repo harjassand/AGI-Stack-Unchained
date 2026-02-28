@@ -83,6 +83,10 @@ pub fn ingest_prior(
         ingest_time_unix_s: now_unix_s(),
         protocol_version: cfg.protocol.version.clone(),
         snapshot_included: true,
+        family_id: None,
+        family_kind: None,
+        reality_role: None,
+        variant_id: None,
     };
 
     write_ingress_receipt(root, &receipt)?;

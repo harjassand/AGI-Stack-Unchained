@@ -7,35 +7,60 @@ use crate::apfsc::bank::{
 };
 use crate::apfsc::canary::{run_phase2_canary, run_phase3_canary};
 use crate::apfsc::candidate::{
-    load_active_candidate, rehash_candidate, save_candidate, set_phase2_build_meta,
-    set_phase3_build_meta, CandidateBundle,
+    load_active_candidate, load_candidate, rehash_candidate, save_candidate, set_phase2_build_meta,
+    set_phase3_build_meta, set_phase4_build_meta, CandidateBundle,
+};
+use crate::apfsc::challenge_scheduler::{
+    load_or_build_hidden_challenge_manifest, score_hidden_challenge_gate,
 };
 use crate::apfsc::config::Phase1Config;
 use crate::apfsc::constellation::resolve_constellation;
+use crate::apfsc::credit::mint_credit;
+use crate::apfsc::dependency_pack::{build_dependency_pack, write_candidate_dependency_pack};
 use crate::apfsc::errors::{ApfscError, Result};
+use crate::apfsc::formal_policy::{load_active_formal_policy, seed_formal_policy};
 use crate::apfsc::hardware_oracle::{load_oracle, oracle_penalty, OracleFeatures};
 use crate::apfsc::headpack::HeadOnlyAdaGradLaw;
 use crate::apfsc::ingress::judge::PendingAdmission;
 use crate::apfsc::judge::{
     evaluate_candidate_split, judge_phase2_candidate, judge_phase3_candidate, run_batch,
-    write_split_receipt,
-    Phase2CandidateEvaluations,
+    write_split_receipt, Phase2CandidateEvaluations,
 };
+use crate::apfsc::lanes;
+use crate::apfsc::law_archive::{
+    append_record as append_law_record, build_summary as build_law_summary,
+    load_records as load_law_records,
+};
+use crate::apfsc::law_tokens::{distill_law_tokens, persist_law_tokens};
 use crate::apfsc::macro_lib::load_or_build_active_registry;
+use crate::apfsc::need::emit_need_tokens;
+use crate::apfsc::normalization::evaluate_static_panel;
 use crate::apfsc::paradigm::{
     classify_promotion_class, compute_paradigm_signature, structural_change_detected,
 };
-use crate::apfsc::rollback::stage_rollback_target;
-use crate::apfsc::lanes;
-use crate::apfsc::normalization::evaluate_static_panel;
+use crate::apfsc::portfolio::{
+    allocate_branch_budget, cull_unproductive_branches, load_or_init_portfolio,
+};
+use crate::apfsc::qd_archive::upsert_cell;
+use crate::apfsc::retirement::rotate_hidden_challenges;
 use crate::apfsc::robustness::evaluate_robustness;
-use crate::apfsc::scir::verify::verify_program;
+use crate::apfsc::rollback::stage_rollback_target;
+use crate::apfsc::scir::verify::{verify_program, verify_program_with_formal_policy};
+use crate::apfsc::search_law::{
+    build_search_plan, ensure_active_search_law, generate_search_law_candidates,
+};
+use crate::apfsc::searchlaw_eval::{
+    evaluate_searchlaw_ab, evaluate_searchlaw_offline, promote_search_law_if_pass,
+};
+use crate::apfsc::searchlaw_features::build_searchlaw_features;
 use crate::apfsc::transfer::evaluate_transfer;
 use crate::apfsc::types::{
-    BackendKind, BackendPlan, CandidatePhase3Meta, EpochReport, EvalMode, JudgeBatchReport,
-    JudgeDecision, PanelKind, Phase3BuildMeta, PromotionClass, PublicEvalRecord, SplitKind,
-    WitnessSelection,
+    BackendKind, BackendPlan, CandidatePhase3Meta, CandidatePhase4Meta, EpochReport, EvalMode,
+    JudgeBatchReport, JudgeDecision, JudgeRejectReason, MorphologyDescriptor, PanelKind,
+    Phase3BuildMeta, Phase4BuildMeta, PromotionClass, PublicEvalRecord, QdCellRecord,
+    SearchObjectKind, SplitKind, WitnessSelection,
 };
+use crate::apfsc::yield_points::points_for_class;
 
 pub fn run_epoch(root: &Path, cfg: &Phase1Config) -> Result<EpochReport> {
     let active = load_active_candidate(root)?;
@@ -320,9 +345,14 @@ fn admit_holdout_candidates(
 }
 
 fn current_epoch_index(root: &Path) -> Result<u64> {
-    let entries: Vec<error_atlas::ErrorAtlasEntry> =
-        crate::apfsc::artifacts::read_jsonl(&root.join("archive/error_atlas.jsonl"))?;
-    Ok(entries.len() as u64)
+    let path = root.join("archive/error_atlas.jsonl");
+    if !path.exists() {
+        return Ok(0);
+    }
+    let text =
+        std::fs::read_to_string(&path).map_err(|e| crate::apfsc::errors::io_err(&path, e))?;
+    let lines = text.lines().filter(|l| !l.trim().is_empty()).count();
+    Ok(lines as u64)
 }
 
 fn witness_bin_bits(
@@ -689,23 +719,27 @@ pub fn run_phase2_epoch(
     }
 
     if canary_activated.is_none() {
-        let preferred: Vec<PromotionBundle> =
-            if cfg.phase3.allow_p_warm && !cfg.phase3.allow_p_cold {
-                passing
-                    .iter()
-                    .filter(|p| matches!(p.cand.manifest.promotion_class, PromotionClass::PWarm))
-                    .cloned()
-                    .collect()
-            } else if cfg.phase3.allow_p_cold && !cfg.phase3.allow_p_warm {
-                passing
-                    .iter()
-                    .filter(|p| matches!(p.cand.manifest.promotion_class, PromotionClass::PCold))
-                    .cloned()
-                    .collect()
-            } else {
-                Vec::new()
-            };
-        let pool = if preferred.is_empty() { &passing } else { &preferred };
+        let preferred: Vec<PromotionBundle> = if cfg.phase3.allow_p_warm && !cfg.phase3.allow_p_cold
+        {
+            passing
+                .iter()
+                .filter(|p| matches!(p.cand.manifest.promotion_class, PromotionClass::PWarm))
+                .cloned()
+                .collect()
+        } else if cfg.phase3.allow_p_cold && !cfg.phase3.allow_p_warm {
+            passing
+                .iter()
+                .filter(|p| matches!(p.cand.manifest.promotion_class, PromotionClass::PCold))
+                .cloned()
+                .collect()
+        } else {
+            Vec::new()
+        };
+        let pool = if preferred.is_empty() {
+            &passing
+        } else {
+            &preferred
+        };
 
         if let Some(best) = select_best_phase2(pool) {
             crate::apfsc::judge::activate_candidate(
@@ -1140,8 +1174,13 @@ pub fn run_phase3_epoch(
     public_path_windows.extend(public_windows.iter().cloned());
     public_path_windows.extend(witnesses.selected.iter().cloned());
     let payloads = load_payload_index_for_windows(root, &public_path_windows)?;
-    let mut survivors =
-        witness_prefilter_phase2(&active, pool.clone(), &witnesses.selected, &payloads, &constellation)?;
+    let mut survivors = witness_prefilter_phase2(
+        &active,
+        pool.clone(),
+        &witnesses.selected,
+        &payloads,
+        &constellation,
+    )?;
     let mut seen_survivor = BTreeSet::new();
     for c in &survivors {
         seen_survivor.insert(c.manifest.candidate_hash.clone());
@@ -1266,7 +1305,10 @@ pub fn run_phase3_epoch(
         if cfg.phase3.allow_p_cold && !cfg.phase3.allow_p_warm {
             fallback.manifest.promotion_class = PromotionClass::PCold;
             rehash_candidate(&mut fallback)?;
-        } else if cfg.phase3.allow_p_warm && !cfg.phase3.allow_p_cold && fallback.bridge_pack.is_some() {
+        } else if cfg.phase3.allow_p_warm
+            && !cfg.phase3.allow_p_cold
+            && fallback.bridge_pack.is_some()
+        {
             fallback.manifest.promotion_class = PromotionClass::PWarm;
             rehash_candidate(&mut fallback)?;
         }
@@ -1339,7 +1381,8 @@ pub fn run_phase3_epoch(
                 )?;
                 holdout_transfer_map.insert(cand.manifest.candidate_hash.clone(), x);
             }
-            if let Ok(r) = evaluate_robustness(root, cand, &active, &constellation, EvalMode::Holdout)
+            if let Ok(r) =
+                evaluate_robustness(root, cand, &active, &constellation, EvalMode::Holdout)
             {
                 crate::apfsc::artifacts::write_json_atomic(
                     &crate::apfsc::artifacts::receipt_path(
@@ -1394,9 +1437,13 @@ pub fn run_phase3_epoch(
         match cand.manifest.promotion_class {
             PromotionClass::A | PromotionClass::PWarm => {
                 if let Some(pack) = &cand.bridge_pack {
-                    if let Ok(b) =
-                        crate::apfsc::bridge::evaluate_warm_bridge(root, &cand, &active, &constellation, pack)
-                    {
+                    if let Ok(b) = crate::apfsc::bridge::evaluate_warm_bridge(
+                        root,
+                        &cand,
+                        &active,
+                        &constellation,
+                        pack,
+                    ) {
                         bridge_receipt = Some(b);
                     }
                 }
@@ -1584,4 +1631,300 @@ fn phase3_canary_windows(class: PromotionClass, cfg: &Phase1Config) -> u32 {
         PromotionClass::PWarm | PromotionClass::A => cfg.phase3.canary.warm_windows,
         _ => 0,
     }
+}
+
+pub fn run_phase4_epoch(
+    root: &Path,
+    cfg: &Phase1Config,
+    requested_constellation: Option<&str>,
+) -> Result<EpochReport> {
+    let mut report = run_phase3_epoch(root, cfg, requested_constellation)?;
+    let active = load_active_candidate(root)?;
+    let constellation = resolve_constellation(root, requested_constellation)?;
+    let current_epoch = current_epoch_index(root)?;
+    let hidden_manifest = load_or_build_hidden_challenge_manifest(root, cfg, current_epoch)?;
+
+    let active_searchlaw = ensure_active_search_law(root)?;
+    let mut law_records = load_law_records(root).unwrap_or_default();
+    let law_summary = build_law_summary(root, &active_searchlaw.manifest_hash)?;
+    let max_tokens = cfg
+        .phase4
+        .max_qd_cells
+        .min(crate::apfsc::constants::MAX_LAWTOKENS_PER_EPOCH as usize)
+        .max(1);
+    let law_tokens = distill_law_tokens(&law_records, max_tokens)?;
+    persist_law_tokens(root, &law_tokens)?;
+
+    let features = build_searchlaw_features(root, &constellation, &law_summary)?;
+    let mut search_plan = build_search_plan(
+        &active_searchlaw,
+        &features,
+        &law_tokens,
+        current_epoch,
+        cfg.phase4.max_needtokens_per_epoch,
+    );
+    search_plan
+        .need_tokens
+        .truncate(cfg.phase4.max_needtokens_per_epoch);
+    emit_need_tokens(root, &search_plan.need_tokens)?;
+
+    let (mut portfolio, mut branches) = load_or_init_portfolio(
+        root,
+        &constellation.snapshot_hash,
+        &constellation.constellation_id,
+        &active_searchlaw.manifest_hash,
+        cfg,
+    )?;
+    allocate_branch_budget(root, &mut portfolio, &mut branches, &search_plan, cfg)?;
+
+    // Phase-4 lane expansion: materialize additional deterministic candidates and attach
+    // dependency+phase4 metadata without disturbing the phase3 judged path.
+    let macro_registry =
+        load_or_build_active_registry(root, &constellation.snapshot_hash, &cfg.protocol.version)?;
+    let snap_hash = crate::apfsc::artifacts::read_pointer(root, "active_snapshot")?;
+    let snapshot: crate::apfsc::types::EpochSnapshot =
+        crate::apfsc::artifacts::load_snapshot(root, &snap_hash)?;
+    let formal_policy = load_active_formal_policy(root).unwrap_or_else(|_| seed_formal_policy());
+
+    let mut phase4_pool = Vec::new();
+    phase4_pool.extend(lanes::truth::generate_phase3(&active, cfg)?);
+    phase4_pool.extend(lanes::equivalence::generate(&active, cfg)?);
+    phase4_pool.extend(lanes::incubator::phase3_macro_aware_candidates(
+        &active, cfg,
+    )?);
+    phase4_pool.extend(lanes::cold_frontier::generate(&active, cfg)?);
+    phase4_pool.extend(lanes::recombination::generate(root, &active, cfg)?);
+    phase4_pool.extend(lanes::tool_shadow::generate(&active, cfg)?);
+    let mut phase4_pool = merge_and_dedup(phase4_pool);
+    phase4_pool.retain(|cand| {
+        verify_program_with_formal_policy(
+            &cand.arch_program,
+            &cand.manifest.resource_envelope,
+            &formal_policy,
+        )
+        .is_ok()
+    });
+
+    for (idx, cand) in phase4_pool.iter_mut().enumerate() {
+        save_candidate(root, cand)?;
+        let dep = build_dependency_pack(
+            root,
+            snapshot.prior_roots.clone(),
+            snapshot.tool_roots.clone(),
+            snapshot.substrate_roots.clone(),
+            &macro_registry.registry_id,
+        )?;
+        write_candidate_dependency_pack(root, &cand.manifest.candidate_hash, &dep)?;
+
+        let branch_id = branches
+            .get(idx % branches.len().max(1))
+            .map(|b| b.branch_id.clone())
+            .unwrap_or_else(|| "b000".to_string());
+        let phase4 = CandidatePhase4Meta {
+            build: Phase4BuildMeta {
+                target_families: constellation
+                    .family_specs
+                    .iter()
+                    .map(|f| f.family_id.clone())
+                    .collect(),
+                source_lane: cand.build_meta.lane.clone(),
+                phase4_profile: "phase4".to_string(),
+                searchlaw_hash: active_searchlaw.manifest_hash.clone(),
+                dependency_pack_hash: dep.manifest_hash.clone(),
+                branch_id,
+                recombination_parent_hashes: cand.manifest.parent_hashes.clone(),
+            },
+            search_object: SearchObjectKind::Architecture,
+        };
+        set_phase4_build_meta(cand, phase4)?;
+        save_candidate(root, cand)?;
+    }
+
+    // Challenge gate for any phase3-promoted architecture receipts.
+    for receipt in &mut report.judge_report.receipts {
+        if receipt.decision != JudgeDecision::Promote {
+            continue;
+        }
+
+        let challenge = score_hidden_challenge_gate(
+            &receipt.candidate_hash,
+            &receipt.incumbent_hash,
+            &hidden_manifest,
+            &cfg.protocol.version,
+        )?;
+        crate::apfsc::artifacts::write_json_atomic(
+            &crate::apfsc::artifacts::receipt_path(
+                root,
+                "challenge",
+                &format!("{}.json", receipt.candidate_hash),
+            ),
+            &challenge,
+        )?;
+        crate::apfsc::artifacts::write_json_atomic(
+            &root
+                .join("candidates")
+                .join(&receipt.candidate_hash)
+                .join("challenge_receipt.json"),
+            &challenge,
+        )?;
+
+        if !challenge.pass && cfg.phase4.enable_hidden_challenge_gate {
+            receipt.decision = JudgeDecision::Reject;
+            receipt.reason = JudgeRejectReason::ChallengeGateFail.as_reason();
+            crate::apfsc::artifacts::write_json_atomic(
+                &crate::apfsc::artifacts::receipt_path(
+                    root,
+                    "judge",
+                    &format!("{}.json", receipt.candidate_hash),
+                ),
+                receipt,
+            )?;
+            if let Ok(active_hash) = crate::apfsc::artifacts::read_pointer(root, "active_candidate")
+            {
+                if active_hash == receipt.candidate_hash {
+                    if let Ok(rollback) =
+                        crate::apfsc::artifacts::read_pointer(root, "rollback_candidate")
+                    {
+                        let rb = load_active_candidate(root)
+                            .ok()
+                            .map(|_| rollback)
+                            .unwrap_or_else(|| receipt.incumbent_hash.clone());
+                        let _ =
+                            crate::apfsc::artifacts::write_pointer(root, "active_candidate", &rb);
+                    }
+                }
+            }
+            continue;
+        }
+
+        let class = receipt.promotion_class.unwrap_or(PromotionClass::S);
+        let yield_points = points_for_class(class, challenge.aggregate_bucket_score > 0, cfg);
+        let lane = load_candidate(root, &receipt.candidate_hash)
+            .ok()
+            .map(|c| c.build_meta.lane)
+            .unwrap_or_else(|| "unknown".to_string());
+        let branch_id = load_candidate(root, &receipt.candidate_hash)
+            .ok()
+            .and_then(|c| c.build_meta.phase4.map(|p| p.build.branch_id))
+            .unwrap_or_else(|| "b000".to_string());
+        let morphology_hash = crate::apfsc::artifacts::digest_json(&(
+            class,
+            &lane,
+            &receipt.candidate_hash,
+            &constellation.constellation_id,
+        ))?;
+        let qd_cell_id = crate::apfsc::artifacts::digest_json(&(
+            &morphology_hash,
+            &constellation.snapshot_hash,
+        ))?;
+
+        let law_record = crate::apfsc::types::LawArchiveRecord {
+            record_id: String::new(),
+            candidate_hash: receipt.candidate_hash.clone(),
+            parent_hashes: load_candidate(root, &receipt.candidate_hash)
+                .ok()
+                .map(|c| c.manifest.parent_hashes)
+                .unwrap_or_default(),
+            searchlaw_hash: active_searchlaw.manifest_hash.clone(),
+            promotion_class: class,
+            source_lane: lane,
+            family_outcome_buckets: challenge
+                .family_bucket_passes
+                .iter()
+                .map(|(k, v)| (k.clone(), if *v { 1 } else { -1 }))
+                .collect(),
+            challenge_bucket: challenge.aggregate_bucket_score as i8,
+            canary_survived: receipt.canary_result.as_deref() != Some("fail"),
+            yield_points,
+            compute_units: (1 + receipt.candidate_hash.len()) as u64,
+            morphology_hash: morphology_hash.clone(),
+            qd_cell_id: qd_cell_id.clone(),
+            snapshot_hash: receipt.snapshot_hash.clone(),
+            constellation_id: receipt
+                .constellation_id
+                .clone()
+                .unwrap_or_else(|| constellation.constellation_id.clone()),
+        };
+        let stored_record = append_law_record(root, law_record)?;
+        law_records.push(stored_record);
+
+        let _ = mint_credit(
+            root,
+            &portfolio.portfolio_id,
+            &branch_id,
+            yield_points.max(0),
+            "judged_promotion",
+            Some(receipt.candidate_hash.clone()),
+            Some(crate::apfsc::artifacts::digest_json(receipt)?),
+        );
+
+        let qd = QdCellRecord {
+            cell_id: qd_cell_id,
+            descriptor: MorphologyDescriptor {
+                paradigm_signature_hash: morphology_hash,
+                scheduler_class: "unknown".to_string(),
+                memory_law_kind: "unknown".to_string(),
+                macro_density_bin: "mid".to_string(),
+                state_bytes_bin: "small".to_string(),
+                family_profile_bin: "mixed".to_string(),
+            },
+            occupant_candidate_hash: receipt.candidate_hash.clone(),
+            public_quality_score: receipt.weighted_static_public_delta_bpb,
+            novelty_score: 1.0,
+            last_updated_epoch: current_epoch,
+        };
+        let _ = upsert_cell(root, &constellation.snapshot_hash, qd);
+    }
+
+    let g_candidates =
+        generate_search_law_candidates(root, &active_searchlaw, &features, &law_tokens, cfg)?;
+    for cand in g_candidates
+        .iter()
+        .take(cfg.phase4.max_searchlaw_ab_candidates.max(1))
+    {
+        let offline = evaluate_searchlaw_offline(
+            root,
+            cand,
+            &law_records,
+            &constellation.snapshot_hash,
+            &constellation.constellation_id,
+            &cfg.protocol.version,
+        )?;
+        if !offline.pass {
+            continue;
+        }
+        let ab_epochs = cfg
+            .phase4
+            .searchlaw_min_ab_epochs
+            .max(1)
+            .min(cfg.phase4.searchlaw_max_ab_epochs.max(1));
+        let ab = evaluate_searchlaw_ab(
+            root,
+            cand,
+            &active_searchlaw,
+            &offline,
+            &law_records,
+            ab_epochs,
+            cfg,
+            &constellation.snapshot_hash,
+            &constellation.constellation_id,
+            &cfg.protocol.version,
+        )?;
+        let _promo = promote_search_law_if_pass(
+            root,
+            cand,
+            &active_searchlaw,
+            &ab,
+            &constellation.snapshot_hash,
+            &constellation.constellation_id,
+            &cfg.protocol.version,
+        )?;
+        if ab.pass {
+            break;
+        }
+    }
+
+    let _ = rotate_hidden_challenges(root, cfg, current_epoch + 1)?;
+    let _ = cull_unproductive_branches(root, &mut portfolio, &mut branches, cfg)?;
+    Ok(report)
 }

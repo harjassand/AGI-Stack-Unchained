@@ -1,0 +1,15 @@
+{
+  "pack_kind": "Formal",
+  "pack_hash": "",
+  "protocol_version": "apfsc-phase4-final-v1",
+  "created_unix_s": 1735689600,
+  "family_id": null,
+  "provenance": {
+    "source_name": "deny_unbounded_gather",
+    "source_type": "synthetic",
+    "attestation": null,
+    "notes": "phase4 formal tightening policy"
+  },
+  "payload_hashes": [],
+  "meta": null
+}

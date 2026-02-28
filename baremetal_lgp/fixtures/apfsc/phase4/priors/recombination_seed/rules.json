@@ -1,0 +1,4 @@
+{
+  "max_parents": 2,
+  "modes": ["block_swap", "head_merge", "macro_mix"]
+}

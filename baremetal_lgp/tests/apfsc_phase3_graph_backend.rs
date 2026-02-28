@@ -51,19 +51,16 @@ fn program_with_ops(ops: Vec<&str>) -> ScirV2Program {
 #[test]
 fn graph_backend_equivalence_and_fallback_behavior() {
     let safe = program_with_ops(vec!["LinearMix", "StateUpdate", "HeadReadout"]);
-    let windows = vec![b"abc123".to_vec(), b"zxy987".to_vec(), b"pqrst".to_vec(), b"uvw".to_vec()];
+    let windows = vec![
+        b"abc123".to_vec(),
+        b"zxy987".to_vec(),
+        b"pqrst".to_vec(),
+        b"uvw".to_vec(),
+    ];
 
-    let ok = evaluate_backend_equivalence(
-        "cand",
-        "canon",
-        "low",
-        &safe,
-        &windows,
-        "snap",
-        "cid",
-        "v",
-    )
-    .expect("equiv ok");
+    let ok =
+        evaluate_backend_equivalence("cand", "canon", "low", &safe, &windows, "snap", "cid", "v")
+            .expect("equiv ok");
     assert!(ok.eligible);
     assert_eq!(ok.backend_kind, BackendKind::GraphBackend);
     assert_eq!(ok.max_abs_mass_diff_q16, 0);

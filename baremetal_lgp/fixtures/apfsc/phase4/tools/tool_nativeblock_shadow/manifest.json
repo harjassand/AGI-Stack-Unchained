@@ -1,0 +1,15 @@
+{
+  "pack_kind": "Tool",
+  "pack_hash": "",
+  "protocol_version": "apfsc-phase4-final-v1",
+  "created_unix_s": 1735689600,
+  "family_id": null,
+  "provenance": {
+    "source_name": "tool_nativeblock_shadow",
+    "source_type": "synthetic",
+    "attestation": null,
+    "notes": "phase4 nativeblock shadow tool"
+  },
+  "payload_hashes": [],
+  "meta": null
+}

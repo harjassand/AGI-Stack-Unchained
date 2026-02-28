@@ -26,6 +26,8 @@ pub struct BuildMeta {
     pub phase2: Option<types::CandidateBuildMeta>,
     #[serde(default)]
     pub phase3: Option<types::CandidatePhase3Meta>,
+    #[serde(default)]
+    pub phase4: Option<types::CandidatePhase4Meta>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -299,6 +301,7 @@ pub fn clone_with_mutation(
             notes: None,
             phase2: None,
             phase3: None,
+            phase4: None,
         },
     };
     build_candidate(input)
@@ -323,6 +326,14 @@ pub fn set_phase3_build_meta(
     meta: types::CandidatePhase3Meta,
 ) -> Result<()> {
     bundle.build_meta.phase3 = Some(meta);
+    rehash_candidate(bundle)
+}
+
+pub fn set_phase4_build_meta(
+    bundle: &mut CandidateBundle,
+    meta: types::CandidatePhase4Meta,
+) -> Result<()> {
+    bundle.build_meta.phase4 = Some(meta);
     rehash_candidate(bundle)
 }
 

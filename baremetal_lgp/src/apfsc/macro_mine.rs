@@ -29,7 +29,10 @@ pub fn mine_macros(
         }
         let key = format!(
             "fragment:{}:{}",
-            r.improved_families.first().cloned().unwrap_or_else(|| "none".to_string()),
+            r.improved_families
+                .first()
+                .cloned()
+                .unwrap_or_else(|| "none".to_string()),
             r.target_subset_pass
         );
         support.entry(key).or_default().push(r);
@@ -112,7 +115,9 @@ pub fn mine_macros(
         receipts.push(receipt);
     }
 
-    registry.macro_defs.sort_by(|a, b| a.macro_id.cmp(&b.macro_id));
+    registry
+        .macro_defs
+        .sort_by(|a, b| a.macro_id.cmp(&b.macro_id));
     registry.manifest_hash = digest_json(&registry)?;
     save_registry(root, &registry)?;
     crate::apfsc::artifacts::write_pointer(root, "active_macro_registry", &registry.registry_id)?;

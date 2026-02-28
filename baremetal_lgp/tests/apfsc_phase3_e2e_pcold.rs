@@ -37,7 +37,8 @@ fn ingest_all(root: &std::path::Path, cfg: &Phase1Config) {
         "reality_f3_phys_robust",
     ];
     for d in phase2_dirs {
-        ingest_reality(root, cfg, &fixtures_phase2().join(d).join("manifest.json")).expect("ingest p2");
+        ingest_reality(root, cfg, &fixtures_phase2().join(d).join("manifest.json"))
+            .expect("ingest p2");
     }
     let phase3_dirs = [
         "reality_f4_event_sparse_base",
@@ -48,9 +49,15 @@ fn ingest_all(root: &std::path::Path, cfg: &Phase1Config) {
         "reality_f5_formal_alg_robust",
     ];
     for d in phase3_dirs {
-        ingest_reality(root, cfg, &fixtures_phase3().join(d).join("manifest.json")).expect("ingest p3");
+        ingest_reality(root, cfg, &fixtures_phase3().join(d).join("manifest.json"))
+            .expect("ingest p3");
     }
-    ingest_prior(root, cfg, &fixtures_phase3().join("priors/macro_seed/manifest.json")).expect("ingest prior");
+    ingest_prior(
+        root,
+        cfg,
+        &fixtures_phase3().join("priors/macro_seed/manifest.json"),
+    )
+    .expect("ingest prior");
 }
 
 #[test]
@@ -75,12 +82,15 @@ fn phase3_epoch_pcold_path_writes_boundary_canary_and_rollback() {
     seed_init(&root, &cfg, None, true).expect("seed init");
     ingest_all(&root, &cfg);
 
-    let incumbent_before = baremetal_lgp::apfsc::artifacts::read_pointer(&root, "active_candidate").expect("incumbent before");
-    let snapshot = baremetal_lgp::apfsc::artifacts::read_pointer(&root, "active_snapshot").expect("snapshot");
+    let incumbent_before = baremetal_lgp::apfsc::artifacts::read_pointer(&root, "active_candidate")
+        .expect("incumbent before");
+    let snapshot =
+        baremetal_lgp::apfsc::artifacts::read_pointer(&root, "active_snapshot").expect("snapshot");
     let packs = pack_hashes_from_snapshot(&root, &snapshot).expect("packs");
     let constellation = build_constellation(&root, &cfg, &snapshot, &packs).expect("constellation");
 
-    let report = run_phase3_epoch(&root, &cfg, Some(&constellation.constellation_id)).expect("phase3 epoch");
+    let report =
+        run_phase3_epoch(&root, &cfg, Some(&constellation.constellation_id)).expect("phase3 epoch");
 
     let cold_receipts: Vec<_> = report
         .judge_report
@@ -93,6 +103,7 @@ fn phase3_epoch_pcold_path_writes_boundary_canary_and_rollback() {
     assert!(root.join("receipts/bridge").exists());
     assert!(root.join("receipts/canary").exists());
 
-    let rollback = baremetal_lgp::apfsc::artifacts::read_pointer(&root, "rollback_candidate").expect("rollback");
+    let rollback = baremetal_lgp::apfsc::artifacts::read_pointer(&root, "rollback_candidate")
+        .expect("rollback");
     assert_eq!(rollback, incumbent_before);
 }

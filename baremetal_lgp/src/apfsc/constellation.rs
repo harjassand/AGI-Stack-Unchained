@@ -293,6 +293,8 @@ pub fn pack_hashes_from_snapshot(root: &Path, snapshot_hash: &str) -> Result<Vec
                     PackKind::Reality => "reality",
                     PackKind::Prior => "prior",
                     PackKind::Substrate => "substrate",
+                    PackKind::Formal => "formal",
+                    PackKind::Tool => "tool",
                 })
                 .join(h)
                 .join("manifest.json")

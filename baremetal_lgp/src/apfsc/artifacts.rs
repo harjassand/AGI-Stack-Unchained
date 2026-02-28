@@ -16,9 +16,18 @@ pub fn ensure_layout(root: &Path) -> Result<()> {
         root.join("active"),
         root.join("macro_registry"),
         root.join("constellations"),
+        root.join("challenges"),
+        root.join("formal_policy"),
+        root.join("toolpacks"),
+        root.join("law_archive"),
+        root.join("search_laws"),
+        root.join("portfolios"),
+        root.join("qd_archive"),
         root.join("packs/reality"),
         root.join("packs/prior"),
         root.join("packs/substrate"),
+        root.join("packs/formal"),
+        root.join("packs/tool"),
         root.join("banks"),
         root.join("candidates"),
         root.join("receipts/ingress"),
@@ -38,6 +47,7 @@ pub fn ensure_layout(root: &Path) -> Result<()> {
         root.join("receipts/activation"),
         root.join("pointers"),
         root.join("archive"),
+        root.join("archives"),
         root.join("queues"),
     ];
     for dir in dirs {
@@ -132,6 +142,8 @@ pub fn pack_kind_dir(kind: PackKind) -> &'static str {
         PackKind::Reality => "reality",
         PackKind::Prior => "prior",
         PackKind::Substrate => "substrate",
+        PackKind::Formal => "formal",
+        PackKind::Tool => "tool",
     }
 }
 

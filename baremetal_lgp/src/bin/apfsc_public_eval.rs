@@ -31,7 +31,7 @@ struct Args {
 
 fn main() -> Result<(), String> {
     let args = Args::parse();
-    if args.profile == "phase2" || args.profile == "phase3" {
+    if args.profile == "phase2" || args.profile == "phase3" || args.profile == "phase4" {
         return run_phase2(args);
     }
     run_phase1(args)

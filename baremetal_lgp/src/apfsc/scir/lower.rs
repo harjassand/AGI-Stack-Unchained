@@ -53,11 +53,7 @@ pub fn lower_v2_with_macros(
     let lowered_hash = digest_json(&lowered)?;
     let scir_hash = canonical_hash.clone();
 
-    let core_op_count: u32 = lowered
-        .core_blocks
-        .iter()
-        .map(|b| b.ops.len() as u32)
-        .sum();
+    let core_op_count: u32 = lowered.core_blocks.iter().map(|b| b.ops.len() as u32).sum();
     let state_bytes_estimate = lowered.state_schema.bytes;
     let graph_backend_eligible = lowered
         .core_blocks

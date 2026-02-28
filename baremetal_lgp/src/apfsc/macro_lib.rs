@@ -2,16 +2,29 @@ use std::path::Path;
 
 use crate::apfsc::artifacts::{digest_json, read_json, write_json_atomic};
 use crate::apfsc::errors::{io_err, ApfscError, Result};
-use crate::apfsc::types::{
-    CoreOp, MacroDef, MacroOriginKind, MacroRegistry, PortSpec,
-};
+use crate::apfsc::types::{CoreOp, MacroDef, MacroOriginKind, MacroRegistry, PortSpec};
 
 pub fn seed_macro_defs() -> Vec<MacroDef> {
     let mut defs = vec![
-        seed_macro("EventSparseAccumulator", vec!["event", "acc"], vec!["acc_out"], 64),
+        seed_macro(
+            "EventSparseAccumulator",
+            vec!["event", "acc"],
+            vec!["acc_out"],
+            64,
+        ),
         seed_macro("RingDelayTap", vec!["input", "tap"], vec!["output"], 128),
-        seed_macro("SelectiveStateCell", vec!["state", "mask"], vec!["state_out"], 96),
-        seed_macro("ResetOnDelimiter", vec!["byte", "state"], vec!["state_out"], 32),
+        seed_macro(
+            "SelectiveStateCell",
+            vec!["state", "mask"],
+            vec!["state_out"],
+            96,
+        ),
+        seed_macro(
+            "ResetOnDelimiter",
+            vec!["byte", "state"],
+            vec!["state_out"],
+            32,
+        ),
     ];
     defs.sort_by(|a, b| a.macro_id.cmp(&b.macro_id));
     defs
@@ -36,7 +49,8 @@ pub fn build_seed_registry(
         protocol_version: protocol_version.to_string(),
         manifest_hash: String::new(),
     };
-    registry.registry_id = digest_json(&(registry.snapshot_hash.clone(), registry.macro_defs.clone()))?;
+    registry.registry_id =
+        digest_json(&(registry.snapshot_hash.clone(), registry.macro_defs.clone()))?;
     registry.manifest_hash = digest_json(&registry)?;
     Ok(registry)
 }
@@ -90,7 +104,12 @@ pub fn load_or_build_active_registry(
     Ok(registry)
 }
 
-fn seed_macro(name: &str, in_ports: Vec<&str>, out_ports: Vec<&str>, local_state_bytes: u64) -> MacroDef {
+fn seed_macro(
+    name: &str,
+    in_ports: Vec<&str>,
+    out_ports: Vec<&str>,
+    local_state_bytes: u64,
+) -> MacroDef {
     let input_ports = in_ports
         .into_iter()
         .map(|n| PortSpec {

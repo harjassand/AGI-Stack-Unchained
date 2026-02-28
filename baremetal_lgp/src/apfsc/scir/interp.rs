@@ -251,7 +251,10 @@ fn simple_scan(node_id: u32, input: &[f32], hidden_dim: usize) -> Vec<f32> {
     h
 }
 
-pub fn run_program_v2(program: &crate::apfsc::types::ScirV2Program, window: &[u8]) -> Result<Vec<u16>> {
+pub fn run_program_v2(
+    program: &crate::apfsc::types::ScirV2Program,
+    window: &[u8],
+) -> Result<Vec<u16>> {
     if window.is_empty() {
         return Err(ApfscError::Validation("window cannot be empty".to_string()));
     }

@@ -36,6 +36,8 @@ pub fn seed_init(
         Vec::new(),
         Vec::new(),
         Vec::new(),
+        Vec::new(),
+        Vec::new(),
         cfg.protocol.version.clone(),
     );
     store_snapshot(root, &snapshot)?;
@@ -76,6 +78,7 @@ pub fn seed_init(
             notes: Some("deterministic phase1 seed incumbent".to_string()),
             phase2: None,
             phase3: None,
+            phase4: None,
         },
     };
 
@@ -86,6 +89,8 @@ pub fn seed_init(
     write_pointer(root, "active_candidate", &hash)?;
     write_pointer(root, "rollback_candidate", &hash)?;
     write_pointer(root, "active_snapshot", &snapshot.snapshot_hash)?;
+    write_pointer(root, "active_search_law", "searchlaw_seed_v1")?;
+    write_pointer(root, "active_formal_policy", "formal_policy_seed_v1")?;
 
     init_archives(root)?;
     Ok(hash)

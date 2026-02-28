@@ -3,7 +3,9 @@ use std::collections::BTreeMap;
 use crate::apfsc::candidate::{clone_with_mutation, CandidateBundle};
 use crate::apfsc::config::Phase1Config;
 use crate::apfsc::errors::Result;
-use crate::apfsc::types::{LearningLawKind, MemoryLawKind, PromotionClass, SchedulerClass, WarmRefinementPack};
+use crate::apfsc::types::{
+    LearningLawKind, MemoryLawKind, PromotionClass, SchedulerClass, WarmRefinementPack,
+};
 
 pub fn generate(active: &CandidateBundle, cfg: &Phase1Config) -> Result<Vec<CandidateBundle>> {
     let mut out = Vec::new();

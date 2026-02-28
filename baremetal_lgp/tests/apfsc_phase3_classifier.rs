@@ -1,5 +1,7 @@
 use baremetal_lgp::apfsc::paradigm::classify_promotion_class;
-use baremetal_lgp::apfsc::types::{LearningLawKind, MemoryLawKind, ParadigmSignature, PromotionClass, SchedulerClass};
+use baremetal_lgp::apfsc::types::{
+    LearningLawKind, MemoryLawKind, ParadigmSignature, PromotionClass, SchedulerClass,
+};
 
 fn sig(core: &str, scheduler: SchedulerClass) -> ParadigmSignature {
     ParadigmSignature {

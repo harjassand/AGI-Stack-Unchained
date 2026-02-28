@@ -119,8 +119,17 @@ pub fn refresh_active_snapshot(root: &Path, cfg: &Phase1Config) -> Result<()> {
     let reality = list_pack_hashes(root, PackKind::Reality)?;
     let prior = list_pack_hashes(root, PackKind::Prior)?;
     let substrate = list_pack_hashes(root, PackKind::Substrate)?;
+    let formal = list_pack_hashes(root, PackKind::Formal)?;
+    let tool = list_pack_hashes(root, PackKind::Tool)?;
 
-    let snapshot = materialize_snapshot(reality, prior, substrate, cfg.protocol.version.clone());
+    let snapshot = materialize_snapshot(
+        reality,
+        prior,
+        substrate,
+        formal,
+        tool,
+        cfg.protocol.version.clone(),
+    );
     store_snapshot(root, &snapshot)?;
     write_pointer(root, "active_snapshot", &snapshot.snapshot_hash)?;
     let _ = rebase_active_candidate_to_snapshot(root, &snapshot.snapshot_hash)?;

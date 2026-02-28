@@ -37,7 +37,8 @@ fn ingest_all(root: &std::path::Path, cfg: &Phase1Config) {
         "reality_f3_phys_robust",
     ];
     for d in phase2_dirs {
-        ingest_reality(root, cfg, &fixtures_phase2().join(d).join("manifest.json")).expect("ingest p2");
+        ingest_reality(root, cfg, &fixtures_phase2().join(d).join("manifest.json"))
+            .expect("ingest p2");
     }
     let phase3_dirs = [
         "reality_f4_event_sparse_base",
@@ -48,9 +49,15 @@ fn ingest_all(root: &std::path::Path, cfg: &Phase1Config) {
         "reality_f5_formal_alg_robust",
     ];
     for d in phase3_dirs {
-        ingest_reality(root, cfg, &fixtures_phase3().join(d).join("manifest.json")).expect("ingest p3");
+        ingest_reality(root, cfg, &fixtures_phase3().join(d).join("manifest.json"))
+            .expect("ingest p3");
     }
-    ingest_prior(root, cfg, &fixtures_phase3().join("priors/macro_seed/manifest.json")).expect("ingest prior");
+    ingest_prior(
+        root,
+        cfg,
+        &fixtures_phase3().join("priors/macro_seed/manifest.json"),
+    )
+    .expect("ingest prior");
 }
 
 fn run_once(root: &std::path::Path) -> baremetal_lgp::apfsc::types::EpochReport {
@@ -72,7 +79,8 @@ fn run_once(root: &std::path::Path) -> baremetal_lgp::apfsc::types::EpochReport 
     seed_init(root, &cfg, None, true).expect("seed init");
     ingest_all(root, &cfg);
 
-    let snapshot = baremetal_lgp::apfsc::artifacts::read_pointer(root, "active_snapshot").expect("snapshot");
+    let snapshot =
+        baremetal_lgp::apfsc::artifacts::read_pointer(root, "active_snapshot").expect("snapshot");
     let packs = pack_hashes_from_snapshot(root, &snapshot).expect("packs");
     let constellation = build_constellation(root, &cfg, &snapshot, &packs).expect("constellation");
 
@@ -96,8 +104,7 @@ fn phase3_epoch_pwarm_path_is_deterministic() {
     assert!(!report.judge_report.receipts.is_empty());
     if !warm.is_empty() {
         assert!(report.judge_report.receipts.iter().any(|r| {
-            r.promotion_class == Some(PromotionClass::PWarm)
-                && r.decision == JudgeDecision::Promote
+            r.promotion_class == Some(PromotionClass::PWarm) && r.decision == JudgeDecision::Promote
         }));
     }
 

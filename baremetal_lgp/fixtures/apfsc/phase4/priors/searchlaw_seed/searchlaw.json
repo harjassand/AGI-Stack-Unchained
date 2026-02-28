@@ -1,0 +1,10 @@
+{
+  "law_id": "searchlaw_seed_fixture",
+  "policy_kind": "RuleTableV1",
+  "lane_weights_q16": {
+    "truth": 22938,
+    "equivalence": 13107,
+    "incubator": 16384,
+    "cold_frontier": 13107
+  }
+}

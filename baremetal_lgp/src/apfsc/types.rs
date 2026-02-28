@@ -120,6 +120,8 @@ pub enum PackKind {
     Reality,
     Prior,
     Substrate,
+    Formal,
+    Tool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -238,7 +240,54 @@ pub enum PromotionClass {
     PWarm,
     #[serde(alias = "PColdDisabled")]
     PCold,
+    G,
     GDisabled,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+pub enum SearchObjectKind {
+    Architecture,
+    SearchLaw,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+pub enum ChallengeRole {
+    HiddenGeneralization,
+    HiddenIntervention,
+    HiddenFreshness,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+pub enum ToolShadowStatus {
+    Quarantined,
+    GoldEquivalent,
+    CanaryEquivalent,
+    DiscoveryOnly,
+    PublicCanaryEligible,
+    Rejected,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+pub enum NeedBucket {
+    Reality,
+    Prior,
+    Substrate,
+    Formal,
+    Tool,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+pub enum BranchStatus {
+    Active,
+    Shadow,
+    Debt,
+    Culled,
+    Promoted,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+pub enum SearchLawPolicyKind {
+    RuleTableV1,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -247,6 +296,10 @@ pub struct EpochSnapshot {
     pub reality_roots: Vec<DigestHex>,
     pub prior_roots: Vec<DigestHex>,
     pub substrate_roots: Vec<DigestHex>,
+    #[serde(default)]
+    pub formal_roots: Vec<DigestHex>,
+    #[serde(default)]
+    pub tool_roots: Vec<DigestHex>,
     pub protocol_version: String,
 }
 
@@ -291,6 +344,23 @@ pub struct CandidatePhase3Meta {
     pub build: Phase3BuildMeta,
     pub backend_plan: BackendPlan,
     pub bridge_kind: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct Phase4BuildMeta {
+    pub target_families: Vec<String>,
+    pub source_lane: String,
+    pub phase4_profile: String,
+    pub searchlaw_hash: String,
+    pub dependency_pack_hash: String,
+    pub branch_id: String,
+    pub recombination_parent_hashes: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct CandidatePhase4Meta {
+    pub build: Phase4BuildMeta,
+    pub search_object: SearchObjectKind,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -546,6 +616,12 @@ pub enum JudgeRejectReason {
     RollbackTargetMissing,
     UnsupportedBackendPlan,
     PColdMarginInsufficient,
+    ForbiddenSearchLawInput,
+    SearchLawOfflineFail,
+    SearchLawAbFail,
+    ChallengeGateFail,
+    FormalPolicyFail,
+    ToolShadowFail,
 }
 
 impl JudgeRejectReason {
@@ -898,4 +974,319 @@ pub struct BridgeReceipt {
     pub snapshot_hash: String,
     pub constellation_id: String,
     pub protocol_version: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct DependencyPack {
+    pub snapshot_hash: String,
+    pub prior_roots: Vec<String>,
+    pub tool_roots: Vec<String>,
+    pub formal_policy_hash: String,
+    pub substrate_roots: Vec<String>,
+    pub macro_registry_hash: String,
+    pub manifest_hash: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct HiddenChallengeFamily {
+    pub family_id: String,
+    pub role: ChallengeRole,
+    pub source_pack_hash: String,
+    pub window_commit_hash: String,
+    pub reveal_epoch: u64,
+    pub retire_after_epoch: u64,
+    pub protected: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct HiddenChallengeManifest {
+    pub constellation_id: String,
+    pub snapshot_hash: String,
+    pub active_hidden_families: Vec<HiddenChallengeFamily>,
+    pub retired_hidden_families: Vec<String>,
+    pub manifest_hash: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct ChallengeReceipt {
+    pub candidate_hash: String,
+    pub incumbent_hash: String,
+    pub family_bucket_passes: BTreeMap<String, bool>,
+    pub aggregate_bucket_score: i32,
+    pub catastrophic_regression: bool,
+    pub pass: bool,
+    pub reason: String,
+    pub snapshot_hash: String,
+    pub constellation_id: String,
+    pub protocol_version: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct FormalRule {
+    pub rule_id: String,
+    pub severity: String,
+    pub scope: String,
+    pub pattern_hash: String,
+    pub action: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct FormalPolicy {
+    pub policy_id: String,
+    pub version: u32,
+    pub rules: Vec<FormalRule>,
+    pub source_pack_hashes: Vec<String>,
+    pub manifest_hash: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct FormalPackAdmissionReceipt {
+    pub pack_hash: String,
+    pub policy_hash: String,
+    pub validated: bool,
+    pub tightened_rules_only: bool,
+    pub applied: bool,
+    pub reason: String,
+    pub snapshot_hash: String,
+    pub constellation_id: String,
+    pub protocol_version: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct ToolPack {
+    pub tool_id: String,
+    pub version: String,
+    pub backend_kind: String,
+    pub entrypoints: Vec<String>,
+    pub dependency_digests: Vec<String>,
+    pub manifest_hash: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct ToolShadowReceipt {
+    pub toolpack_hash: String,
+    pub candidate_hash: Option<String>,
+    pub gold_exact_match: bool,
+    pub canary_exact_match: bool,
+    pub deterministic_replay: bool,
+    pub peak_rss_bytes: u64,
+    pub status: ToolShadowStatus,
+    pub reason: String,
+    pub snapshot_hash: String,
+    pub constellation_id: String,
+    pub protocol_version: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct LawArchiveRecord {
+    pub record_id: String,
+    pub candidate_hash: String,
+    pub parent_hashes: Vec<String>,
+    pub searchlaw_hash: String,
+    pub promotion_class: PromotionClass,
+    pub source_lane: String,
+    pub family_outcome_buckets: BTreeMap<String, i8>,
+    pub challenge_bucket: i8,
+    pub canary_survived: bool,
+    pub yield_points: i32,
+    pub compute_units: u64,
+    pub morphology_hash: String,
+    pub qd_cell_id: String,
+    pub snapshot_hash: String,
+    pub constellation_id: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct LawToken {
+    pub token_id: String,
+    pub token_kind: String,
+    pub support_count: u32,
+    pub mean_yield_points: f64,
+    pub mean_compute_units: f64,
+    pub conditioned_on: BTreeMap<String, String>,
+    pub payload_hash: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct LawArchiveSummary {
+    pub total_records: u64,
+    pub total_tokens: u64,
+    pub active_searchlaw_hash: String,
+    pub dominant_failure_modes: Vec<String>,
+    pub underfilled_qd_cells: Vec<String>,
+    pub stale_family_ids: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct NeedToken {
+    pub token_id: String,
+    pub need_bucket: NeedBucket,
+    pub priority_q16: u32,
+    pub requested_family_shape: String,
+    pub justification_codes: Vec<String>,
+    pub originating_searchlaw_hash: String,
+    pub epoch_id: u64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct BranchRecord {
+    pub branch_id: String,
+    pub parent_branch_id: Option<String>,
+    pub owner_searchlaw_hash: String,
+    pub assigned_lane: String,
+    pub assigned_family_targets: Vec<String>,
+    pub assigned_class_targets: Vec<PromotionClass>,
+    pub assigned_qd_targets: Vec<String>,
+    pub credit_balance: i32,
+    pub debt_balance: i32,
+    pub idle_epochs: u32,
+    pub status: BranchStatus,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct CreditLedgerEntry {
+    pub entry_id: String,
+    pub branch_id: String,
+    pub delta_credits: i32,
+    pub reason: String,
+    pub candidate_hash: Option<String>,
+    pub promotion_hash: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct PortfolioManifest {
+    pub portfolio_id: String,
+    pub snapshot_hash: String,
+    pub constellation_id: String,
+    pub active_searchlaw_hash: String,
+    pub total_credit_supply: i32,
+    pub total_debt_outstanding: i32,
+    pub branch_ids: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct RecombinationSpec {
+    pub parent_candidate_hashes: Vec<String>,
+    pub parent_contribution_ranges: BTreeMap<String, Vec<String>>,
+    pub merge_mode: String,
+    pub compatibility_hash: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct MorphologyDescriptor {
+    pub paradigm_signature_hash: String,
+    pub scheduler_class: String,
+    pub memory_law_kind: String,
+    pub macro_density_bin: String,
+    pub state_bytes_bin: String,
+    pub family_profile_bin: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct QdCellRecord {
+    pub cell_id: String,
+    pub descriptor: MorphologyDescriptor,
+    pub occupant_candidate_hash: String,
+    pub public_quality_score: f64,
+    pub novelty_score: f64,
+    pub last_updated_epoch: u64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct SearchLawPack {
+    pub law_id: String,
+    pub parent_law_hash: Option<String>,
+    pub policy_kind: SearchLawPolicyKind,
+    pub feature_schema_version: String,
+    pub lane_weights_q16: BTreeMap<String, u32>,
+    pub class_weights_q16: BTreeMap<String, u32>,
+    pub family_weights_q16: BTreeMap<String, u32>,
+    pub qd_explore_rate_q16: u32,
+    pub recombination_rate_q16: u32,
+    pub fresh_family_bias_q16: u32,
+    pub need_rules_hash: String,
+    pub debt_policy_hash: String,
+    pub manifest_hash: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct SearchLawFeatureVector {
+    pub active_family_ids: Vec<String>,
+    pub stale_family_ids: Vec<String>,
+    pub underfilled_qd_cells: Vec<String>,
+    pub dominant_failure_modes: Vec<String>,
+    pub recent_public_yield_buckets: BTreeMap<String, i32>,
+    pub recent_judged_yield_points: i32,
+    pub recent_compute_units: u64,
+    pub recent_canary_failures: u32,
+    pub recent_challenge_failures: u32,
+    pub public_plateau_epochs: u32,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct SearchPlan {
+    pub architecture_branch_budgets: Vec<(String, i32)>,
+    pub lane_budget_q16: BTreeMap<String, u32>,
+    pub class_budget_q16: BTreeMap<String, u32>,
+    pub family_budget_q16: BTreeMap<String, u32>,
+    pub qd_target_cells: Vec<String>,
+    pub recombination_pairs: Vec<(String, String)>,
+    pub need_tokens: Vec<NeedToken>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct SearchLawOfflineReceipt {
+    pub searchlaw_hash: String,
+    pub replay_records_used: u64,
+    pub projected_yield_points: i32,
+    pub projected_compute_units: u64,
+    pub projected_yield_per_compute: f64,
+    pub pass: bool,
+    pub reason: String,
+    pub snapshot_hash: String,
+    pub constellation_id: String,
+    pub protocol_version: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct SearchLawAbReceipt {
+    pub candidate_searchlaw_hash: String,
+    pub incumbent_searchlaw_hash: String,
+    pub ab_epochs: u32,
+    pub incumbent_yield_points: i32,
+    pub candidate_yield_points: i32,
+    pub incumbent_compute_units: u64,
+    pub candidate_compute_units: u64,
+    pub incumbent_yield_per_compute: f64,
+    pub candidate_yield_per_compute: f64,
+    pub challenge_regression: bool,
+    pub safety_regression: bool,
+    pub pass: bool,
+    pub reason: String,
+    pub snapshot_hash: String,
+    pub constellation_id: String,
+    pub protocol_version: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct SearchLawPromotionReceipt {
+    pub candidate_searchlaw_hash: String,
+    pub incumbent_searchlaw_hash: String,
+    pub decision: String,
+    pub reason: String,
+    pub ab_receipt_hash: String,
+    pub applied: bool,
+    pub snapshot_hash: String,
+    pub constellation_id: String,
+    pub protocol_version: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct Phase4PromotionExtension {
+    pub challenge_receipt_hash: String,
+    pub searchlaw_hash: String,
+    pub branch_id: String,
+    pub yield_points: i32,
+    pub qd_cell_id: String,
+    pub dependency_pack_hash: String,
 }

@@ -29,10 +29,10 @@ fn main() -> Result<(), String> {
     } else {
         Phase1Config::default()
     };
-    if args.profile == "phase3" {
+    if args.profile == "phase3" || args.profile == "phase4" {
         let candidate = args
             .candidate
-            .ok_or_else(|| "--candidate is required for --profile phase3".to_string())?;
+            .ok_or_else(|| "--candidate is required for --profile phase3/phase4".to_string())?;
         let incumbent = if let Some(v) = args.incumbent {
             v
         } else {
@@ -50,7 +50,11 @@ fn main() -> Result<(), String> {
             &candidate,
             &incumbent,
             &constellation,
-            cfg.phase3.canary.warm_windows,
+            if args.profile == "phase4" {
+                cfg.phase4.searchlaw_max_ab_epochs.max(1) * cfg.phase3.canary.warm_windows.min(32)
+            } else {
+                cfg.phase3.canary.warm_windows
+            },
             &cfg,
         )
         .map_err(|e| e.to_string())?;

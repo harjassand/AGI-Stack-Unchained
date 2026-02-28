@@ -73,7 +73,8 @@ pub fn evaluate_warm_bridge(
 ) -> Result<BridgeReceipt> {
     validate_warm_refinement(pack)?;
 
-    let anchor_cmp = evaluate_static_panel(root, candidate, incumbent, constellation, PanelKind::Anchor)?;
+    let anchor_cmp =
+        evaluate_static_panel(root, candidate, incumbent, constellation, PanelKind::Anchor)?;
     let pass = anchor_cmp.delta_bpb >= -1e-12 && anchor_cmp.protected_floor_failures.is_empty();
     Ok(BridgeReceipt {
         candidate_hash: candidate.manifest.candidate_hash.clone(),
@@ -106,7 +107,8 @@ pub fn evaluate_cold_boundary(
 ) -> Result<(BridgeReceipt, RecentFamilyGainReceipt)> {
     validate_cold_boundary(pack)?;
 
-    let anchor_cmp = evaluate_static_panel(root, candidate, incumbent, constellation, PanelKind::Anchor)?;
+    let anchor_cmp =
+        evaluate_static_panel(root, candidate, incumbent, constellation, PanelKind::Anchor)?;
     let transfer = evaluate_transfer(root, candidate, incumbent, constellation, EvalMode::Holdout)?;
 
     let recent = recent_family_gain(
@@ -163,8 +165,15 @@ pub fn evaluate_bridge_pack(
             None,
         )),
         BridgePack::Cold(c) => {
-            let (bridge, recent) =
-                evaluate_cold_boundary(root, candidate, incumbent, &constellation, c, freshness, current_epoch)?;
+            let (bridge, recent) = evaluate_cold_boundary(
+                root,
+                candidate,
+                incumbent,
+                &constellation,
+                c,
+                freshness,
+                current_epoch,
+            )?;
             Ok((bridge, Some(recent)))
         }
     }

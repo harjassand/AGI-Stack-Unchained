@@ -10,18 +10,19 @@ use crate::apfsc::types::{
 };
 
 pub fn audit_forbidden_inputs(candidate: &SearchLawPack) -> Result<()> {
-    let lowered_need = candidate.need_rules_hash.to_lowercase();
-    let lowered_debt = candidate.debt_policy_hash.to_lowercase();
+    let payload = serde_json::to_string(candidate)
+        .map_err(|e| ApfscError::Protocol(format!("search law serialize failed: {e}")))?;
+    let lowered = payload.to_lowercase();
     let forbidden = [
         "holdout_raw",
+        "holdout_scalar",
         "challenge_raw",
+        "hidden_challenge_content",
         "canary_raw",
         "judge_private",
+        "protocol_private",
     ];
-    if forbidden
-        .iter()
-        .any(|k| lowered_need.contains(k) || lowered_debt.contains(k))
-    {
+    if forbidden.iter().any(|k| lowered.contains(k)) {
         return Err(ApfscError::Validation(
             "search law references forbidden private judge inputs".to_string(),
         ));
@@ -105,6 +106,15 @@ pub fn evaluate_searchlaw_ab(
     constellation_id: &str,
     protocol_version: &str,
 ) -> Result<SearchLawAbReceipt> {
+    if ab_epochs < cfg.phase4.searchlaw_min_ab_epochs
+        || ab_epochs > cfg.phase4.searchlaw_max_ab_epochs
+    {
+        return Err(ApfscError::Validation(format!(
+            "ab_epochs={} outside configured range {}..={}",
+            ab_epochs, cfg.phase4.searchlaw_min_ab_epochs, cfg.phase4.searchlaw_max_ab_epochs
+        )));
+    }
+
     if !offline.pass {
         return Ok(SearchLawAbReceipt {
             candidate_searchlaw_hash: candidate.manifest_hash.clone(),
@@ -141,8 +151,15 @@ pub fn evaluate_searchlaw_ab(
 
     let required =
         incumbent_yield_per_compute * (1.0 + cfg.phase4.searchlaw_required_yield_improvement);
-    let safety_regression = false;
-    let challenge_regression = false;
+    let total = records.len().max(1) as f64;
+    let canary_failure_rate = records.iter().filter(|r| !r.canary_survived).count() as f64 / total;
+    let challenge_mean = records
+        .iter()
+        .map(|r| r.challenge_bucket as f64)
+        .sum::<f64>()
+        / total;
+    let safety_regression = canary_failure_rate > cfg.phase4.searchlaw_max_safety_regression;
+    let challenge_regression = challenge_mean < 0.0;
     let pass =
         candidate_yield_per_compute >= required && !safety_regression && !challenge_regression;
 

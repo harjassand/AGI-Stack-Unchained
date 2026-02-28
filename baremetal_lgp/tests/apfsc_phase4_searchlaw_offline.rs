@@ -39,4 +39,9 @@ fn searchlaw_offline_is_deterministic_and_audits_forbidden_inputs() {
     let mut bad = law.clone();
     bad.need_rules_hash = "holdout_raw_feed".to_string();
     assert!(audit_forbidden_inputs(&bad).is_err());
+
+    let mut bad2 = law.clone();
+    bad2.family_weights_q16
+        .insert("hidden_challenge_content_probe".to_string(), 1);
+    assert!(audit_forbidden_inputs(&bad2).is_err());
 }

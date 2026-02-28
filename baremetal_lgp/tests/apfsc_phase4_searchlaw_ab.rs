@@ -57,3 +57,33 @@ fn searchlaw_ab_uses_yield_per_compute_threshold() {
     assert!(ab.candidate_yield_per_compute.is_finite());
     assert!(ab.candidate_yield_per_compute >= 0.0);
 }
+
+#[test]
+fn searchlaw_ab_rejects_epoch_count_outside_config_range() {
+    let tmp = tempdir().expect("tmp");
+    let root = tmp.path().join(".apfsc");
+    let mut cfg = Phase1Config::default();
+    cfg.phase4.searchlaw_min_ab_epochs = 2;
+    cfg.phase4.searchlaw_max_ab_epochs = 4;
+
+    let cand = seed_search_law();
+    let inc = seed_search_law();
+    let offline =
+        evaluate_searchlaw_offline(&root, &cand, &[rec()], "s", "k", &cfg.protocol.version)
+            .expect("offline");
+    let err = evaluate_searchlaw_ab(
+        &root,
+        &cand,
+        &inc,
+        &offline,
+        &[rec()],
+        1,
+        &cfg,
+        "s",
+        "k",
+        &cfg.protocol.version,
+    )
+    .expect_err("ab epoch bounds should fail");
+
+    assert!(err.to_string().contains("ab_epochs=1"));
+}

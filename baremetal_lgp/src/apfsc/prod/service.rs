@@ -13,8 +13,11 @@ use crate::apfsc::prod::diagnostics::dump_diagnostics;
 use crate::apfsc::prod::gc::gc_candidates;
 use crate::apfsc::prod::health::health_report;
 use crate::apfsc::prod::jobs::{idempotency_key, now_unix_s};
-use crate::apfsc::prod::journal::{append_journal, JobState, JournalRecord};
+use crate::apfsc::prod::journal::{
+    append_journal, has_committed_idempotency, JobState, JournalRecord,
+};
 use crate::apfsc::prod::release_manifest::verify_release_bundle_from_manifest;
+use crate::apfsc::prod::release_manifest::ReleaseManifest;
 use crate::apfsc::prod::restore::{restore_apply, restore_dry_run};
 use crate::apfsc::prod::telemetry::Telemetry;
 
@@ -59,12 +62,142 @@ pub fn handle_request(
     resolved_role: crate::apfsc::prod::auth::Role,
 ) -> Result<ControlResponse> {
     crate::apfsc::prod::auth::authorize(resolved_role, command_required_role(&req.command))?;
+    let is_mutating = command_is_mutating(&req.command);
+    let snapshot_hash = read_pointer(&ctx.root, "active_snapshot").unwrap_or_default();
+    let (cmd_name, profile, entity_hash) = command_materials(&req.command);
+    let idk = if is_mutating {
+        Some(idempotency_key(
+            cmd_name,
+            Some(&snapshot_hash),
+            entity_hash.as_deref(),
+            profile,
+            &req.request_id,
+        )?)
+    } else {
+        None
+    };
+    let job_id = format!(
+        "job:{}:{}",
+        req.request_id,
+        cmd_name.replace(' ', "_").to_lowercase()
+    );
+    let request_digest =
+        crate::apfsc::artifacts::digest_json(req).unwrap_or_else(|_| "digest_error".to_string());
+
+    if let Some(idk) = &idk {
+        if has_committed_idempotency(&ctx.root, idk)? {
+            let replay = resp_ok(
+                req,
+                "idempotent replay",
+                serde_json::json!({
+                    "idempotency_key": idk,
+                    "job_id": job_id,
+                    "replayed": true
+                }),
+            );
+            let _ = append_audit_event(
+                &ctx.root,
+                &ctx.conn,
+                AuditEvent {
+                    seq: 0,
+                    prev_hash: None,
+                    event_hash: String::new(),
+                    actor: req.actor.clone(),
+                    role: format!("{:?}", resolved_role),
+                    command: format!("{:?}", req.command),
+                    request_digest,
+                    result: "idempotent_replay".to_string(),
+                    ts: now_unix_s(),
+                    body_redacted_json: serde_json::json!({"message": replay.message}),
+                },
+            );
+            return Ok(replay);
+        }
+
+        append_journal(
+            &ctx.root,
+            &JournalRecord {
+                job_id: job_id.clone(),
+                run_id: None,
+                idempotency_key: idk.clone(),
+                stage: "planned".to_string(),
+                target_entity_hash: entity_hash.clone(),
+                planned_effects: vec![cmd_name.to_string()],
+                created_at: now_unix_s(),
+                state: JobState::Planned,
+                receipt_hash: None,
+                commit_marker: None,
+            },
+        )?;
+
+        let _ = ctx.conn.execute(
+            "INSERT OR REPLACE INTO jobs(job_id, run_id, kind, entity_hash, state, attempt, started_at)
+             VALUES(?1, NULL, ?2, ?3, 'Planned', 0, datetime('now'))",
+            params![job_id, cmd_name, entity_hash.clone()],
+        );
+
+        let _ = append_audit_event(
+            &ctx.root,
+            &ctx.conn,
+            AuditEvent {
+                seq: 0,
+                prev_hash: None,
+                event_hash: String::new(),
+                actor: req.actor.clone(),
+                role: format!("{:?}", resolved_role),
+                command: format!("{:?}", req.command),
+                request_digest: request_digest.clone(),
+                result: "planned".to_string(),
+                ts: now_unix_s(),
+                body_redacted_json: serde_json::json!({"job_id": job_id, "idempotency_key": idk}),
+            },
+        );
+    }
 
     let result = dispatch(ctx, req);
     let (ok, message) = match &result {
         Ok(r) => (r.ok, r.message.clone()),
         Err(e) => (false, e.to_string()),
     };
+
+    if let Some(idk) = &idk {
+        let state = if ok {
+            JobState::Committed
+        } else {
+            JobState::Failed
+        };
+        let commit_marker = if ok {
+            Some(format!("service_commit:{}", cmd_name))
+        } else {
+            None
+        };
+        let _ = append_journal(
+            &ctx.root,
+            &JournalRecord {
+                job_id: job_id.clone(),
+                run_id: None,
+                idempotency_key: idk.clone(),
+                stage: if ok { "completed" } else { "failed" }.to_string(),
+                target_entity_hash: entity_hash.clone(),
+                planned_effects: vec![cmd_name.to_string()],
+                created_at: now_unix_s(),
+                state: state.clone(),
+                receipt_hash: None,
+                commit_marker,
+            },
+        );
+        let _ = ctx.conn.execute(
+            "UPDATE jobs SET state=?2, finished_at=datetime('now') WHERE job_id=?1",
+            params![
+                job_id,
+                match state {
+                    JobState::Committed => "Committed",
+                    JobState::Failed => "Failed",
+                    _ => "Running",
+                }
+            ],
+        );
+    }
 
     let _ = append_audit_event(
         &ctx.root,
@@ -76,8 +209,7 @@ pub fn handle_request(
             actor: req.actor.clone(),
             role: format!("{:?}", resolved_role),
             command: format!("{:?}", req.command),
-            request_digest: crate::apfsc::artifacts::digest_json(req)
-                .unwrap_or_else(|_| "digest_error".to_string()),
+            request_digest,
             result: if ok {
                 "ok".to_string()
             } else {
@@ -388,6 +520,22 @@ fn dispatch(ctx: &mut ServiceContext, req: &ControlRequest) -> Result<ControlRes
         }
         ControlCommand::ReleaseVerify { manifest_path } => {
             let report = verify_release_bundle_from_manifest(Path::new(manifest_path))?;
+            if report.passed {
+                let manifest: ReleaseManifest = serde_json::from_slice(
+                    &std::fs::read(manifest_path)
+                        .map_err(|e| crate::apfsc::errors::io_err(manifest_path, e))?,
+                )?;
+                let manifest_hash = crate::apfsc::artifacts::digest_json(&manifest)?;
+                let _ = ctx.conn.execute(
+                    "INSERT OR REPLACE INTO releases(release_id, version, state, manifest_hash, created_at, updated_at)
+                     VALUES(?1, ?2, 'Verified', ?3, datetime('now'), datetime('now'))",
+                    params![
+                        format!("release:{}", manifest.version),
+                        manifest.version,
+                        manifest_hash
+                    ],
+                );
+            }
             Ok(resp_ok(
                 req,
                 "release verify",
@@ -396,6 +544,13 @@ fn dispatch(ctx: &mut ServiceContext, req: &ControlRequest) -> Result<ControlRes
         }
         ControlCommand::Qualify { mode } => {
             let report = crate::apfsc::prod::service::run_qualification(&ctx.root, mode)?;
+            if report.passed && mode == "release" {
+                let _ = ctx.conn.execute(
+                    "INSERT OR REPLACE INTO releases(release_id, version, state, manifest_hash, created_at, updated_at)
+                     VALUES('release:pending', 'pending', 'Qualified', '', datetime('now'), datetime('now'))",
+                    [],
+                );
+            }
             Ok(resp_ok(
                 req,
                 "qualification complete",
@@ -469,5 +624,58 @@ fn resolve_manifest_path(path: &str) -> PathBuf {
         p.join("manifest.json")
     } else {
         p
+    }
+}
+
+fn command_is_mutating(command: &ControlCommand) -> bool {
+    !matches!(
+        command,
+        ControlCommand::Status | ControlCommand::Health | ControlCommand::ActiveShow
+    )
+}
+
+fn command_materials(command: &ControlCommand) -> (&'static str, &str, Option<String>) {
+    match command {
+        ControlCommand::Status => ("status", "prod", None),
+        ControlCommand::Health => ("health", "prod", None),
+        ControlCommand::IngestReality { manifest_path } => {
+            ("ingest_reality", "prod", Some(manifest_path.clone()))
+        }
+        ControlCommand::IngestPrior { manifest_path } => {
+            ("ingest_prior", "prod", Some(manifest_path.clone()))
+        }
+        ControlCommand::IngestSubstrate { manifest_path } => {
+            ("ingest_substrate", "prod", Some(manifest_path.clone()))
+        }
+        ControlCommand::IngestFormal { manifest_path } => {
+            ("ingest_formal", "prod", Some(manifest_path.clone()))
+        }
+        ControlCommand::IngestTool { manifest_path } => {
+            ("ingest_tool", "prod", Some(manifest_path.clone()))
+        }
+        ControlCommand::StartRun { profile, .. } => ("start_run", profile.as_str(), None),
+        ControlCommand::Pause => ("pause", "prod", None),
+        ControlCommand::Resume => ("resume", "prod", None),
+        ControlCommand::CancelRun { run_id } => ("cancel_run", "prod", Some(run_id.clone())),
+        ControlCommand::BackupCreate => ("backup_create", "prod", None),
+        ControlCommand::BackupVerify { backup_id } => {
+            ("backup_verify", "prod", Some(backup_id.clone()))
+        }
+        ControlCommand::RestoreDryRun { backup_id } => {
+            ("restore_dry_run", "prod", Some(backup_id.clone()))
+        }
+        ControlCommand::RestoreApply { backup_id } => {
+            ("restore_apply", "prod", Some(backup_id.clone()))
+        }
+        ControlCommand::GcDryRun => ("gc_dry_run", "prod", None),
+        ControlCommand::GcApply => ("gc_apply", "prod", None),
+        ControlCommand::Compact => ("compact", "prod", None),
+        ControlCommand::Qualify { mode } => ("qualify", mode.as_str(), None),
+        ControlCommand::DiagDump => ("diag_dump", "prod", None),
+        ControlCommand::ReleaseVerify { manifest_path } => {
+            ("release_verify", "prod", Some(manifest_path.clone()))
+        }
+        ControlCommand::Rollback => ("rollback", "prod", None),
+        ControlCommand::ActiveShow => ("active_show", "prod", None),
     }
 }

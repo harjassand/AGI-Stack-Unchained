@@ -16,10 +16,12 @@ fn backup_and_restore_round_trip() {
     let conn = open_control_db(&root.join("control/control.db")).expect("db");
     let m = create_backup(&root, &root.join("backups"), &conn).expect("backup");
     let bdir = root.join("backups").join(&m.backup_id);
+    assert!(bdir.join("control.db.zst").exists());
     verify_backup(&bdir).expect("verify");
     restore_dry_run(&bdir).expect("dry");
 
     let target = tmp.path().join("restored");
     restore_apply(&bdir, &target).expect("apply");
     assert!(target.join("pointers/active_candidate").exists());
+    assert!(target.join("control/control.db").exists());
 }

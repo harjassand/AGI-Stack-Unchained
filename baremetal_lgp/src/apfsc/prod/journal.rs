@@ -52,3 +52,11 @@ pub fn has_commit_marker(root: &Path, job_id: &str) -> Result<bool> {
         .and_then(|r| r.commit_marker.as_ref())
         .is_some())
 }
+
+pub fn has_committed_idempotency(root: &Path, idempotency_key: &str) -> Result<bool> {
+    let rows = load_journal(root)?;
+    Ok(rows.iter().rev().any(|r| {
+        r.idempotency_key == idempotency_key
+            && (matches!(r.state, JobState::Committed) || r.commit_marker.is_some())
+    }))
+}

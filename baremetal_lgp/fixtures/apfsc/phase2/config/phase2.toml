@@ -1,0 +1,131 @@
+[root]
+artifact_root = ".apfsc"
+
+[protocol]
+version = "apfsc-phase2-mvp-v1"
+
+[bank]
+window_len = 256
+stride = 64
+
+[limits]
+rss_hard_limit_bytes = 12884901888
+rss_abort_limit_bytes = 15032385536
+max_concurrent_mapped_bytes = 2147483648
+segment_bytes = 268435456
+state_tile_bytes_max = 2097152
+max_public_workers = 2
+max_incubator_workers = 1
+max_canary_workers = 1
+max_transfer_workers = 1
+max_robust_workers = 1
+
+[train]
+steps = 200
+lr = 0.05
+eps = 1e-8
+l2 = 1e-5
+clip_grad = 1.0
+batch_windows = 8
+shuffle = false
+
+[judge]
+public_min_delta_bits = 32.0
+holdout_min_delta_bits = 16.0
+anchor_max_regress_bits = 0.0
+mini_transfer_min_delta_bits = 0.0
+require_canary_for_a = true
+max_holdout_admissions = 8
+
+[lanes]
+max_truth_candidates = 12
+max_equivalence_candidates = 8
+max_incubator_candidates = 8
+max_public_candidates = 32
+
+[incubator]
+incubator_min_utility_bits = 8.0
+lambda_code = 0.1
+lambda_risk = 0.1
+shadow_steps = 100
+
+[witness]
+count = 32
+rotation = 8
+
+[phase2]
+enabled = true
+profile_name = "phase2"
+constellation_required = true
+min_improved_families = 2
+min_nonprotected_improved_families = 1
+require_target_subset_hit = true
+target_subset = ["det_micro", "sensor_temporal", "phys_sim"]
+
+[phase2.normalization]
+codelen_ref_bytes = 4096
+transfer_ref_bytes = 4096
+public_static_margin_bpb = 0.001
+holdout_static_margin_bpb = 0.001
+holdout_transfer_margin_bpb = 0.0
+holdout_robust_margin_bpb = 0.0
+
+[phase2.weights.det_micro]
+static_weight = 0.25
+transfer_weight = 0.25
+robust_weight = 0.25
+
+[phase2.weights.text_code]
+static_weight = 0.25
+transfer_weight = 0.25
+robust_weight = 0.25
+
+[phase2.weights.sensor_temporal]
+static_weight = 0.25
+transfer_weight = 0.25
+robust_weight = 0.25
+
+[phase2.weights.phys_sim]
+static_weight = 0.25
+transfer_weight = 0.25
+robust_weight = 0.25
+
+[phase2.floors.det_micro]
+protected = true
+max_static_regress_bpb = 0.001
+max_transfer_regress_bpb = 0.002
+max_robust_regress_bpb = 0.002
+min_family_improve_bpb = 0.0005
+
+[phase2.floors.text_code]
+protected = true
+max_static_regress_bpb = 0.001
+max_transfer_regress_bpb = 0.002
+max_robust_regress_bpb = 0.002
+min_family_improve_bpb = 0.0005
+
+[phase2.floors.sensor_temporal]
+protected = false
+max_static_regress_bpb = 0.002
+max_transfer_regress_bpb = 0.003
+max_robust_regress_bpb = 0.003
+min_family_improve_bpb = 0.0005
+
+[phase2.floors.phys_sim]
+protected = false
+max_static_regress_bpb = 0.002
+max_transfer_regress_bpb = 0.003
+max_robust_regress_bpb = 0.003
+min_family_improve_bpb = 0.0005
+
+[phase2.transfer]
+steps = 64
+lr = 0.03
+eps = 1e-8
+l2 = 1e-5
+clip_grad = 1.0
+batch_windows = 8
+max_fast_weight_bytes = 262144
+max_delta_bits = 524288
+reset_ephemeral_state = true
+mutable_surfaces = ["nuisance_head", "residual_head", "resid_weights", "fast_weights"]

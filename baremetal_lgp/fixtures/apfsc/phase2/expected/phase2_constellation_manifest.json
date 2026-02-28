@@ -1,0 +1,188 @@
+{
+  "constellation_id": "1266b358d4a1ddecc484d6d34f9d6466f3ececbc7009c3d76b635a0a54f527b3",
+  "snapshot_hash": "cbb99f43e46511bfa99149d80eb321df913c4bf30f952f3a1bb4bd1453610ccf",
+  "family_specs": [
+    {
+      "family_id": "det_micro",
+      "family_kind": "AlgorithmicSymbolic",
+      "base_pack_hash": "09505c47c684138c9ce0bd4f4e0924dfa01f2675b125b79656d745b2291ccb95",
+      "transfer_pack_hashes": [
+        "aabdf85248b817dafd6113fe9d789387b04a60a56f599f274912ed3e128f2134"
+      ],
+      "robust_pack_hashes": [
+        "ba5d9b5ec8de2bb1a5921e2974e3ed0585e743f25c130fc39b4154b5f178afcf"
+      ],
+      "challenge_pack_hashes": [],
+      "weights": {
+        "static_weight": 0.25,
+        "transfer_weight": 0.25,
+        "robust_weight": 0.25
+      },
+      "floors": {
+        "protected": true,
+        "max_static_regress_bpb": 0.001,
+        "max_transfer_regress_bpb": 0.002,
+        "max_robust_regress_bpb": 0.002,
+        "min_family_improve_bpb": 0.0005
+      },
+      "transfer_adapt": {
+        "steps": 64,
+        "lr": 0.03,
+        "eps": 1e-8,
+        "l2": 0.00001,
+        "clip_grad": 1.0,
+        "batch_windows": 8,
+        "max_fast_weight_bytes": 262144,
+        "max_delta_bits": 524288,
+        "reset_ephemeral_state": true,
+        "mutable_surfaces": [
+          "nuisance_head",
+          "residual_head",
+          "resid_weights",
+          "fast_weights"
+        ]
+      }
+    },
+    {
+      "family_id": "phys_sim",
+      "family_kind": "PhysicalSimulation",
+      "base_pack_hash": "d1193bbcb7ceb2e94dd3226dec7283fbeb7439b4a16a966424a9cadecddfc023",
+      "transfer_pack_hashes": [
+        "16699e06370e85c3297b715db89978337569f0b9ca417c014c5429e73e766bc6"
+      ],
+      "robust_pack_hashes": [
+        "812694a3e092f30be16c86655c8077e11f80c96b878e57541d8fea41661e036f"
+      ],
+      "challenge_pack_hashes": [],
+      "weights": {
+        "static_weight": 0.25,
+        "transfer_weight": 0.25,
+        "robust_weight": 0.25
+      },
+      "floors": {
+        "protected": false,
+        "max_static_regress_bpb": 0.002,
+        "max_transfer_regress_bpb": 0.003,
+        "max_robust_regress_bpb": 0.003,
+        "min_family_improve_bpb": 0.0005
+      },
+      "transfer_adapt": {
+        "steps": 64,
+        "lr": 0.03,
+        "eps": 1e-8,
+        "l2": 0.00001,
+        "clip_grad": 1.0,
+        "batch_windows": 8,
+        "max_fast_weight_bytes": 262144,
+        "max_delta_bits": 524288,
+        "reset_ephemeral_state": true,
+        "mutable_surfaces": [
+          "nuisance_head",
+          "residual_head",
+          "resid_weights",
+          "fast_weights"
+        ]
+      }
+    },
+    {
+      "family_id": "sensor_temporal",
+      "family_kind": "SensoryTemporal",
+      "base_pack_hash": "80af9d415caf57adc277f23a796441c39c7ffbe5d6aec9ab6944999ced68ba37",
+      "transfer_pack_hashes": [
+        "b68a6c1974a0c95b829507673341b60efb7a44cf3e098193b1565174190abaca"
+      ],
+      "robust_pack_hashes": [
+        "9c22372c69fc2e99f9ac2980c5ba83b2efea510980314ff850537ce3533d2bda"
+      ],
+      "challenge_pack_hashes": [],
+      "weights": {
+        "static_weight": 0.25,
+        "transfer_weight": 0.25,
+        "robust_weight": 0.25
+      },
+      "floors": {
+        "protected": false,
+        "max_static_regress_bpb": 0.002,
+        "max_transfer_regress_bpb": 0.003,
+        "max_robust_regress_bpb": 0.003,
+        "min_family_improve_bpb": 0.0005
+      },
+      "transfer_adapt": {
+        "steps": 64,
+        "lr": 0.03,
+        "eps": 1e-8,
+        "l2": 0.00001,
+        "clip_grad": 1.0,
+        "batch_windows": 8,
+        "max_fast_weight_bytes": 262144,
+        "max_delta_bits": 524288,
+        "reset_ephemeral_state": true,
+        "mutable_surfaces": [
+          "nuisance_head",
+          "residual_head",
+          "resid_weights",
+          "fast_weights"
+        ]
+      }
+    },
+    {
+      "family_id": "text_code",
+      "family_kind": "TextCodeLog",
+      "base_pack_hash": "b7304b66d080e13a00f1bf6c688721a408df3eda0f60ae32cde0c8b38fed33ef",
+      "transfer_pack_hashes": [
+        "a7ffc6a492a9c465abfb69a61e766556779d9a939ceb6202d2c451d9ff7ac544"
+      ],
+      "robust_pack_hashes": [
+        "1cc5f6df2404c45fc65ff98e14cee16ff1e21b7a2f66a3818432c6182cdd5d0e"
+      ],
+      "challenge_pack_hashes": [],
+      "weights": {
+        "static_weight": 0.25,
+        "transfer_weight": 0.25,
+        "robust_weight": 0.25
+      },
+      "floors": {
+        "protected": true,
+        "max_static_regress_bpb": 0.001,
+        "max_transfer_regress_bpb": 0.002,
+        "max_robust_regress_bpb": 0.002,
+        "min_family_improve_bpb": 0.0005
+      },
+      "transfer_adapt": {
+        "steps": 64,
+        "lr": 0.03,
+        "eps": 1e-8,
+        "l2": 0.00001,
+        "clip_grad": 1.0,
+        "batch_windows": 8,
+        "max_fast_weight_bytes": 262144,
+        "max_delta_bits": 524288,
+        "reset_ephemeral_state": true,
+        "mutable_surfaces": [
+          "nuisance_head",
+          "residual_head",
+          "resid_weights",
+          "fast_weights"
+        ]
+      }
+    }
+  ],
+  "normalization": {
+    "codelen_ref_bytes": 4096,
+    "transfer_ref_bytes": 4096,
+    "min_improved_families": 2,
+    "min_nonprotected_improved_families": 1,
+    "require_target_subset_hit": true,
+    "target_subset": [
+      "det_micro",
+      "sensor_temporal",
+      "phys_sim"
+    ],
+    "public_static_margin_bpb": 0.001,
+    "holdout_static_margin_bpb": 0.001,
+    "holdout_transfer_margin_bpb": 0.0,
+    "holdout_robust_margin_bpb": 0.0
+  },
+  "protocol_version": "apfsc-phase2-mvp-v1",
+  "manifest_hash": "168b727003e695c54352acae0dcfb977edfb327d02e8cbd5e8a23135dcdc6989"
+}

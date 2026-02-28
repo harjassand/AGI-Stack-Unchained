@@ -74,6 +74,7 @@ pub fn seed_init(
             mutation_type: "seed_incumbent".to_string(),
             created_unix_s: 0,
             notes: Some("deterministic phase1 seed incumbent".to_string()),
+            phase2: None,
         },
     };
 
@@ -155,6 +156,9 @@ fn init_archives(root: &Path) -> Result<()> {
         root.join("archive/genealogy.jsonl"),
         root.join("archive/error_atlas.jsonl"),
         root.join("archive/failure_morph.jsonl"),
+        root.join("archive/family_scores.jsonl"),
+        root.join("archive/transfer_trace.jsonl"),
+        root.join("archive/robustness_trace.jsonl"),
         root.join("archive/hardware_trace.jsonl"),
         root.join("queues/canary_queue.json"),
     ];

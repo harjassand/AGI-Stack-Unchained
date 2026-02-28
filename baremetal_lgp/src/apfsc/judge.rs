@@ -1,6 +1,6 @@
 use std::path::Path;
 
-use crate::apfsc::archive::failure_morph;
+use crate::apfsc::archive::{failure_morph, family_scores, robustness_trace, transfer_trace};
 use crate::apfsc::artifacts::{
     read_json, read_pointer, receipt_path, write_json_atomic, write_pointer,
 };
@@ -9,13 +9,18 @@ use crate::apfsc::bridge::validate_warm_refinement;
 use crate::apfsc::bytecoder::score_panel_with_resid_scales;
 use crate::apfsc::candidate::{load_candidate, validate_candidate_artifacts, CandidateBundle};
 use crate::apfsc::config::Phase1Config;
+use crate::apfsc::constellation::load_constellation;
 use crate::apfsc::errors::Result;
 use crate::apfsc::hardware_oracle::SafetyBudget;
 use crate::apfsc::ingress::judge::{
     load_pending_admissions, store_pending_admissions, PendingAdmission,
 };
+use crate::apfsc::normalization::{evaluate_static_panel, PanelComparison};
+use crate::apfsc::robustness::{evaluate_robustness, RobustnessEvaluation};
+use crate::apfsc::transfer::{evaluate_transfer, TransferEvaluation};
 use crate::apfsc::types::{
-    ByteScoreReceipt, JudgeBatchReport, JudgeDecision, PromotionClass, PromotionReceipt, SplitKind,
+    ByteScoreReceipt, ConstellationManifest, EvalMode, JudgeBatchReport, JudgeDecision,
+    JudgeRejectReason, PromotionClass, PromotionReceipt, SplitKind,
 };
 
 pub fn evaluate_candidate_split(
@@ -106,6 +111,7 @@ pub fn run_batch(
                     0.0,
                     0.0,
                     active.manifest.snapshot_hash.clone(),
+                    &cfg.protocol.version,
                 );
                 let judge_path =
                     receipt_path(root, "judge", &format!("{}.json", receipt.candidate_hash));
@@ -196,6 +202,7 @@ pub fn run_batch(
                 holdout_delta,
                 anchor_regress,
                 candidate.manifest.snapshot_hash.clone(),
+                &cfg.protocol.version,
             );
             failure_morph::append_reject(
                 root,
@@ -215,9 +222,18 @@ pub fn run_batch(
                 public_delta_bits: admission.public_delta_bits,
                 holdout_delta_bits: holdout_delta,
                 anchor_regress_bits: anchor_regress,
+                weighted_static_public_delta_bpb: 0.0,
+                weighted_static_holdout_delta_bpb: 0.0,
+                weighted_transfer_holdout_delta_bpb: None,
+                weighted_robust_holdout_delta_bpb: None,
+                improved_family_ids: Vec::new(),
+                regressed_family_ids: Vec::new(),
+                protected_floor_failures: Vec::new(),
                 canary_required,
                 canary_result: None,
                 snapshot_hash: candidate.manifest.snapshot_hash.clone(),
+                protocol_version: cfg.protocol.version.clone(),
+                constellation_id: None,
             }
         };
 
@@ -299,6 +315,7 @@ fn reject_receipt(
     holdout_delta_bits: f64,
     anchor_regress_bits: f64,
     snapshot_hash: String,
+    protocol_version: &str,
 ) -> PromotionReceipt {
     PromotionReceipt {
         candidate_hash: candidate_hash.to_string(),
@@ -308,8 +325,433 @@ fn reject_receipt(
         public_delta_bits,
         holdout_delta_bits,
         anchor_regress_bits,
+        weighted_static_public_delta_bpb: 0.0,
+        weighted_static_holdout_delta_bpb: 0.0,
+        weighted_transfer_holdout_delta_bpb: None,
+        weighted_robust_holdout_delta_bpb: None,
+        improved_family_ids: Vec::new(),
+        regressed_family_ids: Vec::new(),
+        protected_floor_failures: Vec::new(),
         canary_required: false,
         canary_result: None,
         snapshot_hash,
+        protocol_version: protocol_version.to_string(),
+        constellation_id: None,
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct Phase2CandidateEvaluations {
+    pub public_static: PanelComparison,
+    pub public_transfer: Option<TransferEvaluation>,
+    pub public_robust: Option<RobustnessEvaluation>,
+    pub holdout_static: PanelComparison,
+    pub holdout_transfer: Option<TransferEvaluation>,
+    pub holdout_robust: Option<RobustnessEvaluation>,
+}
+
+pub fn evaluate_phase2_candidate(
+    root: &Path,
+    candidate: &CandidateBundle,
+    incumbent: &CandidateBundle,
+    constellation: &ConstellationManifest,
+) -> Result<Phase2CandidateEvaluations> {
+    let public_static = evaluate_static_panel(
+        root,
+        candidate,
+        incumbent,
+        constellation,
+        crate::apfsc::types::PanelKind::StaticPublic,
+    )?;
+    let holdout_static = evaluate_static_panel(
+        root,
+        candidate,
+        incumbent,
+        constellation,
+        crate::apfsc::types::PanelKind::StaticHoldout,
+    )?;
+
+    let (public_transfer, public_robust, holdout_transfer, holdout_robust) =
+        if matches!(candidate.manifest.promotion_class, PromotionClass::A) {
+            (
+                evaluate_transfer(root, candidate, incumbent, constellation, EvalMode::Public).ok(),
+                evaluate_robustness(root, candidate, incumbent, constellation, EvalMode::Public)
+                    .ok(),
+                evaluate_transfer(root, candidate, incumbent, constellation, EvalMode::Holdout)
+                    .ok(),
+                evaluate_robustness(root, candidate, incumbent, constellation, EvalMode::Holdout)
+                    .ok(),
+            )
+        } else {
+            (None, None, None, None)
+        };
+
+    Ok(Phase2CandidateEvaluations {
+        public_static,
+        public_transfer,
+        public_robust,
+        holdout_static,
+        holdout_transfer,
+        holdout_robust,
+    })
+}
+
+pub fn judge_phase2_candidate(
+    root: &Path,
+    candidate: &CandidateBundle,
+    incumbent: &CandidateBundle,
+    constellation: &ConstellationManifest,
+    cfg: &Phase1Config,
+    evals: &Phase2CandidateEvaluations,
+) -> Result<PromotionReceipt> {
+    if candidate.manifest.snapshot_hash != incumbent.manifest.snapshot_hash
+        || candidate.manifest.snapshot_hash != constellation.snapshot_hash
+    {
+        return Ok(phase2_reject_receipt(
+            candidate,
+            incumbent,
+            JudgeRejectReason::ConstellationMismatch,
+            evals,
+            Vec::new(),
+        ));
+    }
+    if validate_candidate_artifacts(root, &candidate.manifest.candidate_hash).is_err() {
+        return Ok(phase2_reject_receipt(
+            candidate,
+            incumbent,
+            JudgeRejectReason::ArtifactInvalid,
+            evals,
+            Vec::new(),
+        ));
+    }
+    if !resource_valid(candidate, cfg) {
+        return Ok(phase2_reject_receipt(
+            candidate,
+            incumbent,
+            JudgeRejectReason::ResourceViolation,
+            evals,
+            Vec::new(),
+        ));
+    }
+
+    if evals.public_static.delta_bpb < constellation.normalization.public_static_margin_bpb {
+        return Ok(phase2_reject_receipt(
+            candidate,
+            incumbent,
+            JudgeRejectReason::NoPublicMargin,
+            evals,
+            Vec::new(),
+        ));
+    }
+    if !evals.public_static.protected_floor_failures.is_empty() {
+        return Ok(phase2_reject_receipt(
+            candidate,
+            incumbent,
+            JudgeRejectReason::ProtectedFamilyRegress,
+            evals,
+            evals.public_static.protected_floor_failures.clone(),
+        ));
+    }
+    if let Some(reason) = coverage_reject_reason(&evals.public_static.receipt, constellation) {
+        return Ok(phase2_reject_receipt(
+            candidate,
+            incumbent,
+            reason,
+            evals,
+            Vec::new(),
+        ));
+    }
+
+    if matches!(candidate.manifest.promotion_class, PromotionClass::A) {
+        let pt = match &evals.public_transfer {
+            Some(v) => v,
+            None => {
+                return Ok(phase2_reject_receipt(
+                    candidate,
+                    incumbent,
+                    JudgeRejectReason::TransferRegression,
+                    evals,
+                    Vec::new(),
+                ))
+            }
+        };
+        let pr = match &evals.public_robust {
+            Some(v) => v,
+            None => {
+                return Ok(phase2_reject_receipt(
+                    candidate,
+                    incumbent,
+                    JudgeRejectReason::RobustRegression,
+                    evals,
+                    Vec::new(),
+                ))
+            }
+        };
+        if pt.delta_bpb < 0.0 || !pt.protected_floor_failures.is_empty() {
+            return Ok(phase2_reject_receipt(
+                candidate,
+                incumbent,
+                JudgeRejectReason::TransferRegression,
+                evals,
+                pt.protected_floor_failures.clone(),
+            ));
+        }
+        if pr.delta_bpb < 0.0 || !pr.protected_floor_failures.is_empty() {
+            return Ok(phase2_reject_receipt(
+                candidate,
+                incumbent,
+                JudgeRejectReason::RobustRegression,
+                evals,
+                pr.protected_floor_failures.clone(),
+            ));
+        }
+    }
+
+    if evals.holdout_static.delta_bpb < constellation.normalization.holdout_static_margin_bpb {
+        return Ok(phase2_reject_receipt(
+            candidate,
+            incumbent,
+            JudgeRejectReason::NoHoldoutMargin,
+            evals,
+            Vec::new(),
+        ));
+    }
+    if !evals.holdout_static.protected_floor_failures.is_empty() {
+        return Ok(phase2_reject_receipt(
+            candidate,
+            incumbent,
+            JudgeRejectReason::ProtectedFamilyRegress,
+            evals,
+            evals.holdout_static.protected_floor_failures.clone(),
+        ));
+    }
+    if let Some(reason) = coverage_reject_reason(&evals.holdout_static.receipt, constellation) {
+        return Ok(phase2_reject_receipt(
+            candidate,
+            incumbent,
+            reason,
+            evals,
+            Vec::new(),
+        ));
+    }
+
+    let mut anchor_eval = None;
+    if matches!(candidate.manifest.promotion_class, PromotionClass::A) {
+        let ht = match &evals.holdout_transfer {
+            Some(v) => v,
+            None => {
+                return Ok(phase2_reject_receipt(
+                    candidate,
+                    incumbent,
+                    JudgeRejectReason::TransferRegression,
+                    evals,
+                    Vec::new(),
+                ))
+            }
+        };
+        let hr = match &evals.holdout_robust {
+            Some(v) => v,
+            None => {
+                return Ok(phase2_reject_receipt(
+                    candidate,
+                    incumbent,
+                    JudgeRejectReason::RobustRegression,
+                    evals,
+                    Vec::new(),
+                ))
+            }
+        };
+        if ht.delta_bpb < constellation.normalization.holdout_transfer_margin_bpb
+            || !ht.protected_floor_failures.is_empty()
+        {
+            return Ok(phase2_reject_receipt(
+                candidate,
+                incumbent,
+                JudgeRejectReason::TransferRegression,
+                evals,
+                ht.protected_floor_failures.clone(),
+            ));
+        }
+        if hr.delta_bpb < constellation.normalization.holdout_robust_margin_bpb
+            || !hr.protected_floor_failures.is_empty()
+        {
+            return Ok(phase2_reject_receipt(
+                candidate,
+                incumbent,
+                JudgeRejectReason::RobustRegression,
+                evals,
+                hr.protected_floor_failures.clone(),
+            ));
+        }
+
+        match &candidate.bridge_pack {
+            Some(bridge) => {
+                if validate_warm_refinement(bridge).is_err() {
+                    return Ok(phase2_reject_receipt(
+                        candidate,
+                        incumbent,
+                        JudgeRejectReason::WarmBridgeFail,
+                        evals,
+                        Vec::new(),
+                    ));
+                }
+            }
+            None => {
+                return Ok(phase2_reject_receipt(
+                    candidate,
+                    incumbent,
+                    JudgeRejectReason::WarmBridgeFail,
+                    evals,
+                    Vec::new(),
+                ))
+            }
+        }
+
+        let anchor = evaluate_static_panel(
+            root,
+            candidate,
+            incumbent,
+            constellation,
+            crate::apfsc::types::PanelKind::Anchor,
+        )?;
+        if anchor.delta_bpb < 0.0 || !anchor.protected_floor_failures.is_empty() {
+            return Ok(phase2_reject_receipt(
+                candidate,
+                incumbent,
+                JudgeRejectReason::AnchorRegress,
+                evals,
+                anchor.protected_floor_failures.clone(),
+            ));
+        }
+        anchor_eval = Some(anchor);
+    }
+
+    let replay_check = evaluate_static_panel(
+        root,
+        candidate,
+        incumbent,
+        constellation,
+        crate::apfsc::types::PanelKind::StaticHoldout,
+    )?;
+    if replay_check.receipt.replay_hash != evals.holdout_static.receipt.replay_hash {
+        return Ok(phase2_reject_receipt(
+            candidate,
+            incumbent,
+            JudgeRejectReason::StabilityFail,
+            evals,
+            Vec::new(),
+        ));
+    }
+
+    // Emit archive rows on pass path.
+    family_scores::append_receipt(root, "public_static", &evals.public_static.receipt)?;
+    family_scores::append_receipt(root, "holdout_static", &evals.holdout_static.receipt)?;
+    if let Some(t) = &evals.public_transfer {
+        family_scores::append_receipt(root, "public_transfer", &t.receipt)?;
+        transfer_trace::append_rows(root, &t.traces)?;
+    }
+    if let Some(t) = &evals.holdout_transfer {
+        family_scores::append_receipt(root, "holdout_transfer", &t.receipt)?;
+        transfer_trace::append_rows(root, &t.traces)?;
+    }
+    if let Some(r) = &evals.public_robust {
+        family_scores::append_receipt(root, "public_robust", &r.receipt)?;
+        robustness_trace::append_rows(root, &r.traces)?;
+    }
+    if let Some(r) = &evals.holdout_robust {
+        family_scores::append_receipt(root, "holdout_robust", &r.receipt)?;
+        robustness_trace::append_rows(root, &r.traces)?;
+    }
+    if let Some(anchor) = &anchor_eval {
+        family_scores::append_receipt(root, "anchor", &anchor.receipt)?;
+    }
+
+    Ok(PromotionReceipt {
+        candidate_hash: candidate.manifest.candidate_hash.clone(),
+        incumbent_hash: incumbent.manifest.candidate_hash.clone(),
+        decision: JudgeDecision::Promote,
+        reason: "Promote".to_string(),
+        public_delta_bits: 0.0,
+        holdout_delta_bits: 0.0,
+        anchor_regress_bits: anchor_eval
+            .as_ref()
+            .map(|a| (-a.delta_bpb).max(0.0))
+            .unwrap_or(0.0),
+        weighted_static_public_delta_bpb: evals.public_static.delta_bpb,
+        weighted_static_holdout_delta_bpb: evals.holdout_static.delta_bpb,
+        weighted_transfer_holdout_delta_bpb: evals.holdout_transfer.as_ref().map(|v| v.delta_bpb),
+        weighted_robust_holdout_delta_bpb: evals.holdout_robust.as_ref().map(|v| v.delta_bpb),
+        improved_family_ids: evals.holdout_static.receipt.improved_families.clone(),
+        regressed_family_ids: evals.holdout_static.receipt.regressed_families.clone(),
+        protected_floor_failures: Vec::new(),
+        canary_required: matches!(candidate.manifest.promotion_class, PromotionClass::A)
+            && cfg.judge.require_canary_for_a,
+        canary_result: None,
+        snapshot_hash: candidate.manifest.snapshot_hash.clone(),
+        protocol_version: constellation.protocol_version.clone(),
+        constellation_id: Some(constellation.constellation_id.clone()),
+    })
+}
+
+pub fn judge_phase2_candidate_by_constellation_id(
+    root: &Path,
+    candidate: &CandidateBundle,
+    incumbent: &CandidateBundle,
+    constellation_id: &str,
+    cfg: &Phase1Config,
+) -> Result<PromotionReceipt> {
+    let constellation = load_constellation(root, constellation_id)?;
+    let evals = evaluate_phase2_candidate(root, candidate, incumbent, &constellation)?;
+    judge_phase2_candidate(root, candidate, incumbent, &constellation, cfg, &evals)
+}
+
+fn coverage_reject_reason(
+    receipt: &crate::apfsc::types::ConstellationScoreReceipt,
+    constellation: &ConstellationManifest,
+) -> Option<JudgeRejectReason> {
+    if receipt.improved_families.len() < constellation.normalization.min_improved_families as usize
+    {
+        return Some(JudgeRejectReason::InsufficientCrossFamilyEvidence);
+    }
+    if receipt.nonprotected_improved_families.len()
+        < constellation
+            .normalization
+            .min_nonprotected_improved_families as usize
+    {
+        return Some(JudgeRejectReason::InsufficientCrossFamilyEvidence);
+    }
+    if constellation.normalization.require_target_subset_hit && !receipt.target_subset_pass {
+        return Some(JudgeRejectReason::TargetSubsetMiss);
+    }
+    None
+}
+
+fn phase2_reject_receipt(
+    candidate: &CandidateBundle,
+    incumbent: &CandidateBundle,
+    reason: JudgeRejectReason,
+    evals: &Phase2CandidateEvaluations,
+    protected_floor_failures: Vec<String>,
+) -> PromotionReceipt {
+    PromotionReceipt {
+        candidate_hash: candidate.manifest.candidate_hash.clone(),
+        incumbent_hash: incumbent.manifest.candidate_hash.clone(),
+        decision: JudgeDecision::Reject,
+        reason: reason.as_reason(),
+        public_delta_bits: 0.0,
+        holdout_delta_bits: 0.0,
+        anchor_regress_bits: 0.0,
+        weighted_static_public_delta_bpb: evals.public_static.delta_bpb,
+        weighted_static_holdout_delta_bpb: evals.holdout_static.delta_bpb,
+        weighted_transfer_holdout_delta_bpb: evals.holdout_transfer.as_ref().map(|v| v.delta_bpb),
+        weighted_robust_holdout_delta_bpb: evals.holdout_robust.as_ref().map(|v| v.delta_bpb),
+        improved_family_ids: evals.holdout_static.receipt.improved_families.clone(),
+        regressed_family_ids: evals.holdout_static.receipt.regressed_families.clone(),
+        protected_floor_failures,
+        canary_required: false,
+        canary_result: None,
+        snapshot_hash: candidate.manifest.snapshot_hash.clone(),
+        protocol_version: evals.holdout_static.receipt.protocol_version.clone(),
+        constellation_id: Some(evals.holdout_static.receipt.constellation_id.clone()),
     }
 }

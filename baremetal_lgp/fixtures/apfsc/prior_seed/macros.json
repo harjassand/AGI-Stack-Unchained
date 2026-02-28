@@ -1,0 +1,9 @@
+{
+  "macros": [
+    "copy_detector_macro",
+    "periodicity_macro",
+    "delimiter_segment_macro",
+    "text_local_context_macro",
+    "sidecar_memory_macro"
+  ]
+}

@@ -15,6 +15,7 @@ pub mod install;
 pub mod jobs;
 pub mod journal;
 pub mod lease;
+pub mod leases;
 pub mod migration;
 pub mod preflight;
 pub mod profiles;

@@ -69,6 +69,8 @@ pub struct LimitsConfig {
     pub segment_bytes: u64,
     #[serde(default = "default_state_tile_bytes_max")]
     pub state_tile_bytes_max: u64,
+    #[serde(default = "default_param_bits_max")]
+    pub max_param_bits: u64,
     #[serde(default = "default_max_public_workers")]
     pub max_public_workers: u32,
     #[serde(default = "default_max_incubator_workers")]
@@ -153,6 +155,14 @@ pub struct Phase2NormalizationConfig {
     pub codelen_ref_bytes: u64,
     #[serde(default = "default_transfer_ref_bytes")]
     pub transfer_ref_bytes: u64,
+    #[serde(default)]
+    pub public_eval_max_bytes: Option<u64>,
+    #[serde(default)]
+    pub public_eval_seed: u64,
+    #[serde(default)]
+    pub holdout_eval_max_bytes: Option<u64>,
+    #[serde(default)]
+    pub canary_eval_max_bytes: Option<u64>,
     #[serde(default = "default_public_static_margin_bpb")]
     pub public_static_margin_bpb: f64,
     #[serde(default = "default_holdout_static_margin_bpb")]
@@ -225,6 +235,8 @@ pub struct Phase3LimitsConfig {
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct Phase3PromotionConfig {
+    #[serde(default = "default_s_class_min_static_delta_bpb")]
+    pub s_class_min_static_delta_bpb: f64,
     #[serde(default = "default_p_warm_min_static_delta_bpb")]
     pub p_warm_min_static_delta_bpb: f64,
     #[serde(default = "default_p_warm_min_transfer_delta_bpb")]
@@ -425,6 +437,7 @@ impl Default for LimitsConfig {
             max_concurrent_mapped_bytes: default_max_concurrent_mapped_bytes(),
             segment_bytes: default_segment_bytes(),
             state_tile_bytes_max: default_state_tile_bytes_max(),
+            max_param_bits: default_param_bits_max(),
             max_public_workers: default_max_public_workers(),
             max_incubator_workers: default_max_incubator_workers(),
             max_canary_workers: default_max_canary_workers(),
@@ -497,6 +510,10 @@ impl Default for Phase2NormalizationConfig {
         Self {
             codelen_ref_bytes: default_codelen_ref_bytes(),
             transfer_ref_bytes: default_transfer_ref_bytes(),
+            public_eval_max_bytes: None,
+            public_eval_seed: 0,
+            holdout_eval_max_bytes: None,
+            canary_eval_max_bytes: None,
             public_static_margin_bpb: default_public_static_margin_bpb(),
             holdout_static_margin_bpb: default_holdout_static_margin_bpb(),
             holdout_transfer_margin_bpb: default_holdout_transfer_margin_bpb(),
@@ -553,6 +570,7 @@ impl Default for Phase3LimitsConfig {
 impl Default for Phase3PromotionConfig {
     fn default() -> Self {
         Self {
+            s_class_min_static_delta_bpb: default_s_class_min_static_delta_bpb(),
             p_warm_min_static_delta_bpb: default_p_warm_min_static_delta_bpb(),
             p_warm_min_transfer_delta_bpb: default_p_warm_min_transfer_delta_bpb(),
             p_warm_max_robust_regress_bpb: default_p_warm_max_robust_regress_bpb(),
@@ -667,6 +685,10 @@ impl Phase1Config {
         NormalizationPolicy {
             codelen_ref_bytes: self.phase2.normalization.codelen_ref_bytes,
             transfer_ref_bytes: self.phase2.normalization.transfer_ref_bytes,
+            public_eval_max_bytes: self.phase2.normalization.public_eval_max_bytes,
+            public_eval_seed: self.phase2.normalization.public_eval_seed,
+            holdout_eval_max_bytes: self.phase2.normalization.holdout_eval_max_bytes,
+            canary_eval_max_bytes: self.phase2.normalization.canary_eval_max_bytes,
             min_improved_families: self.phase2.min_improved_families,
             min_nonprotected_improved_families: self.phase2.min_nonprotected_improved_families,
             require_target_subset_hit: self.phase2.require_target_subset_hit,
@@ -713,6 +735,10 @@ fn default_segment_bytes() -> u64 {
 
 fn default_state_tile_bytes_max() -> u64 {
     constants::STATE_TILE_BYTES_MAX
+}
+
+fn default_param_bits_max() -> u64 {
+    constants::PARAM_BITS_MAX
 }
 
 fn default_max_public_workers() -> u32 {
@@ -991,6 +1017,10 @@ fn default_phase3_max_pcold_holdout_admissions() -> usize {
 
 fn default_p_warm_min_static_delta_bpb() -> f64 {
     0.0020
+}
+
+fn default_s_class_min_static_delta_bpb() -> f64 {
+    0.0
 }
 
 fn default_p_warm_min_transfer_delta_bpb() -> f64 {

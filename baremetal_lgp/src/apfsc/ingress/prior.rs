@@ -125,6 +125,14 @@ fn validate_ops(op_names: &[String]) -> Result<()> {
         "delimiter_reset_newline",
         "simple_scan_small",
         "simple_scan_medium",
+        "hdc_bind",
+        "hdc_bundle",
+        "hdc_permute",
+        "hdc_threshold",
+        "sparse_event_queue",
+        "sparse_router",
+        "symbolic_stack",
+        "symbolic_tape",
     ]
     .into_iter()
     .collect();
@@ -149,6 +157,9 @@ fn validate_macros(macro_names: &[String]) -> Result<()> {
         "RingDelayTap",
         "SelectiveStateCell",
         "ResetOnDelimiter",
+        "HdcAssociativeMemory",
+        "SparseEventRouter",
+        "SymbolicTapeExecutor",
     ]
     .into_iter()
     .collect();
@@ -183,6 +194,12 @@ fn validate_macro_expansions(macro_names: &[String]) -> Result<()> {
                 hidden_dim: 12,
             },
             "ResetOnDelimiter" => ScirOp::DelimiterReset { byte: b'|' },
+            "HdcAssociativeMemory" => ScirOp::HdcBundle,
+            "SparseEventRouter" => ScirOp::SparseRouter {
+                experts: 16,
+                topk: 2,
+            },
+            "SymbolicTapeExecutor" => ScirOp::SymbolicTape { cells: 32 },
             _ => {
                 return Err(ApfscError::Validation(format!(
                     "unsupported macro expansion for {name}"
@@ -197,35 +214,100 @@ fn validate_macro_expansions(macro_names: &[String]) -> Result<()> {
             ScirOp::LagBytes { lags } => lags.len() as u32,
             ScirOp::ShiftRegister { width } => *width,
             ScirOp::SimpleScan { hidden_dim, .. } => *hidden_dim,
+            ScirOp::HdcBind => 16,
+            ScirOp::HdcBundle => 16,
+            ScirOp::HdcPermute { .. } => 16,
+            ScirOp::HdcThreshold { .. } => 16,
+            ScirOp::SparseEventQueue { slots } => *slots,
+            ScirOp::SparseRouter { experts, .. } => *experts,
+            ScirOp::SymbolicStack { depth } => *depth,
+            ScirOp::SymbolicTape { cells } => *cells,
             _ => 1,
         };
 
-        let program = ScirProgram {
-            input_len: 256,
-            nodes: vec![
-                ScirNode {
+        let (macro_node_id, probe_node_id, mut nodes) = match &op {
+            ScirOp::HdcBind | ScirOp::HdcBundle => (
+                3u32,
+                3u32,
+                vec![
+                    ScirNode {
+                        id: 1,
+                        op: ScirOp::ShiftRegister { width: out_dim },
+                        inputs: Vec::new(),
+                        out_dim,
+                        mutable: false,
+                    },
+                    ScirNode {
+                        id: 2,
+                        op: ScirOp::RollingHash {
+                            n: 4,
+                            buckets: out_dim,
+                        },
+                        inputs: Vec::new(),
+                        out_dim,
+                        mutable: false,
+                    },
+                    ScirNode {
+                        id: 3,
+                        op: op.clone(),
+                        inputs: vec![1, 2],
+                        out_dim,
+                        mutable: false,
+                    },
+                ],
+            ),
+            ScirOp::SparseRouter { .. } => (
+                2u32,
+                2u32,
+                vec![
+                    ScirNode {
+                        id: 1,
+                        op: ScirOp::ShiftRegister { width: 16 },
+                        inputs: Vec::new(),
+                        out_dim: 16,
+                        mutable: false,
+                    },
+                    ScirNode {
+                        id: 2,
+                        op: op.clone(),
+                        inputs: vec![1],
+                        out_dim,
+                        mutable: false,
+                    },
+                ],
+            ),
+            _ => (
+                1u32,
+                1u32,
+                vec![ScirNode {
                     id: 1,
-                    op,
+                    op: op.clone(),
                     inputs: Vec::new(),
                     out_dim,
                     mutable: false,
-                },
-                ScirNode {
-                    id: 2,
-                    op: ScirOp::Linear {
-                        in_dim: out_dim,
-                        out_dim,
-                        bias: false,
-                    },
-                    inputs: vec![1],
-                    out_dim,
-                    mutable: false,
-                },
-            ],
+                }],
+            ),
+        };
+        let linear_id = macro_node_id + 1;
+        nodes.push(ScirNode {
+            id: linear_id,
+            op: ScirOp::Linear {
+                in_dim: out_dim,
+                out_dim,
+                bias: false,
+            },
+            inputs: vec![macro_node_id],
+            out_dim,
+            mutable: false,
+        });
+
+        let program = ScirProgram {
+            input_len: 256,
+            nodes,
             outputs: ProgramOutputs {
-                feature_node: 2,
+                feature_node: linear_id,
                 shadow_feature_nodes: Vec::new(),
-                probe_nodes: vec![1],
+                probe_nodes: vec![probe_node_id],
             },
             bounds: ScirBounds {
                 max_state_bytes: env.max_state_bytes,

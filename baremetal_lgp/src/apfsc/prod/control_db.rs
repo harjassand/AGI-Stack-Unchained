@@ -1,4 +1,6 @@
 use std::path::Path;
+use std::thread::sleep;
+use std::time::Duration;
 
 use rusqlite::{params, Connection, OptionalExtension};
 
@@ -12,11 +14,57 @@ pub fn open_control_db(path: &Path) -> Result<Connection> {
     let conn = Connection::open(path).map_err(|e| ApfscError::Protocol(e.to_string()))?;
     conn.pragma_update(None, "journal_mode", "WAL")
         .map_err(|e| ApfscError::Protocol(e.to_string()))?;
+    conn.pragma_update(None, "synchronous", "NORMAL")
+        .map_err(|e| ApfscError::Protocol(e.to_string()))?;
+    conn.pragma_update(None, "busy_timeout", 5000i64)
+        .map_err(|e| ApfscError::Protocol(e.to_string()))?;
+    conn.busy_timeout(Duration::from_millis(5_000))
+        .map_err(|e| ApfscError::Protocol(e.to_string()))?;
     conn.pragma_update(None, "foreign_keys", "ON")
         .map_err(|e| ApfscError::Protocol(e.to_string()))?;
     init_schema(&conn)?;
+    ensure_compat_schema(&conn)?;
     verify_schema_checksums(&conn)?;
     Ok(conn)
+}
+
+fn is_busy_error(err: &rusqlite::Error) -> bool {
+    match err {
+        rusqlite::Error::SqliteFailure(code, msg) => {
+            matches!(
+                code.code,
+                rusqlite::ErrorCode::DatabaseBusy | rusqlite::ErrorCode::DatabaseLocked
+            ) || msg
+                .as_deref()
+                .map(|m| m.contains("database is locked") || m.contains("database is busy"))
+                .unwrap_or(false)
+        }
+        _ => {
+            let s = err.to_string();
+            s.contains("database is locked") || s.contains("database is busy")
+        }
+    }
+}
+
+pub fn with_busy_retry<T, F>(mut op: F) -> Result<T>
+where
+    F: FnMut() -> std::result::Result<T, rusqlite::Error>,
+{
+    let max_attempts = 3usize;
+    let mut backoff_ms = 100u64;
+    for attempt in 0..max_attempts {
+        match op() {
+            Ok(v) => return Ok(v),
+            Err(e) if is_busy_error(&e) && attempt + 1 < max_attempts => {
+                sleep(Duration::from_millis(backoff_ms));
+                backoff_ms = backoff_ms.saturating_mul(2);
+            }
+            Err(e) => return Err(ApfscError::Protocol(e.to_string())),
+        }
+    }
+    Err(ApfscError::Protocol(
+        "sqlite busy retry exhausted without terminal error".to_string(),
+    ))
 }
 
 pub fn init_schema(conn: &Connection) -> Result<()> {
@@ -32,6 +80,10 @@ pub fn init_schema(conn: &Connection) -> Result<()> {
           run_id TEXT PRIMARY KEY,
           snapshot_hash TEXT NOT NULL,
           profile TEXT NOT NULL,
+          target_epochs INTEGER NOT NULL DEFAULT 0,
+          completed_epochs INTEGER NOT NULL DEFAULT 0,
+          last_receipt_hash TEXT,
+          last_stage TEXT,
           state TEXT NOT NULL,
           idempotency_key TEXT NOT NULL,
           active_before TEXT,
@@ -137,6 +189,38 @@ pub fn init_schema(conn: &Connection) -> Result<()> {
     Ok(())
 }
 
+fn ensure_compat_schema(conn: &Connection) -> Result<()> {
+    ensure_column(conn, "runs", "target_epochs", "INTEGER NOT NULL DEFAULT 0")?;
+    ensure_column(conn, "runs", "completed_epochs", "INTEGER NOT NULL DEFAULT 0")?;
+    ensure_column(conn, "runs", "last_receipt_hash", "TEXT")?;
+    ensure_column(conn, "runs", "last_stage", "TEXT")?;
+    Ok(())
+}
+
+fn ensure_column(conn: &Connection, table: &str, column: &str, ddl: &str) -> Result<()> {
+    let mut stmt = conn
+        .prepare(&format!("PRAGMA table_info({table})"))
+        .map_err(|e| ApfscError::Protocol(e.to_string()))?;
+    let mut rows = stmt
+        .query([])
+        .map_err(|e| ApfscError::Protocol(e.to_string()))?;
+    while let Some(row) = rows
+        .next()
+        .map_err(|e| ApfscError::Protocol(e.to_string()))?
+    {
+        let name: String = row.get(1).map_err(|e| ApfscError::Protocol(e.to_string()))?;
+        if name == column {
+            return Ok(());
+        }
+    }
+    conn.execute(
+        &format!("ALTER TABLE {table} ADD COLUMN {column} {ddl}"),
+        [],
+    )
+    .map_err(|e| ApfscError::Protocol(e.to_string()))?;
+    Ok(())
+}
+
 pub fn control_db_schema_version(conn: &Connection) -> Result<u32> {
     let v: i64 = conn
         .query_row("SELECT max(version) FROM schema_migrations", [], |r| {
@@ -162,30 +246,20 @@ pub fn list_jobs_by_state(conn: &Connection, states: &[&str]) -> Result<Vec<(Str
     if states.is_empty() {
         return Ok(Vec::new());
     }
-    let placeholders = (0..states.len()).map(|_| "?").collect::<Vec<_>>().join(",");
-    let sql = format!(
-        "SELECT job_id, state FROM jobs WHERE state IN ({}) ORDER BY job_id",
-        placeholders
-    );
-    let mut stmt = conn
-        .prepare(&sql)
-        .map_err(|e| ApfscError::Protocol(e.to_string()))?;
-    let mut rows = stmt
-        .query(rusqlite::params_from_iter(states.iter().copied()))
-        .map_err(|e| ApfscError::Protocol(e.to_string()))?;
-    let mut out = Vec::new();
-    while let Some(row) = rows
-        .next()
-        .map_err(|e| ApfscError::Protocol(e.to_string()))?
-    {
-        out.push((
-            row.get(0)
-                .map_err(|e| ApfscError::Protocol(e.to_string()))?,
-            row.get(1)
-                .map_err(|e| ApfscError::Protocol(e.to_string()))?,
-        ));
-    }
-    Ok(out)
+    with_busy_retry(|| {
+        let placeholders = (0..states.len()).map(|_| "?").collect::<Vec<_>>().join(",");
+        let sql = format!(
+            "SELECT job_id, state FROM jobs WHERE state IN ({}) ORDER BY job_id",
+            placeholders
+        );
+        let mut stmt = conn.prepare(&sql)?;
+        let mut rows = stmt.query(rusqlite::params_from_iter(states.iter().copied()))?;
+        let mut out = Vec::new();
+        while let Some(row) = rows.next()? {
+            out.push((row.get(0)?, row.get(1)?));
+        }
+        Ok(out)
+    })
 }
 
 fn verify_schema_checksums(conn: &Connection) -> Result<()> {

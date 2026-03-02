@@ -1,0 +1,18 @@
+{
+  "pack_kind": "Prior",
+  "pack_hash": "",
+  "protocol_version": "apfsc-phase4-final-v1",
+  "created_unix_s": 1767225600,
+  "family_id": null,
+  "provenance": {
+    "source_name": "prior_alien",
+    "source_type": "synthetic",
+    "attestation": null,
+    "notes": "phase4 frontier prior with HDC, sparse-event, and symbolic operators"
+  },
+  "payload_hashes": [],
+  "meta": {
+    "tier": "frontier",
+    "scir_version": "v2"
+  }
+}

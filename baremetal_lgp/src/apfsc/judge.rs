@@ -21,7 +21,7 @@ use crate::apfsc::transfer::{evaluate_transfer, TransferEvaluation};
 use crate::apfsc::types::{
     BridgeReceipt, ByteScoreReceipt, ConstellationManifest, EvalMode, JudgeBatchReport,
     JudgeDecision, JudgeRejectReason, PromotionClass, PromotionReceipt, RecentFamilyGainReceipt,
-    SplitKind,
+    SearchLawAbReceipt, SearchLawOfflineReceipt, SearchLawPack, SplitKind,
 };
 
 pub fn evaluate_candidate_split(
@@ -543,6 +543,17 @@ pub fn judge_phase2_candidate(
             Vec::new(),
         ));
     }
+    if matches!(candidate.manifest.promotion_class, PromotionClass::S)
+        && evals.holdout_static.delta_bpb < cfg.phase3.promotion.s_class_min_static_delta_bpb
+    {
+        return Ok(phase2_reject_receipt(
+            candidate,
+            incumbent,
+            JudgeRejectReason::SClassEpsilonFail,
+            evals,
+            Vec::new(),
+        ));
+    }
 
     let mut anchor_eval = None;
     if matches!(candidate.manifest.promotion_class, PromotionClass::A) {
@@ -816,7 +827,12 @@ pub fn judge_phase3_candidate(
 
     if reject_reason.is_none() {
         match cls {
-            PromotionClass::S => {}
+            PromotionClass::S => {
+                if evals.holdout_static.delta_bpb < cfg.phase3.promotion.s_class_min_static_delta_bpb
+                {
+                    reject_reason = Some(JudgeRejectReason::SClassEpsilonFail);
+                }
+            }
             PromotionClass::A => {
                 if transfer_delta.unwrap_or(f64::NEG_INFINITY)
                     < constellation.normalization.holdout_transfer_margin_bpb
@@ -901,7 +917,8 @@ pub fn judge_phase3_candidate(
                     reject_reason = Some(JudgeRejectReason::RollbackTargetMissing);
                 }
             }
-            PromotionClass::G | PromotionClass::GDisabled => {
+            PromotionClass::G => {}
+            PromotionClass::GDisabled => {
                 reject_reason = Some(JudgeRejectReason::ParadigmClassMismatch);
             }
         }
@@ -910,6 +927,7 @@ pub fn judge_phase3_candidate(
     let canary_required = match cls {
         PromotionClass::PWarm | PromotionClass::PCold => true,
         PromotionClass::A => cfg.judge.require_canary_for_a,
+        PromotionClass::G => true,
         _ => false,
     };
 
@@ -950,4 +968,89 @@ pub fn judge_phase3_candidate(
         protocol_version: constellation.protocol_version.clone(),
         constellation_id: Some(constellation.constellation_id.clone()),
     })
+}
+
+pub fn judge_searchlaw_candidate(
+    candidate: &SearchLawPack,
+    incumbent: &SearchLawPack,
+    offline: &SearchLawOfflineReceipt,
+    ab: &SearchLawAbReceipt,
+    cfg: &Phase1Config,
+    snapshot_hash: &str,
+    constellation_id: &str,
+    protocol_version: &str,
+) -> PromotionReceipt {
+    let mut reject = None::<JudgeRejectReason>;
+    if crate::apfsc::searchlaw_eval::audit_forbidden_inputs(candidate).is_err() {
+        reject = Some(JudgeRejectReason::ForbiddenSearchLawInput);
+    }
+    if !offline.pass {
+        reject = Some(JudgeRejectReason::SearchLawOfflineFail);
+    }
+    if reject.is_none() && !ab.pass {
+        reject = Some(JudgeRejectReason::SearchLawAbFail);
+    }
+
+    let required_yield = ab.incumbent_yield_per_compute
+        * (1.0 + cfg.phase4.searchlaw_required_yield_improvement.max(0.0));
+    if reject.is_none() && ab.candidate_yield_per_compute < required_yield {
+        reject = Some(JudgeRejectReason::SearchLawAbFail);
+    }
+    if reject.is_none() && ab.challenge_regression {
+        // Challenge regressions are treated as holdout-equivalent failures for class G.
+        reject = Some(JudgeRejectReason::SearchLawAbFail);
+    }
+    if reject.is_none() && ab.safety_regression {
+        // SearchLaw canary gate: candidate must not increase unsafe outcomes.
+        reject = Some(JudgeRejectReason::CanaryFail);
+    }
+
+    let delta = ab.candidate_yield_per_compute - ab.incumbent_yield_per_compute;
+    let decision = if reject.is_some() {
+        JudgeDecision::Reject
+    } else {
+        JudgeDecision::Promote
+    };
+    let canary_result = if ab.safety_regression {
+        Some("fail".to_string())
+    } else {
+        Some("pass".to_string())
+    };
+
+    PromotionReceipt {
+        candidate_hash: candidate.manifest_hash.clone(),
+        incumbent_hash: incumbent.manifest_hash.clone(),
+        decision,
+        reason: reject
+            .as_ref()
+            .map(|r| r.as_reason())
+            .unwrap_or_else(|| "Promote".to_string()),
+        promotion_class: Some(PromotionClass::G),
+        public_delta_bits: 0.0,
+        holdout_delta_bits: 0.0,
+        anchor_regress_bits: 0.0,
+        weighted_static_public_delta_bpb: delta,
+        weighted_static_holdout_delta_bpb: delta,
+        weighted_transfer_holdout_delta_bpb: Some(delta),
+        weighted_robust_holdout_delta_bpb: Some(if ab.safety_regression { -1.0 } else { 0.0 }),
+        improved_family_ids: if reject.is_none() {
+            vec!["searchlaw_yield_per_compute".to_string()]
+        } else {
+            Vec::new()
+        },
+        regressed_family_ids: if reject.is_none() {
+            Vec::new()
+        } else {
+            vec!["searchlaw_yield_per_compute".to_string()]
+        },
+        protected_floor_failures: Vec::new(),
+        recent_family_receipt_hash: Some(offline.searchlaw_hash.clone()),
+        bridge_receipt_hash: Some(ab.candidate_searchlaw_hash.clone()),
+        canary_required: true,
+        canary_result,
+        rollback_target_hash: None,
+        snapshot_hash: snapshot_hash.to_string(),
+        protocol_version: protocol_version.to_string(),
+        constellation_id: Some(constellation_id.to_string()),
+    }
 }

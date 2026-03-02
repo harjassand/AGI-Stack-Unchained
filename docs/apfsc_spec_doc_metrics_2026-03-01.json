@@ -1,0 +1,32 @@
+[
+  {
+    "file": "apfsc_phase1_mvp_spec.md",
+    "bytes": 43311,
+    "lines": 1702,
+    "words": 5603
+  },
+  {
+    "file": "apfsc_phase2_mvp_spec.md",
+    "bytes": 46614,
+    "lines": 1643,
+    "words": 5495
+  },
+  {
+    "file": "apfsc_phase3_mvp_spec.md",
+    "bytes": 52316,
+    "lines": 1719,
+    "words": 6172
+  },
+  {
+    "file": "apfsc_phase4_mvp_spec.md",
+    "bytes": 62941,
+    "lines": 2100,
+    "words": 7094
+  },
+  {
+    "file": "apfsc_production_ready_spec.md",
+    "bytes": 39856,
+    "lines": 1771,
+    "words": 5159
+  }
+]

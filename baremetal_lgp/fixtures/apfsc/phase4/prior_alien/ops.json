@@ -1,0 +1,12 @@
+{
+  "ops": [
+    "hdc_bind",
+    "hdc_bundle",
+    "hdc_permute",
+    "hdc_threshold",
+    "sparse_event_queue",
+    "sparse_router",
+    "symbolic_stack",
+    "symbolic_tape"
+  ]
+}

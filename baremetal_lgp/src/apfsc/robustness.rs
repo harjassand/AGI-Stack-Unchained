@@ -6,7 +6,7 @@ use crate::apfsc::bank::{load_family_panel_windows, load_payload_index_for_windo
 use crate::apfsc::bytecoder::score_panel_with_resid_scales;
 use crate::apfsc::candidate::CandidateBundle;
 use crate::apfsc::errors::Result;
-use crate::apfsc::normalization::apply_robust_weighted_scores;
+use crate::apfsc::normalization::{apply_robust_weighted_scores, select_eval_windows};
 use crate::apfsc::types::{
     ConstellationManifest, ConstellationScoreReceipt, EvalMode, FamilyEvalVector, FamilyId,
     PanelKind, RobustnessFamilyTrace,
@@ -42,7 +42,19 @@ pub fn evaluate_robustness(
     let mut traces = Vec::new();
 
     for fam in &constellation.family_specs {
-        let windows = load_family_panel_windows(root, &fam.family_id, panel_key.as_key())?;
+        let mut windows = load_family_panel_windows(root, &fam.family_id, panel_key.as_key())?;
+        if matches!(mode, EvalMode::Holdout)
+            && constellation.normalization.holdout_eval_max_bytes.is_some()
+        {
+            windows = select_eval_windows(
+                &windows,
+                constellation.normalization.holdout_eval_max_bytes,
+                constellation.normalization.public_eval_seed,
+                &fam.family_id,
+                "robust_holdout",
+                &constellation.constellation_id,
+            );
+        }
         if windows.is_empty() {
             continue;
         }

@@ -59,6 +59,27 @@ pub enum ScirOp {
     DelimiterReset {
         byte: u8,
     },
+    HdcBind,
+    HdcBundle,
+    HdcPermute {
+        shift: u32,
+    },
+    HdcThreshold {
+        threshold: f32,
+    },
+    SparseEventQueue {
+        slots: u32,
+    },
+    SparseRouter {
+        experts: u32,
+        topk: u32,
+    },
+    SymbolicStack {
+        depth: u32,
+    },
+    SymbolicTape {
+        cells: u32,
+    },
     SimpleScan {
         in_dim: u32,
         hidden_dim: u32,

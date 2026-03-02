@@ -56,6 +56,7 @@ pub fn seed_init(
 
     let mut envelope = default_resource_envelope();
     envelope.max_state_bytes = cfg.limits.state_tile_bytes_max;
+    envelope.max_param_bits = cfg.limits.max_param_bits;
     envelope.max_mapped_bytes = cfg.limits.max_concurrent_mapped_bytes;
     envelope.peak_rss_limit_bytes = cfg.limits.rss_hard_limit_bytes;
 

@@ -13,6 +13,19 @@ pub fn serve(
     token_file: &Path,
     ctx: &mut ServiceContext,
 ) -> Result<()> {
+    serve_with_on_ready(root, socket_path, token_file, ctx, || {})
+}
+
+pub fn serve_with_on_ready<F>(
+    root: &Path,
+    socket_path: &Path,
+    token_file: &Path,
+    ctx: &mut ServiceContext,
+    on_ready: F,
+) -> Result<()>
+where
+    F: FnOnce(),
+{
     if socket_path.exists() {
         std::fs::remove_file(socket_path).map_err(|e| io_err(socket_path, e))?;
     }
@@ -26,6 +39,7 @@ pub fn serve(
         std::fs::set_permissions(socket_path, std::fs::Permissions::from_mode(0o600))
             .map_err(|e| io_err(socket_path, e))?;
     }
+    on_ready();
     for stream in listener.incoming() {
         match stream {
             Ok(mut s) => {

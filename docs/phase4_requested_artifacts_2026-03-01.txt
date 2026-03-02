@@ -1,0 +1,7 @@
+phase4_frontier_toml=/Users/harjas/AGI-Stack-Unchained/docs/phase4_frontier.toml
+epoch_census_epoch1=/Users/harjas/AGI-Stack-Unchained/docs/epoch_census_epoch1_2026-03-01.json
+epoch_census_latest=/Users/harjas/AGI-Stack-Unchained/docs/epoch_census_epoch7_latest_2026-03-01.json
+epoch_census_combined=/Users/harjas/AGI-Stack-Unchained/docs/epoch_census.json
+bank_stats_json=/Users/harjas/AGI-Stack-Unchained/docs/bank_stats_families_public_holdout_2026-03-01.json
+bank_stats_txt=/Users/harjas/AGI-Stack-Unchained/docs/bank_stats_families_public_holdout_2026-03-01.txt
+latest_epoch_id=7

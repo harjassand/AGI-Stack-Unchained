@@ -51,11 +51,6 @@ pub fn validate_cold_boundary(pack: &ColdBoundaryPack) -> Result<()> {
             "ColdBoundaryPack.max_error_streak must be > 0".to_string(),
         ));
     }
-    if pack.mandatory_canary_windows == 0 {
-        return Err(ApfscError::Validation(
-            "ColdBoundaryPack.mandatory_canary_windows must be > 0".to_string(),
-        ));
-    }
     if pack.rollback_target_hash.trim().is_empty() {
         return Err(ApfscError::Validation(
             "ColdBoundaryPack.rollback_target_hash must be non-empty".to_string(),

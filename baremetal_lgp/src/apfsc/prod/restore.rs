@@ -26,7 +26,7 @@ pub fn restore_apply(backup_dir: &Path, target_root: &Path) -> Result<RestoreRep
             continue;
         }
         let src = backup_dir.join(rel);
-        let dst = map_restore_path(target_root, rel);
+        let dst = target_root.join(rel);
         if let Some(parent) = dst.parent() {
             std::fs::create_dir_all(parent).map_err(|e| io_err(parent, e))?;
         }
@@ -34,18 +34,7 @@ pub fn restore_apply(backup_dir: &Path, target_root: &Path) -> Result<RestoreRep
         crate::apfsc::artifacts::write_bytes_atomic(&dst, &body)?;
     }
 
-    if target_root.join("pointers").exists() {
-        let required = ["active_candidate", "active_snapshot"];
-        for r in required {
-            if !target_root.join("pointers").join(r).exists() {
-                return Err(ApfscError::Validation(format!(
-                    "restored pointers missing {}",
-                    r
-                )));
-            }
-        }
-    }
-
+    validate_restored_state(target_root)?;
     Ok(RestoreReport {
         backup_id: manifest.backup_id,
         mode: "apply".to_string(),
@@ -53,9 +42,20 @@ pub fn restore_apply(backup_dir: &Path, target_root: &Path) -> Result<RestoreRep
     })
 }
 
-fn map_restore_path(target_root: &Path, rel: &str) -> std::path::PathBuf {
-    match rel {
-        "control.db.zst" => target_root.join("control").join("control.db"),
-        _ => target_root.join(rel),
+fn validate_restored_state(target_root: &Path) -> Result<()> {
+    let required_pointers = ["active_candidate", "active_snapshot"];
+    for ptr in required_pointers {
+        if !target_root.join("pointers").join(ptr).exists() {
+            return Err(ApfscError::Validation(format!(
+                "restored pointers missing {}",
+                ptr
+            )));
+        }
     }
+    if !target_root.join("control").join("control.db").exists() {
+        return Err(ApfscError::Validation(
+            "restored control db snapshot missing".to_string(),
+        ));
+    }
+    Ok(())
 }

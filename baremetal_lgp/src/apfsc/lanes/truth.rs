@@ -9,7 +9,7 @@ use crate::apfsc::types::{PredictedCost, PromotionClass};
 
 pub fn generate(active: &CandidateBundle, cfg: &Phase1Config) -> Result<Vec<CandidateBundle>> {
     let mut out = Vec::new();
-
+    // Standard structural/parametric queue.
     out.push(mutation_add_lag(active)?);
     out.push(mutation_scan_medium(active)?);
     out.push(mutation_add_feature_node(
@@ -50,6 +50,39 @@ pub fn generate(active: &CandidateBundle, cfg: &Phase1Config) -> Result<Vec<Cand
     )?);
     out.push(mutation_widen_concat_block(active)?);
     out.push(mutation_adjust_tile_bytes(active, cfg)?);
+
+    // Alien queue remains enabled so Symbolic/HDC/Sparse compete under the same gates.
+    out.push(mutation_add_alien_sidecar(
+        active,
+        "splice_SymbolicTapeExecutor_truth",
+        ScirOp::SymbolicTape { cells: 16 },
+        16,
+        false,
+    )?);
+    out.push(mutation_add_alien_sidecar(
+        active,
+        "splice_SparseRouter_truth",
+        ScirOp::SparseRouter {
+            experts: 16,
+            topk: 2,
+        },
+        16,
+        true,
+    )?);
+    let hdc_dim = active
+        .arch_program
+        .nodes
+        .iter()
+        .find(|n| n.id == active.arch_program.outputs.feature_node)
+        .map(|n| n.out_dim)
+        .unwrap_or(16);
+    out.push(mutation_add_alien_sidecar(
+        active,
+        "splice_HdcPermute_truth",
+        ScirOp::HdcPermute { shift: 3 },
+        hdc_dim,
+        true,
+    )?);
 
     out.truncate(
         cfg.lanes
@@ -101,6 +134,86 @@ pub fn generate_phase3(
 
     out.truncate(cfg.lanes.max_truth_candidates.max(2));
     Ok(out)
+}
+
+fn mutation_add_alien_sidecar(
+    active: &CandidateBundle,
+    label: &str,
+    op: ScirOp,
+    out_dim: u32,
+    input_from_feature: bool,
+) -> Result<CandidateBundle> {
+    let mut program = active.arch_program.clone();
+    let feature = program.outputs.feature_node;
+    let feature_dim = program
+        .nodes
+        .iter()
+        .find(|n| n.id == feature)
+        .map(|n| n.out_dim)
+        .unwrap_or(1);
+    let next = program
+        .nodes
+        .iter()
+        .map(|n| n.id)
+        .max()
+        .unwrap_or(0)
+        .saturating_add(1);
+
+    let inputs = if input_from_feature {
+        vec![feature]
+    } else {
+        Vec::new()
+    };
+    program.nodes.push(ScirNode {
+        id: next,
+        op,
+        inputs,
+        out_dim,
+        mutable: false,
+    });
+
+    let join_id = next + 1;
+    program.nodes.push(ScirNode {
+        id: join_id,
+        op: ScirOp::Concat,
+        inputs: vec![feature, next],
+        out_dim: feature_dim + out_dim,
+        mutable: false,
+    });
+    program.outputs.feature_node = join_id;
+
+    let mut head_pack = active.head_pack.clone();
+    head_pack.native_head.in_dim += out_dim;
+    head_pack
+        .native_head
+        .weights
+        .extend(vec![0.0; (256 * out_dim) as usize]);
+    head_pack.nuisance_head.in_dim += out_dim;
+    head_pack
+        .nuisance_head
+        .weights
+        .extend(vec![0.0; (256 * out_dim) as usize]);
+    head_pack.residual_head.in_dim += out_dim;
+    head_pack
+        .residual_head
+        .weights
+        .extend(vec![0.0; (256 * out_dim) as usize]);
+
+    let mut state = active.state_pack.clone();
+    state.resid_weights.extend(vec![0.0; out_dim as usize]);
+
+    clone_with_mutation(
+        active,
+        "truth",
+        label,
+        PromotionClass::A,
+        program,
+        head_pack,
+        state,
+        active.schedule_pack.clone(),
+        None,
+        BTreeMap::new(),
+    )
 }
 
 fn mutation_add_lag(active: &CandidateBundle) -> Result<CandidateBundle> {

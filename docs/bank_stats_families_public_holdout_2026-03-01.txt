@@ -1,0 +1,8 @@
+family_id	public_count	holdout_count
+det_micro	20	14
+event_sparse	9	6
+formal_alg	13	8
+phys_sim	70	47
+sensor_temporal	84	56
+text_code	85	56
+TOTAL	281	187

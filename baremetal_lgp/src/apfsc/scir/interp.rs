@@ -140,6 +140,27 @@ fn eval_node(
             let seen = window.iter().rev().take(8).any(|b| b == byte);
             vec![if seen { 1.0 } else { 0.0 }]
         }
+        ScirOp::HdcBind => {
+            let a = get_input(values, node, 0)?;
+            let b = get_input(values, node, 1)?;
+            hdc_bind(a, b)
+        }
+        ScirOp::HdcBundle => hdc_bundle(node, values)?,
+        ScirOp::HdcPermute { shift } => {
+            let a = get_input(values, node, 0)?;
+            hdc_permute(a, *shift as usize)
+        }
+        ScirOp::HdcThreshold { threshold } => {
+            let a = get_input(values, node, 0)?;
+            hdc_threshold(a, *threshold)
+        }
+        ScirOp::SparseEventQueue { slots } => sparse_event_queue(*slots as usize, window),
+        ScirOp::SparseRouter { experts, topk } => {
+            let a = get_input(values, node, 0)?;
+            sparse_router(node.id, a, *experts as usize, *topk as usize)
+        }
+        ScirOp::SymbolicStack { depth } => symbolic_stack(*depth as usize, window),
+        ScirOp::SymbolicTape { cells } => symbolic_tape(*cells as usize, window),
         ScirOp::SimpleScan { hidden_dim, .. } => {
             let input = get_input(values, node, 0)?;
             simple_scan(node.id, input, *hidden_dim as usize)
@@ -249,6 +270,157 @@ fn simple_scan(node_id: u32, input: &[f32], hidden_dim: usize) -> Vec<f32> {
         }
     }
     h
+}
+
+fn hdc_bind(a: &[f32], b: &[f32]) -> Vec<f32> {
+    a.iter()
+        .zip(b.iter())
+        .map(|(x, y)| (x * y).tanh())
+        .collect()
+}
+
+fn hdc_bundle(
+    node: &crate::apfsc::scir::ast::ScirNode,
+    values: &BTreeMap<u32, Vec<f32>>,
+) -> Result<Vec<f32>> {
+    let mut inputs = Vec::<&[f32]>::new();
+    for id in &node.inputs {
+        inputs.push(
+            values
+                .get(id)
+                .ok_or_else(|| ApfscError::Validation("hdc bundle input missing".to_string()))?,
+        );
+    }
+    if inputs.is_empty() {
+        return Ok(Vec::new());
+    }
+    let len = inputs[0].len();
+    let mut out = vec![0.0f32; len];
+    for inp in inputs {
+        for (dst, src) in out.iter_mut().zip(inp.iter()) {
+            *dst += *src;
+        }
+    }
+    let norm = node.inputs.len().max(1) as f32;
+    for dst in &mut out {
+        *dst = (*dst / norm).clamp(-1.0, 1.0);
+    }
+    Ok(out)
+}
+
+fn hdc_permute(a: &[f32], shift: usize) -> Vec<f32> {
+    if a.is_empty() {
+        return Vec::new();
+    }
+    let mut out = vec![0.0f32; a.len()];
+    let s = shift % a.len();
+    for (i, v) in a.iter().enumerate() {
+        out[(i + s) % a.len()] = *v;
+    }
+    out
+}
+
+fn hdc_threshold(a: &[f32], threshold: f32) -> Vec<f32> {
+    a.iter()
+        .map(|x| if *x >= threshold { 1.0 } else { -1.0 })
+        .collect()
+}
+
+fn sparse_event_queue(slots: usize, window: &[u8]) -> Vec<f32> {
+    if slots == 0 {
+        return Vec::new();
+    }
+    let mut out = vec![0.0f32; slots];
+    let span = window.len().min(slots.saturating_mul(4));
+    let start = window.len().saturating_sub(span);
+    let mut ev_ix = 0usize;
+    for pair in window[start..].windows(2) {
+        if pair[0] != pair[1] {
+            out[ev_ix % slots] = 1.0;
+            ev_ix = ev_ix.saturating_add(1);
+        }
+    }
+    out
+}
+
+fn sparse_router(node_id: u32, input: &[f32], experts: usize, topk: usize) -> Vec<f32> {
+    if experts == 0 {
+        return Vec::new();
+    }
+    let mut scored = Vec::<(usize, f32)>::with_capacity(experts);
+    for e in 0..experts {
+        let mut score = 0.0f32;
+        for (i, x) in input.iter().enumerate() {
+            let w = pseudo_weight(node_id + 23, i as u32, e as u32);
+            score += *x * w;
+        }
+        scored.push((e, score));
+    }
+    scored.sort_by(|a, b| {
+        b.1.abs()
+            .partial_cmp(&a.1.abs())
+            .unwrap_or(std::cmp::Ordering::Equal)
+    });
+    let mut out = vec![0.0f32; experts];
+    let keep = topk.max(1).min(experts);
+    for (idx, score) in scored.into_iter().take(keep) {
+        out[idx] = score.tanh();
+    }
+    out
+}
+
+fn symbolic_stack(depth: usize, window: &[u8]) -> Vec<f32> {
+    if depth == 0 {
+        return Vec::new();
+    }
+    let mut stack = Vec::<u8>::new();
+    for b in window.iter().copied() {
+        match b {
+            b'(' | b'[' | b'{' | b'A'..=b'Z' | b'0'..=b'9' => {
+                if stack.len() < depth {
+                    stack.push(b);
+                }
+            }
+            b')' | b']' | b'}' => {
+                let _ = stack.pop();
+            }
+            _ => {}
+        }
+    }
+    let mut out = vec![0.0f32; depth];
+    for (i, b) in stack.iter().rev().take(depth).enumerate() {
+        out[i] = (*b as f32) / 255.0;
+    }
+    out
+}
+
+fn symbolic_tape(cells: usize, window: &[u8]) -> Vec<f32> {
+    if cells == 0 {
+        return Vec::new();
+    }
+    let mut tape = vec![0u8; cells];
+    let mut ptr = cells / 2;
+    for b in window.iter().copied() {
+        match b {
+            b'>' => {
+                ptr = (ptr + 1).min(cells - 1);
+            }
+            b'<' => {
+                ptr = ptr.saturating_sub(1);
+            }
+            b'+' => {
+                tape[ptr] = tape[ptr].saturating_add(1);
+            }
+            b'-' => {
+                tape[ptr] = tape[ptr].saturating_sub(1);
+            }
+            b'=' => {
+                tape[ptr] = 0;
+            }
+            _ => {}
+        }
+    }
+    tape.into_iter().map(|v| v as f32 / 255.0).collect()
 }
 
 pub fn run_program_v2(

@@ -1,0 +1,639 @@
+{
+  "apfsc_source_summary": {
+    "file_count": 122,
+    "total_loc": 18126,
+    "total_fn_count": 575,
+    "total_pub_fn_count": 317,
+    "top_15_loc_files": [
+      {
+        "file": "src/apfsc/orchestrator.rs",
+        "loc": 1931,
+        "fn_count": 24,
+        "pub_fn_count": 5
+      },
+      {
+        "file": "src/apfsc/types.rs",
+        "loc": 1293,
+        "fn_count": 5,
+        "pub_fn_count": 5
+      },
+      {
+        "file": "src/apfsc/config.rs",
+        "loc": 1143,
+        "fn_count": 127,
+        "pub_fn_count": 3
+      },
+      {
+        "file": "src/apfsc/judge.rs",
+        "loc": 954,
+        "fn_count": 15,
+        "pub_fn_count": 9
+      },
+      {
+        "file": "src/apfsc/prod/service.rs",
+        "loc": 682,
+        "fn_count": 9,
+        "pub_fn_count": 3
+      },
+      {
+        "file": "src/apfsc/transfer.rs",
+        "loc": 535,
+        "fn_count": 12,
+        "pub_fn_count": 2
+      },
+      {
+        "file": "src/apfsc/bank.rs",
+        "loc": 482,
+        "fn_count": 18,
+        "pub_fn_count": 12
+      },
+      {
+        "file": "src/apfsc/lanes/incubator.rs",
+        "loc": 433,
+        "fn_count": 10,
+        "pub_fn_count": 3
+      },
+      {
+        "file": "src/apfsc/constellation.rs",
+        "loc": 399,
+        "fn_count": 11,
+        "pub_fn_count": 5
+      },
+      {
+        "file": "src/apfsc/candidate.rs",
+        "loc": 383,
+        "fn_count": 13,
+        "pub_fn_count": 13
+      },
+      {
+        "file": "src/apfsc/lanes/truth.rs",
+        "loc": 381,
+        "fn_count": 10,
+        "pub_fn_count": 2
+      },
+      {
+        "file": "src/apfsc/headpack.rs",
+        "loc": 348,
+        "fn_count": 13,
+        "pub_fn_count": 7
+      },
+      {
+        "file": "src/apfsc/scir/verify.rs",
+        "loc": 320,
+        "fn_count": 5,
+        "pub_fn_count": 3
+      },
+      {
+        "file": "src/apfsc/canary.rs",
+        "loc": 289,
+        "fn_count": 3,
+        "pub_fn_count": 3
+      },
+      {
+        "file": "src/apfsc/scir/interp.rs",
+        "loc": 276,
+        "fn_count": 12,
+        "pub_fn_count": 2
+      }
+    ]
+  },
+  "apfsc_bin_summary": {
+    "file_count": 41,
+    "total_loc": 4404,
+    "top_20_bins_by_loc": [
+      {
+        "file": "src/bin/lgp_hotloop.rs",
+        "loc": 1057
+      },
+      {
+        "file": "src/bin/raw_hotloop.rs",
+        "loc": 404
+      },
+      {
+        "file": "src/bin/apf3_omega_architect.rs",
+        "loc": 286
+      },
+      {
+        "file": "src/bin/lgp_coev_hotloop.rs",
+        "loc": 255
+      },
+      {
+        "file": "src/bin/apfsc_judge_daemon.rs",
+        "loc": 204
+      },
+      {
+        "file": "src/bin/apfsc_public_eval.rs",
+        "loc": 184
+      },
+      {
+        "file": "src/bin/architect.rs",
+        "loc": 165
+      },
+      {
+        "file": "src/bin/apfscctl.rs",
+        "loc": 134
+      },
+      {
+        "file": "src/bin/apfsc_build_lowered_candidate.rs",
+        "loc": 126
+      },
+      {
+        "file": "src/bin/apfsc_bridge_eval.rs",
+        "loc": 111
+      },
+      {
+        "file": "src/bin/apfsc_shadow_canary.rs",
+        "loc": 100
+      },
+      {
+        "file": "src/bin/apfsc_backend_equiv.rs",
+        "loc": 95
+      },
+      {
+        "file": "src/bin/apfsc_portfolio_step.rs",
+        "loc": 74
+      },
+      {
+        "file": "src/bin/apfsc_robust_eval.rs",
+        "loc": 70
+      },
+      {
+        "file": "src/bin/apfsc_transfer_eval.rs",
+        "loc": 70
+      },
+      {
+        "file": "src/bin/apfsc_searchlaw_ab.rs",
+        "loc": 67
+      },
+      {
+        "file": "src/bin/apfsc_ingest_formal.rs",
+        "loc": 55
+      },
+      {
+        "file": "src/bin/apfsc_epoch_run.rs",
+        "loc": 54
+      },
+      {
+        "file": "src/bin/apfsc_ingest_tool.rs",
+        "loc": 54
+      },
+      {
+        "file": "src/bin/apfsc_ingest_prior.rs",
+        "loc": 51
+      }
+    ]
+  },
+  "phase_test_inventory": [
+    {
+      "file": "apfsc_phase1_bank.rs",
+      "phase": "phase1",
+      "test_fn_count": 3,
+      "all_fn_count": 4,
+      "functions": [
+        "fixtures",
+        "window_split_counts_are_stable",
+        "holdout_windows_not_listed_in_public_panel",
+        "same_payload_same_bank_manifest"
+      ]
+    },
+    {
+      "file": "apfsc_phase1_e2e.rs",
+      "phase": "phase1",
+      "test_fn_count": 5,
+      "all_fn_count": 6,
+      "functions": [
+        "fixtures",
+        "full_setup",
+        "phase1_seed_init_creates_active_candidate",
+        "phase1_epoch_run_emits_receipts",
+        "phase1_replay_is_deterministic",
+        "phase1_canary_activation_updates_pointers_atomically"
+      ]
+    },
+    {
+      "file": "apfsc_phase1_ingress.rs",
+      "phase": "phase1",
+      "test_fn_count": 4,
+      "all_fn_count": 5,
+      "functions": [
+        "fixtures",
+        "reality_pack_hash_is_stable",
+        "reality_ingest_builds_deterministic_bank",
+        "prior_pack_rejects_illegal_macro",
+        "substrate_pack_updates_oracle_cache"
+      ]
+    },
+    {
+      "file": "apfsc_phase1_judge.rs",
+      "phase": "phase1",
+      "test_fn_count": 4,
+      "all_fn_count": 6,
+      "functions": [
+        "fixtures",
+        "setup",
+        "judge_rejects_missing_snapshot",
+        "judge_rejects_anchor_regression",
+        "judge_requires_canary_for_a_class",
+        "judge_promotes_valid_candidate"
+      ]
+    },
+    {
+      "file": "apfsc_phase1_lanes.rs",
+      "phase": "phase1",
+      "test_fn_count": 4,
+      "all_fn_count": 6,
+      "functions": [
+        "fixtures",
+        "setup",
+        "truth_lane_emits_bounded_candidates",
+        "equivalence_lane_candidates_pass_witness_equality",
+        "incubator_sidecar_zero_native_coupling_preserves_parent_score",
+        "incubator_materializes_splice_candidate"
+      ]
+    },
+    {
+      "file": "apfsc_phase1_scir.rs",
+      "phase": "phase1",
+      "test_fn_count": 4,
+      "all_fn_count": 5,
+      "functions": [
+        "fixtures",
+        "scir_verify_rejects_dynamic_allocation",
+        "scir_verify_rejects_noncausal_edges",
+        "equivalence_widen_zero_channels_preserves_output",
+        "split_readout_zero_init_preserves_output"
+      ]
+    },
+    {
+      "file": "apfsc_phase2_constellation.rs",
+      "phase": "phase2",
+      "test_fn_count": 2,
+      "all_fn_count": 4,
+      "functions": [
+        "fixtures_phase2",
+        "phase2_config",
+        "ingest_all_phase2",
+        "phase2_constellation_builds_and_is_deterministic"
+      ]
+    },
+    {
+      "file": "apfsc_phase2_e2e.rs",
+      "phase": "phase2",
+      "test_fn_count": 2,
+      "all_fn_count": 5,
+      "functions": [
+        "fixtures_phase2",
+        "phase2_config",
+        "ingest_all_phase2",
+        "setup_and_run",
+        "phase2_epoch_e2e_is_deterministic"
+      ]
+    },
+    {
+      "file": "apfsc_phase2_judge.rs",
+      "phase": "phase2",
+      "test_fn_count": 2,
+      "all_fn_count": 4,
+      "functions": [
+        "fixtures_phase2",
+        "phase2_config",
+        "ingest_all_phase2",
+        "phase2_judge_s_and_a_gates_and_ignores_challenge_stub"
+      ]
+    },
+    {
+      "file": "apfsc_phase2_normalization.rs",
+      "phase": "phase2",
+      "test_fn_count": 3,
+      "all_fn_count": 3,
+      "functions": [
+        "mock_constellation",
+        "weighted_static_score_uses_family_weights_and_single_code_penalty",
+        "improved_family_counting_is_deterministic"
+      ]
+    },
+    {
+      "file": "apfsc_phase2_robustness.rs",
+      "phase": "phase2",
+      "test_fn_count": 2,
+      "all_fn_count": 4,
+      "functions": [
+        "fixtures_phase2",
+        "phase2_config",
+        "ingest_all_phase2",
+        "phase2_robustness_has_no_adaptation_and_checks_protected_floors"
+      ]
+    },
+    {
+      "file": "apfsc_phase2_specialist_reject.rs",
+      "phase": "phase2",
+      "test_fn_count": 2,
+      "all_fn_count": 4,
+      "functions": [
+        "fixtures_phase2",
+        "phase2_config",
+        "ingest_all_phase2",
+        "phase2_specialist_candidate_is_rejected"
+      ]
+    },
+    {
+      "file": "apfsc_phase2_transfer.rs",
+      "phase": "phase2",
+      "test_fn_count": 2,
+      "all_fn_count": 4,
+      "functions": [
+        "fixtures_phase2",
+        "phase2_config",
+        "ingest_all_phase2",
+        "phase2_transfer_is_bounded_and_replay_stable"
+      ]
+    },
+    {
+      "file": "apfsc_phase3_canary_rollback.rs",
+      "phase": "phase3",
+      "test_fn_count": 2,
+      "all_fn_count": 5,
+      "functions": [
+        "fixtures_phase2",
+        "fixtures_phase3",
+        "phase3_config",
+        "ingest_all",
+        "pcold_canary_fail_keeps_active_and_rollback_pointer"
+      ]
+    },
+    {
+      "file": "apfsc_phase3_classifier.rs",
+      "phase": "phase3",
+      "test_fn_count": 2,
+      "all_fn_count": 2,
+      "functions": [
+        "sig",
+        "classifier_produces_a_pwarm_pcold"
+      ]
+    },
+    {
+      "file": "apfsc_phase3_cold_boundary.rs",
+      "phase": "phase3",
+      "test_fn_count": 2,
+      "all_fn_count": 5,
+      "functions": [
+        "fixtures_phase2",
+        "fixtures_phase3",
+        "phase3_config",
+        "ingest_all",
+        "cold_boundary_pass_and_failure_modes"
+      ]
+    },
+    {
+      "file": "apfsc_phase3_e2e_pcold.rs",
+      "phase": "phase3",
+      "test_fn_count": 2,
+      "all_fn_count": 5,
+      "functions": [
+        "fixtures_phase2",
+        "fixtures_phase3",
+        "phase3_config",
+        "ingest_all",
+        "phase3_epoch_pcold_path_writes_boundary_canary_and_rollback"
+      ]
+    },
+    {
+      "file": "apfsc_phase3_e2e_pwarm.rs",
+      "phase": "phase3",
+      "test_fn_count": 3,
+      "all_fn_count": 6,
+      "functions": [
+        "fixtures_phase2",
+        "fixtures_phase3",
+        "phase3_config",
+        "ingest_all",
+        "run_once",
+        "phase3_epoch_pwarm_path_is_deterministic"
+      ]
+    },
+    {
+      "file": "apfsc_phase3_graph_backend.rs",
+      "phase": "phase3",
+      "test_fn_count": 2,
+      "all_fn_count": 2,
+      "functions": [
+        "program_with_ops",
+        "graph_backend_equivalence_and_fallback_behavior"
+      ]
+    },
+    {
+      "file": "apfsc_phase3_macro_lowering.rs",
+      "phase": "phase3",
+      "test_fn_count": 3,
+      "all_fn_count": 3,
+      "functions": [
+        "base_program",
+        "macro_lowering_is_deterministic_and_charged",
+        "recursive_macro_is_rejected"
+      ]
+    },
+    {
+      "file": "apfsc_phase3_macro_mine.rs",
+      "phase": "phase3",
+      "test_fn_count": 2,
+      "all_fn_count": 2,
+      "functions": [
+        "row",
+        "macro_mining_accepts_and_rejects_by_thresholds"
+      ]
+    },
+    {
+      "file": "apfsc_phase3_recent_family_gate.rs",
+      "phase": "phase3",
+      "test_fn_count": 2,
+      "all_fn_count": 2,
+      "functions": [
+        "receipt",
+        "recent_family_gate_uses_only_fresh_families"
+      ]
+    },
+    {
+      "file": "apfsc_phase3_scir_v2.rs",
+      "phase": "phase3",
+      "test_fn_count": 2,
+      "all_fn_count": 2,
+      "functions": [
+        "sample_program_with_macro",
+        "scir_v2_canonical_lower_verify_is_deterministic"
+      ]
+    },
+    {
+      "file": "apfsc_phase3_warm_bridge.rs",
+      "phase": "phase3",
+      "test_fn_count": 1,
+      "all_fn_count": 1,
+      "functions": [
+        "warm_refinement_pack_passes_and_fails_on_mapping_constraints"
+      ]
+    },
+    {
+      "file": "apfsc_phase4_challenge_retirement.rs",
+      "phase": "phase4",
+      "test_fn_count": 1,
+      "all_fn_count": 3,
+      "functions": [
+        "fixtures_phase2",
+        "fixtures_phase4",
+        "stale_hidden_challenge_is_retired_and_replaced"
+      ]
+    },
+    {
+      "file": "apfsc_phase4_e2e_architecture.rs",
+      "phase": "phase4",
+      "test_fn_count": 2,
+      "all_fn_count": 6,
+      "functions": [
+        "fixtures_phase2",
+        "fixtures_phase3",
+        "fixtures_phase4",
+        "cfg",
+        "ingest_all",
+        "phase4_architecture_epoch_writes_challenge_and_atomic_receipts"
+      ]
+    },
+    {
+      "file": "apfsc_phase4_e2e_full_loop.rs",
+      "phase": "phase4",
+      "test_fn_count": 3,
+      "all_fn_count": 3,
+      "functions": [
+        "root_fixtures",
+        "phase4",
+        "phase4_two_epoch_loop_is_replayable_shape_and_updates_ledgers"
+      ]
+    },
+    {
+      "file": "apfsc_phase4_e2e_searchlaw.rs",
+      "phase": "phase4",
+      "test_fn_count": 1,
+      "all_fn_count": 4,
+      "functions": [
+        "fixtures_phase2",
+        "fixtures_phase3",
+        "fixtures_phase4",
+        "phase4_searchlaw_receipts_exist_and_pointer_is_separate"
+      ]
+    },
+    {
+      "file": "apfsc_phase4_formal_pack.rs",
+      "phase": "phase4",
+      "test_fn_count": 2,
+      "all_fn_count": 3,
+      "functions": [
+        "fixtures_phase4",
+        "phase4_config",
+        "formal_pack_tightening_applies_and_denies_pattern"
+      ]
+    },
+    {
+      "file": "apfsc_phase4_hidden_challenge.rs",
+      "phase": "phase4",
+      "test_fn_count": 1,
+      "all_fn_count": 1,
+      "functions": [
+        "hidden_challenge_catastrophic_regression_rejects"
+      ]
+    },
+    {
+      "file": "apfsc_phase4_judge.rs",
+      "phase": "phase4",
+      "test_fn_count": 1,
+      "all_fn_count": 1,
+      "functions": [
+        "phase4_judge_style_gates_cover_arch_and_searchlaw"
+      ]
+    },
+    {
+      "file": "apfsc_phase4_law_archive.rs",
+      "phase": "phase4",
+      "test_fn_count": 1,
+      "all_fn_count": 1,
+      "functions": [
+        "law_archive_is_deterministic_and_stable"
+      ]
+    },
+    {
+      "file": "apfsc_phase4_law_tokens.rs",
+      "phase": "phase4",
+      "test_fn_count": 2,
+      "all_fn_count": 2,
+      "functions": [
+        "rec",
+        "law_tokens_require_support_and_are_stable"
+      ]
+    },
+    {
+      "file": "apfsc_phase4_need_tokens.rs",
+      "phase": "phase4",
+      "test_fn_count": 1,
+      "all_fn_count": 1,
+      "functions": [
+        "need_tokens_emit_with_expected_justifications"
+      ]
+    },
+    {
+      "file": "apfsc_phase4_portfolio_credit.rs",
+      "phase": "phase4",
+      "test_fn_count": 1,
+      "all_fn_count": 1,
+      "functions": [
+        "portfolio_credit_and_debt_culling_are_deterministic"
+      ]
+    },
+    {
+      "file": "apfsc_phase4_qd_archive.rs",
+      "phase": "phase4",
+      "test_fn_count": 2,
+      "all_fn_count": 2,
+      "functions": [
+        "cell",
+        "qd_archive_replaces_only_on_dominance"
+      ]
+    },
+    {
+      "file": "apfsc_phase4_recombination.rs",
+      "phase": "phase4",
+      "test_fn_count": 1,
+      "all_fn_count": 1,
+      "functions": [
+        "recombination_builds_candidate_and_spec"
+      ]
+    },
+    {
+      "file": "apfsc_phase4_searchlaw_ab.rs",
+      "phase": "phase4",
+      "test_fn_count": 3,
+      "all_fn_count": 3,
+      "functions": [
+        "rec",
+        "searchlaw_ab_uses_yield_per_compute_threshold",
+        "searchlaw_ab_rejects_epoch_count_outside_config_range"
+      ]
+    },
+    {
+      "file": "apfsc_phase4_searchlaw_offline.rs",
+      "phase": "phase4",
+      "test_fn_count": 2,
+      "all_fn_count": 2,
+      "functions": [
+        "rec",
+        "searchlaw_offline_is_deterministic_and_audits_forbidden_inputs"
+      ]
+    },
+    {
+      "file": "apfsc_phase4_tool_shadow.rs",
+      "phase": "phase4",
+      "test_fn_count": 1,
+      "all_fn_count": 2,
+      "functions": [
+        "fixtures_phase4",
+        "tool_shadow_promotes_only_on_exact_match"
+      ]
+    }
+  ]
+}

@@ -160,6 +160,14 @@ pub fn verify_program_with_formal_policy(
             ScirOp::ModCounter { .. } => "ModCounter",
             ScirOp::RollingHash { .. } => "RollingHash",
             ScirOp::DelimiterReset { .. } => "DelimiterReset",
+            ScirOp::HdcBind => "HdcBind",
+            ScirOp::HdcBundle => "HdcBundle",
+            ScirOp::HdcPermute { .. } => "HdcPermute",
+            ScirOp::HdcThreshold { .. } => "HdcThreshold",
+            ScirOp::SparseEventQueue { .. } => "SparseEventQueue",
+            ScirOp::SparseRouter { .. } => "SparseRouter",
+            ScirOp::SymbolicStack { .. } => "SymbolicStack",
+            ScirOp::SymbolicTape { .. } => "SymbolicTape",
             ScirOp::SimpleScan { .. } => "SimpleScan",
             ScirOp::ReadoutNative { .. } => "ReadoutNative",
             ScirOp::ReadoutShadow { .. } => "ReadoutShadow",
@@ -234,6 +242,72 @@ fn infer_node_dim(
         ScirOp::ModCounter { modulus } => *modulus,
         ScirOp::RollingHash { buckets, .. } => *buckets,
         ScirOp::DelimiterReset { .. } => 1,
+        ScirOp::HdcBind => {
+            if node.inputs.len() != 2 {
+                return Err(ApfscError::Validation(
+                    "HdcBind requires exactly two inputs".to_string(),
+                ));
+            }
+            let a = dims
+                .get(&node.inputs[0])
+                .ok_or_else(|| ApfscError::Validation("missing input dim".to_string()))?;
+            let b = dims
+                .get(&node.inputs[1])
+                .ok_or_else(|| ApfscError::Validation("missing input dim".to_string()))?;
+            if a != b {
+                return Err(ApfscError::Validation(
+                    "HdcBind dims must match".to_string(),
+                ));
+            }
+            *a
+        }
+        ScirOp::HdcBundle => {
+            if node.inputs.len() < 2 {
+                return Err(ApfscError::Validation(
+                    "HdcBundle requires at least two inputs".to_string(),
+                ));
+            }
+            let first = dims
+                .get(&node.inputs[0])
+                .ok_or_else(|| ApfscError::Validation("missing input dim".to_string()))?;
+            for ix in &node.inputs[1..] {
+                let d = dims
+                    .get(ix)
+                    .ok_or_else(|| ApfscError::Validation("missing input dim".to_string()))?;
+                if d != first {
+                    return Err(ApfscError::Validation(
+                        "HdcBundle dims must match".to_string(),
+                    ));
+                }
+            }
+            *first
+        }
+        ScirOp::HdcPermute { .. } | ScirOp::HdcThreshold { .. } => {
+            if node.inputs.len() != 1 {
+                return Err(ApfscError::Validation(
+                    "HdcPermute/HdcThreshold require one input".to_string(),
+                ));
+            }
+            *dims
+                .get(&node.inputs[0])
+                .ok_or_else(|| ApfscError::Validation("missing input dim".to_string()))?
+        }
+        ScirOp::SparseEventQueue { slots } => *slots,
+        ScirOp::SparseRouter { experts, topk } => {
+            if node.inputs.len() != 1 {
+                return Err(ApfscError::Validation(
+                    "SparseRouter requires one input".to_string(),
+                ));
+            }
+            if *experts == 0 || *topk == 0 || *topk > *experts {
+                return Err(ApfscError::Validation(
+                    "SparseRouter requires 0 < topk <= experts".to_string(),
+                ));
+            }
+            *experts
+        }
+        ScirOp::SymbolicStack { depth } => *depth,
+        ScirOp::SymbolicTape { cells } => *cells,
         ScirOp::SimpleScan { hidden_dim, .. } => *hidden_dim,
         ScirOp::ReadoutNative { in_dim } => *in_dim,
         ScirOp::ReadoutShadow { in_dim, .. } => *in_dim,
@@ -272,6 +346,18 @@ fn op_costs(op: &ScirOp, out_dim: u32) -> (&'static str, u64, u64) {
         ScirOp::ModCounter { modulus } => ("ModCounter", 0, *modulus as u64),
         ScirOp::RollingHash { buckets, .. } => ("RollingHash", 0, *buckets as u64),
         ScirOp::DelimiterReset { .. } => ("DelimiterReset", 0, 1),
+        ScirOp::HdcBind => ("HdcBind", 0, out_dim as u64 * 4),
+        ScirOp::HdcBundle => ("HdcBundle", 0, out_dim as u64 * 4),
+        ScirOp::HdcPermute { .. } => ("HdcPermute", 0, out_dim as u64 * 4),
+        ScirOp::HdcThreshold { .. } => ("HdcThreshold", 0, out_dim as u64 * 4),
+        ScirOp::SparseEventQueue { slots } => ("SparseEventQueue", 0, *slots as u64),
+        ScirOp::SparseRouter { experts, .. } => (
+            "SparseRouter",
+            (*experts as u64) * 16,
+            (*experts as u64) * 4,
+        ),
+        ScirOp::SymbolicStack { depth } => ("SymbolicStack", 0, *depth as u64),
+        ScirOp::SymbolicTape { cells } => ("SymbolicTape", 0, *cells as u64),
         ScirOp::Concat => ("Concat", 0, out_dim as u64 * 4),
         ScirOp::Add => ("Add", 0, out_dim as u64 * 4),
         ScirOp::Mul => ("Mul", 0, out_dim as u64 * 4),

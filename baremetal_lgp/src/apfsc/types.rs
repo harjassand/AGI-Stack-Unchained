@@ -503,6 +503,14 @@ pub struct FamilySpec {
 pub struct NormalizationPolicy {
     pub codelen_ref_bytes: u64,
     pub transfer_ref_bytes: u64,
+    #[serde(default)]
+    pub public_eval_max_bytes: Option<u64>,
+    #[serde(default)]
+    pub public_eval_seed: u64,
+    #[serde(default)]
+    pub holdout_eval_max_bytes: Option<u64>,
+    #[serde(default)]
+    pub canary_eval_max_bytes: Option<u64>,
     pub min_improved_families: u32,
     pub min_nonprotected_improved_families: u32,
     pub require_target_subset_hit: bool,
@@ -622,6 +630,7 @@ pub enum JudgeRejectReason {
     ChallengeGateFail,
     FormalPolicyFail,
     ToolShadowFail,
+    SClassEpsilonFail,
 }
 
 impl JudgeRejectReason {

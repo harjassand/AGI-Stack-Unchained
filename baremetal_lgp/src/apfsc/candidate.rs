@@ -261,7 +261,7 @@ pub fn default_resource_envelope() -> ResourceEnvelope {
     ResourceEnvelope {
         max_steps: 1_000_000,
         max_state_bytes: 8 * 1024 * 1024,
-        max_param_bits: 64 * 1024 * 1024,
+        max_param_bits: crate::apfsc::constants::PARAM_BITS_MAX,
         max_wall_ms: 60_000,
         peak_rss_limit_bytes: crate::apfsc::constants::RSS_HARD_LIMIT_BYTES,
         max_mapped_bytes: crate::apfsc::constants::MAX_CONCURRENT_MAPPED_BYTES,

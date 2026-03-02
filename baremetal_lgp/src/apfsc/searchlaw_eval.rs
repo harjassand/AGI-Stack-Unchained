@@ -153,13 +153,24 @@ pub fn evaluate_searchlaw_ab(
         incumbent_yield_per_compute * (1.0 + cfg.phase4.searchlaw_required_yield_improvement);
     let total = records.len().max(1) as f64;
     let canary_failure_rate = records.iter().filter(|r| !r.canary_survived).count() as f64 / total;
+    let family_signal: i64 = records
+        .iter()
+        .map(|r| {
+            r.family_outcome_buckets
+                .values()
+                .copied()
+                .map(i64::from)
+                .sum::<i64>()
+        })
+        .sum();
+    let holdout_regression = family_signal < 0;
     let challenge_mean = records
         .iter()
         .map(|r| r.challenge_bucket as f64)
         .sum::<f64>()
         / total;
     let safety_regression = canary_failure_rate > cfg.phase4.searchlaw_max_safety_regression;
-    let challenge_regression = challenge_mean < 0.0;
+    let challenge_regression = challenge_mean < 0.0 || holdout_regression;
     let pass =
         candidate_yield_per_compute >= required && !safety_regression && !challenge_regression;
 
@@ -178,6 +189,8 @@ pub fn evaluate_searchlaw_ab(
         pass,
         reason: if pass {
             "ABPass".to_string()
+        } else if safety_regression || challenge_regression {
+            "ABSafetyOrHoldoutRegression".to_string()
         } else {
             "ABInsufficientYield".to_string()
         },

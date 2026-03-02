@@ -1,0 +1,210 @@
+{
+  "probe_public_static_mtime_epoch": 1772325237,
+  "touched_public_static_count": 8,
+  "top3_by_weighted_static_public_bpb": [
+    {
+      "candidate_hash": "6cffc8ef0f8e32ea08767d620434dd18bb6fe0b30cef4483d78af9ba2f12aab3",
+      "receipt_file": "/Users/harjas/.apfsc/receipts/public_static/6cffc8ef0f8e32ea08767d620434dd18bb6fe0b30cef4483d78af9ba2f12aab3.json",
+      "mtime_epoch": 1772325237,
+      "lane": "incubator",
+      "mutation_type": "phase3_macro_aware",
+      "weighted_static_public_bpb": 417.60348361761027,
+      "code_penalty_bpb": 417.572265625,
+      "panel_bpb": 0.03121799261026581,
+      "improved_families": [],
+      "nonprotected_improved_families": [],
+      "target_subset_pass": null,
+      "protected_floor_pass": true
+    },
+    {
+      "candidate_hash": "a354a23c8a0c6d65300d584796efb6f2e9ef04cd00d6184e78273c198dd660e3",
+      "receipt_file": "/Users/harjas/.apfsc/receipts/public_static/a354a23c8a0c6d65300d584796efb6f2e9ef04cd00d6184e78273c198dd660e3.json",
+      "mtime_epoch": 1772325237,
+      "lane": "equivalence",
+      "mutation_type": "remove_identity_linear",
+      "weighted_static_public_bpb": 417.60543674261027,
+      "code_penalty_bpb": 417.57421875,
+      "panel_bpb": 0.03121799261026581,
+      "improved_families": [],
+      "nonprotected_improved_families": [],
+      "target_subset_pass": null,
+      "protected_floor_pass": true
+    },
+    {
+      "candidate_hash": "d958da075aca2a2cdd9830a210635d7bdbc74df66e1c3427d171b3091a0cf6dc",
+      "receipt_file": "/Users/harjas/.apfsc/receipts/public_static/d958da075aca2a2cdd9830a210635d7bdbc74df66e1c3427d171b3091a0cf6dc.json",
+      "mtime_epoch": 1772325237,
+      "lane": "truth",
+      "mutation_type": "swap_simple_scan_medium",
+      "weighted_static_public_bpb": 417.60543674261027,
+      "code_penalty_bpb": 417.57421875,
+      "panel_bpb": 0.03121799261026581,
+      "improved_families": [],
+      "nonprotected_improved_families": [],
+      "target_subset_pass": null,
+      "protected_floor_pass": true
+    }
+  ],
+  "touched_public_static_all": [
+    {
+      "candidate_hash": "6cffc8ef0f8e32ea08767d620434dd18bb6fe0b30cef4483d78af9ba2f12aab3",
+      "receipt_file": "/Users/harjas/.apfsc/receipts/public_static/6cffc8ef0f8e32ea08767d620434dd18bb6fe0b30cef4483d78af9ba2f12aab3.json",
+      "mtime_epoch": 1772325237,
+      "lane": "incubator",
+      "mutation_type": "phase3_macro_aware",
+      "weighted_static_public_bpb": 417.60348361761027,
+      "code_penalty_bpb": 417.572265625,
+      "panel_bpb": 0.03121799261026581,
+      "improved_families": [],
+      "nonprotected_improved_families": [],
+      "target_subset_pass": null,
+      "protected_floor_pass": true
+    },
+    {
+      "candidate_hash": "a354a23c8a0c6d65300d584796efb6f2e9ef04cd00d6184e78273c198dd660e3",
+      "receipt_file": "/Users/harjas/.apfsc/receipts/public_static/a354a23c8a0c6d65300d584796efb6f2e9ef04cd00d6184e78273c198dd660e3.json",
+      "mtime_epoch": 1772325237,
+      "lane": "equivalence",
+      "mutation_type": "remove_identity_linear",
+      "weighted_static_public_bpb": 417.60543674261027,
+      "code_penalty_bpb": 417.57421875,
+      "panel_bpb": 0.03121799261026581,
+      "improved_families": [],
+      "nonprotected_improved_families": [],
+      "target_subset_pass": null,
+      "protected_floor_pass": true
+    },
+    {
+      "candidate_hash": "d958da075aca2a2cdd9830a210635d7bdbc74df66e1c3427d171b3091a0cf6dc",
+      "receipt_file": "/Users/harjas/.apfsc/receipts/public_static/d958da075aca2a2cdd9830a210635d7bdbc74df66e1c3427d171b3091a0cf6dc.json",
+      "mtime_epoch": 1772325237,
+      "lane": "truth",
+      "mutation_type": "swap_simple_scan_medium",
+      "weighted_static_public_bpb": 417.60543674261027,
+      "code_penalty_bpb": 417.57421875,
+      "panel_bpb": 0.03121799261026581,
+      "improved_families": [],
+      "nonprotected_improved_families": [],
+      "target_subset_pass": null,
+      "protected_floor_pass": true
+    },
+    {
+      "candidate_hash": "bec70f88b025e2ea068b4db520dd5878ee04384619ff3d527971cf8953385c79",
+      "receipt_file": "/Users/harjas/.apfsc/receipts/public_static/bec70f88b025e2ea068b4db520dd5878ee04384619ff3d527971cf8953385c79.json",
+      "mtime_epoch": 1772325237,
+      "lane": "truth",
+      "mutation_type": "add_lag_feature",
+      "weighted_static_public_bpb": 417.61129457383373,
+      "code_penalty_bpb": 417.580078125,
+      "panel_bpb": 0.031216448833731647,
+      "improved_families": [],
+      "nonprotected_improved_families": [],
+      "target_subset_pass": null,
+      "protected_floor_pass": true
+    },
+    {
+      "candidate_hash": "c3c9824e6f19a16abe9ab388149f2f745f3dd3c922f9ccfc337f3ecf157e7dd7",
+      "receipt_file": "/Users/harjas/.apfsc/receipts/public_static/c3c9824e6f19a16abe9ab388149f2f745f3dd3c922f9ccfc337f3ecf157e7dd7.json",
+      "mtime_epoch": 1772325237,
+      "lane": "cold_frontier",
+      "mutation_type": "pcold_formal_alg",
+      "weighted_static_public_bpb": 417.62106174261027,
+      "code_penalty_bpb": 417.58984375,
+      "panel_bpb": 0.03121799261026581,
+      "improved_families": [],
+      "nonprotected_improved_families": [],
+      "target_subset_pass": null,
+      "protected_floor_pass": true
+    },
+    {
+      "candidate_hash": "f8e6e0ade8089cc14250f8c47e1830a791eac004a2c3a0b9d898e7e56f46a594",
+      "receipt_file": "/Users/harjas/.apfsc/receipts/public_static/f8e6e0ade8089cc14250f8c47e1830a791eac004a2c3a0b9d898e7e56f46a594.json",
+      "mtime_epoch": 1772325237,
+      "lane": "equivalence",
+      "mutation_type": "insert_identity_linear",
+      "weighted_static_public_bpb": 417.81442111761027,
+      "code_penalty_bpb": 417.783203125,
+      "panel_bpb": 0.03121799261026581,
+      "improved_families": [],
+      "nonprotected_improved_families": [],
+      "target_subset_pass": null,
+      "protected_floor_pass": true
+    },
+    {
+      "candidate_hash": "bc371ba3d7bf04f3b82d08f9506f200c276087a1e035249a95bc42a9e6262c61",
+      "receipt_file": "/Users/harjas/.apfsc/receipts/public_static/bc371ba3d7bf04f3b82d08f9506f200c276087a1e035249a95bc42a9e6262c61.json",
+      "mtime_epoch": 1772325237,
+      "lane": "cold_frontier",
+      "mutation_type": "pwarm_event_sparse",
+      "weighted_static_public_bpb": 418.18746799261027,
+      "code_penalty_bpb": 418.15625,
+      "panel_bpb": 0.03121799261026581,
+      "improved_families": [],
+      "nonprotected_improved_families": [],
+      "target_subset_pass": null,
+      "protected_floor_pass": true
+    },
+    {
+      "candidate_hash": "575551ba729008edca50a7ccd2c759b50b3362846af0f1fd0f3ba2877aca2974",
+      "receipt_file": "/Users/harjas/.apfsc/receipts/public_static/575551ba729008edca50a7ccd2c759b50b3362846af0f1fd0f3ba2877aca2974.json",
+      "mtime_epoch": 1772325237,
+      "lane": "truth",
+      "mutation_type": "run_length_bucket",
+      "weighted_static_public_bpb": 465.97058848249395,
+      "code_penalty_bpb": 465.939453125,
+      "panel_bpb": 0.031135357493951688,
+      "improved_families": [],
+      "nonprotected_improved_families": [],
+      "target_subset_pass": null,
+      "protected_floor_pass": true
+    }
+  ],
+  "judge_receipt_active": {
+    "candidate_hash": "d0e6c4004dfc653acbea70701c58fbbabd731cd9bf5c520acf0cced1819f575f",
+    "incumbent_hash": "d0e6c4004dfc653acbea70701c58fbbabd731cd9bf5c520acf0cced1819f575f",
+    "decision": "Reject",
+    "reason": "Reject(NoPublicMargin)",
+    "public_delta_bits": 0.0,
+    "holdout_delta_bits": 0.0
+  },
+  "holdout_static_active": {
+    "weighted_static_holdout_bpb": 417.6054367524473,
+    "code_penalty_bpb": 417.57421875,
+    "panel_bpb": 0.03121800244730366,
+    "improved_families": [],
+    "target_subset_pass": false
+  },
+  "active_constellation_normalization": {
+    "codelen_ref_bytes": 4096,
+    "transfer_ref_bytes": 4096,
+    "min_improved_families": 2,
+    "min_nonprotected_improved_families": 1,
+    "require_target_subset_hit": true,
+    "target_subset": [
+      "det_micro",
+      "sensor_temporal",
+      "phys_sim"
+    ],
+    "public_static_margin_bpb": 0.001,
+    "holdout_static_margin_bpb": 0.001,
+    "holdout_transfer_margin_bpb": 0.0,
+    "holdout_robust_margin_bpb": 0.0
+  },
+  "incubator_receipt_candidates": [
+    {
+      "candidate_hash": "6cffc8ef0f8e32ea08767d620434dd18bb6fe0b30cef4483d78af9ba2f12aab3",
+      "receipt_file": "/Users/harjas/.apfsc/receipts/public_static/6cffc8ef0f8e32ea08767d620434dd18bb6fe0b30cef4483d78af9ba2f12aab3.json",
+      "mtime_epoch": 1772325237,
+      "lane": "incubator",
+      "mutation_type": "phase3_macro_aware",
+      "weighted_static_public_bpb": 417.60348361761027,
+      "code_penalty_bpb": 417.572265625,
+      "panel_bpb": 0.03121799261026581,
+      "improved_families": [],
+      "nonprotected_improved_families": [],
+      "target_subset_pass": null,
+      "protected_floor_pass": true
+    }
+  ],
+  "splice_candidates_in_run": []
+}

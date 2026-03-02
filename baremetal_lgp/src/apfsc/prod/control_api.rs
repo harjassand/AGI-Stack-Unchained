@@ -25,6 +25,7 @@ pub enum ControlCommand {
     ReleaseVerify { manifest_path: String },
     ActiveShow,
     Rollback,
+    ForceClearRecovery,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]

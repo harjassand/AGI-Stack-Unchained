@@ -8,7 +8,7 @@ use crate::apfsc::bank::{
 use crate::apfsc::candidate::CandidateBundle;
 use crate::apfsc::errors::{ApfscError, Result};
 use crate::apfsc::headpack::apply_linear;
-use crate::apfsc::normalization::apply_transfer_weighted_scores;
+use crate::apfsc::normalization::{apply_transfer_weighted_scores, select_eval_windows};
 use crate::apfsc::scir::interp::run_program;
 use crate::apfsc::types::{
     ConstellationManifest, ConstellationScoreReceipt, EvalMode, FamilyEvalVector, FamilyId,
@@ -47,8 +47,28 @@ pub fn evaluate_transfer(
     let mut traces = Vec::new();
 
     for fam in &constellation.family_specs {
-        let train = load_family_panel_windows(root, &fam.family_id, "transfer_train")?;
-        let eval = load_family_panel_windows(root, &fam.family_id, "transfer_eval")?;
+        let mut train = load_family_panel_windows(root, &fam.family_id, "transfer_train")?;
+        let mut eval = load_family_panel_windows(root, &fam.family_id, "transfer_eval")?;
+        if matches!(mode, EvalMode::Holdout)
+            && constellation.normalization.holdout_eval_max_bytes.is_some()
+        {
+            train = select_eval_windows(
+                &train,
+                constellation.normalization.holdout_eval_max_bytes,
+                constellation.normalization.public_eval_seed,
+                &fam.family_id,
+                "transfer_train_holdout",
+                &constellation.constellation_id,
+            );
+            eval = select_eval_windows(
+                &eval,
+                constellation.normalization.holdout_eval_max_bytes,
+                constellation.normalization.public_eval_seed,
+                &fam.family_id,
+                "transfer_eval_holdout",
+                &constellation.constellation_id,
+            );
+        }
         if train.is_empty() || eval.is_empty() {
             continue;
         }

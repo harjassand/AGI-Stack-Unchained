@@ -21,6 +21,18 @@ pub fn recent_family_gain(
     recent_ids.sort();
 
     let mut family_gain_bpb = BTreeMap::new();
+    if recent_ids.is_empty() {
+        return RecentFamilyGainReceipt {
+            candidate_hash: candidate_hash.to_string(),
+            incumbent_hash: incumbent_hash.to_string(),
+            recent_family_ids: recent_ids,
+            family_gain_bpb,
+            max_recent_family_gain_bpb: 0.0,
+            // No recent families means no freshness constraint is applicable.
+            pass: true,
+        };
+    }
+
     let mut max_recent_family_gain_bpb = f64::NEG_INFINITY;
 
     for fam in &recent_ids {

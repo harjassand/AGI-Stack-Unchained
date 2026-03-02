@@ -1,4 +1,6 @@
+use std::collections::hash_map::DefaultHasher;
 use std::collections::BTreeMap;
+use std::hash::{Hash, Hasher};
 use std::path::Path;
 
 use crate::apfsc::artifacts::digest_json;
@@ -19,6 +21,44 @@ pub struct PanelComparison {
     pub delta_bpb: f64,
     pub protected_floor_failures: Vec<FamilyId>,
     pub family_deltas: BTreeMap<FamilyId, f64>,
+}
+
+pub(crate) fn select_eval_windows(
+    windows: &[crate::apfsc::types::WindowRef],
+    max_eval_bytes: Option<u64>,
+    seed: u64,
+    family_id: &str,
+    panel_tag: &str,
+    constellation_id: &str,
+) -> Vec<crate::apfsc::types::WindowRef> {
+    let budget = match max_eval_bytes {
+        Some(v) if v > 0 => v,
+        _ => return windows.to_vec(),
+    };
+
+    let total = windows.iter().map(|w| w.len as u64).sum::<u64>();
+    if total <= budget || windows.len() <= 1 {
+        return windows.to_vec();
+    }
+
+    let mut hasher = DefaultHasher::new();
+    family_id.hash(&mut hasher);
+    panel_tag.hash(&mut hasher);
+    constellation_id.hash(&mut hasher);
+    seed.hash(&mut hasher);
+    let start = (hasher.finish() as usize) % windows.len();
+
+    let mut out = Vec::new();
+    let mut used = 0u64;
+    for i in 0..windows.len() {
+        let w = windows[(start + i) % windows.len()].clone();
+        used = used.saturating_add(w.len as u64);
+        out.push(w);
+        if used >= budget {
+            break;
+        }
+    }
+    out
 }
 
 pub fn code_len_bits(candidate: &CandidateBundle) -> Result<u64> {
@@ -68,7 +108,35 @@ pub fn evaluate_static_panel(
     let mut replay_components = Vec::new();
 
     for fam in &constellation.family_specs {
-        let windows = load_family_panel_windows(root, &fam.family_id, panel_key)?;
+        let mut windows = load_family_panel_windows(root, &fam.family_id, panel_key)?;
+        let (max_eval_bytes, panel_seed, panel_tag) = match panel {
+            PanelKind::StaticPublic => (
+                constellation.normalization.public_eval_max_bytes,
+                constellation.normalization.public_eval_seed,
+                "static_public",
+            ),
+            PanelKind::StaticHoldout => (
+                constellation.normalization.holdout_eval_max_bytes,
+                constellation.normalization.public_eval_seed,
+                "static_holdout",
+            ),
+            PanelKind::Canary => (
+                constellation.normalization.canary_eval_max_bytes,
+                constellation.normalization.public_eval_seed,
+                "canary",
+            ),
+            _ => (None, 0, ""),
+        };
+        if max_eval_bytes.is_some() {
+            windows = select_eval_windows(
+                &windows,
+                max_eval_bytes,
+                panel_seed,
+                &fam.family_id,
+                panel_tag,
+                &constellation.constellation_id,
+            );
+        }
         if windows.is_empty() {
             continue;
         }

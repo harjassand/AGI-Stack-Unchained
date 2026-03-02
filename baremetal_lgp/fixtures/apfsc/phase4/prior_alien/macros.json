@@ -1,0 +1,7 @@
+{
+  "macros": [
+    "HdcAssociativeMemory",
+    "SparseEventRouter",
+    "SymbolicTapeExecutor"
+  ]
+}

@@ -1,6 +1,7 @@
 use std::path::Path;
 
 use crate::apfsc::errors::{io_err, Result};
+use crate::apfsc::prod::gc::{sweep_tombstones, TombstoneSweepReport, DEFAULT_TOMBSTONE_DAYS};
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq)]
 pub struct CompactionReport {
@@ -8,6 +9,7 @@ pub struct CompactionReport {
     pub files_compacted: usize,
     pub bytes_before: u64,
     pub bytes_after: u64,
+    pub tombstone_sweep: TombstoneSweepReport,
 }
 
 pub fn compact_archives(root: &Path, dry_run: bool) -> Result<CompactionReport> {
@@ -39,10 +41,13 @@ pub fn compact_archives(root: &Path, dry_run: bool) -> Result<CompactionReport> 
         }
     }
 
+    let tombstone_sweep = sweep_tombstones(root, dry_run, DEFAULT_TOMBSTONE_DAYS)?;
+
     Ok(CompactionReport {
         dry_run,
         files_compacted,
         bytes_before: before,
         bytes_after: after,
+        tombstone_sweep,
     })
 }

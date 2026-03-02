@@ -8,6 +8,7 @@ pub const RSS_ABORT_LIMIT_BYTES: u64 = 14 * 1024 * 1024 * 1024;
 pub const MAX_CONCURRENT_MAPPED_BYTES: u64 = 2 * 1024 * 1024 * 1024;
 pub const SEGMENT_BYTES: u64 = 256 * 1024 * 1024;
 pub const STATE_TILE_BYTES_MAX: u64 = 2 * 1024 * 1024;
+pub const PARAM_BITS_MAX: u64 = 64 * 1024 * 1024;
 pub const MAX_PUBLIC_WORKERS: u32 = 2;
 pub const MAX_INCUBATOR_WORKERS: u32 = 1;
 pub const MAX_CANARY_WORKERS: u32 = 1;

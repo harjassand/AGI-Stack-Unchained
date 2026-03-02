@@ -1,13 +1,17 @@
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Arc, Mutex};
+use std::thread::sleep;
+use std::time::Duration;
 
-use rusqlite::{params, Connection};
+use rusqlite::{params, Connection, OptionalExtension};
 
 use crate::apfsc::artifacts::{read_pointer, write_pointer};
 use crate::apfsc::config::Phase1Config;
 use crate::apfsc::errors::{ApfscError, Result};
-use crate::apfsc::orchestrator::{run_phase2_epoch, run_phase3_epoch, run_phase4_epoch};
 use crate::apfsc::prod::audit::{append_audit_event, AuditEvent};
 use crate::apfsc::prod::backup::{create_backup, verify_backup};
+use crate::apfsc::prod::control_db::open_control_db;
 use crate::apfsc::prod::control_api::{ControlCommand, ControlRequest, ControlResponse};
 use crate::apfsc::prod::diagnostics::dump_diagnostics;
 use crate::apfsc::prod::gc::gc_candidates;
@@ -16,16 +20,103 @@ use crate::apfsc::prod::jobs::{idempotency_key, now_unix_s};
 use crate::apfsc::prod::journal::{
     append_journal, has_committed_idempotency, JobState, JournalRecord,
 };
+use crate::apfsc::prod::leases::{
+    acquire_epoch_critical_section, release_epoch_critical_section, LEASE_ACTIVATION, LEASE_JUDGE,
+    LEASE_ORCHESTRATOR,
+};
 use crate::apfsc::prod::release_manifest::verify_release_bundle_from_manifest;
 use crate::apfsc::prod::release_manifest::ReleaseManifest;
+use crate::apfsc::prod::recovery::{resume_run, startup_recovery};
 use crate::apfsc::prod::restore::{restore_apply, restore_dry_run};
 use crate::apfsc::prod::telemetry::Telemetry;
 
 pub struct ServiceContext {
     pub root: PathBuf,
     pub backup_root: PathBuf,
+    pub control_db_path: PathBuf,
     pub conn: Connection,
     pub telemetry: Telemetry,
+    pub runtime_state: RuntimeStateHandle,
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq)]
+pub struct RuntimeStateSnapshot {
+    pub state: String,
+    pub message: String,
+    pub updated_at_unix_s: u64,
+    pub last_error: Option<String>,
+}
+
+#[derive(Debug, Clone)]
+pub struct RuntimeStateHandle {
+    inner: Arc<Mutex<RuntimeStateSnapshot>>,
+    recovery_in_progress: Arc<AtomicBool>,
+}
+
+impl RuntimeStateHandle {
+    pub fn new(initial_state: &str, initial_message: &str) -> Self {
+        Self {
+            inner: Arc::new(Mutex::new(RuntimeStateSnapshot {
+                state: initial_state.to_string(),
+                message: initial_message.to_string(),
+                updated_at_unix_s: now_unix_s(),
+                last_error: None,
+            })),
+            recovery_in_progress: Arc::new(AtomicBool::new(false)),
+        }
+    }
+
+    pub fn snapshot(&self) -> RuntimeStateSnapshot {
+        self.inner
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .clone()
+    }
+
+    pub fn set(&self, state: &str, message: &str, last_error: Option<String>) {
+        let mut guard = self
+            .inner
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        guard.state = state.to_string();
+        guard.message = message.to_string();
+        guard.updated_at_unix_s = now_unix_s();
+        guard.last_error = last_error;
+    }
+
+    pub fn begin_recovery(&self, message: &str) -> bool {
+        match self.recovery_in_progress.compare_exchange(
+            false,
+            true,
+            Ordering::SeqCst,
+            Ordering::SeqCst,
+        ) {
+            Ok(_) => {
+                self.set("Recovering", message, None);
+                true
+            }
+            Err(_) => false,
+        }
+    }
+
+    pub fn finish_recovery_running(&self, message: &str) {
+        self.set("Running", message, None);
+        self.recovery_in_progress.store(false, Ordering::SeqCst);
+    }
+
+    pub fn finish_recovery_failed(&self, message: &str, err: String) {
+        self.set("RecoveryFailed", message, Some(err));
+        self.recovery_in_progress.store(false, Ordering::SeqCst);
+    }
+
+    pub fn force_idle(&self, message: &str) {
+        self.set("Idle", message, None);
+        self.recovery_in_progress.store(false, Ordering::SeqCst);
+    }
+
+    pub fn is_recovery_in_progress(&self) -> bool {
+        self.recovery_in_progress.load(Ordering::SeqCst)
+    }
 }
 
 impl ServiceContext {
@@ -36,12 +127,65 @@ impl ServiceContext {
         telemetry: Telemetry,
     ) -> Self {
         Self {
+            control_db_path: root.join("control").join("control.db"),
             root,
             backup_root,
             conn,
             telemetry,
+            runtime_state: RuntimeStateHandle::new("Running", "Control plane ready"),
         }
     }
+
+    pub fn runtime_state_handle(&self) -> RuntimeStateHandle {
+        self.runtime_state.clone()
+    }
+
+    pub fn set_control_db_path(&mut self, control_db_path: PathBuf) {
+        self.control_db_path = control_db_path;
+    }
+}
+
+const RECOVERY_SCAN_MESSAGE: &str = "Scanning WAL journal and replaying recovery jobs...";
+const START_RUN_LEASE_TTL_S: u64 = 300;
+
+pub fn spawn_background_recovery(
+    root: PathBuf,
+    control_db_path: PathBuf,
+    runtime_state: RuntimeStateHandle,
+) -> bool {
+    if !runtime_state.begin_recovery(RECOVERY_SCAN_MESSAGE) {
+        return false;
+    }
+
+    std::thread::spawn(move || {
+        let outcome = (|| {
+            let conn = open_control_db(&control_db_path)?;
+            let mut backoff_ms = 100u64;
+            let max_attempts = 3usize;
+            for attempt in 0..max_attempts {
+                match startup_recovery(&root, &conn) {
+                    Ok(_) => break,
+                    Err(err)
+                        if err
+                            .to_string()
+                            .to_ascii_lowercase()
+                            .contains("database is locked")
+                            && attempt + 1 < max_attempts =>
+                    {
+                        sleep(Duration::from_millis(backoff_ms));
+                        backoff_ms = backoff_ms.saturating_mul(2);
+                    }
+                    Err(err) => return Err(err),
+                }
+            }
+            Ok::<(), ApfscError>(())
+        })();
+        match outcome {
+            Ok(()) => runtime_state.finish_recovery_running("Recovery complete"),
+            Err(err) => runtime_state.finish_recovery_failed("Startup recovery failed", err.to_string()),
+        }
+    });
+    true
 }
 
 fn command_required_role(command: &ControlCommand) -> crate::apfsc::prod::auth::Role {
@@ -230,10 +374,81 @@ fn dispatch(ctx: &mut ServiceContext, req: &ControlRequest) -> Result<ControlRes
                 .conn
                 .query_row("SELECT count(*) FROM runs", [], |r| r.get(0))
                 .map_err(|e| ApfscError::Protocol(e.to_string()))?;
+            let leased_owner: Option<String> = ctx
+                .conn
+                .query_row(
+                    "SELECT owner_id FROM leases WHERE lease_name=?1 LIMIT 1",
+                    params![LEASE_ORCHESTRATOR],
+                    |r| r.get(0),
+                )
+                .optional()
+                .map_err(|e| ApfscError::Protocol(e.to_string()))?;
+            let active_run: Option<(String, String, String)> = if let Some(owner) = leased_owner {
+                if let Some(run_id) = owner.strip_prefix("run:") {
+                    ctx.conn
+                        .query_row(
+                            "SELECT run_id, state, COALESCE(last_stage, '')
+                             FROM runs
+                             WHERE run_id=?1 AND state IN ('Running', 'RecoveryPending')
+                             LIMIT 1",
+                            params![run_id],
+                            |r| {
+                                Ok((
+                                    r.get::<_, String>(0)?,
+                                    r.get::<_, String>(1)?,
+                                    r.get::<_, String>(2)?,
+                                ))
+                            },
+                        )
+                        .optional()
+                        .map_err(|e| ApfscError::Protocol(e.to_string()))?
+                } else {
+                    None
+                }
+            } else {
+                ctx.conn
+                    .query_row(
+                        "SELECT run_id, state, COALESCE(last_stage, '')
+                         FROM runs
+                         WHERE state='Running'
+                         ORDER BY updated_at DESC
+                         LIMIT 1",
+                        [],
+                        |r| {
+                            Ok((
+                                r.get::<_, String>(0)?,
+                                r.get::<_, String>(1)?,
+                                r.get::<_, String>(2)?,
+                            ))
+                        },
+                    )
+                    .optional()
+                    .map_err(|e| ApfscError::Protocol(e.to_string()))?
+            };
+            if let Some((run_id, run_state, last_stage)) = active_run {
+                let live_msg = format!(
+                    "Epoch loop active for run {} [{}] ({})",
+                    run_id, run_state, last_stage
+                );
+                let runtime = ctx.runtime_state.snapshot();
+                if runtime.state == "Recovering" {
+                    ctx.runtime_state.finish_recovery_running(&live_msg);
+                } else if runtime.state == "Running" && runtime.message != live_msg {
+                    ctx.runtime_state
+                        .set("Running", &live_msg, runtime.last_error.clone());
+                }
+            }
+            let runtime = ctx.runtime_state.snapshot();
             Ok(resp_ok(
                 req,
                 "status",
-                serde_json::json!({"runs": run_count}),
+                serde_json::json!({
+                    "runs": run_count,
+                    "state": runtime.state,
+                    "message": runtime.message,
+                    "updated_at_unix_s": runtime.updated_at_unix_s,
+                    "last_error": runtime.last_error
+                }),
             ))
         }
         ControlCommand::Health => Ok(resp_ok(
@@ -382,76 +597,105 @@ fn dispatch(ctx: &mut ServiceContext, req: &ControlRequest) -> Result<ControlRes
                 profile,
                 &req.request_id,
             )?;
-
-            ctx.conn.execute(
-                "INSERT OR REPLACE INTO runs(run_id, snapshot_hash, profile, state, idempotency_key, created_at, updated_at)
-                 VALUES(?1, ?2, ?3, 'Running', ?4, datetime('now'), datetime('now'))",
-                params![run_id, snapshot_hash, profile, idk],
-            ).map_err(|e| ApfscError::Protocol(e.to_string()))?;
-
-            append_journal(
-                &ctx.root,
-                &JournalRecord {
-                    job_id: format!("job:{}", req.request_id),
-                    run_id: Some(run_id.clone()),
-                    idempotency_key: idk,
-                    stage: "run_start".to_string(),
-                    target_entity_hash: None,
-                    planned_effects: vec!["epoch_execution".to_string()],
-                    created_at: now_unix_s(),
-                    state: JobState::Running,
-                    receipt_hash: None,
-                    commit_marker: None,
-                },
-            )?;
-
-            let cfg = Phase1Config::default();
-            for _ in 0..*epochs {
-                match profile.as_str() {
-                    "phase2" => {
-                        let _ = run_phase2_epoch(&ctx.root, &cfg, None)?;
-                    }
-                    "phase3" => {
-                        let _ = run_phase3_epoch(&ctx.root, &cfg, None)?;
-                    }
-                    "phase4" | "prod" | "production" => {
-                        let _ = run_phase4_epoch(&ctx.root, &cfg, None)?;
-                    }
-                    _ => {
-                        return Err(ApfscError::Validation(format!(
-                            "unsupported run profile: {}",
-                            profile
-                        )));
-                    }
-                }
+            let lease_owner = format!("run:{}", run_id);
+            if !acquire_epoch_critical_section(
+                &ctx.conn,
+                &lease_owner,
+                START_RUN_LEASE_TTL_S,
+                now_unix_s(),
+            )? {
+                return Err(ApfscError::Validation(
+                    "409 Conflict: failed to acquire orchestrator/judge/activation leases"
+                        .to_string(),
+                ));
             }
 
-            ctx.conn
-                .execute(
-                    "UPDATE runs SET state='Succeeded', updated_at=datetime('now') WHERE run_id=?1",
-                    params![run_id],
-                )
-                .map_err(|e| ApfscError::Protocol(e.to_string()))?;
-            append_journal(
-                &ctx.root,
-                &JournalRecord {
-                    job_id: format!("job:{}", req.request_id),
-                    run_id: Some(run_id),
-                    idempotency_key: "completed".to_string(),
-                    stage: "run_complete".to_string(),
-                    target_entity_hash: None,
-                    planned_effects: vec!["commit".to_string()],
-                    created_at: now_unix_s(),
-                    state: JobState::Committed,
-                    receipt_hash: None,
-                    commit_marker: Some("run_commit".to_string()),
-                },
-            )?;
+            let start_result = (|| -> Result<()> {
+                ctx.conn.execute(
+                    "INSERT OR REPLACE INTO runs(
+                        run_id, snapshot_hash, profile,
+                        target_epochs, completed_epochs, last_receipt_hash, last_stage,
+                        state, idempotency_key, created_at, updated_at
+                     ) VALUES(
+                        ?1, ?2, ?3,
+                        ?4, 0, NULL, 'run_start',
+                        'Running', ?5, datetime('now'), datetime('now')
+                     )",
+                    params![run_id, snapshot_hash, profile, *epochs as i64, idk],
+                ).map_err(|e| ApfscError::Protocol(e.to_string()))?;
+
+                append_journal(
+                    &ctx.root,
+                    &JournalRecord {
+                        job_id: format!("job:{}", req.request_id),
+                        run_id: Some(run_id.clone()),
+                        idempotency_key: idk.clone(),
+                        stage: "run_start".to_string(),
+                        target_entity_hash: None,
+                        planned_effects: vec![format!("epoch_execution:{}", epochs)],
+                        created_at: now_unix_s(),
+                        state: JobState::Running,
+                        receipt_hash: None,
+                        commit_marker: None,
+                    },
+                )?;
+
+                resume_run(&ctx.root, &ctx.conn, &run_id, profile, 0, *epochs)?;
+                Ok(())
+            })();
+
+            if let Err(err) = start_result {
+                let _ = release_epoch_critical_section(&ctx.conn, &lease_owner);
+                return Err(err);
+            }
 
             Ok(resp_ok(
                 req,
                 "run complete",
                 serde_json::json!({"profile": profile, "epochs": epochs}),
+            ))
+        }
+        ControlCommand::ForceClearRecovery => {
+            let cleared_leases = ctx
+                .conn
+                .execute(
+                    "DELETE FROM leases WHERE lease_name IN (?1, ?2, ?3)",
+                    params![LEASE_ORCHESTRATOR, LEASE_JUDGE, LEASE_ACTIVATION],
+                )
+                .map_err(|e| ApfscError::Protocol(e.to_string()))?;
+            let failed_runs = ctx
+                .conn
+                .execute(
+                    "UPDATE runs
+                     SET state='Failed',
+                         last_stage='operator_override',
+                         updated_at=datetime('now')
+                     WHERE state IN ('Running', 'RecoveryPending')",
+                    [],
+                )
+                .map_err(|e| ApfscError::Protocol(e.to_string()))?;
+            let failed_jobs = ctx
+                .conn
+                .execute(
+                    "UPDATE jobs
+                     SET state='Failed',
+                         error_code='OperatorOverride',
+                         finished_at=datetime('now')
+                     WHERE state IN ('Running', 'RecoveryPending', 'Leased', 'Planned')",
+                    [],
+                )
+                .map_err(|e| ApfscError::Protocol(e.to_string()))?;
+            ctx.runtime_state
+                .force_idle("Operator override cleared recovery state");
+            Ok(resp_ok(
+                req,
+                "force clear recovery complete",
+                serde_json::json!({
+                    "state": "Idle",
+                    "cleared_leases": cleared_leases,
+                    "failed_runs": failed_runs,
+                    "failed_jobs": failed_jobs
+                }),
             ))
         }
         ControlCommand::BackupCreate => {
@@ -571,9 +815,35 @@ fn dispatch(ctx: &mut ServiceContext, req: &ControlRequest) -> Result<ControlRes
                 serde_json::json!({"active_candidate": rollback}),
             ))
         }
-        ControlCommand::Pause | ControlCommand::Resume | ControlCommand::CancelRun { .. } => {
-            Ok(resp_ok(req, "accepted", serde_json::json!({})))
+        ControlCommand::Pause => Ok(resp_ok(req, "accepted", serde_json::json!({}))),
+        ControlCommand::Resume => {
+            let spawned = spawn_background_recovery(
+                ctx.root.clone(),
+                ctx.control_db_path.clone(),
+                ctx.runtime_state_handle(),
+            );
+            let runtime = ctx.runtime_state.snapshot();
+            Ok(resp_ok(
+                req,
+                if spawned {
+                    "resume accepted (background recovery started)"
+                } else if ctx.runtime_state.is_recovery_in_progress() {
+                    "resume accepted (recovery already in progress)"
+                } else {
+                    "resume accepted"
+                },
+                serde_json::json!({
+                    "accepted": true,
+                    "background": true,
+                    "spawned": spawned,
+                    "state": runtime.state,
+                    "message": runtime.message,
+                    "updated_at_unix_s": runtime.updated_at_unix_s,
+                    "last_error": runtime.last_error
+                }),
+            ))
         }
+        ControlCommand::CancelRun { .. } => Ok(resp_ok(req, "accepted", serde_json::json!({}))),
     }
 }
 
@@ -677,5 +947,6 @@ fn command_materials(command: &ControlCommand) -> (&'static str, &str, Option<St
         }
         ControlCommand::Rollback => ("rollback", "prod", None),
         ControlCommand::ActiveShow => ("active_show", "prod", None),
+        ControlCommand::ForceClearRecovery => ("force_clear_recovery", "prod", None),
     }
 }

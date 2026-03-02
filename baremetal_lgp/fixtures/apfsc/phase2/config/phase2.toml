@@ -63,7 +63,7 @@ require_target_subset_hit = true
 target_subset = ["det_micro", "sensor_temporal", "phys_sim"]
 
 [phase2.normalization]
-codelen_ref_bytes = 4096
+codelen_ref_bytes = 10485760
 transfer_ref_bytes = 4096
 public_static_margin_bpb = 0.001
 holdout_static_margin_bpb = 0.001

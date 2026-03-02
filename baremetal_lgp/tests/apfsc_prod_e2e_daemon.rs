@@ -64,4 +64,37 @@ fn daemon_round_trip_over_local_socket() {
     client.read_to_end(&mut out).expect("read");
     let resp: ControlResponse = serde_json::from_slice(&out).expect("resp");
     assert!(resp.ok);
+    let payload = resp.payload.expect("payload");
+    assert!(payload.get("state").is_some(), "status state missing");
+    assert!(payload.get("message").is_some(), "status message missing");
+
+    let (mut server2, mut client2) = UnixStream::pair().expect("pair");
+    let req2 = ControlRequest {
+        request_id: "r2".to_string(),
+        actor: "operator".to_string(),
+        token: Some("secret".to_string()),
+        command: ControlCommand::Resume,
+    };
+    client2
+        .write_all(&serde_json::to_vec(&req2).expect("json"))
+        .expect("write");
+    client2
+        .shutdown(std::net::Shutdown::Write)
+        .expect("shutdown");
+
+    serve_once(&root, &token_file, &mut server2, &mut ctx).expect("serve");
+    drop(server2);
+    let mut out2 = Vec::new();
+    client2.read_to_end(&mut out2).expect("read");
+    let resp2: ControlResponse = serde_json::from_slice(&out2).expect("resp");
+    assert!(resp2.ok);
+    assert!(resp2.message.contains("accepted"));
+    let payload2 = resp2.payload.expect("payload");
+    assert_eq!(
+        payload2
+            .get("background")
+            .and_then(|v| v.as_bool())
+            .unwrap_or(false),
+        true
+    );
 }

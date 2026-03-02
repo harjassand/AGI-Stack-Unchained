@@ -1,0 +1,137 @@
+{
+  "schema": "apfsc-epoch-census-v1",
+  "epoch_id": 7,
+  "generated_at_utc": "2026-03-01T00:02:00Z",
+  "root": "/Users/harjas/.apfsc",
+  "pointers": {
+    "active_snapshot": "cc03ed501e75201a5ccf41c57ea0b65ebb021b79565e7358404fc63b31c30517",
+    "active_constellation": "11d667a61423788fa209a354d614ca5566f1d6aaa1f9054055172aa41a4a8489",
+    "active_candidate": "d0e6c4004dfc653acbea70701c58fbbabd731cd9bf5c520acf0cced1819f575f",
+    "active_search_law": "39ece2195f42961b4a3c0bcfd5335745a2400c892fe9d99103278c7e2cd32fe8"
+  },
+  "bank_stats": {
+    "schema": "apfsc-bank-stats-v1",
+    "generated_at_utc": "2026-03-01T00:02:00Z",
+    "root": "/Users/harjas/.apfsc",
+    "families": [
+      {
+        "family_id": "det_micro",
+        "public_count": 20,
+        "holdout_count": 14,
+        "train_count": 79,
+        "anchor_count": 7,
+        "canary_count": 6,
+        "transfer_eval_count": 2,
+        "transfer_train_count": 3
+      },
+      {
+        "family_id": "event_sparse",
+        "public_count": 9,
+        "holdout_count": 6,
+        "train_count": 35,
+        "anchor_count": 3,
+        "canary_count": 3,
+        "transfer_eval_count": 1,
+        "transfer_train_count": 1
+      },
+      {
+        "family_id": "formal_alg",
+        "public_count": 13,
+        "holdout_count": 8,
+        "train_count": 49,
+        "anchor_count": 4,
+        "canary_count": 4,
+        "transfer_eval_count": 1,
+        "transfer_train_count": 2
+      },
+      {
+        "family_id": "phys_sim",
+        "public_count": 70,
+        "holdout_count": 47,
+        "train_count": 280,
+        "anchor_count": 23,
+        "canary_count": 23,
+        "transfer_eval_count": 9,
+        "transfer_train_count": 13
+      },
+      {
+        "family_id": "sensor_temporal",
+        "public_count": 84,
+        "holdout_count": 56,
+        "train_count": 336,
+        "anchor_count": 28,
+        "canary_count": 28,
+        "transfer_eval_count": 11,
+        "transfer_train_count": 16
+      },
+      {
+        "family_id": "text_code",
+        "public_count": 85,
+        "holdout_count": 56,
+        "train_count": 338,
+        "anchor_count": 28,
+        "canary_count": 28,
+        "transfer_eval_count": 11,
+        "transfer_train_count": 16
+      }
+    ],
+    "totals": {
+      "families": 6,
+      "public_count": 281,
+      "holdout_count": 187,
+      "train_count": 1117,
+      "anchor_count": 93,
+      "canary_count": 92,
+      "transfer_eval_count": 35,
+      "transfer_train_count": 51
+    }
+  },
+  "receipt_counts": {
+    "activation": 0,
+    "bridge": 0,
+    "canary": 0,
+    "fresh_holdout": 0,
+    "fresh_public": 0,
+    "holdout": 0,
+    "holdout_robust": 0,
+    "holdout_static": 1,
+    "holdout_transfer": 0,
+    "ingress": 26,
+    "judge": 1,
+    "public": 0,
+    "public_robust": 18,
+    "public_static": 18,
+    "public_transfer": 18
+  },
+  "archive_line_counts": {
+    "searchlaw_trace": 6,
+    "need_tokens": 2,
+    "challenge_retirement": 2,
+    "genealogy": 2,
+    "hardware_trace": 2,
+    "error_atlas": 8
+  },
+  "epoch_tagged_events": {
+    "need_tokens_for_epoch": [
+      {
+        "token_id": "e56c0ca8a404048ed2d4e6564a4b38d5f10ab67d6f074e4eba52fd1ed208c3a0",
+        "need_bucket": "Reality",
+        "priority_q16": 50000,
+        "requested_family_shape": "fresh_family",
+        "justification_codes": [
+          "plateau_judged_yield"
+        ],
+        "originating_searchlaw_hash": "0fac6ca84f84c6da1647191411dbf7f2a673334227ee27ca534360ad090305a4",
+        "epoch_id": 7
+      }
+    ],
+    "need_tokens_total": 2,
+    "max_epoch_id_observed": 7
+  },
+  "timing_markers": {
+    "first_error_atlas_epoch_unix_s": 1772320978,
+    "first_hardware_trace_unix_s": 1772321892,
+    "latest_hardware_trace_unix_s": 1772322248
+  },
+  "note": "Latest epoch census uses highest epoch_id observed in need_tokens ledger at generation time."
+}

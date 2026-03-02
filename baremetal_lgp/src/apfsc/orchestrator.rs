@@ -1,6 +1,8 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::Path;
 
+use rayon::prelude::*;
+
 use crate::apfsc::archive::{error_atlas, failure_morph, genealogy, hardware_trace};
 use crate::apfsc::bank::{
     load_bank, load_family_panel_windows, load_payload_index_for_windows, WindowBank,
@@ -23,7 +25,8 @@ use crate::apfsc::hardware_oracle::{load_oracle, oracle_penalty, OracleFeatures}
 use crate::apfsc::headpack::HeadOnlyAdaGradLaw;
 use crate::apfsc::ingress::judge::PendingAdmission;
 use crate::apfsc::judge::{
-    evaluate_candidate_split, judge_phase2_candidate, judge_phase3_candidate, run_batch,
+    evaluate_candidate_split, judge_phase2_candidate, judge_phase3_candidate,
+    judge_searchlaw_candidate, run_batch,
     write_split_receipt, Phase2CandidateEvaluations,
 };
 use crate::apfsc::lanes;
@@ -454,17 +457,27 @@ pub fn run_phase2_epoch(
         CandidateBundle,
         crate::apfsc::normalization::PanelComparison,
     )>::new();
-    for cand in witness_survivors
+    let public_candidates: Vec<CandidateBundle> = witness_survivors
         .into_iter()
         .take(crate::apfsc::constants::MAX_STATIC_PUBLIC_CANDIDATES)
-    {
-        let static_cmp = evaluate_static_panel(
-            root,
-            &cand,
-            &active,
-            &constellation,
-            PanelKind::StaticPublic,
-        )?;
+        .collect();
+    let public_static_results: Vec<
+        Result<(
+            CandidateBundle,
+            crate::apfsc::normalization::PanelComparison,
+        )>,
+    > = public_candidates
+        .into_par_iter()
+        .map(|cand| {
+            let static_cmp =
+                evaluate_static_panel(root, &cand, &active, &constellation, PanelKind::StaticPublic)?;
+            Ok((cand, static_cmp))
+        })
+        .collect();
+    for result in public_static_results {
+        public_static.push(result?);
+    }
+    for (cand, static_cmp) in &public_static {
         crate::apfsc::artifacts::write_json_atomic(
             &crate::apfsc::artifacts::receipt_path(
                 root,
@@ -473,7 +486,6 @@ pub fn run_phase2_epoch(
             ),
             &static_cmp.receipt,
         )?;
-        public_static.push((cand, static_cmp));
     }
     public_static.sort_by(|a, b| {
         b.1.delta_bpb
@@ -483,53 +495,71 @@ pub fn run_phase2_epoch(
 
     let mut public_transfer_map = BTreeMap::new();
     let mut public_robust_map = BTreeMap::new();
-    for (cand, _) in public_static
+    let public_a_candidates: Vec<CandidateBundle> = public_static
         .iter()
         .take(crate::apfsc::constants::MAX_TRANSFER_PUBLIC_CANDIDATES)
-    {
-        if !matches!(
-            cand.manifest.promotion_class,
-            crate::apfsc::types::PromotionClass::A
-        ) {
-            continue;
-        }
-        let x = match evaluate_transfer(root, cand, &active, &constellation, EvalMode::Public) {
-            Ok(v) => v,
-            Err(_) => continue,
-        };
+        .filter(|(cand, _)| {
+            matches!(
+                cand.manifest.promotion_class,
+                crate::apfsc::types::PromotionClass::A
+            )
+        })
+        .map(|(cand, _)| cand.clone())
+        .collect();
+    let transfer_results: Vec<Option<(
+        String,
+        crate::apfsc::transfer::TransferEvaluation,
+    )>> = public_a_candidates
+        .par_iter()
+        .map(|cand| {
+            evaluate_transfer(root, cand, &active, &constellation, EvalMode::Public)
+                .ok()
+                .map(|x| (cand.manifest.candidate_hash.clone(), x))
+        })
+        .collect();
+    for (candidate_hash, x) in transfer_results.into_iter().flatten() {
         crate::apfsc::artifacts::write_json_atomic(
             &crate::apfsc::artifacts::receipt_path(
                 root,
                 "public_transfer",
-                &format!("{}.json", cand.manifest.candidate_hash),
+                &format!("{}.json", candidate_hash),
             ),
             &x.receipt,
         )?;
-        public_transfer_map.insert(cand.manifest.candidate_hash.clone(), x);
+        public_transfer_map.insert(candidate_hash, x);
     }
-    for (cand, _) in public_static
+    let public_robust_candidates: Vec<CandidateBundle> = public_static
         .iter()
         .take(crate::apfsc::constants::MAX_ROBUST_PUBLIC_CANDIDATES)
-    {
-        if !matches!(
-            cand.manifest.promotion_class,
-            crate::apfsc::types::PromotionClass::A
-        ) {
-            continue;
-        }
-        let r = match evaluate_robustness(root, cand, &active, &constellation, EvalMode::Public) {
-            Ok(v) => v,
-            Err(_) => continue,
-        };
+        .filter(|(cand, _)| {
+            matches!(
+                cand.manifest.promotion_class,
+                crate::apfsc::types::PromotionClass::A
+            )
+        })
+        .map(|(cand, _)| cand.clone())
+        .collect();
+    let robust_results: Vec<Option<(
+        String,
+        crate::apfsc::robustness::RobustnessEvaluation,
+    )>> = public_robust_candidates
+        .par_iter()
+        .map(|cand| {
+            evaluate_robustness(root, cand, &active, &constellation, EvalMode::Public)
+                .ok()
+                .map(|r| (cand.manifest.candidate_hash.clone(), r))
+        })
+        .collect();
+    for (candidate_hash, r) in robust_results.into_iter().flatten() {
         crate::apfsc::artifacts::write_json_atomic(
             &crate::apfsc::artifacts::receipt_path(
                 root,
                 "public_robust",
-                &format!("{}.json", cand.manifest.candidate_hash),
+                &format!("{}.json", candidate_hash),
             ),
             &r.receipt,
         )?;
-        public_robust_map.insert(cand.manifest.candidate_hash.clone(), r);
+        public_robust_map.insert(candidate_hash, r);
     }
 
     let mut holdout_admissions = Vec::<CandidateBundle>::new();
@@ -696,6 +726,14 @@ pub fn run_phase2_epoch(
                 if canary.pass {
                     canary_activated = Some(cand.manifest.candidate_hash.clone());
                     receipt.canary_result = Some("pass".to_string());
+                    crate::apfsc::artifacts::write_json_atomic(
+                        &crate::apfsc::artifacts::receipt_path(
+                            root,
+                            "activation",
+                            &format!("{}.json", cand.manifest.candidate_hash),
+                        ),
+                        &receipt,
+                    )?;
                     passing.push(promotion_bundle);
                 } else {
                     receipt.decision = JudgeDecision::Reject;
@@ -1085,11 +1123,34 @@ pub fn run_phase3_epoch(
     let witnesses =
         error_atlas::update_family_error_atlas(root, &constellation, &windows_by_family)?;
 
+    let mut train_windows = Vec::new();
+    let mut public_windows = Vec::new();
+    for fam in &constellation.family_specs {
+        train_windows.extend(
+            load_family_panel_windows(root, &fam.family_id, PanelKind::Train.as_key())?.into_iter(),
+        );
+        public_windows.extend(
+            load_family_panel_windows(root, &fam.family_id, PanelKind::StaticPublic.as_key())?
+                .into_iter(),
+        );
+    }
+    let mut incubator_path_windows = train_windows.clone();
+    incubator_path_windows.extend(public_windows.iter().cloned());
+    let incubator_payloads = load_payload_index_for_windows(root, &incubator_path_windows)?;
+
     let truth = lanes::truth::generate_phase3(&active, cfg)?;
     let equiv = lanes::equivalence::generate(&active, cfg)?;
+    let incubated = lanes::incubator::generate(
+        &active,
+        cfg,
+        &train_windows,
+        &public_windows,
+        &incubator_payloads,
+    )?;
+    let splice = lanes::incubator::materialize_splice_candidates(&active, incubated, cfg)?;
     let incubator = lanes::incubator::phase3_macro_aware_candidates(&active, cfg)?;
     let frontier = lanes::cold_frontier::generate(&active, cfg)?;
-    let mut pool = merge_and_dedup([truth, equiv, incubator, frontier].concat());
+    let mut pool = merge_and_dedup([truth, equiv, incubator, splice, frontier].concat());
     pool = verify_and_bound(pool)?;
 
     let incumbent_core_hash = crate::apfsc::artifacts::digest_json(&active.arch_program)?;
@@ -1159,17 +1220,6 @@ pub fn run_phase3_epoch(
         save_candidate(root, cand)?;
     }
 
-    let mut train_windows = Vec::new();
-    let mut public_windows = Vec::new();
-    for fam in &constellation.family_specs {
-        train_windows.extend(
-            load_family_panel_windows(root, &fam.family_id, PanelKind::Train.as_key())?.into_iter(),
-        );
-        public_windows.extend(
-            load_family_panel_windows(root, &fam.family_id, PanelKind::StaticPublic.as_key())?
-                .into_iter(),
-        );
-    }
     let mut public_path_windows = train_windows.clone();
     public_path_windows.extend(public_windows.iter().cloned());
     public_path_windows.extend(witnesses.selected.iter().cloned());
@@ -1199,17 +1249,27 @@ pub fn run_phase3_epoch(
         CandidateBundle,
         crate::apfsc::normalization::PanelComparison,
     )>::new();
-    for cand in survivors
+    let public_candidates: Vec<CandidateBundle> = survivors
         .into_iter()
         .take(crate::apfsc::constants::MAX_STATIC_PUBLIC_CANDIDATES)
-    {
-        let static_cmp = evaluate_static_panel(
-            root,
-            &cand,
-            &active,
-            &constellation,
-            PanelKind::StaticPublic,
-        )?;
+        .collect();
+    let public_static_results: Vec<
+        Result<(
+            CandidateBundle,
+            crate::apfsc::normalization::PanelComparison,
+        )>,
+    > = public_candidates
+        .into_par_iter()
+        .map(|cand| {
+            let static_cmp =
+                evaluate_static_panel(root, &cand, &active, &constellation, PanelKind::StaticPublic)?;
+            Ok((cand, static_cmp))
+        })
+        .collect();
+    for result in public_static_results {
+        public_static.push(result?);
+    }
+    for (cand, static_cmp) in &public_static {
         crate::apfsc::artifacts::write_json_atomic(
             &crate::apfsc::artifacts::receipt_path(
                 root,
@@ -1218,7 +1278,6 @@ pub fn run_phase3_epoch(
             ),
             &static_cmp.receipt,
         )?;
-        public_static.push((cand, static_cmp));
     }
     public_static.sort_by(|a, b| {
         b.1.delta_bpb
@@ -1228,32 +1287,54 @@ pub fn run_phase3_epoch(
 
     let mut public_transfer_map = BTreeMap::new();
     let mut public_robust_map = BTreeMap::new();
-    for (cand, _) in &public_static {
-        if !is_phase3_structural_candidate(cand.manifest.promotion_class) {
-            continue;
-        }
-        if let Ok(x) = evaluate_transfer(root, cand, &active, &constellation, EvalMode::Public) {
-            crate::apfsc::artifacts::write_json_atomic(
-                &crate::apfsc::artifacts::receipt_path(
-                    root,
-                    "public_transfer",
-                    &format!("{}.json", cand.manifest.candidate_hash),
-                ),
-                &x.receipt,
-            )?;
-            public_transfer_map.insert(cand.manifest.candidate_hash.clone(), x);
-        }
-        if let Ok(r) = evaluate_robustness(root, cand, &active, &constellation, EvalMode::Public) {
-            crate::apfsc::artifacts::write_json_atomic(
-                &crate::apfsc::artifacts::receipt_path(
-                    root,
-                    "public_robust",
-                    &format!("{}.json", cand.manifest.candidate_hash),
-                ),
-                &r.receipt,
-            )?;
-            public_robust_map.insert(cand.manifest.candidate_hash.clone(), r);
-        }
+    let structural_public_candidates: Vec<CandidateBundle> = public_static
+        .iter()
+        .filter(|(cand, _)| is_phase3_structural_candidate(cand.manifest.promotion_class))
+        .map(|(cand, _)| cand.clone())
+        .collect();
+    let transfer_results: Vec<Option<(
+        String,
+        crate::apfsc::transfer::TransferEvaluation,
+    )>> = structural_public_candidates
+        .par_iter()
+        .map(|cand| {
+            evaluate_transfer(root, cand, &active, &constellation, EvalMode::Public)
+                .ok()
+                .map(|x| (cand.manifest.candidate_hash.clone(), x))
+        })
+        .collect();
+    for (candidate_hash, x) in transfer_results.into_iter().flatten() {
+        crate::apfsc::artifacts::write_json_atomic(
+            &crate::apfsc::artifacts::receipt_path(
+                root,
+                "public_transfer",
+                &format!("{}.json", candidate_hash),
+            ),
+            &x.receipt,
+        )?;
+        public_transfer_map.insert(candidate_hash, x);
+    }
+    let robust_results: Vec<Option<(
+        String,
+        crate::apfsc::robustness::RobustnessEvaluation,
+    )>> = structural_public_candidates
+        .par_iter()
+        .map(|cand| {
+            evaluate_robustness(root, cand, &active, &constellation, EvalMode::Public)
+                .ok()
+                .map(|r| (cand.manifest.candidate_hash.clone(), r))
+        })
+        .collect();
+    for (candidate_hash, r) in robust_results.into_iter().flatten() {
+        crate::apfsc::artifacts::write_json_atomic(
+            &crate::apfsc::artifacts::receipt_path(
+                root,
+                "public_robust",
+                &format!("{}.json", candidate_hash),
+            ),
+            &r.receipt,
+        )?;
+        public_robust_map.insert(candidate_hash, r);
     }
 
     let mut holdout_admissions = Vec::<CandidateBundle>::new();
@@ -1275,8 +1356,16 @@ pub fn run_phase3_epoch(
                 Some(v) => v,
                 None => continue,
             };
-            if t.delta_bpb < 0.0
-                || r.delta_bpb < 0.0
+            let min_transfer_delta = match cand.manifest.promotion_class {
+                PromotionClass::PWarm => cfg.phase3.promotion.p_warm_min_transfer_delta_bpb,
+                PromotionClass::PCold => cfg.phase3.promotion.p_cold_min_transfer_delta_bpb,
+                _ => 0.0,
+            };
+            // PCold does not expose a dedicated robust-regress threshold in config,
+            // so use the warm robustness budget as the shared structural tolerance.
+            let min_robust_delta = -cfg.phase3.promotion.p_warm_max_robust_regress_bpb;
+            if t.delta_bpb < min_transfer_delta
+                || r.delta_bpb < min_robust_delta
                 || !t.protected_floor_failures.is_empty()
                 || !r.protected_floor_failures.is_empty()
             {
@@ -1548,6 +1637,14 @@ pub fn run_phase3_epoch(
                 if canary.pass {
                     canary_activated = Some(cand.manifest.candidate_hash.clone());
                     receipt.canary_result = Some("pass".to_string());
+                    crate::apfsc::artifacts::write_json_atomic(
+                        &crate::apfsc::artifacts::receipt_path(
+                            root,
+                            "activation",
+                            &format!("{}.json", cand.manifest.candidate_hash),
+                        ),
+                        &receipt,
+                    )?;
                     passing.push(promotion_bundle);
                 } else {
                     receipt.decision = JudgeDecision::Reject;
@@ -1686,9 +1783,33 @@ pub fn run_phase4_epoch(
         crate::apfsc::artifacts::load_snapshot(root, &snap_hash)?;
     let formal_policy = load_active_formal_policy(root).unwrap_or_else(|_| seed_formal_policy());
 
+    let mut phase4_train_windows = Vec::new();
+    let mut phase4_public_windows = Vec::new();
+    for fam in &constellation.family_specs {
+        phase4_train_windows.extend(
+            load_family_panel_windows(root, &fam.family_id, PanelKind::Train.as_key())?.into_iter(),
+        );
+        phase4_public_windows.extend(
+            load_family_panel_windows(root, &fam.family_id, PanelKind::StaticPublic.as_key())?
+                .into_iter(),
+        );
+    }
+    let mut phase4_path_windows = phase4_train_windows.clone();
+    phase4_path_windows.extend(phase4_public_windows.iter().cloned());
+    let phase4_payloads = load_payload_index_for_windows(root, &phase4_path_windows)?;
+    let incubated = lanes::incubator::generate(
+        &active,
+        cfg,
+        &phase4_train_windows,
+        &phase4_public_windows,
+        &phase4_payloads,
+    )?;
+    let splice = lanes::incubator::materialize_splice_candidates(&active, incubated, cfg)?;
+
     let mut phase4_pool = Vec::new();
     phase4_pool.extend(lanes::truth::generate_phase3(&active, cfg)?);
     phase4_pool.extend(lanes::equivalence::generate(&active, cfg)?);
+    phase4_pool.extend(splice);
     phase4_pool.extend(lanes::incubator::phase3_macro_aware_candidates(
         &active, cfg,
     )?);
@@ -1876,51 +1997,73 @@ pub fn run_phase4_epoch(
         let _ = upsert_cell(root, &constellation.snapshot_hash, qd);
     }
 
-    let g_candidates =
-        generate_search_law_candidates(root, &active_searchlaw, &features, &law_tokens, cfg)?;
-    for cand in g_candidates
-        .iter()
-        .take(cfg.phase4.max_searchlaw_ab_candidates.max(1))
-    {
-        let offline = evaluate_searchlaw_offline(
-            root,
-            cand,
-            &law_records,
-            &constellation.snapshot_hash,
-            &constellation.constellation_id,
-            &cfg.protocol.version,
-        )?;
-        if !offline.pass {
-            continue;
-        }
-        let ab_epochs = cfg
-            .phase4
-            .searchlaw_min_ab_epochs
-            .max(1)
-            .min(cfg.phase4.searchlaw_max_ab_epochs.max(1));
-        let ab = evaluate_searchlaw_ab(
-            root,
-            cand,
-            &active_searchlaw,
-            &offline,
-            &law_records,
-            ab_epochs,
-            cfg,
-            &constellation.snapshot_hash,
-            &constellation.constellation_id,
-            &cfg.protocol.version,
-        )?;
-        let _promo = promote_search_law_if_pass(
-            root,
-            cand,
-            &active_searchlaw,
-            &ab,
-            &constellation.snapshot_hash,
-            &constellation.constellation_id,
-            &cfg.protocol.version,
-        )?;
-        if ab.pass {
-            break;
+    if cfg.phase4.enable_searchlaw {
+        let macro_period = cfg.phase4.searchlaw_min_ab_epochs.max(1) as u64;
+        let run_searchlaw_cycle = current_epoch % macro_period == 0;
+        if run_searchlaw_cycle {
+            let g_candidates =
+                generate_search_law_candidates(root, &active_searchlaw, &features, &law_tokens, cfg)?;
+            for cand in g_candidates
+                .iter()
+                .take(cfg.phase4.max_searchlaw_ab_candidates.max(1))
+            {
+                let offline = evaluate_searchlaw_offline(
+                    root,
+                    cand,
+                    &law_records,
+                    &constellation.snapshot_hash,
+                    &constellation.constellation_id,
+                    &cfg.protocol.version,
+                )?;
+                let ab_epochs = cfg
+                    .phase4
+                    .searchlaw_min_ab_epochs
+                    .max(1)
+                    .min(cfg.phase4.searchlaw_max_ab_epochs.max(1));
+                let ab = evaluate_searchlaw_ab(
+                    root,
+                    cand,
+                    &active_searchlaw,
+                    &offline,
+                    &law_records,
+                    ab_epochs,
+                    cfg,
+                    &constellation.snapshot_hash,
+                    &constellation.constellation_id,
+                    &cfg.protocol.version,
+                )?;
+                let g_receipt = judge_searchlaw_candidate(
+                    cand,
+                    &active_searchlaw,
+                    &offline,
+                    &ab,
+                    cfg,
+                    &constellation.snapshot_hash,
+                    &constellation.constellation_id,
+                    &cfg.protocol.version,
+                );
+                crate::apfsc::artifacts::write_json_atomic(
+                    &crate::apfsc::artifacts::receipt_path(
+                        root,
+                        "judge",
+                        &format!("{}.json", cand.manifest_hash),
+                    ),
+                    &g_receipt,
+                )?;
+                report.judge_report.receipts.push(g_receipt.clone());
+                let _promo = promote_search_law_if_pass(
+                    root,
+                    cand,
+                    &active_searchlaw,
+                    &ab,
+                    &constellation.snapshot_hash,
+                    &constellation.constellation_id,
+                    &cfg.protocol.version,
+                )?;
+                if g_receipt.decision == JudgeDecision::Promote {
+                    break;
+                }
+            }
         }
     }
 

@@ -1,0 +1,77 @@
+{
+  "schema": "apfsc-bank-stats-v1",
+  "generated_at_utc": "2026-03-01T00:02:00Z",
+  "root": "/Users/harjas/.apfsc",
+  "families": [
+    {
+      "family_id": "det_micro",
+      "public_count": 20,
+      "holdout_count": 14,
+      "train_count": 79,
+      "anchor_count": 7,
+      "canary_count": 6,
+      "transfer_eval_count": 2,
+      "transfer_train_count": 3
+    },
+    {
+      "family_id": "event_sparse",
+      "public_count": 9,
+      "holdout_count": 6,
+      "train_count": 35,
+      "anchor_count": 3,
+      "canary_count": 3,
+      "transfer_eval_count": 1,
+      "transfer_train_count": 1
+    },
+    {
+      "family_id": "formal_alg",
+      "public_count": 13,
+      "holdout_count": 8,
+      "train_count": 49,
+      "anchor_count": 4,
+      "canary_count": 4,
+      "transfer_eval_count": 1,
+      "transfer_train_count": 2
+    },
+    {
+      "family_id": "phys_sim",
+      "public_count": 70,
+      "holdout_count": 47,
+      "train_count": 280,
+      "anchor_count": 23,
+      "canary_count": 23,
+      "transfer_eval_count": 9,
+      "transfer_train_count": 13
+    },
+    {
+      "family_id": "sensor_temporal",
+      "public_count": 84,
+      "holdout_count": 56,
+      "train_count": 336,
+      "anchor_count": 28,
+      "canary_count": 28,
+      "transfer_eval_count": 11,
+      "transfer_train_count": 16
+    },
+    {
+      "family_id": "text_code",
+      "public_count": 85,
+      "holdout_count": 56,
+      "train_count": 338,
+      "anchor_count": 28,
+      "canary_count": 28,
+      "transfer_eval_count": 11,
+      "transfer_train_count": 16
+    }
+  ],
+  "totals": {
+    "families": 6,
+    "public_count": 281,
+    "holdout_count": 187,
+    "train_count": 1117,
+    "anchor_count": 93,
+    "canary_count": 92,
+    "transfer_eval_count": 35,
+    "transfer_train_count": 51
+  }
+}

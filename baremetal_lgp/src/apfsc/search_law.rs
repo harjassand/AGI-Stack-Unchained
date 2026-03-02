@@ -27,6 +27,7 @@ pub fn seed_search_law() -> SearchLawPack {
             ("A".to_string(), 19661),
             ("PWarm".to_string(), 13107),
             ("PCold".to_string(), 13107),
+            ("G".to_string(), 8192),
         ]),
         family_weights_q16: BTreeMap::new(),
         qd_explore_rate_q16: 8192,
@@ -92,6 +93,25 @@ fn scaled_u32(v: u32, num: u32, den: u32) -> u32 {
     ((v as u64).saturating_mul(num as u64) / den as u64).min(u32::MAX as u64) as u32
 }
 
+fn boost_weight(map: &mut BTreeMap<String, u32>, key: &str, delta: u32) {
+    map.entry(key.to_string())
+        .and_modify(|v| *v = v.saturating_add(delta))
+        .or_insert(delta);
+}
+
+fn rebalance_q16(weights: &mut BTreeMap<String, u32>) {
+    if weights.is_empty() {
+        return;
+    }
+    let total: u64 = weights.values().map(|v| *v as u64).sum();
+    if total == 0 {
+        return;
+    }
+    for v in weights.values_mut() {
+        *v = ((*v as u64).saturating_mul(65_535) / total).min(65_535) as u32;
+    }
+}
+
 pub fn generate_search_law_candidates(
     root: &Path,
     active: &SearchLawPack,
@@ -100,14 +120,25 @@ pub fn generate_search_law_candidates(
     cfg: &Phase1Config,
 ) -> Result<Vec<SearchLawPack>> {
     let mut out = Vec::new();
-    let max = cfg.phase4.max_searchlaw_public_candidates.max(1).min(2);
+    let max = cfg.phase4.max_searchlaw_public_candidates.max(1).min(16);
 
+    let mut push = |mut cand: SearchLawPack| -> Result<()> {
+        if out.len() >= max {
+            return Ok(());
+        }
+        rebalance_q16(&mut cand.lane_weights_q16);
+        rebalance_q16(&mut cand.class_weights_q16);
+        cand.manifest_hash = digest_json(&cand)?;
+        persist_search_law(root, &cand)?;
+        out.push(cand);
+        Ok(())
+    };
+
+    // Baseline compat mutation: maximize truth pressure while modestly increasing exploration.
     let mut candidate = active.clone();
     candidate.parent_law_hash = Some(active.manifest_hash.clone());
     candidate.law_id = format!("{}_c1", active.law_id);
-    candidate
-        .lane_weights_q16
-        .insert("truth".to_string(), 65535);
+    candidate.lane_weights_q16.insert("truth".to_string(), 65_535);
     candidate.recombination_rate_q16 = candidate.recombination_rate_q16.saturating_add(1024);
     candidate.qd_explore_rate_q16 = candidate
         .qd_explore_rate_q16
@@ -118,22 +149,58 @@ pub fn generate_search_law_candidates(
             .lane_weights_q16
             .entry("equivalence".to_string())
             .and_modify(|v| *v = scaled_u32(*v, 1 + (t % 3), 1))
-            .or_insert(13107);
+            .or_insert(13_107);
     }
-    candidate.manifest_hash = digest_json(&candidate)?;
-    persist_search_law(root, &candidate)?;
-    out.push(candidate);
+    boost_weight(&mut candidate.class_weights_q16, "G", 4096);
+    push(candidate)?;
 
-    if max > 1 {
-        let mut c2 = active.clone();
-        c2.parent_law_hash = Some(active.manifest_hash.clone());
-        c2.law_id = format!("{}_c2", active.law_id);
-        c2.fresh_family_bias_q16 = c2.fresh_family_bias_q16.saturating_add(2048);
-        c2.debt_policy_hash = "debt_policy_v1_tight".to_string();
-        c2.manifest_hash = digest_json(&c2)?;
-        persist_search_law(root, &c2)?;
-        out.push(c2);
-    }
+    // Fresh-family pressure mutation.
+    let mut c2 = active.clone();
+    c2.parent_law_hash = Some(active.manifest_hash.clone());
+    c2.law_id = format!("{}_c2", active.law_id);
+    c2.fresh_family_bias_q16 = c2.fresh_family_bias_q16.saturating_add(2048);
+    c2.debt_policy_hash = "debt_policy_v1_tight".to_string();
+    boost_weight(&mut c2.class_weights_q16, "G", 3072);
+    push(c2)?;
+
+    // Frontier topology mutations aimed at sparse/event/symbolic discovery.
+    let mut hdc_sparse = active.clone();
+    hdc_sparse.parent_law_hash = Some(active.manifest_hash.clone());
+    hdc_sparse.law_id = format!("{}_hdc_sparse", active.law_id);
+    boost_weight(&mut hdc_sparse.lane_weights_q16, "incubator", 4096);
+    boost_weight(&mut hdc_sparse.lane_weights_q16, "cold_frontier", 4096);
+    boost_weight(&mut hdc_sparse.class_weights_q16, "PWarm", 2048);
+    boost_weight(&mut hdc_sparse.class_weights_q16, "PCold", 2048);
+    boost_weight(&mut hdc_sparse.class_weights_q16, "G", 8192);
+    boost_weight(&mut hdc_sparse.family_weights_q16, "event_sparse", 8192);
+    hdc_sparse.need_rules_hash = "need_rules_v2_hdc_sparse".to_string();
+    push(hdc_sparse)?;
+
+    let mut symbolic = active.clone();
+    symbolic.parent_law_hash = Some(active.manifest_hash.clone());
+    symbolic.law_id = format!("{}_symbolic", active.law_id);
+    boost_weight(&mut symbolic.lane_weights_q16, "equivalence", 3072);
+    boost_weight(&mut symbolic.lane_weights_q16, "cold_frontier", 3072);
+    boost_weight(&mut symbolic.class_weights_q16, "PCold", 4096);
+    boost_weight(&mut symbolic.class_weights_q16, "G", 8192);
+    boost_weight(&mut symbolic.family_weights_q16, "formal_alg", 8192);
+    symbolic.need_rules_hash = "need_rules_v2_symbolic".to_string();
+    push(symbolic)?;
+
+    let mut mixed = active.clone();
+    mixed.parent_law_hash = Some(active.manifest_hash.clone());
+    mixed.law_id = format!("{}_hdc_symbolic_mix", active.law_id);
+    boost_weight(&mut mixed.lane_weights_q16, "truth", 2048);
+    boost_weight(&mut mixed.lane_weights_q16, "incubator", 2048);
+    boost_weight(&mut mixed.lane_weights_q16, "cold_frontier", 4096);
+    boost_weight(&mut mixed.class_weights_q16, "PWarm", 2048);
+    boost_weight(&mut mixed.class_weights_q16, "PCold", 2048);
+    boost_weight(&mut mixed.class_weights_q16, "G", 10_240);
+    boost_weight(&mut mixed.family_weights_q16, "event_sparse", 6144);
+    boost_weight(&mut mixed.family_weights_q16, "formal_alg", 6144);
+    mixed.recombination_rate_q16 = mixed.recombination_rate_q16.saturating_add(2048);
+    mixed.need_rules_hash = "need_rules_v2_hdc_symbolic_mix".to_string();
+    push(mixed)?;
 
     out.sort_by(|a, b| a.manifest_hash.cmp(&b.manifest_hash));
     out.truncate(max);

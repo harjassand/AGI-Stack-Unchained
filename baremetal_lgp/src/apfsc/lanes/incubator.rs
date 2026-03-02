@@ -25,6 +25,9 @@ pub fn generate(
     payloads_by_seq_hash: &BTreeMap<String, Vec<u8>>,
 ) -> Result<Vec<IncubatorArtifact>> {
     let sidecars = [
+        "HdcAssociativeMemory",
+        "SparseEventRouter",
+        "SymbolicTapeExecutor",
         "sidecar_memory_macro",
         "periodicity_macro",
         "copy_detector_macro",
@@ -144,7 +147,7 @@ pub fn materialize_splice_candidates(
         extend_head_for_splice(
             &mut head_pack.residual_head,
             item.sidecar_dim,
-            Some((&item.shadow_head, 0.25)),
+            Some((&item.shadow_head, 1.0)),
         );
 
         let mut state = active.state_pack.clone();
@@ -207,6 +210,13 @@ pub fn phase3_macro_aware_candidates(
 
 fn attach_sidecar(program: &ScirProgram, macro_name: &str) -> Result<(ScirProgram, u32, u32)> {
     let mut p = program.clone();
+    let base_feature = p.outputs.feature_node;
+    let base_dim = p
+        .nodes
+        .iter()
+        .find(|n| n.id == base_feature)
+        .map(|n| n.out_dim)
+        .unwrap_or(16);
     let next_id = p
         .nodes
         .iter()
@@ -215,11 +225,18 @@ fn attach_sidecar(program: &ScirProgram, macro_name: &str) -> Result<(ScirProgra
         .unwrap_or(0)
         .saturating_add(1);
 
-    let (op, dim) = match macro_name {
-        "sidecar_memory_macro" => (ScirOp::ShiftRegister { width: 8 }, 8),
-        "periodicity_macro" => (ScirOp::ModCounter { modulus: 8 }, 8),
-        "copy_detector_macro" => (ScirOp::RunLengthBucket { buckets: 8 }, 8),
-        "delimiter_segment_macro" => (ScirOp::DelimiterReset { byte: b'\n' }, 1),
+    let (op, dim, inputs) = match macro_name {
+        "HdcAssociativeMemory" => (
+            ScirOp::HdcPermute { shift: 3 },
+            base_dim,
+            vec![base_feature],
+        ),
+        "SparseEventRouter" => (ScirOp::SparseEventQueue { slots: 16 }, 16, Vec::new()),
+        "SymbolicTapeExecutor" => (ScirOp::SymbolicTape { cells: 16 }, 16, Vec::new()),
+        "sidecar_memory_macro" => (ScirOp::ShiftRegister { width: 8 }, 8, Vec::new()),
+        "periodicity_macro" => (ScirOp::ModCounter { modulus: 8 }, 8, Vec::new()),
+        "copy_detector_macro" => (ScirOp::RunLengthBucket { buckets: 8 }, 8, Vec::new()),
+        "delimiter_segment_macro" => (ScirOp::DelimiterReset { byte: b'\n' }, 1, Vec::new()),
         _ => {
             return Err(ApfscError::Validation(format!(
                 "unsupported incubator sidecar macro: {macro_name}"
@@ -230,7 +247,7 @@ fn attach_sidecar(program: &ScirProgram, macro_name: &str) -> Result<(ScirProgra
     p.nodes.push(ScirNode {
         id: next_id,
         op,
-        inputs: Vec::new(),
+        inputs,
         out_dim: dim,
         mutable: false,
     });

@@ -153,6 +153,9 @@ fn main() -> Result<(), String> {
             "judge decision={} reason={}",
             match receipt.decision {
                 baremetal_lgp::apfsc::types::JudgeDecision::Promote => "promote",
+                baremetal_lgp::apfsc::types::JudgeDecision::PromoteIncubator => {
+                    "promote_incubator"
+                }
                 baremetal_lgp::apfsc::types::JudgeDecision::Reject => "reject",
             },
             receipt.reason

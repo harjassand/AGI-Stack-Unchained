@@ -7,6 +7,17 @@ use crate::apfsc::artifacts::{append_jsonl_atomic, read_jsonl};
 use crate::apfsc::candidate::CandidateBundle;
 use crate::apfsc::errors::Result;
 
+fn failure_morph_path(root: &Path) -> std::path::PathBuf {
+    let pioneer = crate::apfsc::artifacts::read_pointer(root, "active_epoch_mode")
+        .map(|m| m.eq_ignore_ascii_case("pioneer"))
+        .unwrap_or(false);
+    if pioneer {
+        root.join("archive").join("incubator_failure_morph.jsonl")
+    } else {
+        root.join("archive").join("failure_morph.jsonl")
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct FailureMorphRow {
     pub candidate_hash: String,
@@ -31,7 +42,7 @@ pub fn append_reject(
         snapshot_hash: snapshot_hash.to_string(),
         taboo_expiration_epoch,
     };
-    append_jsonl_atomic(&root.join("archive/failure_morph.jsonl"), &row)
+    append_jsonl_atomic(&failure_morph_path(root), &row)
 }
 
 pub fn apply_taboo(
@@ -39,7 +50,7 @@ pub fn apply_taboo(
     candidates: Vec<CandidateBundle>,
     current_epoch: u64,
 ) -> Result<Vec<CandidateBundle>> {
-    let rows: Vec<FailureMorphRow> = read_jsonl(&root.join("archive/failure_morph.jsonl"))?;
+    let rows: Vec<FailureMorphRow> = read_jsonl(&failure_morph_path(root))?;
     let taboo: BTreeSet<String> = rows
         .into_iter()
         .filter(|r| current_epoch < r.taboo_expiration_epoch)

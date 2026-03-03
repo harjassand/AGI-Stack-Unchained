@@ -1,12 +1,22 @@
-# Mission Control UI (Phase 3)
+# Mission Control UI
 
-Next.js App Router dashboard for the Mission Control contract:
+Next.js App Router frontend for live Mission Control observability and operator interaction.
 
-- SSE stream: `GET /stream`
-- State polling: `GET /api/state/current` (1 Hz)
-- Mission ingest: `POST /api/mission`
+## Scope
 
-## Local Run
+- Render live mission telemetry and execution state.
+- Stream daemon events from server SSE endpoints.
+- Provide mission-ingest and command interaction surfaces.
+
+## Runtime Contract
+
+The UI integrates with the Mission Control server using:
+
+- `GET /stream` for server-sent event streaming.
+- `GET /api/state/current` for periodic state snapshots.
+- `POST /api/mission` for mission ingest actions.
+
+## Local Development
 
 ```bash
 cd mission-control-ui
@@ -14,31 +24,38 @@ npm install
 npm run dev
 ```
 
-The dev server binds to `127.0.0.1:3000`.
+Default dev bind: `127.0.0.1:3000`.
 
-## FastAPI Base URL
+## Environment Variables
 
-The UI reads:
+- `NEXT_PUBLIC_MC_SERVER_BASE`: Base URL for the backend API/SSE server.
 
-- `NEXT_PUBLIC_MC_SERVER_BASE`
-
-Default:
-
-- `http://127.0.0.1:7890`
-
-Optional local override:
+Example local override:
 
 ```bash
 echo 'NEXT_PUBLIC_MC_SERVER_BASE=http://127.0.0.1:7890' > .env.local
 ```
 
-## Dashboard Panels
+## Production Build
 
-- Left: command console, goal queue, and host health.
-- Center: live SSE monologue and signal DAG (`reactflow`).
-- Right: latest important artifact (`ACTIVATION_COMMIT` / `CCAP_DECISION`) and active bundle value.
+```bash
+npm run build
+npm run start
+```
 
-## Notes
+## Quality Checks
 
-- SSE client uses native `EventSource` and reconnects 1 second after disconnect.
-- Events are deduplicated by `seq` when present.
+```bash
+npm run lint
+```
+
+## UI Composition
+
+- Left panel: command console, goal queue, host health.
+- Center panel: live SSE monologue and signal DAG visualization (`reactflow`).
+- Right panel: high-priority artifact feed (for example `ACTIVATION_COMMIT`, `CCAP_DECISION`) and bundle status.
+
+## Reliability Notes
+
+- SSE client uses native `EventSource` and reconnects after disconnect.
+- Stream events are deduplicated by sequence ID when present.

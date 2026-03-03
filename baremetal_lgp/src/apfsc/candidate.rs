@@ -1,14 +1,14 @@
 use std::collections::BTreeMap;
-use std::fs;
 use std::path::Path;
 
 use serde::{Deserialize, Serialize};
 
 use crate::apfsc::artifacts::{
-    candidate_dir, digest_bytes, digest_json, list_candidate_hashes, read_json, read_pointer,
-    write_bytes_atomic, write_json_atomic, write_pointer,
+    candidate_dir, create_dir_all_if_persistent, digest_bytes, digest_json, list_candidate_hashes,
+    path_exists, read_bytes, read_json, read_pointer, write_bytes_atomic, write_json_atomic,
+    write_pointer,
 };
-use crate::apfsc::errors::{io_err, ApfscError, Result};
+use crate::apfsc::errors::{ApfscError, Result};
 use crate::apfsc::scir::ast::ScirProgram;
 use crate::apfsc::types::{self, HeadPack};
 use crate::apfsc::types::{
@@ -106,7 +106,7 @@ pub fn build_candidate(input: CandidateBuildInput) -> Result<CandidateBundle> {
 
 pub fn save_candidate(root: &Path, bundle: &CandidateBundle) -> Result<()> {
     let dir = candidate_dir(root, &bundle.manifest.candidate_hash);
-    fs::create_dir_all(&dir).map_err(|e| io_err(&dir, e))?;
+    create_dir_all_if_persistent(&dir)?;
 
     write_json_atomic(&dir.join("manifest.json"), &bundle.manifest)?;
     write_json_atomic(&dir.join("arch_program.json"), &bundle.arch_program)?;
@@ -132,17 +132,17 @@ pub fn load_candidate(root: &Path, candidate_hash: &str) -> Result<CandidateBund
     let manifest: CandidateManifest = read_json(&dir.join("manifest.json"))?;
     let arch_program: ScirProgram = read_json(&dir.join("arch_program.json"))?;
 
-    let state_bytes = fs::read(dir.join("state_pack.bin")).map_err(|e| io_err(&dir, e))?;
+    let state_bytes = read_bytes(&dir.join("state_pack.bin"))?;
     let state_pack: StatePack = bincode::deserialize(&state_bytes)
         .map_err(|e| ApfscError::Protocol(format!("state pack decode failed: {e}")))?;
 
-    let head_bytes = fs::read(dir.join("head_pack.bin")).map_err(|e| io_err(&dir, e))?;
+    let head_bytes = read_bytes(&dir.join("head_pack.bin"))?;
     let head_pack: HeadPack = bincode::deserialize(&head_bytes)
         .map_err(|e| ApfscError::Protocol(format!("head pack decode failed: {e}")))?;
 
     let bridge_pack = {
         let p = dir.join("bridge_pack.json");
-        if p.exists() {
+        if path_exists(&p) {
             Some(read_json(&p)?)
         } else {
             None
@@ -174,7 +174,7 @@ pub fn list_candidates(root: &Path) -> Result<Vec<String>> {
 
 pub fn validate_candidate_artifacts(root: &Path, candidate_hash: &str) -> Result<()> {
     let dir = candidate_dir(root, candidate_hash);
-    if !dir.exists() {
+    if !path_exists(&dir) {
         return Err(ApfscError::Missing(format!(
             "candidate dir missing: {}",
             dir.display()

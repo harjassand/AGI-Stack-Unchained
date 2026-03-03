@@ -215,7 +215,9 @@ pub fn evaluate_static_panel(
     regressed_families.sort();
     protected_floor_failures.sort();
 
-    let target_subset_pass = if constellation.normalization.require_target_subset_hit {
+    let target_subset_pass = if constellation.normalization.require_target_subset_hit
+        && !crate::apfsc::artifacts::omega_mode_enabled()
+    {
         constellation
             .normalization
             .target_subset

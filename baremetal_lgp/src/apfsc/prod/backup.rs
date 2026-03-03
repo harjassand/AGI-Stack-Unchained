@@ -143,7 +143,11 @@ fn copy_required_chunks(root: &Path, backup_dir: &Path) -> Result<()> {
     let mut copied_files = BTreeSet::<PathBuf>::new();
 
     let mut candidate_roots = Vec::<String>::new();
-    for p in ["active_candidate", "rollback_candidate"] {
+    for p in [
+        "active_candidate",
+        "active_incubator_pointer",
+        "rollback_candidate",
+    ] {
         if let Ok(v) = read_pointer(root, p) {
             candidate_roots.push(v);
         }
@@ -156,7 +160,11 @@ fn copy_required_chunks(root: &Path, backup_dir: &Path) -> Result<()> {
     for cand in all_candidates {
         let src = root.join("candidates").join(&cand);
         if src.exists() {
-            copy_tree_once(&src, &backup_dir.join("candidates").join(&cand), &mut copied_dirs)?;
+            copy_tree_once(
+                &src,
+                &backup_dir.join("candidates").join(&cand),
+                &mut copied_dirs,
+            )?;
         }
     }
 
@@ -206,7 +214,23 @@ fn copy_required_chunks(root: &Path, backup_dir: &Path) -> Result<()> {
         }
     }
     if let Ok(search_law) = read_pointer(root, "active_search_law") {
-        let src = root.join("search_laws").join(format!("{}.json", search_law));
+        let src = root
+            .join("search_laws")
+            .join(format!("{}.json", search_law));
+        if src.exists() {
+            copy_file_once(
+                &src,
+                &backup_dir
+                    .join("search_laws")
+                    .join(format!("{}.json", search_law)),
+                &mut copied_files,
+            )?;
+        }
+    }
+    if let Ok(search_law) = read_pointer(root, "active_incubator_search_law") {
+        let src = root
+            .join("search_laws")
+            .join(format!("{}.json", search_law));
         if src.exists() {
             copy_file_once(
                 &src,
@@ -257,17 +281,11 @@ fn copy_pack_if_exists(
     copied_dirs: &mut BTreeSet<PathBuf>,
 ) -> Result<()> {
     let kind_dir = crate::apfsc::artifacts::pack_kind_dir(kind);
-    let src = root
-        .join("packs")
-        .join(kind_dir)
-        .join(hash);
+    let src = root.join("packs").join(kind_dir).join(hash);
     if src.exists() {
         copy_tree_once(
             &src,
-            &backup_dir
-                .join("packs")
-                .join(kind_dir)
-                .join(hash),
+            &backup_dir.join("packs").join(kind_dir).join(hash),
             copied_dirs,
         )?;
     }

@@ -1,17 +1,31 @@
 use std::collections::BTreeMap;
 use std::path::Path;
 
-use crate::apfsc::artifacts::{digest_json, read_json, write_json_atomic};
+use crate::apfsc::artifacts::{
+    create_dir_all_if_persistent, digest_json, path_exists, read_json, write_json_atomic,
+};
 use crate::apfsc::errors::Result;
 use crate::apfsc::types::{MorphologyDescriptor, QdCellRecord};
 
+fn pioneer_mode_active(root: &Path) -> bool {
+    crate::apfsc::artifacts::read_pointer(root, "active_epoch_mode")
+        .map(|m| m.eq_ignore_ascii_case("pioneer"))
+        .unwrap_or(false)
+}
+
 fn qd_dir(root: &Path, snapshot_hash: &str) -> std::path::PathBuf {
-    root.join("qd_archive").join(snapshot_hash)
+    if pioneer_mode_active(root) {
+        root.join("qd_archive")
+            .join("incubator")
+            .join(snapshot_hash)
+    } else {
+        root.join("qd_archive").join(snapshot_hash)
+    }
 }
 
 pub fn load_cells(root: &Path, snapshot_hash: &str) -> Result<Vec<QdCellRecord>> {
     let p = qd_dir(root, snapshot_hash).join("cells.jsonl");
-    if !p.exists() {
+    if !path_exists(&p) {
         return Ok(Vec::new());
     }
     read_json(&p)
@@ -19,7 +33,7 @@ pub fn load_cells(root: &Path, snapshot_hash: &str) -> Result<Vec<QdCellRecord>>
 
 pub fn persist_cells(root: &Path, snapshot_hash: &str, cells: &[QdCellRecord]) -> Result<()> {
     let dir = qd_dir(root, snapshot_hash);
-    std::fs::create_dir_all(&dir).map_err(|e| crate::apfsc::errors::io_err(&dir, e))?;
+    create_dir_all_if_persistent(&dir)?;
     write_json_atomic(&dir.join("cells.jsonl"), cells)?;
     write_json_atomic(
         &dir.join("occupancy.json"),
@@ -67,7 +81,11 @@ pub fn upsert_cell(root: &Path, snapshot_hash: &str, mut candidate: QdCellRecord
     cells.sort_by(|a, b| a.cell_id.cmp(&b.cell_id));
     persist_cells(root, snapshot_hash, &cells)?;
     crate::apfsc::artifacts::append_jsonl_atomic(
-        &root.join("archives/qd_archive.jsonl"),
+        &if pioneer_mode_active(root) {
+            root.join("archives").join("incubator_qd_archive.jsonl")
+        } else {
+            root.join("archives").join("qd_archive.jsonl")
+        },
         &serde_json::json!({
             "snapshot_hash": snapshot_hash,
             "replaced": replaced,

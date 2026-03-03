@@ -16,38 +16,38 @@ target_subset = ["real_world_series"]
 
 [phase2.weights.event_sparse]
 static_weight = 1.0
-transfer_weight = 1.0
-robust_weight = 1.0
+transfer_weight = 0.0
+robust_weight = 0.0
 
 [phase2.weights.det_micro]
 static_weight = 1.0
-transfer_weight = 1.0
-robust_weight = 1.0
+transfer_weight = 0.0
+robust_weight = 0.0
 
 [phase2.weights.text_code]
 static_weight = 1.0
-transfer_weight = 1.0
-robust_weight = 1.0
+transfer_weight = 0.0
+robust_weight = 0.0
 
 [phase2.weights.sensor_temporal]
 static_weight = 1.0
-transfer_weight = 1.0
-robust_weight = 1.0
+transfer_weight = 0.0
+robust_weight = 0.0
 
 [phase2.weights.phys_sim]
 static_weight = 1.0
-transfer_weight = 1.0
-robust_weight = 1.0
+transfer_weight = 0.0
+robust_weight = 0.0
 
 [phase2.weights.formal_alg]
 static_weight = 1.0
-transfer_weight = 1.0
-robust_weight = 1.0
+transfer_weight = 0.0
+robust_weight = 0.0
 
 [phase2.weights.real_world_series]
 static_weight = 10.0
-transfer_weight = 10.0
-robust_weight = 10.0
+transfer_weight = 0.0
+robust_weight = 0.0
 
 [phase2.floors.det_micro]
 protected = true
@@ -123,6 +123,8 @@ cold_frontier = 0.6
 
 [phase3.promotion]
 s_class_min_static_delta_bpb = 0.005
+paradigm_shift_allowance_bpb = 0.10
+class_r_takeover_allowance_bpb = 0.02
 p_warm_min_static_delta_bpb = -1000000.0
 p_warm_min_transfer_delta_bpb = -1000000.0
 p_warm_max_robust_regress_bpb = 10.0
@@ -152,8 +154,9 @@ holdout_retire_after_epochs = 12
 enable_formal_pack = true
 enable_tool_pack = true
 enable_recombination = true
-enable_qd_archive = true
+enable_qd_archive = false
 enable_searchlaw = true
+polyphasic_async_lanes = true
 enable_need_tokens = true
 enable_credit_debt = true
 max_hidden_challenge_families = 4
@@ -163,6 +166,11 @@ searchlaw_min_ab_epochs = 2
 searchlaw_max_ab_epochs = 4
 searchlaw_required_yield_improvement = 0.0
 searchlaw_max_safety_regression = 0.00
+pioneer_timeslice = 5
+era_public_delta_multiplier = 1.05
+era_holdout_delta_multiplier = 1.10
+era_challenge_bucket_step = 1
+era_hidden_challenge_growth = 1
 max_portfolio_branches = 8
 max_branch_local_debt_credits = 3
 max_global_debt_credits = 8

@@ -20,6 +20,9 @@ pub fn ingest_reality(
     manifest_path: &Path,
 ) -> Result<IngressReceipt> {
     ensure_layout(root)?;
+    // Cyber-physical tether bootstrap: refresh an afferent host telemetry snapshot
+    // whenever new reality is admitted.
+    let _ = crate::apfsc::afferent::write_snapshot(root);
 
     let raw_manifest = load_pack_manifest(manifest_path)?;
     if raw_manifest.pack_kind != PackKind::Reality {

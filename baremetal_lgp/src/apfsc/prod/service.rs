@@ -1,3 +1,4 @@
+use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
@@ -6,13 +7,16 @@ use std::time::Duration;
 
 use rusqlite::{params, Connection, OptionalExtension};
 
-use crate::apfsc::artifacts::{read_pointer, write_pointer};
+use crate::apfsc::artifacts::{
+    append_jsonl_atomic, digest_json, read_pointer, receipt_path, write_json_atomic, write_pointer,
+};
+use crate::apfsc::candidate::{load_active_candidate, load_candidate, rehash_candidate, save_candidate};
 use crate::apfsc::config::Phase1Config;
 use crate::apfsc::errors::{ApfscError, Result};
 use crate::apfsc::prod::audit::{append_audit_event, AuditEvent};
 use crate::apfsc::prod::backup::{create_backup, verify_backup};
-use crate::apfsc::prod::control_db::open_control_db;
 use crate::apfsc::prod::control_api::{ControlCommand, ControlRequest, ControlResponse};
+use crate::apfsc::prod::control_db::open_control_db;
 use crate::apfsc::prod::diagnostics::dump_diagnostics;
 use crate::apfsc::prod::gc::gc_candidates;
 use crate::apfsc::prod::health::health_report;
@@ -24,11 +28,14 @@ use crate::apfsc::prod::leases::{
     acquire_epoch_critical_section, release_epoch_critical_section, LEASE_ACTIVATION, LEASE_JUDGE,
     LEASE_ORCHESTRATOR,
 };
+use crate::apfsc::prod::recovery::{resume_run, startup_recovery};
 use crate::apfsc::prod::release_manifest::verify_release_bundle_from_manifest;
 use crate::apfsc::prod::release_manifest::ReleaseManifest;
-use crate::apfsc::prod::recovery::{resume_run, startup_recovery};
 use crate::apfsc::prod::restore::{restore_apply, restore_dry_run};
 use crate::apfsc::prod::telemetry::Telemetry;
+use crate::apfsc::rosetta::attempt_symbolic_extraction;
+use crate::apfsc::scir::ast::{AlienMutationVector, ScirOp};
+use crate::apfsc::types::{ConstellationScoreReceipt, JudgeDecision, PromotionReceipt};
 
 pub struct ServiceContext {
     pub root: PathBuf,
@@ -147,6 +154,8 @@ impl ServiceContext {
 
 const RECOVERY_SCAN_MESSAGE: &str = "Scanning WAL journal and replaying recovery jobs...";
 const START_RUN_LEASE_TTL_S: u64 = 300;
+const RESONANCE_DISTILLER_POLL_MS: u64 = 5000;
+const ROSETTA_POLL_MS: u64 = 7000;
 
 pub fn spawn_background_recovery(
     root: PathBuf,
@@ -182,7 +191,300 @@ pub fn spawn_background_recovery(
         })();
         match outcome {
             Ok(()) => runtime_state.finish_recovery_running("Recovery complete"),
-            Err(err) => runtime_state.finish_recovery_failed("Startup recovery failed", err.to_string()),
+            Err(err) => {
+                runtime_state.finish_recovery_failed("Startup recovery failed", err.to_string())
+            }
+        }
+    });
+    true
+}
+
+fn current_epoch_index_estimate(root: &Path) -> u64 {
+    let path = root.join("archive").join("error_atlas.jsonl");
+    if !path.exists() {
+        return 0;
+    }
+    std::fs::read_to_string(&path)
+        .ok()
+        .map(|v| v.lines().filter(|l| !l.trim().is_empty()).count() as u64)
+        .unwrap_or(0)
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq)]
+struct ResonanceDistillReceipt {
+    epoch: u64,
+    old_active_hash: String,
+    new_active_hash: String,
+    flattened_subcortex_ops: usize,
+    activated: bool,
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq)]
+struct HallucinatoryAfferentReceipt {
+    epoch: u64,
+    loadavg_1m: f32,
+    cpu_speed_limit_pct: f32,
+    thermal_pressure: f32,
+    power_proxy_watts: f32,
+    available_cores: u32,
+    distiller_activated: bool,
+    distilled_candidate_hash: Option<String>,
+    reason: String,
+}
+
+fn distill_subcortex_if_due(root: &Path, epoch_id: u64) -> Result<Option<ResonanceDistillReceipt>> {
+    let mut active = load_active_candidate(root)?;
+    let old_hash = active.manifest.candidate_hash.clone();
+    let mut flattened = 0usize;
+    for node in &mut active.arch_program.nodes {
+        let (prior_hash, mod_vec) = match &node.op {
+            ScirOp::Subcortex {
+                prior_hash,
+                eigen_modulator_vector,
+            } => (prior_hash.clone(), eigen_modulator_vector.clone()),
+            _ => continue,
+        };
+        let activity = if mod_vec.is_empty() {
+            1.0
+        } else {
+            mod_vec.iter().map(|v| v.abs() as f64).sum::<f64>() / mod_vec.len() as f64
+        };
+        if activity < 0.02 {
+            continue;
+        }
+        let seed_hash = digest_json(&(
+            old_hash.clone(),
+            prior_hash.clone(),
+            mod_vec,
+            node.id,
+            epoch_id,
+        ))?;
+        node.op = ScirOp::Alien {
+            seed_hash,
+            mutation_vector: AlienMutationVector {
+                ops_added: vec![
+                    "ResonanceDistiller::FlattenSubcortex".to_string(),
+                    format!("SubcortexPrior:{prior_hash}"),
+                ],
+                ops_removed: vec!["Subcortex".to_string()],
+            },
+            fused_ops_hint: 8,
+        };
+        flattened += 1;
+    }
+    if flattened == 0 {
+        return Ok(None);
+    }
+
+    active.build_meta.mutation_type =
+        format!("{}+resonance_distill", active.build_meta.mutation_type);
+    active.build_meta.notes = Some(format!(
+        "ResonanceDistiller flattened {flattened} Subcortex op(s) at epoch {epoch_id}"
+    ));
+    rehash_candidate(&mut active)?;
+    save_candidate(root, &active)?;
+
+    let mut activated = false;
+    if read_pointer(root, "active_candidate").ok().as_deref() == Some(old_hash.as_str()) {
+        write_pointer(root, "active_candidate", &active.manifest.candidate_hash)?;
+        activated = true;
+    }
+
+    let receipt = ResonanceDistillReceipt {
+        epoch: epoch_id,
+        old_active_hash: old_hash,
+        new_active_hash: active.manifest.candidate_hash.clone(),
+        flattened_subcortex_ops: flattened,
+        activated,
+    };
+    write_json_atomic(
+        &receipt_path(
+            root,
+            "resonance_distiller",
+            &format!("{}.json", receipt.new_active_hash),
+        ),
+        &receipt,
+    )?;
+    write_json_atomic(
+        &receipt_path(
+            root,
+            "resonance_distiller",
+            &format!(
+                "distilled_epoch_{}_{}.json",
+                epoch_id, receipt.new_active_hash
+            ),
+        ),
+        &receipt,
+    )?;
+    append_jsonl_atomic(
+        &root.join("archives").join("resonance_distiller.jsonl"),
+        &receipt,
+    )?;
+    Ok(Some(receipt))
+}
+
+fn distill_with_hallucinatory_afferent(
+    root: &Path,
+    epoch_id: u64,
+) -> Result<Option<ResonanceDistillReceipt>> {
+    let runtime_dir = root.join("runtime");
+    std::fs::create_dir_all(&runtime_dir)
+        .map_err(|e| crate::apfsc::errors::io_err(&runtime_dir, e))?;
+    let snapshot_path = runtime_dir.join("afferent_snapshot.json");
+    let original_snapshot = std::fs::read(&snapshot_path).ok();
+
+    let nightmare = crate::apfsc::afferent::AfferentTelemetry {
+        unix_s: now_unix_s(),
+        loadavg_1m: 10_000.0,
+        cpu_speed_limit_pct: 0.001,
+        thermal_pressure: 1_000_000.0,
+        power_proxy_watts: -1_000_000.0,
+        available_cores: 10_000,
+    };
+    write_json_atomic(&snapshot_path, &nightmare)?;
+
+    let distill_result = distill_subcortex_if_due(root, epoch_id);
+
+    match original_snapshot {
+        Some(bytes) => {
+            let _ = std::fs::write(&snapshot_path, bytes);
+        }
+        None => {
+            let _ = std::fs::remove_file(&snapshot_path);
+        }
+    }
+
+    let activated = distill_result
+        .as_ref()
+        .ok()
+        .and_then(|r| r.as_ref())
+        .map(|r| r.activated)
+        .unwrap_or(false);
+    let distilled_hash = distill_result
+        .as_ref()
+        .ok()
+        .and_then(|r| r.as_ref())
+        .map(|r| r.new_active_hash.clone());
+    let hallu_receipt = HallucinatoryAfferentReceipt {
+        epoch: epoch_id,
+        loadavg_1m: nightmare.loadavg_1m,
+        cpu_speed_limit_pct: nightmare.cpu_speed_limit_pct,
+        thermal_pressure: nightmare.thermal_pressure,
+        power_proxy_watts: nightmare.power_proxy_watts,
+        available_cores: nightmare.available_cores,
+        distiller_activated: activated,
+        distilled_candidate_hash: distilled_hash,
+        reason: if activated {
+            "HallucinatoryDreamDistillActivated".to_string()
+        } else {
+            "HallucinatoryDreamNoDistill".to_string()
+        },
+    };
+    write_json_atomic(
+        &receipt_path(
+            root,
+            "resonance_distiller",
+            &format!("hallucinatory_epoch_{}.json", epoch_id),
+        ),
+        &hallu_receipt,
+    )?;
+    append_jsonl_atomic(
+        &root.join("archives").join("hallucinatory_afferent.jsonl"),
+        &hallu_receipt,
+    )?;
+
+    distill_result
+}
+
+pub fn spawn_resonance_distiller(
+    root: PathBuf,
+    control_db_path: PathBuf,
+    interval_epochs: u32,
+    enabled: bool,
+) -> bool {
+    if !enabled {
+        return false;
+    }
+    let interval_epochs = interval_epochs.max(1) as u64;
+    std::thread::spawn(move || {
+        let mut last_checked_epoch = 0u64;
+        loop {
+            sleep(Duration::from_millis(RESONANCE_DISTILLER_POLL_MS));
+            let epoch_id = current_epoch_index_estimate(&root);
+            if epoch_id == 0 || epoch_id == last_checked_epoch || epoch_id % interval_epochs != 0 {
+                continue;
+            }
+            last_checked_epoch = epoch_id;
+
+            let running = open_control_db(&control_db_path)
+                .ok()
+                .and_then(|conn| {
+                    conn.query_row("SELECT count(*) FROM runs WHERE state='Running'", [], |r| {
+                        r.get::<_, i64>(0)
+                    })
+                    .ok()
+                })
+                .unwrap_or(0)
+                > 0;
+            if !running {
+                continue;
+            }
+            let _ = distill_with_hallucinatory_afferent(&root, epoch_id);
+        }
+    });
+    true
+}
+
+pub fn spawn_symbolic_extraction_daemon(
+    root: PathBuf,
+    control_db_path: PathBuf,
+    interval_epochs: u32,
+    enabled: bool,
+) -> bool {
+    if !enabled {
+        return false;
+    }
+    let interval_epochs = interval_epochs.max(1) as u64;
+    std::thread::spawn(move || {
+        let mut last_checked_epoch = 0u64;
+        loop {
+            sleep(Duration::from_millis(ROSETTA_POLL_MS));
+            let epoch_id = current_epoch_index_estimate(&root);
+            if epoch_id == 0 || epoch_id == last_checked_epoch || epoch_id % interval_epochs != 0 {
+                continue;
+            }
+            last_checked_epoch = epoch_id;
+            let running = open_control_db(&control_db_path)
+                .ok()
+                .and_then(|conn| {
+                    conn.query_row("SELECT count(*) FROM runs WHERE state='Running'", [], |r| {
+                        r.get::<_, i64>(0)
+                    })
+                    .ok()
+                })
+                .unwrap_or(0)
+                > 0;
+            if !running {
+                continue;
+            }
+
+            if let Ok(Some(discovery)) = attempt_symbolic_extraction(&root, epoch_id) {
+                let _ = append_jsonl_atomic(
+                    &root.join("archives").join("rosetta_daemon.jsonl"),
+                    &serde_json::json!({
+                        "epoch": epoch_id,
+                        "discovery_id": discovery.discovery_id,
+                        "candidate_hash": discovery.candidate_hash,
+                        "probe_r2": discovery.probe_r2,
+                        "surprisal_mean_bits": discovery.class_r_surprisal_bits_mean,
+                        "ts": now_unix_s(),
+                    }),
+                );
+            }
+            // Keep disk pressure low during infinite loops.
+            if epoch_id % 25 == 0 {
+                let _ = gc_candidates(&root, false);
+            }
         }
     });
     true
@@ -198,6 +500,135 @@ fn command_required_role(command: &ControlCommand) -> crate::apfsc::prod::auth::
         ControlCommand::RestoreApply { .. } | ControlCommand::Rollback => Role::ReleaseManager,
         _ => Role::Operator,
     }
+}
+
+#[derive(Debug, Default, Clone, serde::Serialize)]
+struct AlephJitRejectionSummary {
+    judge_receipts_scanned: usize,
+    dethroning_receipts_scanned: usize,
+    aleph_receipts_scanned: usize,
+    aleph_rejections: usize,
+    judge_reason_counts: BTreeMap<String, u64>,
+    jit_compile_fail_receipts: u64,
+    execution_panic_receipts: u64,
+    shape_mismatch_receipts: u64,
+}
+
+#[derive(Debug, Clone, serde::Deserialize)]
+struct DethroningAuditRow {
+    candidate_hash: String,
+    decision: JudgeDecision,
+    reason: String,
+    #[serde(default)]
+    reject_reason: Option<String>,
+    #[serde(default)]
+    failed_gate: Option<String>,
+}
+
+fn candidate_has_aleph_tags(root: &Path, candidate_hash: &str) -> bool {
+    let Ok(candidate) = load_candidate(root, candidate_hash) else {
+        return false;
+    };
+    candidate.arch_program.nodes.iter().any(|node| match &node.op {
+        ScirOp::AlephZero { .. } => true,
+        ScirOp::Alien {
+            mutation_vector, ..
+        } => mutation_vector
+            .ops_added
+            .iter()
+            .chain(mutation_vector.ops_removed.iter())
+            .any(|tag| {
+                let t = tag.to_ascii_lowercase();
+                t.contains("alephzero")
+                    || t.contains("aleph_zero")
+                    || t.contains("fractal")
+                    || t.contains("classm")
+                    || t.contains("class_m")
+                    || t.contains("mera")
+                    || t.contains("demonlane")
+            }),
+        _ => false,
+    })
+}
+
+fn classify_replay_hash(summary: &mut AlephJitRejectionSummary, replay_hash: &str) {
+    let lower = replay_hash.to_ascii_lowercase();
+    if lower.contains("jitcompilefail") {
+        summary.jit_compile_fail_receipts = summary.jit_compile_fail_receipts.saturating_add(1);
+    }
+    if lower.contains("executionpanic") {
+        summary.execution_panic_receipts = summary.execution_panic_receipts.saturating_add(1);
+    }
+    if lower.contains("shapemismatch") {
+        summary.shape_mismatch_receipts = summary.shape_mismatch_receipts.saturating_add(1);
+    }
+}
+
+fn summarize_aleph_jit_rejections(root: &Path, max_receipts: usize) -> AlephJitRejectionSummary {
+    let mut summary = AlephJitRejectionSummary::default();
+    let mut aleph_candidate_hashes = BTreeMap::<String, ()>::new();
+    let judge_paths = crate::apfsc::artifacts::list_json_files_sorted_by_mtime_desc(
+        &root.join("receipts").join("judge"),
+        max_receipts.max(1),
+    )
+    .unwrap_or_default();
+
+    for path in judge_paths {
+        let Ok(receipt) = crate::apfsc::artifacts::read_json::<PromotionReceipt>(&path) else {
+            continue;
+        };
+        summary.judge_receipts_scanned = summary.judge_receipts_scanned.saturating_add(1);
+        if !candidate_has_aleph_tags(root, &receipt.candidate_hash) {
+            continue;
+        }
+        aleph_candidate_hashes.insert(receipt.candidate_hash.clone(), ());
+        summary.aleph_receipts_scanned = summary.aleph_receipts_scanned.saturating_add(1);
+        if receipt.decision == JudgeDecision::Reject {
+            summary.aleph_rejections = summary.aleph_rejections.saturating_add(1);
+            *summary
+                .judge_reason_counts
+                .entry(receipt.reason.clone())
+                .or_insert(0) += 1;
+        }
+    }
+
+    let dethroning_paths = crate::apfsc::artifacts::list_json_files_sorted_by_mtime_desc(
+        &root.join("receipts").join("dethroning_audit"),
+        max_receipts.max(1),
+    )
+    .unwrap_or_default();
+    for path in dethroning_paths {
+        let Ok(audit) = crate::apfsc::artifacts::read_json::<DethroningAuditRow>(&path) else {
+            continue;
+        };
+        summary.dethroning_receipts_scanned = summary.dethroning_receipts_scanned.saturating_add(1);
+        if !candidate_has_aleph_tags(root, &audit.candidate_hash) {
+            continue;
+        }
+        aleph_candidate_hashes.insert(audit.candidate_hash.clone(), ());
+        summary.aleph_receipts_scanned = summary.aleph_receipts_scanned.saturating_add(1);
+        if audit.decision == JudgeDecision::Reject {
+            summary.aleph_rejections = summary.aleph_rejections.saturating_add(1);
+            let reason = audit
+                .failed_gate
+                .clone()
+                .or_else(|| audit.reject_reason.clone())
+                .unwrap_or(audit.reason.clone());
+            *summary.judge_reason_counts.entry(reason).or_insert(0) += 1;
+        }
+    }
+
+    for candidate_hash in aleph_candidate_hashes.keys() {
+        for lane in ["public_static", "holdout_static"] {
+            let score_path = receipt_path(root, lane, &format!("{candidate_hash}.json"));
+            let Ok(score) = crate::apfsc::artifacts::read_json::<ConstellationScoreReceipt>(&score_path)
+            else {
+                continue;
+            };
+            classify_replay_hash(&mut summary, &score.replay_hash);
+        }
+    }
+    summary
 }
 
 pub fn handle_request(
@@ -439,17 +870,106 @@ fn dispatch(ctx: &mut ServiceContext, req: &ControlRequest) -> Result<ControlRes
                 }
             }
             let runtime = ctx.runtime_state.snapshot();
-            Ok(resp_ok(
-                req,
-                "status",
-                serde_json::json!({
-                    "runs": run_count,
-                    "state": runtime.state,
-                    "message": runtime.message,
-                    "updated_at_unix_s": runtime.updated_at_unix_s,
-                    "last_error": runtime.last_error
-                }),
-            ))
+            let volatile = crate::apfsc::artifacts::omega_volatile_metrics();
+            let arxiv = crate::apfsc::afferent::arxiv_refresh_profile();
+            let truth = crate::apfsc::lanes::truth::truth_generate_profile();
+            let judge = crate::apfsc::judge::judge_phase3_profile();
+            let candidate_eval = crate::apfsc::bytecoder::candidate_evaluate_profile();
+            let scir_interp = crate::apfsc::scir::interp::scir_interp_profile();
+            let jit = crate::oracle3::compile::alien_jit_synthesis_profile();
+            let thermal = crate::apfsc::searchlaw_eval::thermal_spike_state(&ctx.root);
+            let aleph_jit_rejections = summarize_aleph_jit_rejections(&ctx.root, 128);
+            let arxiv_avg_ms = if arxiv.calls == 0 {
+                0.0
+            } else {
+                arxiv.total_ms as f64 / arxiv.calls as f64
+            };
+            let truth_avg_ms = if truth.calls == 0 {
+                0.0
+            } else {
+                truth.total_ms as f64 / truth.calls as f64
+            };
+            let judge_avg_ms = if judge.calls == 0 {
+                0.0
+            } else {
+                judge.total_ms as f64 / judge.calls as f64
+            };
+            let jit_avg_ms = if jit.calls == 0 {
+                0.0
+            } else {
+                jit.total_ms as f64 / jit.calls as f64
+            };
+            let candidate_eval_avg_ms = if candidate_eval.calls == 0 {
+                0.0
+            } else {
+                candidate_eval.total_ms as f64 / candidate_eval.calls as f64
+            };
+            let scir_interp_avg_ms = if scir_interp.calls == 0 {
+                0.0
+            } else {
+                scir_interp.total_ms as f64 / scir_interp.calls as f64
+            };
+            let mut payload = serde_json::json!({
+                "runs": run_count,
+                "state": runtime.state,
+                "message": runtime.message,
+                "updated_at_unix_s": runtime.updated_at_unix_s,
+                "last_error": runtime.last_error,
+                "class_m_generation_count": volatile.class_m_generation_count,
+                "demon_lane_mortality_count": volatile.demon_lane_mortality_count,
+                "demon_lane_consecutive_mortality_count": volatile.demon_lane_consecutive_mortality_count,
+                "best_demon_survival_margin": volatile.best_demon_survival_margin,
+                "current_demon_survival_margin": volatile.current_demon_survival_margin,
+                "thermal_spike_active": thermal.active,
+                "thermal_spike_temp": thermal.temp,
+                "thermal_spike_epochs_remaining": thermal.epochs_remaining,
+                "arxiv_refresh_calls": arxiv.calls,
+                "arxiv_refresh_network_attempts": arxiv.network_attempts,
+                "arxiv_refresh_successes": arxiv.refreshed,
+                "arxiv_refresh_failures": arxiv.failures,
+                "arxiv_refresh_total_ms": arxiv.total_ms,
+                "arxiv_refresh_last_ms": arxiv.last_ms,
+                "arxiv_refresh_avg_ms": arxiv_avg_ms,
+                "truth_generate_calls": truth.calls,
+                "truth_generate_total_ms": truth.total_ms,
+                "truth_generate_last_ms": truth.last_ms,
+                "truth_generate_avg_ms": truth_avg_ms,
+                "judge_phase3_calls": judge.calls,
+                "judge_phase3_total_ms": judge.total_ms,
+                "judge_phase3_last_ms": judge.last_ms,
+                "judge_phase3_avg_ms": judge_avg_ms,
+                "candidate_evaluate_calls": candidate_eval.calls,
+                "candidate_evaluate_total_ms": candidate_eval.total_ms,
+                "candidate_evaluate_last_ms": candidate_eval.last_ms,
+                "candidate_evaluate_avg_ms": candidate_eval_avg_ms,
+                "scir_interp_calls": scir_interp.calls,
+                "scir_interp_total_ms": scir_interp.total_ms,
+                "scir_interp_last_ms": scir_interp.last_ms,
+                "scir_interp_avg_ms": scir_interp_avg_ms,
+                "alien_jit_synthesis_calls": jit.calls,
+                "alien_jit_synthesis_total_ms": jit.total_ms,
+                "alien_jit_synthesis_last_ms": jit.last_ms,
+                "alien_jit_synthesis_avg_ms": jit_avg_ms,
+                "aleph_jit_rejections": aleph_jit_rejections
+            });
+            if let Some(obj) = payload.as_object_mut() {
+                obj.insert(
+                    "last_rejected_proposal_score".to_string(),
+                    serde_json::to_value(volatile.last_rejected_proposal_score)
+                        .map_err(|e| ApfscError::Protocol(e.to_string()))?,
+                );
+                obj.insert(
+                    "last_rejected_proposal_reason".to_string(),
+                    serde_json::to_value(volatile.last_rejected_proposal_reason.clone())
+                        .map_err(|e| ApfscError::Protocol(e.to_string()))?,
+                );
+                obj.insert(
+                    "last_rejected_proposal_trace".to_string(),
+                    serde_json::to_value(volatile.last_rejected_proposal_trace.clone())
+                        .map_err(|e| ApfscError::Protocol(e.to_string()))?,
+                );
+            }
+            Ok(resp_ok(req, "status", payload))
         }
         ControlCommand::Health => Ok(resp_ok(
             req,
@@ -570,6 +1090,10 @@ fn dispatch(ctx: &mut ServiceContext, req: &ControlRequest) -> Result<ControlRes
             let mut m = serde_json::Map::new();
             for p in [
                 "active_candidate",
+                "active_incubator_pointer",
+                "active_incubator_search_law",
+                "active_epoch_mode",
+                "active_era",
                 "rollback_candidate",
                 "active_constellation",
                 "active_snapshot",
@@ -579,6 +1103,47 @@ fn dispatch(ctx: &mut ServiceContext, req: &ControlRequest) -> Result<ControlRes
                 if let Ok(v) = read_pointer(&ctx.root, p) {
                     m.insert(p.to_string(), serde_json::Value::String(v));
                 }
+            }
+            if let Ok(active) = load_active_candidate(&ctx.root) {
+                let out_dim = active
+                    .arch_program
+                    .nodes
+                    .iter()
+                    .find(|n| n.id == active.arch_program.outputs.feature_node)
+                    .map(|n| n.out_dim as usize)
+                    .unwrap_or(0);
+                let mut op_dist = std::collections::BTreeMap::<String, u64>::new();
+                for n in &active.arch_program.nodes {
+                    let key = match &n.op {
+                        crate::apfsc::scir::ast::ScirOp::ByteEmbedding { .. } => "ByteEmbedding",
+                        crate::apfsc::scir::ast::ScirOp::LagBytes { .. } => "LagBytes",
+                        crate::apfsc::scir::ast::ScirOp::SimpleScan { .. } => "SimpleScan",
+                        crate::apfsc::scir::ast::ScirOp::Concat => "Concat",
+                        crate::apfsc::scir::ast::ScirOp::Add => "Add",
+                        crate::apfsc::scir::ast::ScirOp::AlephZero { .. } => "AlephZero",
+                        crate::apfsc::scir::ast::ScirOp::AfferentNode { .. } => "AfferentNode",
+                        crate::apfsc::scir::ast::ScirOp::EctodermPrimitive { .. } => {
+                            "EctodermPrimitive"
+                        }
+                        crate::apfsc::scir::ast::ScirOp::Subcortex { .. } => "Subcortex",
+                        crate::apfsc::scir::ast::ScirOp::Alien { .. } => "Alien",
+                        _ => "Other",
+                    };
+                    *op_dist.entry(key.to_string()).or_insert(0) += 1;
+                }
+                m.insert(
+                    "active_candidate_ast_node_count".to_string(),
+                    serde_json::json!(active.arch_program.nodes.len()),
+                );
+                m.insert(
+                    "active_candidate_output_shape".to_string(),
+                    serde_json::json!(format!("feature_vector[{out_dim}]")),
+                );
+                m.insert(
+                    "active_candidate_operator_distribution".to_string(),
+                    serde_json::to_value(op_dist)
+                        .map_err(|e| ApfscError::Protocol(e.to_string()))?,
+                );
             }
             Ok(resp_ok(req, "active", serde_json::Value::Object(m)))
         }
@@ -611,8 +1176,9 @@ fn dispatch(ctx: &mut ServiceContext, req: &ControlRequest) -> Result<ControlRes
             }
 
             let start_result = (|| -> Result<()> {
-                ctx.conn.execute(
-                    "INSERT OR REPLACE INTO runs(
+                ctx.conn
+                    .execute(
+                        "INSERT OR REPLACE INTO runs(
                         run_id, snapshot_hash, profile,
                         target_epochs, completed_epochs, last_receipt_hash, last_stage,
                         state, idempotency_key, created_at, updated_at
@@ -621,8 +1187,9 @@ fn dispatch(ctx: &mut ServiceContext, req: &ControlRequest) -> Result<ControlRes
                         ?4, 0, NULL, 'run_start',
                         'Running', ?5, datetime('now'), datetime('now')
                      )",
-                    params![run_id, snapshot_hash, profile, *epochs as i64, idk],
-                ).map_err(|e| ApfscError::Protocol(e.to_string()))?;
+                        params![run_id, snapshot_hash, profile, *epochs as i64, idk],
+                    )
+                    .map_err(|e| ApfscError::Protocol(e.to_string()))?;
 
                 append_journal(
                     &ctx.root,
@@ -639,8 +1206,6 @@ fn dispatch(ctx: &mut ServiceContext, req: &ControlRequest) -> Result<ControlRes
                         commit_marker: None,
                     },
                 )?;
-
-                resume_run(&ctx.root, &ctx.conn, &run_id, profile, 0, *epochs)?;
                 Ok(())
             })();
 
@@ -649,10 +1214,37 @@ fn dispatch(ctx: &mut ServiceContext, req: &ControlRequest) -> Result<ControlRes
                 return Err(err);
             }
 
+            crate::apfsc::artifacts::reset_omega_volatile_metrics();
+            let root = ctx.root.clone();
+            let control_db_path = ctx.control_db_path.clone();
+            let run_id_bg = run_id.clone();
+            let profile_bg = profile.clone();
+            let target_epochs = *epochs;
+            let runtime_state = ctx.runtime_state_handle();
+            std::thread::spawn(move || {
+                let outcome = (|| -> Result<()> {
+                    let conn = open_control_db(&control_db_path)?;
+                    resume_run(&root, &conn, &run_id_bg, &profile_bg, 0, target_epochs)?;
+                    Ok(())
+                })();
+                if let Err(err) = outcome {
+                    runtime_state.set(
+                        "Running",
+                        &format!("Epoch loop failed for run {}: {}", run_id_bg, err),
+                        Some(err.to_string()),
+                    );
+                }
+            });
+
             Ok(resp_ok(
                 req,
-                "run complete",
-                serde_json::json!({"profile": profile, "epochs": epochs}),
+                "run accepted",
+                serde_json::json!({
+                    "run_id": run_id,
+                    "profile": profile,
+                    "epochs": epochs,
+                    "mode": "background"
+                }),
             ))
         }
         ControlCommand::ForceClearRecovery => {
@@ -695,6 +1287,27 @@ fn dispatch(ctx: &mut ServiceContext, req: &ControlRequest) -> Result<ControlRes
                     "cleared_leases": cleared_leases,
                     "failed_runs": failed_runs,
                     "failed_jobs": failed_jobs
+                }),
+            ))
+        }
+        ControlCommand::ForceThermalSpike {
+            temp,
+            epochs,
+            cooldown_temp,
+        } => {
+            let state = crate::apfsc::searchlaw_eval::force_thermal_spike(
+                &ctx.root,
+                *temp,
+                *epochs,
+                *cooldown_temp,
+            )?;
+            let active_search_law = read_pointer(&ctx.root, "active_search_law").ok();
+            Ok(resp_ok(
+                req,
+                "thermal spike armed",
+                serde_json::json!({
+                    "override": state,
+                    "active_search_law": active_search_law
                 }),
             ))
         }
@@ -948,5 +1561,6 @@ fn command_materials(command: &ControlCommand) -> (&'static str, &str, Option<St
         ControlCommand::Rollback => ("rollback", "prod", None),
         ControlCommand::ActiveShow => ("active_show", "prod", None),
         ControlCommand::ForceClearRecovery => ("force_clear_recovery", "prod", None),
+        ControlCommand::ForceThermalSpike { .. } => ("force_thermal_spike", "prod", None),
     }
 }

@@ -1,7 +1,7 @@
 use baremetal_lgp::apfsc::config::Phase1Config;
 use baremetal_lgp::apfsc::search_law::seed_search_law;
 use baremetal_lgp::apfsc::searchlaw_eval::{evaluate_searchlaw_ab, evaluate_searchlaw_offline};
-use baremetal_lgp::apfsc::types::{LawArchiveRecord, PromotionClass};
+use baremetal_lgp::apfsc::types::{LawArchiveRecord, PromotionClass, SearchLawOfflineReceipt};
 use tempfile::tempdir;
 
 fn rec() -> LawArchiveRecord {
@@ -86,4 +86,48 @@ fn searchlaw_ab_rejects_epoch_count_outside_config_range() {
     .expect_err("ab epoch bounds should fail");
 
     assert!(err.to_string().contains("ab_epochs=1"));
+}
+
+#[test]
+fn searchlaw_ab_requires_strict_nonzero_yield_gain() {
+    let tmp = tempdir().expect("tmp");
+    let root = tmp.path().join(".apfsc");
+    let mut cfg = Phase1Config::default();
+    cfg.phase4.searchlaw_required_yield_improvement = 0.0;
+
+    let cand = seed_search_law();
+    let inc = seed_search_law();
+    let offline = SearchLawOfflineReceipt {
+        searchlaw_hash: cand.manifest_hash.clone(),
+        replay_records_used: 1,
+        projected_yield_points: 100,
+        projected_compute_units: 100,
+        projected_yield_per_compute: 1.0,
+        pass: true,
+        reason: "OfflinePass".to_string(),
+        snapshot_hash: "s".to_string(),
+        constellation_id: "k".to_string(),
+        protocol_version: cfg.protocol.version.clone(),
+    };
+
+    let ab = evaluate_searchlaw_ab(
+        &root,
+        &cand,
+        &inc,
+        &offline,
+        &[rec()],
+        2,
+        &cfg,
+        "s",
+        "k",
+        &cfg.protocol.version,
+    )
+    .expect("ab");
+
+    assert_eq!(
+        ab.candidate_yield_per_compute,
+        ab.incumbent_yield_per_compute
+    );
+    assert!(!ab.pass);
+    assert_eq!(ab.reason, "ABInsufficientYield");
 }

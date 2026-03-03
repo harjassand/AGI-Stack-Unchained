@@ -1,8 +1,14 @@
+use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
 
 use rusqlite::{params, Connection, OptionalExtension};
 
+use crate::apfsc::artifacts::{read_pointer, write_pointer};
+use crate::apfsc::candidate::{
+    list_candidates, load_candidate, rebase_active_candidate_to_snapshot,
+};
 use crate::apfsc::config::Phase1Config;
+use crate::apfsc::constellation::load_active_constellation;
 use crate::apfsc::errors::{ApfscError, Result};
 use crate::apfsc::orchestrator::{run_phase2_epoch, run_phase3_epoch, run_phase4_epoch};
 use crate::apfsc::prod::control_db::{list_jobs_by_state, with_busy_retry};
@@ -14,7 +20,9 @@ use crate::apfsc::prod::journal::{
 use crate::apfsc::prod::leases::{
     acquire_epoch_critical_section, release_epoch_critical_section, renew_epoch_critical_section,
 };
+use crate::apfsc::scir::ast::ScirOp;
 use crate::apfsc::types::EpochReport;
+use crate::oracle3::compile::{synthesize_alien_jit_blob_from_seed, AlienSeedRecord};
 
 const LEASE_TTL_S: u64 = 300;
 const AUTO_GC_INTERVAL_EPOCHS: u32 = 25;
@@ -29,6 +37,8 @@ pub struct RecoveryReceipt {
 }
 
 pub fn startup_recovery(root: &Path, conn: &Connection) -> Result<RecoveryReceipt> {
+    rehydrate_alien_seed_records(root)?;
+
     let pending = list_jobs_by_state(conn, &["Leased", "Running", "RecoveryPending"])?;
     let mut recovered = Vec::new();
     let mut restarted = Vec::new();
@@ -172,6 +182,71 @@ pub fn startup_recovery(root: &Path, conn: &Connection) -> Result<RecoveryReceip
     })
 }
 
+fn rehydrate_alien_seed_records(root: &Path) -> Result<()> {
+    let mut candidate_hashes = BTreeSet::new();
+    for pointer in [
+        "active_candidate",
+        "rollback_candidate",
+        "active_incubator_pointer",
+    ] {
+        if let Ok(hash) = crate::apfsc::artifacts::read_pointer(root, pointer) {
+            if !hash.is_empty() {
+                candidate_hashes.insert(hash);
+            }
+        }
+    }
+    if candidate_hashes.is_empty() {
+        return Ok(());
+    }
+
+    let runtime_dir = root.join("runtime").join("alien_jit");
+    std::fs::create_dir_all(&runtime_dir)
+        .map_err(|e| ApfscError::Protocol(format!("create {}: {e}", runtime_dir.display())))?;
+
+    for candidate_hash in candidate_hashes {
+        let bundle = match load_candidate(root, &candidate_hash) {
+            Ok(v) => v,
+            Err(_) => continue,
+        };
+        let mut count = 0usize;
+        for node in &bundle.arch_program.nodes {
+            if let ScirOp::Alien {
+                seed_hash,
+                mutation_vector,
+                fused_ops_hint,
+            } = &node.op
+            {
+                let seed = AlienSeedRecord {
+                    seed_hash: seed_hash.clone(),
+                    ops_added: mutation_vector.ops_added.clone(),
+                    ops_removed: mutation_vector.ops_removed.clone(),
+                    fused_ops_hint: *fused_ops_hint,
+                    compile_seed: 0,
+                    max_fixpoint_iters: 64,
+                    epsilon: 1.0 / 1024.0,
+                };
+                let blob = synthesize_alien_jit_blob_from_seed(&seed);
+                crate::apfsc::artifacts::write_json_atomic(
+                    &runtime_dir.join(format!("{}-node{}.json", candidate_hash, node.id)),
+                    &blob,
+                )?;
+                count += 1;
+            }
+        }
+        if count > 0 {
+            crate::apfsc::artifacts::append_jsonl_atomic(
+                &root.join("archives").join("alien_rehydration.jsonl"),
+                &serde_json::json!({
+                    "candidate_hash": candidate_hash,
+                    "blob_count": count,
+                    "ts": now_unix_s(),
+                }),
+            )?;
+        }
+    }
+    Ok(())
+}
+
 pub fn resume_run(
     root: &Path,
     conn: &Connection,
@@ -186,6 +261,10 @@ pub fn resume_run(
             run_id
         )));
     }
+
+    // Omega/silent mode can restart with stale disk pointers while candidate state was volatile.
+    // Rehydrate or reseed candidate pointers before entering the epoch loop.
+    let _ = ensure_runtime_active_candidate(root, profile)?;
 
     if target_epochs <= completed_epochs {
         with_busy_retry(|| {
@@ -292,6 +371,8 @@ pub fn resume_run(
                     },
                 )?;
             }
+
+            let _ = crate::apfsc::searchlaw_eval::advance_thermal_spike_epoch(root);
         }
 
         with_busy_retry(|| {
@@ -361,12 +442,17 @@ pub fn resume_run(
 
 fn run_state_allows_progress(conn: &Connection, run_id: &str) -> Result<bool> {
     let state: Option<String> = with_busy_retry(|| {
-        conn.query_row("SELECT state FROM runs WHERE run_id=?1", params![run_id], |r| {
-            r.get(0)
-        })
+        conn.query_row(
+            "SELECT state FROM runs WHERE run_id=?1",
+            params![run_id],
+            |r| r.get(0),
+        )
         .optional()
     })?;
-    Ok(matches!(state.as_deref(), Some("Running" | "RecoveryPending")))
+    Ok(matches!(
+        state.as_deref(),
+        Some("Running" | "RecoveryPending")
+    ))
 }
 
 fn runtime_config_candidates(root: &Path, profile: &str) -> Vec<PathBuf> {
@@ -400,6 +486,74 @@ fn load_runtime_phase_config(root: &Path, profile: &str) -> Phase1Config {
         }
     }
     Phase1Config::default()
+}
+
+fn pointer_candidate(root: &Path, name: &str) -> Option<(String, String)> {
+    let candidate_hash = read_pointer(root, name).ok()?;
+    if candidate_hash.is_empty() {
+        return None;
+    }
+    let bundle = load_candidate(root, &candidate_hash).ok()?;
+    Some((candidate_hash, bundle.manifest.snapshot_hash))
+}
+
+fn any_candidate(root: &Path) -> Result<Option<(String, String)>> {
+    for candidate_hash in list_candidates(root)? {
+        let bundle = match load_candidate(root, &candidate_hash) {
+            Ok(v) => v,
+            Err(_) => continue,
+        };
+        return Ok(Some((candidate_hash, bundle.manifest.snapshot_hash)));
+    }
+    Ok(None)
+}
+
+fn preferred_runtime_snapshot(root: &Path) -> Option<String> {
+    if let Ok(constellation) = load_active_constellation(root) {
+        if !constellation.snapshot_hash.is_empty() {
+            return Some(constellation.snapshot_hash);
+        }
+    }
+    read_pointer(root, "active_snapshot")
+        .ok()
+        .filter(|s| !s.is_empty())
+}
+
+fn align_active_candidate_snapshot(root: &Path, candidate_hash: &str) -> Result<String> {
+    let Some(target_snapshot) = preferred_runtime_snapshot(root) else {
+        return Ok(candidate_hash.to_string());
+    };
+    let bundle = load_candidate(root, candidate_hash)?;
+    if bundle.manifest.snapshot_hash == target_snapshot {
+        write_pointer(root, "active_snapshot", &target_snapshot)?;
+        return Ok(candidate_hash.to_string());
+    }
+    let rebased = rebase_active_candidate_to_snapshot(root, &target_snapshot)?
+        .unwrap_or_else(|| candidate_hash.to_string());
+    write_pointer(root, "active_snapshot", &target_snapshot)?;
+    Ok(rebased)
+}
+
+fn ensure_runtime_active_candidate(root: &Path, profile: &str) -> Result<String> {
+    if let Some((active, snapshot)) = pointer_candidate(root, "active_candidate") {
+        let _ = write_pointer(root, "active_snapshot", &snapshot);
+        return align_active_candidate_snapshot(root, &active);
+    }
+    if let Some((rollback, snapshot)) = pointer_candidate(root, "rollback_candidate") {
+        write_pointer(root, "active_candidate", &rollback)?;
+        write_pointer(root, "active_snapshot", &snapshot)?;
+        return align_active_candidate_snapshot(root, &rollback);
+    }
+    if let Some((candidate_hash, snapshot)) = any_candidate(root)? {
+        write_pointer(root, "active_candidate", &candidate_hash)?;
+        write_pointer(root, "rollback_candidate", &candidate_hash)?;
+        write_pointer(root, "active_snapshot", &snapshot)?;
+        return align_active_candidate_snapshot(root, &candidate_hash);
+    }
+
+    let cfg = load_runtime_phase_config(root, profile);
+    let seeded = crate::apfsc::seed::seed_init(root, &cfg, None, false)?;
+    align_active_candidate_snapshot(root, &seeded)
 }
 
 fn run_single_epoch(root: &Path, profile: &str) -> Result<EpochReport> {
@@ -442,10 +596,9 @@ fn last_committed_epoch(root: &Path, run_id: &str) -> Result<u32> {
 fn has_run_commit_marker(root: &Path, run_id: &str) -> Result<bool> {
     let marker = format!("run_commit:{}", run_id);
     let rows = load_journal(root)?;
-    Ok(rows
-        .iter()
-        .rev()
-        .any(|r| r.run_id.as_deref() == Some(run_id) && r.commit_marker.as_deref() == Some(&marker)))
+    Ok(rows.iter().rev().any(|r| {
+        r.run_id.as_deref() == Some(run_id) && r.commit_marker.as_deref() == Some(&marker)
+    }))
 }
 
 fn run_idempotency_key(conn: &Connection, run_id: &str) -> Result<String> {

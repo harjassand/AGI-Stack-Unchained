@@ -94,7 +94,11 @@ pub fn gc_candidates(root: &Path, dry_run: bool) -> Result<GcReport> {
     Ok(report)
 }
 
-pub fn sweep_tombstones(root: &Path, dry_run: bool, tombstone_days: u64) -> Result<TombstoneSweepReport> {
+pub fn sweep_tombstones(
+    root: &Path,
+    dry_run: bool,
+    tombstone_days: u64,
+) -> Result<TombstoneSweepReport> {
     let now_s = crate::apfsc::prod::jobs::now_unix_s();
     let idx_dir = tombstone_index_dir(root);
     let tomb_dir = tombstone_candidates_dir(root);
@@ -132,7 +136,9 @@ pub fn sweep_tombstones(root: &Path, dry_run: bool, tombstone_days: u64) -> Resu
         deleted,
     };
     write_json_atomic(
-        &root.join("archives").join("gc_tombstone_sweep_last_report.json"),
+        &root
+            .join("archives")
+            .join("gc_tombstone_sweep_last_report.json"),
         &report,
     )?;
     Ok(report)
@@ -142,6 +148,7 @@ fn reachable_candidate_set(root: &Path) -> Result<BTreeSet<String>> {
     let mut out = BTreeSet::<String>::new();
     for p in [
         "active_candidate",
+        "active_incubator_pointer",
         "rollback_candidate",
         "active_constellation",
         "active_snapshot",

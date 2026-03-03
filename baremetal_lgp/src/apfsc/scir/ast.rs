@@ -21,6 +21,21 @@ pub enum ScirV2Primitive {
     HeadReadout,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
+pub struct AlienMutationVector {
+    #[serde(default)]
+    pub ops_added: Vec<String>,
+    #[serde(default)]
+    pub ops_removed: Vec<String>,
+}
+
+impl AlienMutationVector {
+    pub fn effective_fused_ops(&self, fallback_hint: u32) -> u32 {
+        let structural = self.ops_added.len().saturating_add(self.ops_removed.len()) as u32;
+        structural.max(fallback_hint).max(1)
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub enum ScirOp {
     ByteEmbedding {
@@ -79,6 +94,31 @@ pub enum ScirOp {
     },
     SymbolicTape {
         cells: u32,
+    },
+    AfferentNode {
+        channel: u8,
+    },
+    EctodermPrimitive {
+        channel: u8,
+    },
+    Subcortex {
+        #[serde(alias = "hash")]
+        prior_hash: String,
+        #[serde(default)]
+        eigen_modulator_vector: Vec<f32>,
+    },
+    Alien {
+        #[serde(alias = "hash")]
+        seed_hash: String,
+        #[serde(default)]
+        mutation_vector: AlienMutationVector,
+        // Legacy compatibility: old snapshots may carry `fused_ops`. We keep parsing it,
+        // but avoid serializing opaque fused structure back into the genome artifact.
+        #[serde(default, alias = "fused_ops", skip_serializing)]
+        fused_ops_hint: u32,
+    },
+    AlephZero {
+        recursion_depth: u32,
     },
     SimpleScan {
         in_dim: u32,

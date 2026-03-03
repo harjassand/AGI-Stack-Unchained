@@ -5,6 +5,28 @@ use crate::apfsc::artifacts::{append_jsonl_atomic, digest_json, read_jsonl, writ
 use crate::apfsc::errors::Result;
 use crate::apfsc::types::{LawArchiveRecord, LawArchiveSummary};
 
+fn pioneer_mode_active(root: &Path) -> bool {
+    crate::apfsc::artifacts::read_pointer(root, "active_epoch_mode")
+        .map(|m| m.eq_ignore_ascii_case("pioneer"))
+        .unwrap_or(false)
+}
+
+fn archive_jsonl_path(root: &Path) -> std::path::PathBuf {
+    if pioneer_mode_active(root) {
+        root.join("archive").join("incubator_law_archive.jsonl")
+    } else {
+        root.join("archive").join("law_archive.jsonl")
+    }
+}
+
+fn archives_jsonl_path(root: &Path) -> std::path::PathBuf {
+    if pioneer_mode_active(root) {
+        root.join("archives").join("incubator_law_archive.jsonl")
+    } else {
+        root.join("archives").join("law_archive.jsonl")
+    }
+}
+
 pub fn append_record(root: &Path, mut rec: LawArchiveRecord) -> Result<LawArchiveRecord> {
     if rec.record_id.is_empty() {
         rec.record_id = digest_json(&(
@@ -14,13 +36,13 @@ pub fn append_record(root: &Path, mut rec: LawArchiveRecord) -> Result<LawArchiv
             rec.constellation_id.clone(),
         ))?;
     }
-    append_jsonl_atomic(&root.join("archive/law_archive.jsonl"), &rec)?;
-    append_jsonl_atomic(&root.join("archives/law_archive.jsonl"), &rec)?;
+    append_jsonl_atomic(&archive_jsonl_path(root), &rec)?;
+    append_jsonl_atomic(&archives_jsonl_path(root), &rec)?;
     Ok(rec)
 }
 
 pub fn load_records(root: &Path) -> Result<Vec<LawArchiveRecord>> {
-    let mut rows: Vec<LawArchiveRecord> = read_jsonl(&root.join("archive/law_archive.jsonl"))?;
+    let mut rows: Vec<LawArchiveRecord> = read_jsonl(&archive_jsonl_path(root))?;
     rows.sort_by(|a, b| a.record_id.cmp(&b.record_id));
     Ok(rows)
 }
@@ -74,7 +96,11 @@ pub fn build_summary(root: &Path, active_searchlaw_hash: &str) -> Result<LawArch
     };
 
     let hash = digest_json(&summary)?;
-    let dir = root.join("law_archive").join(hash);
+    let dir = if pioneer_mode_active(root) {
+        root.join("law_archive").join("incubator").join(hash)
+    } else {
+        root.join("law_archive").join(hash)
+    };
     std::fs::create_dir_all(&dir).map_err(|e| crate::apfsc::errors::io_err(&dir, e))?;
     write_json_atomic(&dir.join("summary.json"), &summary)?;
 

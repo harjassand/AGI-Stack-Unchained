@@ -39,6 +39,8 @@ pub struct Phase1Config {
 pub struct RootConfig {
     #[serde(default = "default_artifact_root")]
     pub artifact_root: String,
+    #[serde(default = "default_false")]
+    pub omega_mode: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -237,6 +239,12 @@ pub struct Phase3LimitsConfig {
 pub struct Phase3PromotionConfig {
     #[serde(default = "default_s_class_min_static_delta_bpb")]
     pub s_class_min_static_delta_bpb: f64,
+    #[serde(default = "default_paradigm_shift_allowance_bpb")]
+    pub paradigm_shift_allowance_bpb: f64,
+    #[serde(default = "default_class_r_takeover_allowance_bpb")]
+    pub class_r_takeover_allowance_bpb: f64,
+    #[serde(default = "default_class_r_max_surprisal_bits")]
+    pub class_r_max_surprisal_bits: f64,
     #[serde(default = "default_p_warm_min_static_delta_bpb")]
     pub p_warm_min_static_delta_bpb: f64,
     #[serde(default = "default_p_warm_min_transfer_delta_bpb")]
@@ -257,6 +265,24 @@ pub struct Phase3PromotionConfig {
     pub p_cold_max_error_streak: u32,
     #[serde(default = "default_p_cold_min_improved_families")]
     pub p_cold_min_improved_families: usize,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct EctodermConfig {
+    #[serde(default = "default_true")]
+    pub enabled: bool,
+    #[serde(default = "default_phase4_ectoderm_paradigm_shift_scale_min")]
+    pub paradigm_shift_scale_min: f64,
+    #[serde(default = "default_phase4_ectoderm_paradigm_shift_scale_max")]
+    pub paradigm_shift_scale_max: f64,
+    #[serde(default = "default_phase4_ectoderm_class_r_difficulty_min")]
+    pub class_r_difficulty_min: f64,
+    #[serde(default = "default_phase4_ectoderm_class_r_difficulty_max")]
+    pub class_r_difficulty_max: f64,
+    #[serde(default = "default_phase4_ectoderm_pioneer_timeslice_min")]
+    pub pioneer_timeslice_min: u32,
+    #[serde(default = "default_phase4_ectoderm_pioneer_timeslice_max")]
+    pub pioneer_timeslice_max: u32,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -337,6 +363,8 @@ pub struct Phase4Config {
     #[serde(default = "default_true")]
     pub enable_searchlaw: bool,
     #[serde(default = "default_true")]
+    pub polyphasic_async_lanes: bool,
+    #[serde(default = "default_true")]
     pub enable_need_tokens: bool,
     #[serde(default = "default_true")]
     pub enable_credit_debt: bool,
@@ -355,6 +383,26 @@ pub struct Phase4Config {
     pub searchlaw_required_yield_improvement: f64,
     #[serde(default = "default_phase4_searchlaw_max_safety_regression")]
     pub searchlaw_max_safety_regression: f64,
+    #[serde(default = "default_true")]
+    pub searchlaw_ergodic_enabled: bool,
+    #[serde(default = "default_phase4_searchlaw_ergodic_temperature_floor")]
+    pub searchlaw_ergodic_temperature_floor: f64,
+    #[serde(default = "default_phase4_searchlaw_ergodic_max_loss_ratio")]
+    pub searchlaw_ergodic_max_loss_ratio: f64,
+    #[serde(default = "default_phase4_searchlaw_sparse_gain_min")]
+    pub searchlaw_sparse_gain_min: f64,
+    #[serde(default = "default_phase4_pioneer_timeslice")]
+    pub pioneer_timeslice: u32,
+    #[serde(default = "default_phase4_class_r_hamiltonian_difficulty_multiplier")]
+    pub class_r_hamiltonian_difficulty_multiplier: f64,
+    #[serde(default = "default_phase4_era_public_delta_multiplier")]
+    pub era_public_delta_multiplier: f64,
+    #[serde(default = "default_phase4_era_holdout_delta_multiplier")]
+    pub era_holdout_delta_multiplier: f64,
+    #[serde(default = "default_phase4_era_challenge_bucket_step")]
+    pub era_challenge_bucket_step: i32,
+    #[serde(default = "default_phase4_era_hidden_challenge_growth")]
+    pub era_hidden_challenge_growth: usize,
 
     #[serde(default = "default_phase4_max_portfolio_branches")]
     pub max_portfolio_branches: usize,
@@ -382,6 +430,24 @@ pub struct Phase4Config {
     pub yield_points_pcold: i32,
     #[serde(default = "default_phase4_yield_points_challenge_bonus")]
     pub yield_points_challenge_bonus: i32,
+    #[serde(default)]
+    pub ectoderm: EctodermConfig,
+    #[serde(default = "default_true")]
+    pub enable_resonance_distiller: bool,
+    #[serde(default = "default_phase4_resonance_distiller_interval_epochs")]
+    pub resonance_distiller_interval_epochs: u32,
+    #[serde(default = "default_true")]
+    pub enable_extropy_guardrail: bool,
+    #[serde(default = "default_phase4_extropy_receipt_window")]
+    pub extropy_receipt_window: usize,
+    #[serde(default = "default_phase4_extropy_surprisal_floor_bits")]
+    pub extropy_surprisal_floor_bits: f64,
+    #[serde(default = "default_phase4_extropy_zero_delta_eps_bpb")]
+    pub extropy_zero_delta_eps_bpb: f64,
+    #[serde(default = "default_phase4_extropy_zero_delta_ratio_trigger")]
+    pub extropy_zero_delta_ratio_trigger: f64,
+    #[serde(default = "default_phase4_extropy_difficulty_boost")]
+    pub extropy_difficulty_boost: f64,
 }
 
 impl Default for Phase1Config {
@@ -407,6 +473,7 @@ impl Default for RootConfig {
     fn default() -> Self {
         Self {
             artifact_root: default_artifact_root(),
+            omega_mode: default_false(),
         }
     }
 }
@@ -571,6 +638,9 @@ impl Default for Phase3PromotionConfig {
     fn default() -> Self {
         Self {
             s_class_min_static_delta_bpb: default_s_class_min_static_delta_bpb(),
+            paradigm_shift_allowance_bpb: default_paradigm_shift_allowance_bpb(),
+            class_r_takeover_allowance_bpb: default_class_r_takeover_allowance_bpb(),
+            class_r_max_surprisal_bits: default_class_r_max_surprisal_bits(),
             p_warm_min_static_delta_bpb: default_p_warm_min_static_delta_bpb(),
             p_warm_min_transfer_delta_bpb: default_p_warm_min_transfer_delta_bpb(),
             p_warm_max_robust_regress_bpb: default_p_warm_max_robust_regress_bpb(),
@@ -581,6 +651,20 @@ impl Default for Phase3PromotionConfig {
             p_cold_max_anchor_regret_bpb: default_p_cold_max_anchor_regret_bpb(),
             p_cold_max_error_streak: default_p_cold_max_error_streak(),
             p_cold_min_improved_families: default_p_cold_min_improved_families(),
+        }
+    }
+}
+
+impl Default for EctodermConfig {
+    fn default() -> Self {
+        Self {
+            enabled: true,
+            paradigm_shift_scale_min: default_phase4_ectoderm_paradigm_shift_scale_min(),
+            paradigm_shift_scale_max: default_phase4_ectoderm_paradigm_shift_scale_max(),
+            class_r_difficulty_min: default_phase4_ectoderm_class_r_difficulty_min(),
+            class_r_difficulty_max: default_phase4_ectoderm_class_r_difficulty_max(),
+            pioneer_timeslice_min: default_phase4_ectoderm_pioneer_timeslice_min(),
+            pioneer_timeslice_max: default_phase4_ectoderm_pioneer_timeslice_max(),
         }
     }
 }
@@ -645,6 +729,7 @@ impl Default for Phase4Config {
             enable_recombination: true,
             enable_qd_archive: true,
             enable_searchlaw: true,
+            polyphasic_async_lanes: true,
             enable_need_tokens: true,
             enable_credit_debt: true,
             max_hidden_challenge_families: default_phase4_max_hidden_challenge_families(),
@@ -655,6 +740,18 @@ impl Default for Phase4Config {
             searchlaw_required_yield_improvement:
                 default_phase4_searchlaw_required_yield_improvement(),
             searchlaw_max_safety_regression: default_phase4_searchlaw_max_safety_regression(),
+            searchlaw_ergodic_enabled: true,
+            searchlaw_ergodic_temperature_floor: default_phase4_searchlaw_ergodic_temperature_floor(
+            ),
+            searchlaw_ergodic_max_loss_ratio: default_phase4_searchlaw_ergodic_max_loss_ratio(),
+            searchlaw_sparse_gain_min: default_phase4_searchlaw_sparse_gain_min(),
+            pioneer_timeslice: default_phase4_pioneer_timeslice(),
+            class_r_hamiltonian_difficulty_multiplier:
+                default_phase4_class_r_hamiltonian_difficulty_multiplier(),
+            era_public_delta_multiplier: default_phase4_era_public_delta_multiplier(),
+            era_holdout_delta_multiplier: default_phase4_era_holdout_delta_multiplier(),
+            era_challenge_bucket_step: default_phase4_era_challenge_bucket_step(),
+            era_hidden_challenge_growth: default_phase4_era_hidden_challenge_growth(),
             max_portfolio_branches: default_phase4_max_portfolio_branches(),
             max_branch_local_debt_credits: default_phase4_max_branch_local_debt_credits(),
             max_global_debt_credits: default_phase4_max_global_debt_credits(),
@@ -667,6 +764,16 @@ impl Default for Phase4Config {
             yield_points_pwarm: default_phase4_yield_points_pwarm(),
             yield_points_pcold: default_phase4_yield_points_pcold(),
             yield_points_challenge_bonus: default_phase4_yield_points_challenge_bonus(),
+            ectoderm: EctodermConfig::default(),
+            enable_resonance_distiller: true,
+            resonance_distiller_interval_epochs: default_phase4_resonance_distiller_interval_epochs(
+            ),
+            enable_extropy_guardrail: true,
+            extropy_receipt_window: default_phase4_extropy_receipt_window(),
+            extropy_surprisal_floor_bits: default_phase4_extropy_surprisal_floor_bits(),
+            extropy_zero_delta_eps_bpb: default_phase4_extropy_zero_delta_eps_bpb(),
+            extropy_zero_delta_ratio_trigger: default_phase4_extropy_zero_delta_ratio_trigger(),
+            extropy_difficulty_boost: default_phase4_extropy_difficulty_boost(),
         }
     }
 }
@@ -674,7 +781,11 @@ impl Default for Phase4Config {
 impl Phase1Config {
     pub fn from_path(path: &Path) -> Result<Self> {
         let body = std::fs::read_to_string(path).map_err(|e| io_err(path, e))?;
-        Ok(toml::from_str(&body)?)
+        let mut cfg: Self = toml::from_str(&body)?;
+        if env_bool("APFSC_OMEGA_MODE") {
+            cfg.root.omega_mode = true;
+        }
+        Ok(cfg)
     }
 
     pub fn to_toml_string(&self) -> Result<String> {
@@ -843,6 +954,19 @@ fn default_witness_rotation() -> usize {
 
 fn default_true() -> bool {
     true
+}
+
+fn default_false() -> bool {
+    false
+}
+
+fn env_bool(name: &str) -> bool {
+    std::env::var(name)
+        .map(|v| {
+            let t = v.to_ascii_lowercase();
+            t == "1" || t == "true" || t == "yes" || t == "on"
+        })
+        .unwrap_or(false)
 }
 
 fn default_phase2_profile_name() -> String {
@@ -1023,6 +1147,18 @@ fn default_s_class_min_static_delta_bpb() -> f64 {
     0.0
 }
 
+fn default_paradigm_shift_allowance_bpb() -> f64 {
+    0.0
+}
+
+fn default_class_r_takeover_allowance_bpb() -> f64 {
+    0.0
+}
+
+fn default_class_r_max_surprisal_bits() -> f64 {
+    0.25
+}
+
 fn default_p_warm_min_transfer_delta_bpb() -> f64 {
     0.0010
 }
@@ -1121,6 +1257,90 @@ fn default_phase4_searchlaw_required_yield_improvement() -> f64 {
 
 fn default_phase4_searchlaw_max_safety_regression() -> f64 {
     constants::SEARCHLAW_MAX_SAFETY_REGRESSION
+}
+
+fn default_phase4_searchlaw_ergodic_temperature_floor() -> f64 {
+    0.01
+}
+
+fn default_phase4_searchlaw_ergodic_max_loss_ratio() -> f64 {
+    0.05
+}
+
+fn default_phase4_searchlaw_sparse_gain_min() -> f64 {
+    0.01
+}
+
+fn default_phase4_pioneer_timeslice() -> u32 {
+    5
+}
+
+fn default_phase4_class_r_hamiltonian_difficulty_multiplier() -> f64 {
+    1.0
+}
+
+fn default_phase4_ectoderm_paradigm_shift_scale_min() -> f64 {
+    0.5
+}
+
+fn default_phase4_ectoderm_paradigm_shift_scale_max() -> f64 {
+    1.5
+}
+
+fn default_phase4_ectoderm_class_r_difficulty_min() -> f64 {
+    0.5
+}
+
+fn default_phase4_ectoderm_class_r_difficulty_max() -> f64 {
+    4.0
+}
+
+fn default_phase4_ectoderm_pioneer_timeslice_min() -> u32 {
+    1
+}
+
+fn default_phase4_ectoderm_pioneer_timeslice_max() -> u32 {
+    16
+}
+
+fn default_phase4_resonance_distiller_interval_epochs() -> u32 {
+    50
+}
+
+fn default_phase4_extropy_receipt_window() -> usize {
+    64
+}
+
+fn default_phase4_extropy_surprisal_floor_bits() -> f64 {
+    0.005
+}
+
+fn default_phase4_extropy_zero_delta_eps_bpb() -> f64 {
+    1e-6
+}
+
+fn default_phase4_extropy_zero_delta_ratio_trigger() -> f64 {
+    0.90
+}
+
+fn default_phase4_extropy_difficulty_boost() -> f64 {
+    1.75
+}
+
+fn default_phase4_era_public_delta_multiplier() -> f64 {
+    1.05
+}
+
+fn default_phase4_era_holdout_delta_multiplier() -> f64 {
+    1.10
+}
+
+fn default_phase4_era_challenge_bucket_step() -> i32 {
+    1
+}
+
+fn default_phase4_era_hidden_challenge_growth() -> usize {
+    1
 }
 
 fn default_phase4_max_portfolio_branches() -> usize {

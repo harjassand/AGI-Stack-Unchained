@@ -168,6 +168,11 @@ pub fn verify_program_with_formal_policy(
             ScirOp::SparseRouter { .. } => "SparseRouter",
             ScirOp::SymbolicStack { .. } => "SymbolicStack",
             ScirOp::SymbolicTape { .. } => "SymbolicTape",
+            ScirOp::AfferentNode { .. } => "AfferentNode",
+            ScirOp::EctodermPrimitive { .. } => "EctodermPrimitive",
+            ScirOp::Subcortex { .. } => "Subcortex",
+            ScirOp::Alien { .. } => "Alien",
+            ScirOp::AlephZero { .. } => "AlephZero",
             ScirOp::SimpleScan { .. } => "SimpleScan",
             ScirOp::ReadoutNative { .. } => "ReadoutNative",
             ScirOp::ReadoutShadow { .. } => "ReadoutShadow",
@@ -308,6 +313,98 @@ fn infer_node_dim(
         }
         ScirOp::SymbolicStack { depth } => *depth,
         ScirOp::SymbolicTape { cells } => *cells,
+        ScirOp::AfferentNode { channel } => {
+            if *channel > 3 {
+                return Err(ApfscError::Validation(
+                    "AfferentNode channel must be 0..=3".to_string(),
+                ));
+            }
+            if !node.inputs.is_empty() {
+                return Err(ApfscError::Validation(
+                    "AfferentNode requires zero inputs".to_string(),
+                ));
+            }
+            node.out_dim.max(1)
+        }
+        ScirOp::EctodermPrimitive { channel } => {
+            if *channel > 2 {
+                return Err(ApfscError::Validation(
+                    "EctodermPrimitive channel must be 0..=2".to_string(),
+                ));
+            }
+            if node.inputs.len() != 1 {
+                return Err(ApfscError::Validation(
+                    "EctodermPrimitive requires exactly one input".to_string(),
+                ));
+            }
+            node.out_dim.max(1)
+        }
+        ScirOp::Subcortex {
+            prior_hash,
+            eigen_modulator_vector,
+        } => {
+            if prior_hash.is_empty() {
+                return Err(ApfscError::Validation(
+                    "Subcortex requires non-empty prior_hash".to_string(),
+                ));
+            }
+            if node.inputs.len() != 1 {
+                return Err(ApfscError::Validation(
+                    "Subcortex requires exactly one input".to_string(),
+                ));
+            }
+            if !eigen_modulator_vector.iter().all(|v| v.is_finite()) {
+                return Err(ApfscError::Validation(
+                    "Subcortex eigen_modulator_vector must be finite".to_string(),
+                ));
+            }
+            if eigen_modulator_vector.len() > 4096 {
+                return Err(ApfscError::Validation(
+                    "Subcortex eigen_modulator_vector too large".to_string(),
+                ));
+            }
+            *dims
+                .get(&node.inputs[0])
+                .ok_or_else(|| ApfscError::Validation("missing input dim".to_string()))?
+        }
+        ScirOp::Alien {
+            seed_hash,
+            mutation_vector,
+            fused_ops_hint,
+        } => {
+            if seed_hash.is_empty() {
+                return Err(ApfscError::Validation(
+                    "Alien op requires non-empty seed_hash".to_string(),
+                ));
+            }
+            if mutation_vector.effective_fused_ops(*fused_ops_hint) == 0 {
+                return Err(ApfscError::Validation(
+                    "Alien op requires positive effective fused_ops".to_string(),
+                ));
+            }
+            if node.inputs.is_empty() {
+                node.out_dim
+            } else {
+                *dims
+                    .get(&node.inputs[0])
+                    .ok_or_else(|| ApfscError::Validation("missing input dim".to_string()))?
+            }
+        }
+        ScirOp::AlephZero { recursion_depth } => {
+            if *recursion_depth == 0 {
+                return Err(ApfscError::Validation(
+                    "AlephZero recursion_depth must be > 0".to_string(),
+                ));
+            }
+            if node.inputs.len() != 1 {
+                return Err(ApfscError::Validation(
+                    "AlephZero requires exactly one input".to_string(),
+                ));
+            }
+            *dims
+                .get(&node.inputs[0])
+                .ok_or_else(|| ApfscError::Validation("missing input dim".to_string()))?
+        }
         ScirOp::SimpleScan { hidden_dim, .. } => *hidden_dim,
         ScirOp::ReadoutNative { in_dim } => *in_dim,
         ScirOp::ReadoutShadow { in_dim, .. } => *in_dim,
@@ -358,6 +455,28 @@ fn op_costs(op: &ScirOp, out_dim: u32) -> (&'static str, u64, u64) {
         ),
         ScirOp::SymbolicStack { depth } => ("SymbolicStack", 0, *depth as u64),
         ScirOp::SymbolicTape { cells } => ("SymbolicTape", 0, *cells as u64),
+        ScirOp::AfferentNode { .. } => ("AfferentNode", 0, out_dim as u64),
+        ScirOp::EctodermPrimitive { .. } => ("EctodermPrimitive", 0, out_dim as u64),
+        ScirOp::Subcortex {
+            eigen_modulator_vector,
+            ..
+        } => (
+            "Subcortex",
+            (eigen_modulator_vector.len() as u64) * 32,
+            out_dim as u64 * 2,
+        ),
+        ScirOp::Alien {
+            mutation_vector,
+            fused_ops_hint,
+            ..
+        } => {
+            let fused = mutation_vector.effective_fused_ops(*fused_ops_hint) as u64;
+            ("Alien", fused * 64, out_dim as u64 * 2)
+        }
+        ScirOp::AlephZero { recursion_depth } => {
+            // Fractal compute primitive: zero persistent params, compute-heavy runtime.
+            ("AlephZero", 0, out_dim as u64 * 4 + *recursion_depth as u64)
+        }
         ScirOp::Concat => ("Concat", 0, out_dim as u64 * 4),
         ScirOp::Add => ("Add", 0, out_dim as u64 * 4),
         ScirOp::Mul => ("Mul", 0, out_dim as u64 * 4),

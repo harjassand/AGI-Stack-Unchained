@@ -10,6 +10,7 @@ use crate::apf3::metachunkpack::MetaChunkPack;
 use crate::apf3::morphisms::{identity_check, AllowedMorphisms};
 use crate::apf3::profiler::{build_report, classify_failures, compute_metrics, ProfilerThresholds};
 use crate::apf3::{omega, write_atomic};
+use crate::oracle3::chunkpack::NumericSubstrate;
 
 #[derive(Clone, Debug)]
 pub struct WakeConfig {
@@ -34,6 +35,12 @@ pub struct WakeReceipt {
     pub native_fault_rate: f32,
     pub timeout_rate: f32,
     pub identity_passed: bool,
+    #[serde(default = "default_numeric_substrate_tag")]
+    pub numeric_substrate: String,
+    #[serde(default = "default_capacity_multiplier")]
+    pub capacity_multiplier_estimate: f32,
+    #[serde(default)]
+    pub precision_mutation_applied: bool,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -43,6 +50,8 @@ pub struct WakeSnapshot {
     pub latest_candidate_hash: Option<Digest32>,
     pub latest_query_score_mean: f32,
     pub latest_query_score_var: f32,
+    #[serde(default = "default_numeric_substrate_tag")]
+    pub latest_numeric_substrate: String,
 }
 
 pub fn run_wake(cfg: &WakeConfig) -> Result<(), String> {
@@ -97,6 +106,7 @@ pub fn run_wake(cfg: &WakeConfig) -> Result<(), String> {
     let mut latest_hash = None;
     let mut latest_mean = 0.0_f32;
     let mut latest_var = 0.0_f32;
+    let mut latest_substrate = NumericSubstrate::Fp32;
 
     for (_path, diff) in proposals.into_iter().take(cfg.max_candidates as usize) {
         evaluated = evaluated.saturating_add(1);
@@ -133,6 +143,7 @@ pub fn run_wake(cfg: &WakeConfig) -> Result<(), String> {
 
         let diff_digest = diff.digest();
         let candidate_hash = candidate_hash(&candidate_graph, diff_digest);
+        let substrate = select_numeric_substrate(candidate_hash);
 
         let mut score_samples = Vec::with_capacity(packs.len());
         let mut query_before = Vec::with_capacity(packs.len());
@@ -142,9 +153,9 @@ pub fn run_wake(cfg: &WakeConfig) -> Result<(), String> {
 
         for pack in &packs {
             let r = exec.eval_pack(&candidate_graph, pack, None);
-            score_samples.push(r.query_score_mean);
-            query_before.push(r.query_loss_before_support);
-            query_after.push(r.query_loss_after_support);
+            score_samples.push(quantize_metric(r.query_score_mean, substrate));
+            query_before.push(quantize_metric(r.query_loss_before_support, substrate));
+            query_after.push(quantize_metric(r.query_loss_after_support, substrate));
             trace_sum.mem_reads = trace_sum.mem_reads.saturating_add(r.trace.mem_reads);
             trace_sum.mem_writes = trace_sum.mem_writes.saturating_add(r.trace.mem_writes);
             trace_sum.update_l1 += r.trace.update_l1;
@@ -200,6 +211,9 @@ pub fn run_wake(cfg: &WakeConfig) -> Result<(), String> {
                 trace_sum.native_timeouts as f32 / total_eps as f32
             },
             identity_passed: identity_ok,
+            numeric_substrate: substrate.as_tag().to_string(),
+            capacity_multiplier_estimate: substrate.capacity_multiplier_estimate(),
+            precision_mutation_applied: substrate != NumericSubstrate::Fp32,
         };
 
         let receipt_path = receipt_dir.join(format!(
@@ -229,6 +243,7 @@ pub fn run_wake(cfg: &WakeConfig) -> Result<(), String> {
         latest_hash = Some(candidate_hash);
         latest_mean = mean;
         latest_var = var;
+        latest_substrate = substrate;
 
         if accepted % 16 == 0 {
             write_wake_snapshot(
@@ -238,6 +253,7 @@ pub fn run_wake(cfg: &WakeConfig) -> Result<(), String> {
                 latest_hash,
                 latest_mean,
                 latest_var,
+                latest_substrate,
             )?;
         }
     }
@@ -249,6 +265,7 @@ pub fn run_wake(cfg: &WakeConfig) -> Result<(), String> {
         latest_hash,
         latest_mean,
         latest_var,
+        latest_substrate,
     )?;
 
     run_builder.u64(evaluated);
@@ -258,6 +275,7 @@ pub fn run_wake(cfg: &WakeConfig) -> Result<(), String> {
     }
     run_builder.f32(latest_mean);
     run_builder.f32(latest_var);
+    run_builder.u64(latest_substrate.capacity_multiplier_estimate().to_bits() as u64);
     let run_digest = run_builder.finish();
     let digest_text = format!(
         "version=1\nseed={}\nworkers={}\nmax_candidates={}\nbase_graph={}\ntrain_pack_set_digest={}\nevaluated={}\naccepted={}\nlatest_candidate_hash={}\nlatest_query_score_mean={:.6}\nlatest_query_score_var={:.6}\nrun_digest={}\n",
@@ -307,14 +325,16 @@ fn write_wake_snapshot(
     latest_hash: Option<Digest32>,
     latest_mean: f32,
     latest_var: f32,
+    latest_substrate: NumericSubstrate,
 ) -> Result<(), String> {
     let summary = format!(
-        "evaluated={} accepted={} latest_candidate_hash={} query_score_mean={:.6} query_score_var={:.6}",
+        "evaluated={} accepted={} latest_candidate_hash={} query_score_mean={:.6} query_score_var={:.6} substrate={}",
         evaluated,
         accepted,
         latest_hash.map_or_else(|| "none".to_string(), |d| d.hex()),
         latest_mean,
-        latest_var
+        latest_var,
+        latest_substrate.as_tag(),
     );
 
     let snap = WakeSnapshot {
@@ -323,6 +343,7 @@ fn write_wake_snapshot(
         latest_candidate_hash: latest_hash,
         latest_query_score_mean: latest_mean,
         latest_query_score_var: latest_var,
+        latest_numeric_substrate: latest_substrate.as_tag().to_string(),
     };
 
     write_atomic(&apf3_dir.join("summary_latest.txt"), summary.as_bytes())?;
@@ -369,5 +390,42 @@ fn var_f32(xs: &[f32], mean: f32) -> f32 {
             })
             .sum::<f32>()
             / xs.len() as f32
+    }
+}
+
+fn default_numeric_substrate_tag() -> String {
+    "fp32".to_string()
+}
+
+fn default_capacity_multiplier() -> f32 {
+    1.0
+}
+
+fn select_numeric_substrate(candidate_hash: Digest32) -> NumericSubstrate {
+    match candidate_hash.0[0] % 5 {
+        0 => NumericSubstrate::Fp32,
+        1 => NumericSubstrate::Posit16Sim,
+        2 => NumericSubstrate::Log8Sim,
+        3 => NumericSubstrate::Int4Gate,
+        _ => NumericSubstrate::Int2Gate,
+    }
+}
+
+fn quantize_metric(v: f32, substrate: NumericSubstrate) -> f32 {
+    match substrate {
+        NumericSubstrate::Fp32 => v,
+        NumericSubstrate::Posit16Sim => (v * 1024.0).round() / 1024.0,
+        NumericSubstrate::Log8Sim => {
+            if v == 0.0 {
+                0.0
+            } else {
+                let sign = if v < 0.0 { -1.0 } else { 1.0 };
+                let lv = v.abs().ln_1p();
+                let q = (lv * 32.0).round() / 32.0;
+                sign * q.exp_m1()
+            }
+        }
+        NumericSubstrate::Int4Gate => (v.clamp(-1.0, 1.0) * 7.0).round() / 7.0,
+        NumericSubstrate::Int2Gate => v.clamp(-1.0, 1.0).round(),
     }
 }

@@ -1,5 +1,6 @@
 use std::path::{Path, PathBuf};
 
+use baremetal_lgp::apfsc::afferent::{scrape_arxiv_formula_payload, write_external_snapshot};
 use baremetal_lgp::apfsc::artifacts::{
     digest_bytes, digest_json, ensure_layout, write_bytes_atomic, write_json_atomic,
 };
@@ -41,7 +42,7 @@ struct Args {
     #[arg(long, default_value = ".apfsc")]
     root: PathBuf,
     #[arg(long)]
-    input: PathBuf,
+    input: Option<PathBuf>,
     #[arg(long)]
     family_id: String,
     #[arg(long, value_enum, default_value_t = InputFormat::Auto)]
@@ -68,6 +69,10 @@ struct Args {
     out: Option<PathBuf>,
     #[arg(long, default_value_t = false)]
     ingest: bool,
+    #[arg(long, default_value_t = false)]
+    arxiv_sync: bool,
+    #[arg(long, default_value_t = 24)]
+    arxiv_max_results: usize,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -112,8 +117,52 @@ fn run(args: Args) -> Result<()> {
     };
     ensure_layout(&args.root)?;
 
-    let format = resolve_format(&args.input, &args.format);
-    let payload = load_external_payload(&args.input, &format)?;
+    let (
+        format,
+        payload,
+        source_file,
+        arxiv_entry_count,
+        arxiv_query,
+        arxiv_payload_hash,
+        arxiv_semantic_extract,
+    ) = if args.arxiv_sync {
+        let (payload, snapshot) = scrape_arxiv_formula_payload(args.arxiv_max_results)?;
+        write_external_snapshot(&args.root, &snapshot)?;
+        (
+            InputFormat::Bin,
+            payload,
+            format!(
+                "arxiv://query={};max_results={}",
+                snapshot.query, snapshot.max_results
+            ),
+            Some(snapshot.entry_count),
+            Some(snapshot.query),
+            Some(snapshot.payload_hash),
+            Some(serde_json::json!({
+                "semantic_formula_count": snapshot.semantic_formula_count,
+                "semantic_formula_examples": snapshot.semantic_formula_examples,
+                "semantic_tc_kelvin": snapshot.semantic_tc_kelvin,
+                "semantic_lattice_hints": snapshot.semantic_lattice_hints,
+                "alien_target_objective": snapshot.alien_target_objective,
+                "tensor_seed": snapshot.tensor_seed,
+            })),
+        )
+    } else {
+        let input = args.input.as_ref().ok_or_else(|| {
+            ApfscError::Validation("--input is required unless --arxiv-sync is enabled".to_string())
+        })?;
+        let format = resolve_format(input, &args.format);
+        let payload = load_external_payload(input, &format)?;
+        (
+            format,
+            payload,
+            input.display().to_string(),
+            None,
+            None,
+            None,
+            None,
+        )
+    };
     if payload.len() <= cfg.bank.window_len as usize {
         return Err(ApfscError::Validation(format!(
             "external payload too small for window_len={} (bytes={})",
@@ -132,7 +181,17 @@ fn run(args: Args) -> Result<()> {
     let description = args
         .description
         .clone()
-        .unwrap_or_else(|| format!("external ingest from {}", args.input.display()));
+        .unwrap_or_else(|| format!("external ingest from {source_file}"));
+    let source_name = if args.arxiv_sync {
+        "arxiv_api".to_string()
+    } else {
+        args.source_name.clone()
+    };
+    let source_type = if args.arxiv_sync {
+        "web_scrape".to_string()
+    } else {
+        args.source_type.clone()
+    };
 
     let raw_manifest = PackManifest {
         pack_kind: PackKind::Reality,
@@ -141,8 +200,8 @@ fn run(args: Args) -> Result<()> {
         created_unix_s: now_unix_s(),
         family_id: Some(args.family_id.clone()),
         provenance: Provenance {
-            source_name: args.source_name.clone(),
-            source_type: args.source_type.clone(),
+            source_name,
+            source_type,
             attestation: None,
             notes: Some("generated_by=apfsc_ingest_external".to_string()),
         },
@@ -156,10 +215,15 @@ fn run(args: Args) -> Result<()> {
             "description": description,
             "external_ingress": {
                 "format": format_key(&format),
-                "source_file": args.input.display().to_string(),
+                "source_file": source_file.clone(),
                 "chunk_bytes": args.chunk_bytes,
                 "payload_bytes": payload.len(),
                 "payload_hash": payload_hash,
+                "arxiv_sync": args.arxiv_sync,
+                "arxiv_query": arxiv_query.clone(),
+                "arxiv_entry_count": arxiv_entry_count,
+                "arxiv_payload_hash": arxiv_payload_hash.clone(),
+                "semantic_extract": arxiv_semantic_extract,
             }
         }),
     };
@@ -180,7 +244,11 @@ fn run(args: Args) -> Result<()> {
     persist_laws_windowbank(&args.root, &args.family_id, &manifest.pack_hash, &bank)?;
 
     // Persist content-addressed payload + manifest under laws/.
-    let payload_path = args.root.join("laws").join("payloads").join(format!("{payload_hash}.bin"));
+    let payload_path = args
+        .root
+        .join("laws")
+        .join("payloads")
+        .join(format!("{payload_hash}.bin"));
     if !payload_path.exists() {
         if let Some(parent) = payload_path.parent() {
             std::fs::create_dir_all(parent).map_err(|e| io_err(parent, e))?;
@@ -200,7 +268,7 @@ fn run(args: Args) -> Result<()> {
     let mut index = ExternalLawsIndex {
         index_hash: String::new(),
         family_id: args.family_id.clone(),
-        source_file: args.input.display().to_string(),
+        source_file: source_file.clone(),
         format: format_key(&format).to_string(),
         payload_hash: payload_hash.clone(),
         payload_bytes: payload.len() as u64,
@@ -252,6 +320,14 @@ fn run(args: Args) -> Result<()> {
     println!("external ingest artifact directory: {}", out_dir.display());
     println!("manifest path: {}", out_manifest_path.display());
     println!("laws index: {}", laws_index_path.display());
+    if args.arxiv_sync {
+        println!(
+            "arXiv scrape synced (query={}; max_results={})",
+            arxiv_query
+                .unwrap_or_else(|| "cat:cond-mat.supr-con OR cat:physics.chem-ph".to_string()),
+            args.arxiv_max_results
+        );
+    }
     println!(
         "ingest command: apfsc_ingest_reality --root {} --manifest {}",
         args.root.display(),
@@ -317,7 +393,11 @@ fn normalize_csv(csv: &str) -> String {
     out
 }
 
-fn persist_external_chunks(root: &Path, payload: &[u8], chunk_bytes: usize) -> Result<Vec<ExternalChunkRef>> {
+fn persist_external_chunks(
+    root: &Path,
+    payload: &[u8],
+    chunk_bytes: usize,
+) -> Result<Vec<ExternalChunkRef>> {
     let chunks_dir = root.join("laws").join("chunks");
     std::fs::create_dir_all(&chunks_dir).map_err(|e| io_err(&chunks_dir, e))?;
     let mut refs = Vec::new();
@@ -355,11 +435,26 @@ fn persist_laws_windowbank(
     write_jsonl(&dir.join("holdout_windows.jsonl"), &bank.holdout)?;
     write_jsonl(&dir.join("anchor_windows.jsonl"), &bank.anchor)?;
     write_jsonl(&dir.join("canary_windows.jsonl"), &bank.canary)?;
-    write_jsonl(&dir.join("transfer_train_windows.jsonl"), &bank.transfer_train)?;
-    write_jsonl(&dir.join("transfer_eval_windows.jsonl"), &bank.transfer_eval)?;
-    write_jsonl(&dir.join("robust_public_windows.jsonl"), &bank.robust_public)?;
-    write_jsonl(&dir.join("robust_holdout_windows.jsonl"), &bank.robust_holdout)?;
-    write_jsonl(&dir.join("challenge_stub_windows.jsonl"), &bank.challenge_stub)?;
+    write_jsonl(
+        &dir.join("transfer_train_windows.jsonl"),
+        &bank.transfer_train,
+    )?;
+    write_jsonl(
+        &dir.join("transfer_eval_windows.jsonl"),
+        &bank.transfer_eval,
+    )?;
+    write_jsonl(
+        &dir.join("robust_public_windows.jsonl"),
+        &bank.robust_public,
+    )?;
+    write_jsonl(
+        &dir.join("robust_holdout_windows.jsonl"),
+        &bank.robust_holdout,
+    )?;
+    write_jsonl(
+        &dir.join("challenge_stub_windows.jsonl"),
+        &bank.challenge_stub,
+    )?;
     Ok(())
 }
 
@@ -374,7 +469,13 @@ fn write_jsonl<T: Serialize>(path: &Path, rows: &[T]) -> Result<()> {
 
 fn sanitize_component(s: &str) -> String {
     s.chars()
-        .map(|c| if c.is_ascii_alphanumeric() || c == '-' || c == '_' { c } else { '_' })
+        .map(|c| {
+            if c.is_ascii_alphanumeric() || c == '-' || c == '_' {
+                c
+            } else {
+                '_'
+            }
+        })
         .collect()
 }
 

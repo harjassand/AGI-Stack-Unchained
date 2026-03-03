@@ -18,17 +18,21 @@ pub fn run_preflight(root: &Path, cfg: &ProdRuntimeConfig) -> Result<PreflightRe
     let mut checks = Vec::new();
     let mut failures = Vec::new();
 
-    for dir in [
-        root.join("control"),
-        root.join("run"),
-        root.join("logs"),
-        root.join("diagnostics"),
-        root.join("backups"),
-    ] {
-        if let Err(e) = std::fs::create_dir_all(&dir) {
-            failures.push(format!("create {} failed: {}", dir.display(), e));
-        } else {
-            checks.push(format!("dir:{}", dir.display()));
+    if crate::apfsc::artifacts::silent_run_enabled() {
+        checks.push("omega_silent_run_enabled".to_string());
+    } else {
+        for dir in [
+            root.join("control"),
+            root.join("run"),
+            root.join("logs"),
+            root.join("diagnostics"),
+            root.join("backups"),
+        ] {
+            if let Err(e) = std::fs::create_dir_all(&dir) {
+                failures.push(format!("create {} failed: {}", dir.display(), e));
+            } else {
+                checks.push(format!("dir:{}", dir.display()));
+            }
         }
     }
 

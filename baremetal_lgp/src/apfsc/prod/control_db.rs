@@ -2,16 +2,33 @@ use std::path::Path;
 use std::thread::sleep;
 use std::time::Duration;
 
-use rusqlite::{params, Connection, OptionalExtension};
+use rusqlite::{params, Connection, OpenFlags, OptionalExtension};
 
 use crate::apfsc::errors::{ApfscError, Result};
 use crate::apfsc::prod::versioning::CONTROL_DB_SCHEMA_VERSION;
 
 pub fn open_control_db(path: &Path) -> Result<Connection> {
-    if let Some(parent) = path.parent() {
-        std::fs::create_dir_all(parent).map_err(|e| crate::apfsc::errors::io_err(parent, e))?;
+    let path_s = path.to_string_lossy();
+    let is_uri = path_s.starts_with("file:");
+    if !is_uri {
+        if let Some(parent) = path.parent() {
+            if !parent.as_os_str().is_empty() {
+                std::fs::create_dir_all(parent)
+                    .map_err(|e| crate::apfsc::errors::io_err(parent, e))?;
+            }
+        }
     }
-    let conn = Connection::open(path).map_err(|e| ApfscError::Protocol(e.to_string()))?;
+    let conn = if is_uri {
+        Connection::open_with_flags(
+            path_s.as_ref(),
+            OpenFlags::SQLITE_OPEN_READ_WRITE
+                | OpenFlags::SQLITE_OPEN_CREATE
+                | OpenFlags::SQLITE_OPEN_URI,
+        )
+        .map_err(|e| ApfscError::Protocol(e.to_string()))?
+    } else {
+        Connection::open(path).map_err(|e| ApfscError::Protocol(e.to_string()))?
+    };
     conn.pragma_update(None, "journal_mode", "WAL")
         .map_err(|e| ApfscError::Protocol(e.to_string()))?;
     conn.pragma_update(None, "synchronous", "NORMAL")
@@ -191,7 +208,12 @@ pub fn init_schema(conn: &Connection) -> Result<()> {
 
 fn ensure_compat_schema(conn: &Connection) -> Result<()> {
     ensure_column(conn, "runs", "target_epochs", "INTEGER NOT NULL DEFAULT 0")?;
-    ensure_column(conn, "runs", "completed_epochs", "INTEGER NOT NULL DEFAULT 0")?;
+    ensure_column(
+        conn,
+        "runs",
+        "completed_epochs",
+        "INTEGER NOT NULL DEFAULT 0",
+    )?;
     ensure_column(conn, "runs", "last_receipt_hash", "TEXT")?;
     ensure_column(conn, "runs", "last_stage", "TEXT")?;
     Ok(())
@@ -208,7 +230,9 @@ fn ensure_column(conn: &Connection, table: &str, column: &str, ddl: &str) -> Res
         .next()
         .map_err(|e| ApfscError::Protocol(e.to_string()))?
     {
-        let name: String = row.get(1).map_err(|e| ApfscError::Protocol(e.to_string()))?;
+        let name: String = row
+            .get(1)
+            .map_err(|e| ApfscError::Protocol(e.to_string()))?;
         if name == column {
             return Ok(());
         }

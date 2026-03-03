@@ -35,6 +35,7 @@ pub fn append_epoch(
     for r in &judge_report.receipts {
         let decision = match r.decision {
             crate::apfsc::types::JudgeDecision::Promote => "promote",
+            crate::apfsc::types::JudgeDecision::PromoteIncubator => "promote_incubator",
             crate::apfsc::types::JudgeDecision::Reject => "reject",
         };
 

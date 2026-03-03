@@ -1,7 +1,10 @@
 use std::collections::BTreeMap;
 use std::path::Path;
 
-use crate::apfsc::active::{read_active_search_law, write_active_search_law};
+use crate::apfsc::active::{
+    read_active_epoch_mode, read_active_incubator_search_law, read_active_search_law,
+    write_active_incubator_search_law, write_active_search_law,
+};
 use crate::apfsc::artifacts::{digest_json, read_json, write_json_atomic};
 use crate::apfsc::config::Phase1Config;
 use crate::apfsc::errors::Result;
@@ -76,13 +79,26 @@ pub fn load_search_law(root: &Path, hash_or_id: &str) -> Result<SearchLawPack> {
 }
 
 pub fn ensure_active_search_law(root: &Path) -> Result<SearchLawPack> {
-    let active = read_active_search_law(root).unwrap_or_else(|_| "searchlaw_seed_v1".to_string());
+    let pioneer = read_active_epoch_mode(root)
+        .map(|m| m.eq_ignore_ascii_case("pioneer"))
+        .unwrap_or(false);
+    let active = if pioneer {
+        read_active_incubator_search_law(root)
+            .or_else(|_| read_active_search_law(root))
+            .unwrap_or_else(|_| "searchlaw_seed_v1".to_string())
+    } else {
+        read_active_search_law(root).unwrap_or_else(|_| "searchlaw_seed_v1".to_string())
+    };
     if let Ok(law) = load_search_law(root, &active) {
         return Ok(law);
     }
     let seed = seed_search_law();
     persist_search_law(root, &seed)?;
-    write_active_search_law(root, &seed.manifest_hash)?;
+    if pioneer {
+        write_active_incubator_search_law(root, &seed.manifest_hash)?;
+    } else {
+        write_active_search_law(root, &seed.manifest_hash)?;
+    }
     Ok(seed)
 }
 
@@ -138,7 +154,9 @@ pub fn generate_search_law_candidates(
     let mut candidate = active.clone();
     candidate.parent_law_hash = Some(active.manifest_hash.clone());
     candidate.law_id = format!("{}_c1", active.law_id);
-    candidate.lane_weights_q16.insert("truth".to_string(), 65_535);
+    candidate
+        .lane_weights_q16
+        .insert("truth".to_string(), 65_535);
     candidate.recombination_rate_q16 = candidate.recombination_rate_q16.saturating_add(1024);
     candidate.qd_explore_rate_q16 = candidate
         .qd_explore_rate_q16

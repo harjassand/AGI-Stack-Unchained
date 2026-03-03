@@ -1,4 +1,5 @@
 pub mod active;
+pub mod afferent;
 pub mod archive;
 pub mod artifacts;
 pub mod bank;
@@ -39,6 +40,7 @@ pub mod recombination;
 pub mod retirement;
 pub mod robustness;
 pub mod rollback;
+pub mod rosetta;
 pub mod schedule_pack;
 pub mod scir;
 pub mod search_law;

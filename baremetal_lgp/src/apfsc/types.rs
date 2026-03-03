@@ -590,6 +590,8 @@ pub struct ConstellationScoreReceipt {
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
 pub enum JudgeDecision {
     Promote,
+    #[serde(alias = "Promote(Incubator)")]
+    PromoteIncubator,
     Reject,
 }
 
@@ -828,6 +830,7 @@ pub struct BackendEquivReceipt {
 pub enum MacroOriginKind {
     SeedPrior,
     InducedFromArchive,
+    SubstrateCrystallized,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -1270,6 +1273,16 @@ pub struct SearchLawAbReceipt {
     pub candidate_yield_per_compute: f64,
     pub challenge_regression: bool,
     pub safety_regression: bool,
+    #[serde(default)]
+    pub metropolis_acceptance_probability: f64,
+    #[serde(default)]
+    pub metropolis_temperature_bpb: f64,
+    #[serde(default)]
+    pub structural_sparsity_gain: f64,
+    #[serde(default)]
+    pub ergodic_drift_accepted: bool,
+    #[serde(default)]
+    pub pareto_dominates_incumbent: bool,
     pub pass: bool,
     pub reason: String,
     pub snapshot_hash: String,

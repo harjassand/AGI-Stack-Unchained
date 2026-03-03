@@ -1,6 +1,7 @@
 use std::collections::BTreeMap;
 use std::path::Path;
 
+use crate::apfsc::active::read_active_epoch_mode;
 use crate::apfsc::archive::family_scores::FamilyScoreRow;
 use crate::apfsc::artifacts::{append_jsonl_atomic, digest_json, read_jsonl};
 use crate::apfsc::errors::Result;
@@ -8,6 +9,11 @@ use crate::apfsc::macro_lib::{load_or_build_active_registry, save_registry};
 use crate::apfsc::types::{
     CoreOp, MacroDef, MacroInductionReceipt, MacroOriginKind, MacroRegistry,
 };
+use crate::oracle3::compile::{synthesize_alien_jit_blob_from_seed, AlienSeedRecord};
+
+const CRYSTALLIZE_MIN_SUPPORT: u32 = 3;
+const CRYSTALLIZE_MIN_GAIN_BPB: f64 = 0.0005;
+const CRYSTALLIZE_MIN_REDUCTION: f64 = 1.10;
 
 pub fn mine_macros(
     root: &Path,
@@ -19,6 +25,9 @@ pub fn mine_macros(
     max_induced: u32,
 ) -> Result<(MacroRegistry, Vec<MacroInductionReceipt>)> {
     let mut registry = load_or_build_active_registry(root, snapshot_hash, protocol_version)?;
+    let pioneer_epoch = read_active_epoch_mode(root)
+        .map(|mode| mode.eq_ignore_ascii_case("pioneer"))
+        .unwrap_or(false);
 
     let rows: Vec<FamilyScoreRow> =
         read_jsonl(&root.join("archive/family_scores.jsonl")).unwrap_or_default();
@@ -83,19 +92,41 @@ pub fn mine_macros(
         )?;
 
         if accepted {
+            let crystallized = pioneer_epoch
+                && support_count >= CRYSTALLIZE_MIN_SUPPORT
+                && mean_gain >= CRYSTALLIZE_MIN_GAIN_BPB
+                && op_ratio >= CRYSTALLIZE_MIN_REDUCTION;
+            let alien_hash = digest_json(&(fragment_key.clone(), support_count, mean_gain))?;
             let mut def = MacroDef {
                 macro_id: macro_id.clone(),
                 version: 1,
-                origin_kind: MacroOriginKind::InducedFromArchive,
+                origin_kind: if crystallized {
+                    MacroOriginKind::SubstrateCrystallized
+                } else {
+                    MacroOriginKind::InducedFromArchive
+                },
                 origin_hash: digest_json(&fragment_key)?,
                 input_ports: vec![],
                 output_ports: vec![],
                 local_state_bytes: 32,
                 expansion_hash: String::new(),
-                expansion_core: vec![CoreOp {
-                    op: "ScanReduce".to_string(),
-                    args: BTreeMap::new(),
-                }],
+                expansion_core: if crystallized {
+                    let mut args = BTreeMap::new();
+                    args.insert("seed_hash".to_string(), alien_hash.clone());
+                    args.insert("hash".to_string(), alien_hash.clone());
+                    args.insert("fused_ops".to_string(), support_count.max(1).to_string());
+                    args.insert("ops_added".to_string(), format!("fragment:{fragment_key}"));
+                    args.insert("ops_removed".to_string(), "legacy_dense_path".to_string());
+                    vec![CoreOp {
+                        op: "Alien".to_string(),
+                        args,
+                    }]
+                } else {
+                    vec![CoreOp {
+                        op: "ScanReduce".to_string(),
+                        args: BTreeMap::new(),
+                    }]
+                },
                 max_expansion_ops: crate::apfsc::constants::MAX_MACRO_EXPANSION_OPS,
                 canonical_hash: String::new(),
             };
@@ -109,6 +140,45 @@ pub fn mine_macros(
                     .join("induced_macros.jsonl"),
                 &def,
             )?;
+            if crystallized {
+                let seed_record = AlienSeedRecord {
+                    seed_hash: alien_hash.clone(),
+                    ops_added: vec![format!("fragment:{fragment_key}")],
+                    ops_removed: vec!["legacy_dense_path".to_string()],
+                    fused_ops_hint: support_count.max(1),
+                    compile_seed: 0,
+                    max_fixpoint_iters: 64,
+                    epsilon: 1.0 / 1024.0,
+                };
+                let blob = synthesize_alien_jit_blob_from_seed(&seed_record);
+                let blob_dir = root
+                    .join("macro_registry")
+                    .join(&registry.registry_id)
+                    .join("alien_blobs");
+                std::fs::create_dir_all(&blob_dir)
+                    .map_err(|e| crate::apfsc::errors::io_err(&blob_dir, e))?;
+                crate::apfsc::artifacts::write_json_atomic(
+                    &blob_dir.join(format!("{}.json", alien_hash)),
+                    &blob,
+                )?;
+                crate::apfsc::artifacts::write_json_atomic(
+                    &blob_dir.join(format!("{}.seed.json", alien_hash)),
+                    &seed_record,
+                )?;
+                crate::apfsc::artifacts::append_jsonl_atomic(
+                    &root.join("archives").join("alien_crystallization.jsonl"),
+                    &serde_json::json!({
+                        "macro_id": def.macro_id,
+                        "alien_hash": alien_hash,
+                        "seed_hash": seed_record.seed_hash,
+                        "blob_hash": blob.blob_hash,
+                        "fused_ops": blob.fused_op_count,
+                        "max_fixpoint_iters": blob.max_fixpoint_iters,
+                        "epsilon": blob.epsilon,
+                        "registry_id": registry.registry_id,
+                    }),
+                )?;
+            }
             induced_count += 1;
         }
 

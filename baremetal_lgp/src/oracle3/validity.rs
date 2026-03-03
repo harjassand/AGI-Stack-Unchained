@@ -1,3 +1,5 @@
+use std::collections::BTreeSet;
+
 use crate::bytecode::program::BytecodeProgram;
 use crate::isa::encoding::encode;
 use crate::isa::op::Op;
@@ -5,14 +7,17 @@ use crate::library::bank::LibraryBank;
 use crate::oracle3::chunkpack::ChunkPack;
 use crate::vm::{run_candidate, ExecConfig, VmProgram, VmWorker};
 
+use super::ast::AstOp;
 use super::compile::{compile_chunkpack, CompileError, VALIDITY_COMPILE_CFG};
-use super::cost::{compute_cost, CostViolation};
+use super::cost::{compute_cost, AstCost, CostViolation};
 use super::spec::RegimeSpec;
 
 pub const DELTA_VALID: f32 = 0.05;
 pub const DELTA_LEAK: f32 = 0.02;
 pub const VALIDITY_COMPILE_SEED: u64 = 0xB3A7_1EED_0000_0001;
 pub const VALIDITY_FUEL_MAX: u32 = 200_000;
+pub const COMPLEXITY_TARGET_RATIO: f32 = 512.0;
+pub const COMPLEXITY_PENALTY_SCALE: f32 = 0.02;
 
 pub type LinkedProgram = VmProgram;
 
@@ -55,9 +60,11 @@ pub fn phase1_vm_champ_set() -> VMChampSet {
 }
 
 pub fn evaluate_validity(spec: &RegimeSpec, champs: &VMChampSet) -> ValidityVerdict {
-    if let Err(err) = compute_cost(spec) {
-        return ValidityVerdict::InvalidCost(err);
-    }
+    let cost = match compute_cost(spec) {
+        Ok(v) => v,
+        Err(err) => return ValidityVerdict::InvalidCost(err),
+    };
+    let dense_activation_penalty = dense_activation_penalty(spec, &cost);
 
     let chunk = match compile_chunkpack(spec, VALIDITY_COMPILE_SEED, VALIDITY_COMPILE_CFG) {
         Ok(v) => v,
@@ -72,6 +79,7 @@ pub fn evaluate_validity(spec: &RegimeSpec, champs: &VMChampSet) -> ValidityVerd
     for champ in &champs.champs {
         s_star = s_star.max(score_program(champ, &chunk, &lib));
     }
+    let s_star = s_star - dense_activation_penalty;
 
     if s_star < s_rand + DELTA_VALID {
         return ValidityVerdict::InvalidBaseline { s_star, s_rand };
@@ -97,6 +105,70 @@ pub fn evaluate_validity(spec: &RegimeSpec, champs: &VMChampSet) -> ValidityVerd
         s_trivial,
         s_rand,
     }
+}
+
+fn dense_activation_penalty(spec: &RegimeSpec, cost: &AstCost) -> f32 {
+    let active_flops = cost.affine_mac as f32;
+    let uwm = estimate_unique_weight_mass(spec) as f32;
+    let receptive = estimate_effective_receptive_pathways(spec) as f32;
+    if receptive <= 0.0 {
+        return 0.0;
+    }
+
+    // Phase 5.0 substrate pressure: prefer high-functional complexity routed through
+    // compact reusable pathways over explicit dense footprint.
+    let complexity_ratio = (active_flops + uwm) / receptive.max(1.0);
+    let overflow = (complexity_ratio / COMPLEXITY_TARGET_RATIO - 1.0).max(0.0);
+    overflow * COMPLEXITY_PENALTY_SCALE
+}
+
+fn estimate_unique_weight_mass(spec: &RegimeSpec) -> u64 {
+    let mut seen = BTreeSet::new();
+    let mut mass = 0_u64;
+    for node in &spec.ast.nodes {
+        let (sig, add_mass) = match node.op {
+            AstOp::Affine {
+                in_len, out_len, ..
+            } => (
+                format!("Affine:{in_len}x{out_len}"),
+                u64::from(in_len)
+                    .saturating_mul(u64::from(out_len))
+                    .saturating_add(u64::from(out_len)),
+            ),
+            AstOp::ConstVec { len, .. } => (format!("ConstVec:{len}"), u64::from(len)),
+            AstOp::MetaParamVector { count } => (format!("Meta:{count}"), u64::from(count)),
+            AstOp::InputVector => ("InputVector".to_string(), u64::from(spec.input_len)),
+            AstOp::ConstF32(_) => ("ConstF32".to_string(), 1),
+            AstOp::Add { .. } => ("Add".to_string(), 1),
+            AstOp::Sub { .. } => ("Sub".to_string(), 1),
+            AstOp::Mul { .. } => ("Mul".to_string(), 1),
+            AstOp::Div { .. } => ("Div".to_string(), 1),
+            AstOp::Tanh { .. } => ("Tanh".to_string(), 1),
+            AstOp::Sigmoid { .. } => ("Sigmoid".to_string(), 1),
+            AstOp::Dot { .. } => ("Dot".to_string(), 1),
+            AstOp::Broadcast { len, .. } => (format!("Broadcast:{len}"), u64::from(len)),
+        };
+        if seen.insert(sig) {
+            mass = mass.saturating_add(add_mass.max(1));
+        }
+    }
+    mass
+}
+
+fn estimate_effective_receptive_pathways(spec: &RegimeSpec) -> u64 {
+    let mut pathways = 1_u64;
+    for node in &spec.ast.nodes {
+        pathways = pathways.saturating_add(match node.op {
+            AstOp::Affine { .. } => 2,
+            AstOp::Add { .. } | AstOp::Sub { .. } | AstOp::Mul { .. } | AstOp::Div { .. } => 2,
+            AstOp::Dot { .. } => 2,
+            AstOp::Broadcast { .. } => 1,
+            AstOp::Tanh { .. } | AstOp::Sigmoid { .. } => 1,
+            AstOp::ConstF32(_) | AstOp::ConstVec { .. } => 0,
+            AstOp::InputVector | AstOp::MetaParamVector { .. } => 1,
+        });
+    }
+    pathways
 }
 
 pub fn constant_zero_baseline(output_len: u32) -> LinkedProgram {

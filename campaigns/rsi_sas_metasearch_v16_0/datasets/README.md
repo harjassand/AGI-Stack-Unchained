@@ -1,0 +1,43 @@
+# datasets
+
+> Path: `campaigns/rsi_sas_metasearch_v16_0/datasets`
+
+## Mission
+
+Campaign configuration and execution packaging for reproducible orchestrator runs.
+
+## Responsibilities
+
+- Keep this directory deterministic and reproducible under the stack's verification model.
+- Preserve contract compatibility for files consumed by upstream/downstream tooling.
+- Prefer additive evolution (new versioned artifacts) over in-place breaking edits.
+
+## Subdirectories
+
+- No child directories.
+
+## Key Files
+
+- `gravity_dataset.csv`: project artifact.
+- `gravity_dataset_manifest_v1.json`: JSON contract, config, or artifact.
+- `hooke_dataset.csv`: project artifact.
+- `hooke_dataset_manifest_v1.json`: JSON contract, config, or artifact.
+
+## File-Type Surface
+
+- `json`: 2 files
+- `csv`: 2 files
+
+## Operational Checks
+
+```bash
+ls -la campaigns/rsi_sas_metasearch_v16_0/datasets
+find campaigns/rsi_sas_metasearch_v16_0/datasets -mindepth 1 -maxdepth 2 -type d | sed -n '1,40p'
+rg --files campaigns/rsi_sas_metasearch_v16_0/datasets | sed -n '1,40p'
+```
+
+## Change Control
+
+1. Validate schema/contract changes before merge (tests + verifier paths).
+2. Keep run-generated or transient outputs out of source-controlled contract files.
+3. Update this README when introducing new subtrees, contracts, or operational semantics.

@@ -4,7 +4,7 @@ use std::path::Path;
 use serde::{Deserialize, Serialize};
 
 use crate::apfsc::artifacts::{
-    digest_bytes, digest_json, read_json, read_jsonl, write_json_atomic,
+    digest_bytes, digest_json, read_json, read_jsonl, read_pointer, write_json_atomic,
 };
 use crate::apfsc::errors::{io_err, ApfscError, Result};
 use crate::apfsc::types::{BankManifest, FamilyBankManifest, SplitKind, WindowRef};
@@ -184,6 +184,10 @@ pub fn load_bank(root: &Path, family_id: &str) -> Result<WindowBank> {
         robust_holdout: read_jsonl_if_exists(&dir.join("robust_holdout_windows.jsonl"))?,
         challenge_stub: read_jsonl_if_exists(&dir.join("challenge_stub_windows.jsonl"))?,
     })
+}
+
+pub fn read_active_incubator_pointer(root: &Path) -> Option<String> {
+    read_pointer(root, "active_incubator_pointer").ok()
 }
 
 fn rotate_windows(mut windows: Vec<WindowRef>, source_pack_hash: &str) -> Vec<WindowRef> {

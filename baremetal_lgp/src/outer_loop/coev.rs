@@ -11,6 +11,8 @@ use crate::oracle3::{score_candidate_on_chunk, ExecEngine};
 pub const K1: u32 = 8;
 pub const K2: u32 = 4;
 pub const K3: u32 = 4;
+pub const CLASS_R_BUDGET_NUMERATOR: u32 = 2;
+pub const CLASS_R_BUDGET_DENOMINATOR: u32 = 100;
 pub const CHUNK_EVALS: u32 = 50_000;
 pub const DELTA_A_PROMOTE: f32 = 0.01;
 pub const A_LEAGUE_K: usize = 8;
@@ -20,6 +22,7 @@ pub enum OpponentSource {
     BCurrent,
     BLeague { index: u32 },
     Anchor { index: u32 },
+    ClassR { index: u32 },
 }
 
 #[derive(Clone, Debug)]
@@ -60,7 +63,11 @@ pub fn build_epoch_schedule(
     b_league_len: usize,
     anchor_len: usize,
 ) -> Vec<ChunkJob> {
-    let mut jobs = Vec::with_capacity((K1 + K2 + K3) as usize);
+    let base_jobs = K1 + K2 + K3;
+    let class_r_jobs = ((base_jobs * CLASS_R_BUDGET_NUMERATOR)
+        .saturating_add(CLASS_R_BUDGET_DENOMINATOR - 1))
+        / CLASS_R_BUDGET_DENOMINATOR;
+    let mut jobs = Vec::with_capacity((base_jobs + class_r_jobs) as usize);
 
     for i in 0..K1 {
         jobs.push(ChunkJob {
@@ -99,6 +106,20 @@ pub fn build_epoch_schedule(
         });
     }
 
+    for i in 0..class_r_jobs {
+        let idx = if anchor_len == 0 {
+            0
+        } else {
+            (mix64(epoch_seed ^ 0x55_u64 ^ u64::from(i)) as usize % anchor_len) as u32
+        };
+        jobs.push(ChunkJob {
+            opponent: OpponentSource::ClassR { index: idx },
+            compile_seed: mix64(epoch_seed ^ 0x66_u64 ^ u64::from(i)),
+            evals: CHUNK_EVALS,
+            is_proxy: false,
+        });
+    }
+
     jobs
 }
 
@@ -116,6 +137,10 @@ pub fn schedule_hash(schedule: &[ChunkJob]) -> [u8; 32] {
             }
             OpponentSource::Anchor { index } => {
                 hasher.update(&[2]);
+                hasher.update(&index.to_le_bytes());
+            }
+            OpponentSource::ClassR { index } => {
+                hasher.update(&[3]);
                 hasher.update(&index.to_le_bytes());
             }
         }
@@ -188,6 +213,9 @@ pub fn run_epoch<E: ExecEngine<Vec<u32>>>(
     }
 
     let mut best_candidate = None::<(Vec<u32>, f32)>;
+    let requires_class_r_improvement = schedule
+        .iter()
+        .any(|job| matches!(job.opponent, OpponentSource::ClassR { .. }));
     for _ in 0..8 {
         let challenger = mutate_words(rng, &a_state.champion, None);
         if let Some((mean, faulted, improved_sources)) = evaluate_candidate_across_schedule(
@@ -199,7 +227,12 @@ pub fn run_epoch<E: ExecEngine<Vec<u32>>>(
             anchors,
             engine,
         ) {
-            if !faulted && improved_sources.0 && improved_sources.1 && improved_sources.2 {
+            if !faulted
+                && improved_sources.0
+                && improved_sources.1
+                && improved_sources.2
+                && (!requires_class_r_improvement || improved_sources.3)
+            {
                 let replace = best_candidate
                     .as_ref()
                     .map_or(true, |(_, best)| mean > *best);
@@ -249,7 +282,7 @@ fn evaluate_candidate_across_schedule<E: ExecEngine<Vec<u32>>>(
     b_state: &AgentBState,
     anchors: &[RegimeSpec],
     engine: &mut E,
-) -> Option<(f32, bool, (bool, bool, bool))> {
+) -> Option<(f32, bool, (bool, bool, bool, bool))> {
     if schedule.is_empty() {
         return None;
     }
@@ -259,6 +292,7 @@ fn evaluate_candidate_across_schedule<E: ExecEngine<Vec<u32>>>(
     let mut improved_b_current = false;
     let mut improved_b_league = false;
     let mut improved_anchor = false;
+    let mut improved_class_r = false;
 
     for (idx, job) in schedule.iter().enumerate() {
         let spec = select_opponent_spec(job, b_state, anchors)?;
@@ -280,6 +314,7 @@ fn evaluate_candidate_across_schedule<E: ExecEngine<Vec<u32>>>(
                 OpponentSource::BCurrent => improved_b_current = true,
                 OpponentSource::BLeague { .. } => improved_b_league = true,
                 OpponentSource::Anchor { .. } => improved_anchor = true,
+                OpponentSource::ClassR { .. } => improved_class_r = true,
             }
         }
     }
@@ -288,7 +323,12 @@ fn evaluate_candidate_across_schedule<E: ExecEngine<Vec<u32>>>(
     Some((
         mean,
         faulted,
-        (improved_b_current, improved_b_league, improved_anchor),
+        (
+            improved_b_current,
+            improved_b_league,
+            improved_anchor,
+            improved_class_r,
+        ),
     ))
 }
 
@@ -314,7 +354,56 @@ fn select_opponent_spec(
                 Some(anchors[index as usize % anchors.len()].clone())
             }
         }
+        OpponentSource::ClassR { index } => {
+            let base = if anchors.is_empty() {
+                default_anchor_spec()
+            } else {
+                anchors[index as usize % anchors.len()].clone()
+            };
+            Some(class_r_spec_from_seed(&base, job.compile_seed, index))
+        }
     }
+}
+
+fn class_r_spec_from_seed(base: &RegimeSpec, compile_seed: u64, index: u32) -> RegimeSpec {
+    let mut out = base.clone();
+    let m =
+        mix64(compile_seed ^ (index as u64).wrapping_mul(0x9E37_79B9_7F4A_7C15) ^ 0xA11E_A17Eu64);
+    let amp = 1.0 + ((m & 0xFF) as f32 / 255.0) * 0.75;
+    out.spec_seed_salt = out.spec_seed_salt.wrapping_add(m);
+    out.input_dist = match out.input_dist {
+        crate::oracle3::spec::InputDistSpec::Uniform { lo, hi } => {
+            crate::oracle3::spec::InputDistSpec::Uniform {
+                lo: lo * amp,
+                hi: hi * amp,
+            }
+        }
+        crate::oracle3::spec::InputDistSpec::Normal { mean, std } => {
+            crate::oracle3::spec::InputDistSpec::Normal {
+                mean,
+                std: (std * amp).max(0.05),
+            }
+        }
+        crate::oracle3::spec::InputDistSpec::Rademacher { scale } => {
+            crate::oracle3::spec::InputDistSpec::Rademacher { scale: scale * amp }
+        }
+    };
+    if out.schedule.segments.is_empty() {
+        out.schedule
+            .segments
+            .push(crate::oracle3::spec::ScheduleSegment {
+                start_episode: 0,
+                end_episode: FULL_COMPILE_CFG.episode_count,
+                param_scale: amp,
+                input_scale: amp,
+            });
+    } else {
+        for seg in &mut out.schedule.segments {
+            seg.param_scale = (seg.param_scale * amp).min(4.0);
+            seg.input_scale = (seg.input_scale * amp).min(4.0);
+        }
+    }
+    out
 }
 
 fn default_anchor_spec() -> RegimeSpec {

@@ -11,6 +11,35 @@ use crate::apfsc::types::{
     ConstellationManifest, FamilyWitnessSelection, WindowRef, WitnessSelection,
 };
 
+fn pioneer_mode_active(root: &Path) -> bool {
+    crate::apfsc::artifacts::read_pointer(root, "active_epoch_mode")
+        .map(|m| m.eq_ignore_ascii_case("pioneer"))
+        .unwrap_or(false)
+}
+
+fn error_atlas_jsonl_path(root: &Path) -> std::path::PathBuf {
+    if pioneer_mode_active(root) {
+        root.join("archive")
+            .join("active_incubator_error_atlas.jsonl")
+    } else {
+        root.join("archive").join("error_atlas.jsonl")
+    }
+}
+
+fn mirror_error_atlas_jsonl_path(root: &Path) -> std::path::PathBuf {
+    if pioneer_mode_active(root) {
+        root.join("archives")
+            .join("active_incubator_error_atlas.jsonl")
+    } else {
+        root.join("archives").join("error_atlas.jsonl")
+    }
+}
+
+fn active_incubator_error_atlas_json_path(root: &Path) -> std::path::PathBuf {
+    root.join("archive")
+        .join("active_incubator_error_atlas.json")
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct ErrorAtlasEntry {
     pub epoch_unix_s: u64,
@@ -35,7 +64,7 @@ pub fn update_error_atlas(
         *bins.entry(key.to_string()).or_insert(0) += 1;
     }
 
-    let history: Vec<ErrorAtlasEntry> = read_jsonl(&root.join("archive/error_atlas.jsonl"))?;
+    let history: Vec<ErrorAtlasEntry> = read_jsonl(&error_atlas_jsonl_path(root))?;
     let offset = history.len().saturating_mul(rotation);
 
     let mut selected = Vec::new();
@@ -52,7 +81,19 @@ pub fn update_error_atlas(
         witness_count: selected.len(),
         witness_starts: selected.iter().map(|w| w.start).collect(),
     };
-    append_jsonl_atomic(&root.join("archive/error_atlas.jsonl"), &entry)?;
+    append_jsonl_atomic(&error_atlas_jsonl_path(root), &entry)?;
+    append_jsonl_atomic(&mirror_error_atlas_jsonl_path(root), &entry)?;
+    if pioneer_mode_active(root) {
+        crate::apfsc::artifacts::write_json_atomic(
+            &active_incubator_error_atlas_json_path(root),
+            &entry,
+        )?;
+        let p = active_incubator_error_atlas_json_path(root);
+        let _ = crate::apfsc::active::write_active_incubator_error_atlas(
+            root,
+            &p.display().to_string(),
+        );
+    }
 
     Ok(WitnessSelection { selected, bins })
 }
@@ -135,7 +176,19 @@ pub fn update_family_error_atlas(
         bins,
         selected_count: selected.len(),
     };
-    append_jsonl_atomic(&root.join("archive/error_atlas.jsonl"), &row)?;
+    append_jsonl_atomic(&error_atlas_jsonl_path(root), &row)?;
+    append_jsonl_atomic(&mirror_error_atlas_jsonl_path(root), &row)?;
+    if pioneer_mode_active(root) {
+        crate::apfsc::artifacts::write_json_atomic(
+            &active_incubator_error_atlas_json_path(root),
+            &row,
+        )?;
+        let p = active_incubator_error_atlas_json_path(root);
+        let _ = crate::apfsc::active::write_active_incubator_error_atlas(
+            root,
+            &p.display().to_string(),
+        );
+    }
 
     Ok(FamilyWitnessSelection {
         selected,

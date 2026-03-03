@@ -5,6 +5,12 @@ use crate::apfsc::artifacts::{append_jsonl_atomic, digest_json};
 use crate::apfsc::errors::Result;
 use crate::apfsc::types::{LawArchiveRecord, LawToken};
 
+fn pioneer_mode_active(root: &Path) -> bool {
+    crate::apfsc::artifacts::read_pointer(root, "active_epoch_mode")
+        .map(|m| m.eq_ignore_ascii_case("pioneer"))
+        .unwrap_or(false)
+}
+
 pub fn distill_law_tokens(
     records: &[LawArchiveRecord],
     max_tokens: usize,
@@ -53,11 +59,22 @@ pub fn distill_law_tokens(
 }
 
 pub fn persist_law_tokens(root: &Path, tokens: &[LawToken]) -> Result<()> {
+    let (law_archive_path, archives_path) = if pioneer_mode_active(root) {
+        (
+            root.join("law_archive").join("incubator_tokens.jsonl"),
+            root.join("archives").join("incubator_law_tokens.jsonl"),
+        )
+    } else {
+        (
+            root.join("law_archive").join("tokens.jsonl"),
+            root.join("archives").join("law_tokens.jsonl"),
+        )
+    };
     for token in tokens {
-        append_jsonl_atomic(&root.join("law_archive/tokens.jsonl"), token)?;
+        append_jsonl_atomic(&law_archive_path, token)?;
     }
     for token in tokens {
-        append_jsonl_atomic(&root.join("archives/law_tokens.jsonl"), token)?;
+        append_jsonl_atomic(&archives_path, token)?;
     }
     Ok(())
 }

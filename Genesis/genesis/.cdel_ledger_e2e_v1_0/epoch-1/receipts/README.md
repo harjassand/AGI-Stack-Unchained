@@ -1,0 +1,40 @@
+# receipts
+
+> Path: `Genesis/genesis/.cdel_ledger_e2e_v1_0/epoch-1/receipts`
+
+## Mission
+
+Schema, protocol, and artifact-contract definitions for stack-wide interoperability.
+
+## Responsibilities
+
+- Keep this directory deterministic and reproducible under the stack's verification model.
+- Preserve contract compatibility for files consumed by upstream/downstream tooling.
+- Prefer additive evolution (new versioned artifacts) over in-place breaking edits.
+
+## Subdirectories
+
+- No child directories.
+
+## Key Files
+
+- `5001949a-4bc2-5370-bc0c-b3a4dd659381.json`: JSON contract, config, or artifact.
+- `632604b6-90f2-5909-8fdb-4ae09d4d76c1.json`: JSON contract, config, or artifact.
+
+## File-Type Surface
+
+- `json`: 2 files
+
+## Operational Checks
+
+```bash
+ls -la Genesis/genesis/.cdel_ledger_e2e_v1_0/epoch-1/receipts
+find Genesis/genesis/.cdel_ledger_e2e_v1_0/epoch-1/receipts -mindepth 1 -maxdepth 2 -type d | sed -n '1,40p'
+rg --files Genesis/genesis/.cdel_ledger_e2e_v1_0/epoch-1/receipts | sed -n '1,40p'
+```
+
+## Change Control
+
+1. Validate schema/contract changes before merge (tests + verifier paths).
+2. Keep run-generated or transient outputs out of source-controlled contract files.
+3. Update this README when introducing new subtrees, contracts, or operational semantics.
